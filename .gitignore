@@ -41,3 +41,7 @@ coverage/
 *.pem
 tmp/
 uploads/
+
+# Vercel CLI project link (contains project/org ids)
+.vercel
+.env*
