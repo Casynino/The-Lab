@@ -65,7 +65,58 @@ function hoursLabel(h) {
 // Name + email live on the user account; phone, region and target on the rep —
 // so this saves to both endpoints. Region was the gap that left a rep's sales
 // showing as an undefined location.
+// Take an amount off this rep's commission balance. Money and future accrual are
+// untouched; the rep is told, and the record can be reversed with Forgive.
+function DeductCommissionModal({ rep, available, onClose }) {
+  const qc = useQueryClient();
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+
+  const deduct = useMutation({
+    mutationFn: () => api.post('/penalties/adjust', { salesRepId: rep.id, amount: Number(amount), reason }),
+    onSuccess: () => {
+      toast.success(`${formatCurrency(Number(amount))} deducted from ${rep.name || 'the rep'}'s commission`);
+      ['salesRep', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      onClose();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const amt = Number(amount);
+  const valid = amt > 0 && reason.trim();
+  return (
+    <Modal open onClose={onClose} title={`Deduct commission — ${rep.name || rep.code}`} footer={
+      <>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button loading={deduct.isPending} disabled={!valid} onClick={() => deduct.mutate()}>
+          Deduct {amt > 0 ? formatCurrency(amt) : ''}
+        </Button>
+      </>
+    }>
+      <div className="space-y-4">
+        <Field label="Amount to deduct" required hint={`Available now: ${formatCurrency(available)}`}>
+          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        {/* Clearing the balance exactly is the common case — save the arithmetic. */}
+        {available > 0 && (
+          <button type="button" className="text-xs text-brand-500 hover:underline" onClick={() => setAmount(String(available))}>
+            Use the full available balance ({formatCurrency(available)})
+          </button>
+        )}
+        <Field label="Reason" required hint="Shown to the rep and kept in the record">
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Commission removed by The Lab" />
+        </Field>
+        <p className="text-xs text-faint">
+          Removes the amount from available balance only — future commission keeps accruing normally.
+          It appears under Overdue &amp; penalties as a manual deduction and can be reversed with Forgive.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
 function EditRepModal({ rep, onClose }) {
+
   const qc = useQueryClient();
   const [form, setForm] = useState({
     name: rep.name || '',
@@ -238,6 +289,7 @@ export default function SalesRepProfile() {
   const [viewing, setViewing] = useState(null); // settlementId for OrderDetailModal
   const [addOpen, setAddOpen] = useState(false); // "Add stock" modal
   const [editOpen, setEditOpen] = useState(false); // "Edit details" modal
+  const [deducting, setDeducting] = useState(false); // "Deduct commission" modal
 
   const { data, isLoading } = useQuery({
     queryKey: ['sales-rep-profile', id],
@@ -420,7 +472,12 @@ export default function SalesRepProfile() {
         <div className="space-y-6">
           {/* Commission overview */}
           <Section icon={Wallet} title="Commission overview"
-            action={isAdmin && <Button variant="ghost" className="text-xs" onClick={() => navigate('/commissions')}>Payouts</Button>}>
+            action={isAdmin && (
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" className="text-xs" onClick={() => setDeducting(true)}>Deduct</Button>
+                <Button variant="ghost" className="text-xs" onClick={() => navigate('/commissions')}>Payouts</Button>
+              </div>
+            )}>
             <div className="grid grid-cols-2 gap-3">
               <Money label="Total earned" value={formatCurrency(c.earned)} tone="emerald"
                 sub={[
@@ -514,6 +571,13 @@ export default function SalesRepProfile() {
       {viewing && <OrderDetailModal settlementId={viewing} onClose={() => { setViewing(null); refreshAll(); }} />}
       {addOpen && <AddStockModal repId={id} repName={rep.name} onClose={() => setAddOpen(false)} />}
       {editOpen && <EditRepModal rep={rep} onClose={() => setEditOpen(false)} />}
+      {deducting && (
+        <DeductCommissionModal
+          rep={{ id: rep.id, name: rep.name, code: rep.code }}
+          available={c.available}
+          onClose={() => setDeducting(false)}
+        />
+      )}
     </div>
   );
 }
