@@ -15,6 +15,14 @@ const list = asyncHandler(async (req, res) => {
 
 const unreadCount = asyncHandler(async (req, res) => {
   const count = await notifications.unreadCount(req.user);
+  // Anything held back — quiet hours, the provider burst cap, a failed attempt —
+  // sits PENDING until something calls flush(). That was the dashboard and the
+  // twice-daily crons, so a held message could wait half a day. The bell polls
+  // every 30s from every page, so draining here means it waits about a minute
+  // instead. flush() throttles itself and runs after the response, so this costs
+  // the request nothing.
+  const wa = require('../services/whatsappNotify.service');
+  wa.background(wa.flush());
   return ok(res, { unread: count });
 });
 

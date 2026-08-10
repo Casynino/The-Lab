@@ -65,6 +65,19 @@ const whatsappHistory = asyncHandler(async (req, res) => {
   return ok(res, await wa.history(req.query.limit));
 });
 
+// Re-queue messages that failed, after the reason they failed has been fixed.
+const whatsappRetryFailed = asyncHandler(async (req, res) => {
+  const wa = require('../services/whatsappNotify.service');
+  const result = await wa.retryFailed({ hours: Number(req.query.hours) || 168 });
+  await audit.record(req, {
+    action: 'UPDATE',
+    entityType: 'WhatsAppNotification',
+    entityId: 'retry-failed',
+    newValues: { requeued: result.requeued },
+  });
+  return ok(res, result);
+});
+
 const whatsappTest = asyncHandler(async (req, res) => {
   const wa = require('../services/whatsappNotify.service');
   const result = await wa.test();
@@ -72,4 +85,4 @@ const whatsappTest = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
-module.exports = { list, get, upsert, whatsappTypes, whatsappHistory, whatsappTest };
+module.exports = { list, get, upsert, whatsappTypes, whatsappHistory, whatsappTest, whatsappRetryFailed };

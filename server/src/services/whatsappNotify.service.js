@@ -145,6 +145,16 @@ async function sendRaw(text, creds = null) {
 // budget on what matters: when it's nearly gone, hold INFO-priority rows in
 // our own queue (flush retries them once the window frees) so action-required
 // and critical alerts still land instantly.
+// Free CallMeBot delivers ~16 messages per 4 hours immediately and queues the
+// rest to arrive late and grouped, so we stop short of that. A paid plan raises
+// the provider's own limit, and this ceiling must be raised to match or it
+// becomes the thing delaying messages. 0 disables the cap entirely.
+async function providerBudgetCap() {
+  const raw = await getSetting('whatsapp.providerBudget');
+  const n = parseInt(raw, 10);
+  return Number.isNaN(n) ? 14 : n;
+}
+
 async function providerBudgetUsed(toPhone = null) {
   return prisma.whatsAppNotification.count({
     where: {
@@ -156,7 +166,8 @@ async function providerBudgetUsed(toPhone = null) {
 }
 
 async function deliver(row) {
-  if (row.priority === 'INFO' && row.type !== 'TEST' && (await providerBudgetUsed(row.toPhone)) >= 14) {
+  const cap = await providerBudgetCap();
+  if (cap > 0 && row.priority === 'INFO' && row.type !== 'TEST' && (await providerBudgetUsed(row.toPhone)) >= cap) {
     return { queued: true, sent: false, status: 'PENDING', reason: 'provider-budget', id: row.id };
   }
 
@@ -615,6 +626,23 @@ async function testRep(salesRepId) {
 }
 
 // ── Admin endpoints ──────────────────────────────────────────────────────────
+// Put failed messages back in the queue. Used after the cause of the failure is
+// fixed — a renewed provider plan, a corrected number — since those rows are
+// otherwise terminal and their text would never be delivered at all.
+async function retryFailed({ hours = 168 } = {}) {
+  const since = new Date(Date.now() - hours * 3600 * 1000);
+  const { count } = await prisma.whatsAppNotification.updateMany({
+    where: { status: 'FAILED', createdAt: { gt: since } },
+    // attempts reset so the retry budget applies afresh; lastAttemptAt cleared
+    // so the ten-minute anti-duplicate cool-down does not hold them back.
+    data: { status: 'PENDING', attempts: 0, lastAttemptAt: null, lastError: null },
+  });
+  // flush() sends two per run on purpose — CallMeBot rate-limits bursts — so the
+  // rest go out on the following cron passes rather than all at once.
+  const flushed = await flush({ throttleMs: 0 });
+  return { requeued: count, ...flushed };
+}
+
 async function history(limit = 30) {
   return prisma.whatsAppNotification.findMany({
     orderBy: { createdAt: 'desc' },
@@ -633,6 +661,8 @@ async function test() {
 }
 
 module.exports = {
+  retryFailed,
+  providerBudgetCap,
   TYPES,
   compose,
   background,

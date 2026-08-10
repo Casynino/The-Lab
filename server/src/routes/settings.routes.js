@@ -16,6 +16,7 @@ router.get('/', ctrl.list);
 router.get('/whatsapp/types', requireAdmin, ctrl.whatsappTypes);
 router.get('/whatsapp/history', requireAdmin, ctrl.whatsappHistory);
 router.post('/whatsapp/test', requireAdmin, ctrl.whatsappTest);
+router.post('/whatsapp/retry-failed', requireAdmin, ctrl.whatsappRetryFailed);
 
 router.get('/:key', ctrl.get);
 router.put('/:key', requireAdmin, validate(settingUpsert), ctrl.upsert);
