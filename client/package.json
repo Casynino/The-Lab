@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "The Lab — Distribution ERP (frontend)",
+  "description": "The Lab \u2014 Distribution ERP (frontend)",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/check-jsx-imports.mjs && vite build",
     "preview": "vite preview --port 4173",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "check:jsx": "node scripts/check-jsx-imports.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

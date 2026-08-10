@@ -8,7 +8,7 @@ import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import {
   PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea,
-  Pagination, Table, THead, TBody, TR, TH, TD,
+  Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function WithdrawModal({ available, minWithdrawal, onClose }) {
