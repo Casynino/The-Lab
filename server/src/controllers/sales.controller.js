@@ -9,6 +9,7 @@ const salesService = require('../services/sales.service');
 const finance = require('../services/finance.service');
 const audit = require('../services/audit.service');
 const { ROLES } = require('../middleware/authorize');
+const { toNumber } = require('../utils/money');
 
 const create = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
@@ -47,7 +48,10 @@ const create = asyncHandler(async (req, res) => {
     wa.background(finance.recordSaleIncome({
       saleId: sale.id,
       saleNumber: sale.saleNumber,
-      amount: sale.total,
+      // What actually reached the till, not what was invoiced. Banking the
+      // total meant a part-paid sale credited the account with money nobody
+      // handed over, and the books disagreed with the sale's own balance.
+      amount: toNumber(sale.amountPaid),
       fromSettlement: false,
       occurredAt: sale.soldAt,
       accountId: payload.accountId || null,

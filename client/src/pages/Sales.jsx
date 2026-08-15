@@ -50,6 +50,8 @@ function NewSaleModal({ open, onClose }) {
     [items],
   );
   const total = Math.max(0, subtotal - (Number(discount) || 0));
+  // Only a typed-in amount can be short; empty means the full total.
+  const shortfall = amountPaid === '' ? 0 : Math.max(0, total - (Number(amountPaid) || 0));
 
   const create = useMutation({
     mutationFn: () => {
@@ -125,9 +127,18 @@ function NewSaleModal({ open, onClose }) {
 
         <ItemLines products={products} value={items} onChange={setItems} showPrice />
 
+        {shortfall > 0 && (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-400">
+            <span className="font-medium">This sale will be saved as PARTIAL.</span>{' '}
+            Paid {formatCurrency(Number(amountPaid))} of {formatCurrency(total)}, leaving{' '}
+            {formatCurrency(shortfall)} owed — and only {formatCurrency(Number(amountPaid))} goes into the account.
+            Leave “Amount paid” empty if the customer paid in full.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Discount"><Input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} /></Field>
-          <Field label="Amount paid" hint="Defaults to total">
+          <Field label="Amount paid" hint="Leave empty for the full amount">
             <Input type="number" min="0" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder={String(total)} />
           </Field>
           {!isRep && source.startsWith('w:') && (
