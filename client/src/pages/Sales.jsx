@@ -125,7 +125,7 @@ function NewSaleModal({ open, onClose }) {
           )}
         </div>
 
-        <ItemLines products={products} value={items} onChange={setItems} showPrice />
+        <ItemLines products={products} value={items} onChange={setItems} showPrice priceReadOnly />
 
         {shortfall > 0 && (
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-400">

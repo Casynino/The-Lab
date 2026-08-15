@@ -5,7 +5,7 @@ const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
 const inventory = require('./inventory.service');
 const { nextDocNumber } = require('../utils/numbering');
-const { round2, toNumber } = require('../utils/money');
+const { round2, toNumber, formatCurrency } = require('../utils/money');
 const { dayjs } = require('../utils/dates');
 
 const SALE_INCLUDE = {
@@ -30,13 +30,22 @@ function priceLine(input, product, packaging) {
   const factor = packaging.baseQuantity;
   const baseQuantity = input.quantity * factor;
 
-  // Price for ONE unit of the chosen packaging.
-  const packagingUnitPrice =
-    input.unitPrice != null
-      ? Number(input.unitPrice)
-      : packaging.unitPrice != null
-        ? toNumber(packaging.unitPrice)
-        : round2(toNumber(product.sellingPrice) * factor);
+  // Price for ONE unit of the chosen packaging, straight from the catalogue.
+  const cataloguePrice =
+    packaging.unitPrice != null
+      ? toNumber(packaging.unitPrice)
+      : round2(toNumber(product.sellingPrice) * factor);
+
+  // Goods are never sold below the listed price. A caller may price ABOVE it,
+  // but anything under is refused rather than quietly accepted — a discount is
+  // the way to sell for less, and it is recorded as one.
+  const packagingUnitPrice = input.unitPrice != null ? Number(input.unitPrice) : cataloguePrice;
+  if (packagingUnitPrice < cataloguePrice) {
+    throw ApiError.badRequest(
+      `${product.name} sells for ${formatCurrency(cataloguePrice)} per ${packaging.packagingUnit?.name || 'unit'}. ` +
+      `${formatCurrency(packagingUnitPrice)} is below that — use Discount to sell for less.`,
+    );
+  }
 
   const perBasePrice = round2(packagingUnitPrice / factor);
   const lineDiscount = round2(input.lineDiscount || 0);
