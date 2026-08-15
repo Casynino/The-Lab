@@ -162,15 +162,68 @@ function NewSaleModal({ open, onClose }) {
 }
 
 function SaleDetail({ id, onClose }) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?.role === ROLES.ADMIN;
+  const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState('');
   const { data, isLoading } = useQuery({
     queryKey: ['sale', id],
     queryFn: async () => unwrap(await api.get(`/sales/${id}`)).data,
     enabled: !!id,
   });
+
+  // A sale cannot be edited, so a mistyped one is cancelled and recorded again.
+  // Cancelling puts the boxes back and removes the money it banked, leaving
+  // nothing behind to reconcile.
+  const cancel = useMutation({
+    mutationFn: () => api.post(`/sales/${id}/cancel`, { reason: reason.trim() || undefined }),
+    onSuccess: () => {
+      toast.success(`${data?.saleNumber} cancelled — stock returned and the money reversed`);
+      ['sales', 'sale', 'inventory', 'finance', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      onClose();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const cancelled = data?.status === 'CANCELLED';
   return (
-    <Modal open={!!id} onClose={onClose} size="lg" title={data ? `Sale ${data.saleNumber}` : 'Sale'}>
+    <Modal
+      open={!!id}
+      onClose={onClose}
+      size="lg"
+      title={data ? `Sale ${data.saleNumber}` : 'Sale'}
+      footer={data && isAdmin && !cancelled ? (
+        confirming ? (
+          <>
+            <Button variant="secondary" onClick={() => setConfirming(false)}>Keep sale</Button>
+            <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate()}>
+              Yes, cancel {data.saleNumber}
+            </Button>
+          </>
+        ) : (
+          <Button variant="danger" onClick={() => setConfirming(true)}>Cancel this sale</Button>
+        )
+      ) : null}
+    >
       {isLoading || !data ? <PageSpinner /> : (
         <div className="space-y-4 text-sm">
+          {cancelled && (
+            <div className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-muted">
+              This sale is cancelled. The stock went back and the money it banked was reversed.
+            </div>
+          )}
+          {confirming && !cancelled && (
+            <div className="space-y-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-3">
+              <p className="text-sm font-medium text-rose-400">Cancel {data.saleNumber}?</p>
+              <p className="text-xs text-muted">
+                {data.items.reduce((n2_, it) => n2_ + it.quantity, 0)} box(es) go back into stock and the{' '}
+                {formatCurrency(data.amountPaid)} it banked is removed from the account. Sales cannot be edited,
+                so record the sale again afterwards with the correct amount.
+              </p>
+              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (kept in the record)" />
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div><span className="text-muted">Customer</span><div className="font-medium">{data.customer?.name || 'Walk-in'}</div></div>
             <div><span className="text-muted">Sales rep</span><div className="font-medium">{data.salesRep?.user?.name || '—'}</div></div>
