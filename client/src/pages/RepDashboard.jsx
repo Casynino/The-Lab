@@ -102,7 +102,7 @@ export default function RepDashboard() {
       </div>
 
       {/* Sales bonus — separate from box commission, so it sits on its own. */}
-      {bonus?.configured && <BonusProgress p={bonus} />}
+      {bonus?.configured && <BonusProgress p={bonus} compact />}
 
       {/* Card grid */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
