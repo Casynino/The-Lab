@@ -14,19 +14,40 @@ const ApiError = require('../utils/ApiError');
 const notification = require('./notification.service');
 const { round2, toNumber, formatCurrency } = require('../utils/money');
 
-// The rule a rep is measured against right now: the newest active rule that has
-// already taken effect. A rule dated in the future is configured but not yet
-// counting, so targets can be announced ahead of time.
-async function activeRule(at = new Date()) {
-  return prisma.bonusRule.findFirst({
+// Every tier currently in play, cheapest target first. Several active rules are
+// several tiers — reaching a lower one does not end the run.
+async function activeTiers(at = new Date()) {
+  return prisma.bonusRule.findMany({
     where: { isActive: true, effectiveFrom: { lte: new Date(at) } },
-    orderBy: { effectiveFrom: 'desc' },
+    orderBy: { salesTarget: 'asc' },
   });
 }
 
-// Sales that count toward the target: revenue the rep actually brought in,
-// measured the same way commission is — money from settled boxes, from the
-// moment the rule took effect. Cancelled sales never count.
+// Kept for callers that just want "is a bonus configured".
+async function activeRule(at = new Date()) {
+  const tiers = await activeTiers(at);
+  return tiers[0] || null;
+}
+
+// When this rep's current run started. Taking a bonus ends the run and starts a
+// new one from the moment it was paid, so the counter goes back to zero and the
+// same tiers can be earned again.
+async function cycleStartFor(salesRepId, tiers) {
+  const lastPaid = await prisma.bonusAward.findFirst({
+    where: { salesRepId, status: 'PAID' },
+    orderBy: { paidAt: 'desc' },
+    select: { paidAt: true },
+  });
+  const ruleStart = tiers.length
+    ? new Date(Math.min(...tiers.map((t) => new Date(t.effectiveFrom).getTime())))
+    : new Date();
+  if (lastPaid?.paidAt && new Date(lastPaid.paidAt) > ruleStart) return new Date(lastPaid.paidAt);
+  return ruleStart;
+}
+
+// Sales that count toward a target: revenue the rep actually brought in,
+// measured the same way commission is — money from settled boxes — counted from
+// the start of their current run. Cancelled sales never count.
 async function qualifyingSales(salesRepId, since) {
   const agg = await prisma.sale.aggregate({
     where: {
@@ -40,88 +61,139 @@ async function qualifyingSales(salesRepId, since) {
   return round2(toNumber(agg._sum.total));
 }
 
-// Where a rep stands against the current target. Safe to call for a rep with no
-// rule configured — it simply reports that there is nothing to chase.
+// Where a rep stands in their current run. Safe to call for a rep with no tiers
+// configured — it simply reports there is nothing to chase.
 async function progressForRep(salesRepId) {
-  const rule = await activeRule();
-  if (!rule) return { configured: false };
+  const tiers = await activeTiers();
+  if (!tiers.length) return { configured: false };
 
-  const [sales, award] = await Promise.all([
-    qualifyingSales(salesRepId, rule.effectiveFrom),
-    prisma.bonusAward.findUnique({
-      where: { salesRepId_bonusRuleId: { salesRepId, bonusRuleId: rule.id } },
-    }),
-  ]);
+  const cycleStart = await cycleStartFor(salesRepId, tiers);
+  const sales = await qualifyingSales(salesRepId, cycleStart);
 
-  const target = toNumber(rule.salesTarget);
-  const bonusAmount = toNumber(rule.bonusAmount);
-  const unlocked = Boolean(award) || (target > 0 && sales >= target);
+  const shaped = tiers.map((t) => {
+    const target = toNumber(t.salesTarget);
+    return {
+      ruleId: t.id,
+      target,
+      bonusAmount: toNumber(t.bonusAmount),
+      reached: sales >= target,
+      progress: target > 0 ? Math.min(100, Math.round((sales / target) * 100)) : 0,
+      remaining: Math.max(0, round2(target - sales)),
+    };
+  });
+
+  const reached = shaped.filter((t) => t.reached);
+  // The best one they could take right now, and the one still worth chasing.
+  const claimable = reached.length ? reached[reached.length - 1] : null;
+  const next = shaped.find((t) => !t.reached) || null;
+
+  // The bar tracks the next tier while one remains, then the top tier once every
+  // target is behind them.
+  const bar = next || shaped[shaped.length - 1];
+
   return {
     configured: true,
-    ruleId: rule.id,
-    effectiveFrom: rule.effectiveFrom,
+    cycleStart,
     sales,
-    target,
-    bonusAmount,
-    // Capped so a rep past the target sees a full bar rather than 143%.
-    progress: target > 0 ? Math.min(100, Math.round((sales / target) * 100)) : 0,
-    remaining: Math.max(0, round2(target - sales)),
-    unlocked,
-    award: award ? { id: award.id, status: award.status, unlockedAt: award.unlockedAt, paidAt: award.paidAt } : null,
+    tiers: shaped,
+    claimable,
+    next,
+    target: bar.target,
+    bonusAmount: bar.bonusAmount,
+    progress: bar.progress,
+    remaining: bar.remaining,
+    unlocked: Boolean(claimable),
   };
 }
 
-// Record that a rep reached the target. Called after anything that grows their
-// sales; does nothing until the line is crossed, and nothing again afterwards
-// because one rep can hold only one award per rule.
+// Tell a rep the moment they cross a tier. No award row is written here: taking
+// a bonus is a decision, and writing one would quietly end a run the rep might
+// want to push further. Deduplicated per run per tier, so it is said once.
 async function checkAndAward(salesRepId) {
   const p = await progressForRep(salesRepId);
-  if (!p.configured || p.award || p.sales < p.target || p.target <= 0) {
-    return { awarded: false };
+  if (!p.configured || !p.claimable) return { awarded: false };
+
+  const rep = await prisma.salesRepresentative.findUnique({
+    where: { id: salesRepId },
+    include: { user: { select: { id: true, name: true } } },
+  });
+  const cycleKey = new Date(p.cycleStart).toISOString();
+  const stretch = p.next
+    ? ` Keep going and ${formatCurrency(p.next.target)} earns ${formatCurrency(p.next.bonusAmount)} instead — taking a bonus starts your count again from zero.`
+    : '';
+
+  notification.createIfAbsent({
+    type: 'GENERAL',
+    severity: 'INFO',
+    title: `Bonus unlocked — ${formatCurrency(p.claimable.bonusAmount)}`,
+    message: `You reached ${formatCurrency(p.claimable.target)} in sales.${stretch}`,
+    entityType: 'BonusAward',
+    entityId: `bonus:${salesRepId}:${cycleKey}:${p.claimable.ruleId}`,
+    userId: rep?.user?.id || null,
+  }).catch(() => {});
+
+  notification.notifyAdmins({
+    type: 'GENERAL',
+    severity: 'INFO',
+    title: 'Sales bonus reached',
+    message: `${rep?.user?.name || 'A rep'} reached ${formatCurrency(p.claimable.target)} and can take ${formatCurrency(p.claimable.bonusAmount)}.`,
+    entityType: 'BonusAward',
+    entityId: `bonus-admin:${salesRepId}:${cycleKey}:${p.claimable.ruleId}`,
+  }).catch(() => {});
+
+  return { awarded: true, claimable: p.claimable };
+}
+
+// Pay a tier a rep has reached. This is what ends the run: the award records the
+// run it belonged to, and everything after the payment counts toward the next.
+async function payTier({ salesRepId, bonusRuleId }, actor, notes) {
+  const p = await progressForRep(salesRepId);
+  if (!p.configured) throw ApiError.badRequest('No bonus is configured');
+
+  const tier = p.tiers.find((t) => t.ruleId === bonusRuleId) || p.claimable;
+  if (!tier) throw ApiError.badRequest('That bonus tier does not exist');
+  if (!tier.reached) {
+    throw ApiError.badRequest(
+      `This rep is on ${formatCurrency(p.sales)} — ${formatCurrency(tier.remaining)} short of the ${formatCurrency(tier.target)} target.`,
+    );
   }
+
+  const rep = await prisma.salesRepresentative.findUnique({
+    where: { id: salesRepId },
+    include: { user: { select: { id: true } } },
+  });
+  if (!rep) throw ApiError.notFound('Sales rep not found');
 
   let award;
   try {
     award = await prisma.bonusAward.create({
       data: {
         salesRepId,
-        bonusRuleId: p.ruleId,
+        bonusRuleId: tier.ruleId,
+        cycleStart: p.cycleStart,
         qualifyingSales: p.sales,
-        bonusAmount: p.bonusAmount,
-        status: 'ELIGIBLE',
+        bonusAmount: tier.bonusAmount,
+        status: 'PAID',
+        paidAt: new Date(),
+        paidById: actor?.id || null,
+        notes: notes || null,
       },
     });
   } catch (e) {
-    // Two settlements approved at once can both cross the line; the unique key
-    // means the second simply loses, which is the intended outcome.
-    if (e.code === 'P2002') return { awarded: false, reason: 'already-awarded' };
+    if (e.code === 'P2002') throw ApiError.badRequest('This bonus has already been paid for this run');
     throw e;
   }
 
-  const rep = await prisma.salesRepresentative.findUnique({
-    where: { id: salesRepId },
-    include: { user: { select: { id: true, name: true } } },
-  });
-
-  notification.notifyUser(rep?.user?.id, {
+  notification.notifyUser(rep.user?.id, {
     type: 'GENERAL',
     severity: 'INFO',
-    title: `Bonus unlocked — ${formatCurrency(p.bonusAmount)}`,
-    message: `You reached ${formatCurrency(p.target)} in sales and earned a ${formatCurrency(p.bonusAmount)} bonus. It is separate from your box commission and will be paid by The Lab.`,
+    title: `Bonus paid — ${formatCurrency(tier.bonusAmount)}`,
+    message: `Your ${formatCurrency(tier.bonusAmount)} sales bonus has been paid. Your sales count starts again from zero for the next one.`,
     entityType: 'BonusAward',
     entityId: award.id,
   }).catch(() => {});
 
-  notification.notifyAdmins({
-    type: 'GENERAL',
-    severity: 'INFO',
-    title: 'Sales bonus unlocked',
-    message: `${rep?.user?.name || 'A rep'} reached ${formatCurrency(p.target)} in sales and is eligible for a ${formatCurrency(p.bonusAmount)} bonus.`,
-    entityType: 'BonusAward',
-    entityId: award.id,
-  }).catch(() => {});
-
-  return { awarded: true, award };
+  return award;
 }
 
 // Progress for every rep — the admin view.
@@ -223,33 +295,11 @@ async function listAwards({ status } = {}) {
   });
 }
 
-async function markPaid(id, actor, notes) {
-  const award = await prisma.bonusAward.findUnique({
-    where: { id },
-    include: { salesRep: { include: { user: { select: { id: true } } } } },
-  });
-  if (!award) throw ApiError.notFound('Bonus award not found');
-  if (award.status === 'PAID') throw ApiError.badRequest('This bonus is already marked paid');
-
-  const updated = await prisma.bonusAward.update({
-    where: { id },
-    data: { status: 'PAID', paidAt: new Date(), paidById: actor?.id || null, notes: notes || null },
-  });
-
-  notification.notifyUser(award.salesRep?.user?.id, {
-    type: 'GENERAL',
-    severity: 'INFO',
-    title: `Bonus paid — ${formatCurrency(toNumber(award.bonusAmount))}`,
-    message: `Your ${formatCurrency(toNumber(award.bonusAmount))} sales bonus has been paid.`,
-    entityType: 'BonusAward',
-    entityId: award.id,
-  }).catch(() => {});
-
-  return updated;
-}
-
 module.exports = {
   activeRule,
+  activeTiers,
+  cycleStartFor,
+  payTier,
   qualifyingSales,
   progressForRep,
   checkAndAward,
@@ -259,5 +309,4 @@ module.exports = {
   updateRule,
   setRuleActive,
   listAwards,
-  markPaid,
 };

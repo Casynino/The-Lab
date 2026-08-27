@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import BonusProgress from '@/components/BonusProgress';
 import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -229,54 +230,6 @@ function RatesCard({ rates }) {
   );
 }
 
-// Progress toward the sales bonus. Shown to the rep and on the admin list.
-function BonusProgressCard({ p }) {
-  if (!p?.configured) return null;
-  const pct = Math.max(0, Math.min(100, p.progress || 0));
-  return (
-    <Card className="mt-4">
-      <CardHeader
-        title="Sales bonus"
-        subtitle={p.unlocked ? 'Target reached — this is separate from your box commission.' : 'Separate from your box commission.'}
-      />
-      <div className="p-4 pt-0">
-        {p.unlocked ? (
-          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
-            <p className="text-sm font-semibold text-emerald-400">Bonus unlocked</p>
-            <p className="mt-1 text-2xl font-bold text-emerald-300">{formatCurrency(p.bonusAmount)}</p>
-            <p className="mt-1 text-xs text-muted">
-              {p.award?.status === 'PAID' ? 'Paid.' : 'Waiting to be paid by The Lab.'}
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-faint">Current sales</p>
-                <p className="text-xl font-bold text-foreground">{formatCurrency(p.sales)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-wide text-faint">Target</p>
-                <p className="text-xl font-bold text-muted">{formatCurrency(p.target)}</p>
-              </div>
-            </div>
-            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="mt-2 flex justify-between text-xs text-muted">
-              <span>{pct}% of the way</span>
-              <span>{formatCurrency(p.remaining)} to go</span>
-            </div>
-            <p className="mt-3 text-sm text-muted">
-              Reach the target and earn <span className="font-semibold text-emerald-400">{formatCurrency(p.bonusAmount)}</span>.
-            </p>
-          </>
-        )}
-      </div>
-    </Card>
-  );
-}
-
 // How far the rep is from the withdrawal minimum.
 function WithdrawalProgress({ available, minimum }) {
   const pct = Math.max(0, Math.min(100, (available / minimum) * 100));
@@ -371,7 +324,7 @@ function RepView() {
       {hasPenalties && <PenaltyBreakdown breakdown={c.penaltyBreakdown} />}
 
       <RatesCard rates={c.rates} />
-      <BonusProgressCard p={bonusProgress} />
+      {bonusProgress?.configured && <div className="mt-4"><BonusProgress p={bonusProgress} /></div>}
 
       <Card className="mt-4">
         <CardHeader title="My withdrawal requests" subtitle={`Minimum withdrawal: ${formatCurrency(c.minWithdrawal)}`} />
@@ -621,8 +574,9 @@ function BonusSettings() {
     onSuccess: () => { refresh(); }, onError: (e) => toast.error(apiError(e)),
   });
   const pay = useMutation({
-    mutationFn: (id) => api.post(`/commissions/bonus/awards/${id}/pay`),
-    onSuccess: () => { toast.success('Bonus marked paid'); refresh(); }, onError: (e) => toast.error(apiError(e)),
+    mutationFn: ({ salesRepId, bonusRuleId }) => api.post('/commissions/bonus/pay', { salesRepId, bonusRuleId }),
+    onSuccess: () => { toast.success('Bonus paid — that rep\u2019s count starts again from zero'); refresh(); },
+    onError: (e) => toast.error(apiError(e)),
   });
 
   const valid = Number(target) > 0 && Number(amount) > 0;
@@ -674,22 +628,42 @@ function BonusSettings() {
         <>
           <CardHeader title="Rep progress" subtitle="Against the rule in force now." />
           <Table>
-            <THead><TR><TH>Rep</TH><TH className="text-right">Sales</TH><TH className="text-right">Target</TH><TH>Progress</TH><TH>Status</TH></TR></THead>
+            <THead><TR><TH>Rep</TH><TH className="text-right">Sales this run</TH><TH>Next tier</TH><TH>Progress</TH><TH>Can take</TH><TH /></TR></THead>
             <TBody>
               {progress.items.filter((i) => i.configured).map((i) => (
                 <TR key={i.salesRepId}>
                   <TD className="font-medium text-foreground">{i.name}</TD>
                   <TD className="text-right">{formatCurrency(i.sales)}</TD>
-                  <TD className="text-right text-muted">{formatCurrency(i.target)}</TD>
+                  <TD className="text-muted">{i.next ? `${formatCurrency(i.next.target)} → ${formatCurrency(i.next.bonusAmount)}` : 'all tiers reached'}</TD>
                   <TD>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
-                        <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, i.progress)}%` }} />
+                        <div className={clsx('h-full rounded-full', i.claimable ? 'bg-emerald-400' : 'bg-brand-500')} style={{ width: `${Math.min(100, i.progress)}%` }} />
                       </div>
                       <span className="text-xs text-muted">{i.progress}%</span>
                     </div>
                   </TD>
-                  <TD>{i.unlocked ? <Badge className="bg-emerald-100 text-emerald-700">Unlocked</Badge> : <span className="text-xs text-faint">{formatCurrency(i.remaining)} to go</span>}</TD>
+                  <TD>
+                    {i.claimable
+                      ? <Badge className="bg-emerald-100 text-emerald-700">{formatCurrency(i.claimable.bonusAmount)}</Badge>
+                      : <span className="text-xs text-faint">{formatCurrency(i.remaining)} to go</span>}
+                  </TD>
+                  <TD>
+                    <div className="flex justify-end gap-1">
+                      {/* Every tier they have passed can be paid — the rep may have
+                          chosen to hold out, so the choice stays open here too. */}
+                      {(i.tiers || []).filter((t) => t.reached).map((t) => (
+                        <Button
+                          key={t.ruleId}
+                          className="px-2 py-1 text-xs"
+                          loading={pay.isPending}
+                          onClick={() => pay.mutate({ salesRepId: i.salesRepId, bonusRuleId: t.ruleId })}
+                        >
+                          Pay {formatCurrency(t.bonusAmount)}
+                        </Button>
+                      ))}
+                    </div>
+                  </TD>
                 </TR>
               ))}
             </TBody>
@@ -701,19 +675,15 @@ function BonusSettings() {
         <>
           <CardHeader title="Bonuses earned" />
           <Table>
-            <THead><TR><TH>Rep</TH><TH className="text-right">Bonus</TH><TH>Unlocked</TH><TH>Status</TH><TH /></TR></THead>
+            <THead><TR><TH>Rep</TH><TH className="text-right">Bonus</TH><TH>Paid</TH><TH>Status</TH><TH className="text-right">Run total</TH></TR></THead>
             <TBody>
               {awards.map((a) => (
                 <TR key={a.id}>
                   <TD className="font-medium text-foreground">{a.salesRep?.user?.name || a.salesRep?.code}</TD>
                   <TD className="text-right font-semibold text-emerald-500">{formatCurrency(a.bonusAmount)}</TD>
-                  <TD className="text-muted">{formatDateTime(a.unlockedAt)}</TD>
+                  <TD className="text-muted">{a.paidAt ? formatDateTime(a.paidAt) : formatDateTime(a.unlockedAt)}</TD>
                   <TD><Badge className={a.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>{a.status}</Badge></TD>
-                  <TD>
-                    <div className="flex justify-end">
-                      {a.status !== 'PAID' && <Button className="px-2 py-1 text-xs" loading={pay.isPending} onClick={() => pay.mutate(a.id)}>Mark paid</Button>}
-                    </div>
-                  </TD>
+                  <TD className="text-right text-xs text-faint">{formatCurrency(a.qualifyingSales)} sold</TD>
                 </TR>
               ))}
             </TBody>

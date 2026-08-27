@@ -87,10 +87,15 @@ const setBonusRuleActive = asyncHandler(async (req, res) => {
 
 const bonusAwards = asyncHandler(async (req, res) => ok(res, await bonus.listAwards({ status: req.query.status })));
 
+// Paying a tier ends that rep's run and starts their count again from zero.
 const payBonusAward = asyncHandler(async (req, res) => {
-  const row = await bonus.markPaid(req.params.id, req.user, req.body?.notes);
-  await audit.record(req, { action: 'UPDATE', entityType: 'BonusAward', entityId: row.id, newValues: { status: 'PAID' } });
-  return ok(res, row);
+  const row = await bonus.payTier(
+    { salesRepId: req.body?.salesRepId, bonusRuleId: req.body?.bonusRuleId },
+    req.user,
+    req.body?.notes,
+  );
+  await audit.record(req, { action: 'CREATE', entityType: 'BonusAward', entityId: row.id, newValues: { status: 'PAID', bonusAmount: row.bonusAmount } });
+  return created(res, row);
 });
 
 module.exports = {

@@ -36,6 +36,6 @@ router.post('/bonus/rules', admin, ctrl.createBonusRule);
 router.patch('/bonus/rules/:id', admin, validate(idParam), ctrl.updateBonusRule);
 router.patch('/bonus/rules/:id/active', admin, validate(idParam), ctrl.setBonusRuleActive);
 router.get('/bonus/awards', staff, ctrl.bonusAwards);
-router.post('/bonus/awards/:id/pay', admin, validate(idParam), ctrl.payBonusAward);
+router.post('/bonus/pay', admin, ctrl.payBonusAward);
 
 module.exports = router;

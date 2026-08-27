@@ -1446,9 +1446,11 @@ model CommissionRate {
 }
 
 // ── Sales performance bonus ──────────────────────────────────────────────────
-// Reach `salesTarget` of qualifying sales and earn `bonusAmount`. Deliberately
-// nothing to do with per-box commission: bonus money is never added into a
-// rep's commission balance, and never affects what a box is worth.
+// One TIER: reach `salesTarget` of qualifying sales and earn `bonusAmount`.
+// Several active rows are several tiers a rep can aim at — 10m for 500k, hold
+// out to 15m for 1m — and a rep chooses which to take, because taking one ends
+// the run. Deliberately nothing to do with per-box commission: bonus money is
+// never added into a commission balance and never changes what a box is worth.
 model BonusRule {
   id            String   @id @default(cuid())
   salesTarget   Decimal  @db.Decimal(16, 2)
@@ -1487,8 +1489,12 @@ model BonusAward {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  // One award per rep per rule — crossing the line twice is still one bonus.
-  @@unique([salesRepId, bonusRuleId])
+  // Which run of the counter this was earned in. Taking a bonus resets a rep to
+  // zero, so the same tier can be earned again in a later run — the run's start
+  // is what makes each one distinct.
+  cycleStart      DateTime            @default(now())
+
+  @@unique([salesRepId, bonusRuleId, cycleStart])
   @@index([salesRepId])
   @@map("bonus_awards")
 }
