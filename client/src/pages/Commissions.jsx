@@ -250,9 +250,35 @@ function WithdrawalProgress({ available, minimum }) {
   );
 }
 
+// Three seven-digit amounts do not fit across a phone, and truncating them to
+// "TSh 656,0…" is worse than rounding: a shortened number still reads, a cut one
+// does not. Exact figures are a tap away on the tabs below.
+const compactTsh = (n) => {
+  const v = Math.abs(Number(n) || 0);
+  const sign = Number(n) < 0 ? '-' : '';
+  if (v >= 1_000_000) return `${sign}TSh ${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1)}M`;
+  if (v >= 1_000) return `${sign}TSh ${Math.round(v / 1_000)}K`;
+  return `${sign}TSh ${Math.round(v)}`;
+};
+
+// A small figure that supports the headline without competing with it.
+function MiniStat({ label, value, tone }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-border bg-surface px-3 py-2.5">
+      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</p>
+      <p className={clsx(
+        'mt-0.5 truncate text-sm font-bold tabular-nums',
+        tone === 'rose' ? 'text-rose-400' : 'text-foreground',
+      )}>
+        {compactTsh(value)}
+      </p>
+    </div>
+  );
+}
+
 function RepView() {
-  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('bonus');
   const { data: c, isLoading } = useQuery({ queryKey: ['commissions', 'me'], queryFn: async () => unwrap(await api.get('/commissions/me')).data });
   const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'mine'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 20 } })) });
   const { data: bonusProgress } = useQuery({ queryKey: ['bonus', 'me'], queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data });
@@ -262,93 +288,132 @@ function RepView() {
   const hasPenalties = c.penalties > 0;
   const balanceNegative = c.available < 0;
   const canWithdraw = c.available >= c.minWithdrawal;
+  const pct = c.minWithdrawal > 0
+    ? Math.max(0, Math.min(100, (Math.max(0, c.available) / c.minWithdrawal) * 100))
+    : 0;
+  const withdrawals = wd?.data || [];
+  const pendingCount = withdrawals.filter((w) => w.status === 'PENDING').length;
 
   return (
     <>
-      <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${hasPenalties ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-        <StatCard
-          label="Available Balance"
-          value={formatCurrency(c.available)}
-          icon={balanceNegative ? ShieldAlert : Wallet}
-          tone={balanceNegative ? 'rose' : 'emerald'}
-          hint={balanceNegative ? 'Penalty debt — settle overdue orders' : 'Ready to withdraw'}
-        />
-        <StatCard
-          label="Total Earned"
-          value={formatCurrency(c.earned)}
-          icon={Coins}
-          tone="violet"
-          hint={[
-            c.earnedByBrand?.length
-              ? c.earnedByBrand.map((b) => `${formatNumber(b.boxes)} ${b.brand}`).join(' · ')
-              : `${formatNumber(c.boxesSettled)} boxes settled`,
-            // Without this the rep reads a total that his own box count contradicts.
-            c.adjustment ? `adjustment ${formatCurrency(c.adjustment)}` : null,
-          ].filter(Boolean).join(' · ')}
-        />
-        <StatCard label="Total Paid Out" value={formatCurrency(c.paid)} icon={TrendingUp} tone="brand" />
-        <StatCard label="Pending Requests" value={formatCurrency(c.pendingRequests)} icon={Clock} tone="amber" hint="Awaiting approval" />
-        {hasPenalties && (
-          <StatCard label="Total Penalties" value={formatCurrency(c.penalties)} icon={AlertTriangle} tone="rose" hint="Deducted from balance" />
+      {/* The balance is the one number this page exists for, so it takes the
+          headline and the action sits beside it. Everything else supports it. */}
+      <div className={clsx(
+        'rounded-2xl border p-4',
+        balanceNegative ? 'border-rose-500/40 bg-rose-500/[0.06]'
+          : canWithdraw ? 'border-emerald-500/40 bg-emerald-500/[0.07]'
+            : 'border-border bg-surface',
+      )}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Available balance</p>
+            <p className={clsx(
+              'mt-1 text-3xl font-bold leading-none tabular-nums',
+              balanceNegative ? 'text-rose-400' : canWithdraw ? 'text-emerald-300' : 'text-foreground',
+            )}>
+              {formatCurrency(c.available)}
+            </p>
+          </div>
+          {/* 44px minimum, so it is comfortably tappable on a phone. */}
+          <Button className="min-h-[44px] shrink-0" onClick={() => setOpen(true)} disabled={!canWithdraw}>
+            Withdraw
+          </Button>
+        </div>
+
+        {balanceNegative ? (
+          <p className="mt-3 text-[11px] leading-snug text-rose-400">
+            Your balance is negative from overdue fines. Settle your outstanding orders to clear it.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
+              <div
+                className={clsx(
+                  'h-full rounded-full transition-[width] duration-700 ease-out',
+                  canWithdraw ? 'bg-gradient-to-r from-emerald-500 to-emerald-300' : 'bg-gradient-to-r from-brand-600 to-brand-400',
+                )}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] leading-none text-muted">
+              {canWithdraw
+                ? <span className="font-semibold text-emerald-400">Ready to withdraw</span>
+                : `${formatCurrency(c.available)} of ${formatCurrency(c.minWithdrawal)} minimum`}
+            </p>
+          </>
         )}
       </div>
 
-      {c.adjustmentNote && (
-        <div className="mt-4 rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-muted">
-          <span className="font-medium text-foreground">Commission adjustment {formatCurrency(c.adjustment)}</span> — {c.adjustmentNote}
-        </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <MiniStat label="Earned" value={c.earned} />
+        <MiniStat label="Paid out" value={c.paid} />
+        <MiniStat
+          label={hasPenalties ? 'Fines' : 'Pending'}
+          value={hasPenalties ? c.penalties : c.pendingRequests}
+          tone={hasPenalties ? 'rose' : undefined}
+        />
+      </div>
+
+      {/* Four stacked sections became four tabs. The page was a single scroll
+          through everything at once; now it opens on one thing. */}
+      <SectionTabs
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'bonus', label: 'Bonus' },
+          { key: 'withdrawals', label: 'Payouts', count: pendingCount },
+          { key: 'fines', label: 'Fines' },
+          { key: 'rules', label: 'Rules' },
+        ]}
+      />
+
+      {tab === 'bonus' && (
+        bonusProgress?.configured
+          ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
+          : <Card className="mt-4"><EmptyState title="No bonus running" description="Nothing to chase right now." /></Card>
       )}
 
-      <div className="mt-4">
-        <div className="flex items-center justify-between gap-4">
-          {balanceNegative ? (
-            <p className="text-sm text-rose-400">
-              Your balance is negative due to overdue penalties. Settle your outstanding orders to restore your balance before withdrawing.
-            </p>
-          ) : !canWithdraw ? (
-            <p className="text-sm text-amber-400">
-              Minimum withdrawal is {formatCurrency(c.minWithdrawal)} — keep settling to reach it.
-            </p>
-          ) : null}
-          <div className="ml-auto">
-            <Button onClick={() => setOpen(true)} disabled={!canWithdraw}>
-              <Coins className="h-4 w-4" /> Request withdrawal
-            </Button>
-          </div>
-        </div>
-        {!balanceNegative && !canWithdraw && (
-          <WithdrawalProgress available={c.available} minimum={c.minWithdrawal} />
-        )}
-      </div>
+      {tab === 'withdrawals' && (
+        <Card className="mt-4">
+          <CardHeader title="My withdrawal requests" subtitle={`Minimum ${formatCurrency(c.minWithdrawal)}`} />
+          {!withdrawals.length ? <EmptyState title="No withdrawals yet" /> : (
+            <Table>
+              <THead><TR><TH>Amount</TH><TH>Status</TH><TH>Requested</TH></TR></THead>
+              <TBody>{withdrawals.map((w) => (
+                <TR key={w.id}>
+                  <TD className="font-medium">{formatCurrency(w.amount)}</TD>
+                  <TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>
+                  <TD className="text-faint">{formatDateTime(w.requestedAt)}</TD>
+                </TR>
+              ))}</TBody>
+            </Table>
+          )}
+        </Card>
+      )}
 
-      {hasPenalties && <PenaltyBreakdown breakdown={c.penaltyBreakdown} />}
+      {tab === 'fines' && (
+        hasPenalties ? (
+          <>
+            <PenaltyBreakdown breakdown={c.penaltyBreakdown} />
+            <FinesHistory admin={false} />
+          </>
+        ) : (
+          <Card className="mt-4"><EmptyState title="No fines" description="Nothing is reducing your balance." /></Card>
+        )
+      )}
 
-      <RatesCard rates={c.rates} />
-      {bonusProgress?.configured && <div className="mt-4"><BonusProgress p={bonusProgress} /></div>}
-
-      <Card className="mt-4">
-        <CardHeader title="My withdrawal requests" subtitle={`Minimum withdrawal: ${formatCurrency(c.minWithdrawal)}`} />
-        {!wd?.data?.length ? <EmptyState title="No withdrawals yet" /> : (
-          <Table>
-            <THead><TR><TH>Amount</TH><TH>Status</TH><TH>Requested</TH></TR></THead>
-            <TBody>{wd.data.map((w) => (
-              <TR key={w.id}><TD className="font-medium">{formatCurrency(w.amount)}</TD><TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD><TD className="text-faint">{formatDateTime(w.requestedAt)}</TD></TR>
-            ))}</TBody>
-          </Table>
-        )}
-      </Card>
-
-      <FinesHistory admin={false} />
-
-      <PenaltyPolicyCard />
+      {tab === 'rules' && (
+        <>
+          <RatesCard rates={c.rates} />
+          <PenaltyPolicyCard />
+        </>
+      )}
 
       {open && <WithdrawModal available={c.available} minWithdrawal={c.minWithdrawal} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-// Manual commission deduction: remove an amount from a rep's balance without
-// touching money or future accrual. Reversible via Forgive.
 function DeductModal({ reps, onClose }) {
   const qc = useQueryClient();
   const [salesRepId, setSalesRepId] = useState('');
@@ -409,7 +474,8 @@ function SectionTabs({ value, onChange, tabs }) {
           type="button"
           onClick={() => onChange(t.key)}
           className={clsx(
-            'flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition',
+            // 44px minimum: below that a tab is uncomfortable to hit on a phone.
+            'min-h-[44px] flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition',
             value === t.key ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
           )}
         >
