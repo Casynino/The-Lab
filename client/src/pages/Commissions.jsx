@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -119,19 +120,30 @@ function ForgiveModal({ penalty, onClose }) {
 // deduction record, like any other financial transaction.
 function FinesHistory({ admin }) {
   const [forgiving, setForgiving] = useState(null);
+  const [showForgiven, setShowForgiven] = useState(false);
   const { data } = useQuery({
     queryKey: ['penalties', admin ? 'all' : 'mine'],
     queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 50 } })),
   });
-  const items = data?.data || [];
-  if (!items.length) return null;
+  const all = data?.data || [];
+  // A forgiven fine is settled business. Showing dozens of them first buried the
+  // handful still costing someone money, so they are collapsed by default.
+  const active = all.filter((p) => p.status !== 'WAIVED');
+  const forgivenCount = all.length - active.length;
+  const items = showForgiven ? all : active;
+  if (!all.length) return null;
   return (
     <Card className="mt-6">
       <CardHeader
         title="Penalty transactions"
-        subtitle={admin
-          ? 'Every late-settlement fine — a permanent record. Forgiven fines stay listed but no longer reduce the balance.'
-          : 'Late-settlement fines currently charged to you. Forgiven fines are written off and are not shown.'} />
+        subtitle={active.length
+          ? `${active.length} fine${active.length !== 1 ? 's' : ''} still reducing a balance.`
+          : 'Nothing is currently reducing anyone\u2019s balance.'}
+        action={admin && forgivenCount > 0 && (
+          <Button variant="ghost" className="text-xs" onClick={() => setShowForgiven((v) => !v)}>
+            {showForgiven ? 'Hide forgiven' : `Show ${forgivenCount} forgiven`}
+          </Button>
+        )} />
       <Table>
         <THead><TR>{admin && <TH>Rep</TH>}<TH>Type</TH><TH>Order</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH>Date</TH>{admin && <TH />}</TR></THead>
         <TBody>
@@ -433,6 +445,33 @@ function DeductModal({ reps, onClose }) {
   );
 }
 
+// One section at a time. The page had grown to four stacked tables and a wall
+// of forgiven fines, which buried the balances everyone actually opens it for.
+function SectionTabs({ value, onChange, tabs }) {
+  return (
+    <div className="mt-4 flex flex-wrap gap-1 rounded-xl border border-border bg-elevated p-1">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onChange(t.key)}
+          className={clsx(
+            'flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition',
+            value === t.key ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
+          )}
+        >
+          {t.label}
+          {t.count != null && t.count > 0 && (
+            <span className={clsx('ml-2 rounded-full px-1.5 py-0.5 text-[11px]', value === t.key ? 'bg-black/20' : 'bg-white/10')}>
+              {t.count}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Admin: commission rates ──────────────────────────────────────────────────
 // Rates are added, never edited. A new rate must start in the future, which is
 // what guarantees a settled box can never be re-priced — so the form offers a
@@ -693,8 +732,17 @@ function BonusSettings() {
 function AdminView() {
   const qc = useQueryClient();
   const [deducting, setDeducting] = useState(false);
+  const [tab, setTab] = useState('balances');
   const { data: summary, isLoading } = useQuery({ queryKey: ['commissions', 'summary'], queryFn: async () => unwrap(await api.get('/commissions/summary')).data });
   const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'all'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 30 } })) });
+  // Same query key as FinesHistory, so this shares its cache rather than refetching.
+  const { data: penaltyData } = useQuery({
+    queryKey: ['penalties', 'all'],
+    queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 50 } })),
+  });
+  // Only fines still charged are worth a badge — forgiven ones need no attention.
+  const activeFines = (penaltyData?.data || []).filter((p) => p.status !== 'WAIVED').length;
+  const pendingWithdrawals = (wd?.data || []).filter((w) => w.status === 'PENDING').length;
 
   const applyPenalties = useMutation({
     mutationFn: () => api.post('/penalties/apply'),
@@ -733,6 +781,18 @@ function AdminView() {
       </div>
       {deducting && <DeductModal reps={summary?.items || []} onClose={() => setDeducting(false)} />}
 
+      <SectionTabs
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'balances', label: 'Balances' },
+          { key: 'payouts', label: 'Payouts', count: pendingWithdrawals },
+          { key: 'penalties', label: 'Penalties', count: activeFines },
+          { key: 'rules', label: 'Rates & bonus' },
+        ]}
+      />
+
+      {tab === 'balances' && (
       <Card className="mt-4">
         <CardHeader title="Commission by representative" />
         <Table>
@@ -763,9 +823,12 @@ function AdminView() {
         </Table>
       </Card>
 
-      <FinesHistory admin />
+      )}
 
-      <Card className="mt-6">
+      {tab === 'penalties' && <FinesHistory admin />}
+
+      {tab === 'payouts' && (
+      <Card className="mt-4">
         <CardHeader title="Withdrawal requests" />
         {!wd?.data?.length ? <EmptyState title="No withdrawal requests" /> : (
           <Table>
@@ -791,8 +854,14 @@ function AdminView() {
         )}
       </Card>
 
-      <CommissionRateSettings />
-      <BonusSettings />
+      )}
+
+      {tab === 'rules' && (
+        <>
+          <CommissionRateSettings />
+          <BonusSettings />
+        </>
+      )}
     </>
   );
 }
