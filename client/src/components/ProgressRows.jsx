@@ -2,10 +2,10 @@ import clsx from 'clsx';
 import { formatCurrency } from '@/lib/format';
 
 // A rep is running at two things at once — a withdrawal minimum and a bonus
-// tier — and both are the same shape of question: how far along, how much left,
-// what it unlocks. One row type answers it for both, so they read as a pair
-// rather than two unrelated widgets competing for the same screen.
-function Row({ label, value, pct, hint, target, reward, ready, readyLabel, markers = [], onClick }) {
+// tier — and both ask the same question: how far along, how much is left, what
+// it unlocks. One row type answers it for both, so they read as a pair rather
+// than two unrelated widgets competing for the same screen.
+function Row({ label, pct, hint, reward, ready, readyLabel, markers = [], onClick }) {
   const width = Math.max(0, Math.min(100, pct || 0));
   const Tag = onClick ? 'button' : 'div';
   return (
@@ -13,41 +13,43 @@ function Row({ label, value, pct, hint, target, reward, ready, readyLabel, marke
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={clsx(
-        'block w-full px-4 py-3 text-left transition',
+        'block w-full px-4 py-2.5 text-left transition',
         onClick && 'hover:bg-white/[0.02] active:bg-white/[0.04]',
       )}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {/* A dot rather than an icon: it carries the state without adding weight. */}
-          <span className={clsx('h-1.5 w-1.5 rounded-full', ready ? 'bg-emerald-400' : 'bg-brand-500')} />
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">{label}</p>
-        </div>
-        <span className={clsx('text-base font-bold tabular-nums', ready ? 'text-emerald-300' : 'text-foreground')}>
-          {formatCurrency(value)}
+      {/* The share of the way there is the headline, not the money. A long
+          currency string set large dominates the screen and reads as a wall;
+          a percentage is one glance, and the amounts stay legible below it. */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
+        <span className={clsx(
+          'text-xl font-bold leading-none tabular-nums',
+          ready ? 'text-emerald-400' : 'text-brand-400',
+        )}>
+          {Math.round(width)}<span className="text-xs font-semibold text-faint">%</span>
         </span>
       </div>
 
-      {/* Track. The fill carries a soft glow so it reads as lit rather than
-          painted, and tier markers sit on top of it where they exist. */}
       <div className="relative mt-2">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06] ring-1 ring-inset ring-white/[0.03]">
+        <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
           <div
             className={clsx(
               'h-full rounded-full transition-[width] duration-700 ease-out',
               ready
-                ? 'bg-gradient-to-r from-emerald-500 to-emerald-300 shadow-[0_0_12px_-2px_rgba(52,211,153,0.75)]'
-                : 'bg-gradient-to-r from-brand-600 to-brand-400 shadow-[0_0_12px_-3px_rgba(163,230,53,0.6)]',
+                ? 'bg-gradient-to-r from-emerald-500 to-emerald-300'
+                : 'bg-gradient-to-r from-brand-600 to-brand-400',
             )}
             style={{ width: `${width}%` }}
           />
         </div>
+        {/* A notch per bonus tier, so the next milestone is visible on the track
+            rather than buried on another page. */}
         {markers.map((m) => (
           <span
             key={m.at}
             className={clsx(
-              'absolute top-1/2 h-2.5 w-[2px] -translate-y-1/2 rounded-full',
-              m.passed ? 'bg-emerald-200/80' : 'bg-white/20',
+              'absolute top-1/2 h-2 w-[2px] -translate-y-1/2 rounded-full',
+              m.passed ? 'bg-emerald-200/80' : 'bg-white/25',
             )}
             style={{ left: `calc(${Math.min(100, m.at)}% - 1px)` }}
           />
@@ -55,14 +57,14 @@ function Row({ label, value, pct, hint, target, reward, ready, readyLabel, marke
       </div>
 
       <div className="mt-1.5 flex items-baseline justify-between gap-3">
-        <p className="text-[11px] leading-snug text-muted">
+        <p className="truncate text-[11px] leading-none text-muted">
           {ready ? <span className="font-semibold text-emerald-400">{readyLabel}</span> : hint}
         </p>
-        {reward != null ? (
-          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-emerald-400">{formatCurrency(reward)}</span>
-        ) : target != null ? (
-          <span className="shrink-0 text-[11px] tabular-nums text-faint">{formatCurrency(target)}</span>
-        ) : null}
+        {reward != null && (
+          <span className="shrink-0 text-[11px] font-semibold leading-none tabular-nums text-emerald-400">
+            {formatCurrency(reward)}
+          </span>
+        )}
       </div>
     </Tag>
   );
@@ -80,9 +82,8 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
       <Row
         key="commission"
         label="Commission"
-        value={commission.available || 0}
         pct={(avail / min) * 100}
-        target={min}
+        reward={min}
         ready={ready}
         readyLabel="Ready to withdraw"
         hint={avail / min >= 0.9
@@ -105,11 +106,10 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
       <Row
         key="bonus"
         label="Sales bonus"
-        value={bonus.sales}
         pct={aim.progress}
         reward={aim.bonusAmount}
         ready={Boolean(claimable)}
-        readyLabel={claimable ? `${formatCurrency(claimable.bonusAmount)} ready — or push to ${formatCurrency(aim.target)}` : ''}
+        readyLabel={claimable ? `${formatCurrency(claimable.bonusAmount)} ready — or push on` : ''}
         hint={aim.progress >= 90
           ? `Almost there — only ${formatCurrency(aim.remaining)} to go`
           : `${formatCurrency(bonus.sales)} of ${formatCurrency(aim.target)}`}
