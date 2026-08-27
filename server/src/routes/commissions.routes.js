@@ -33,6 +33,7 @@ router.get('/bonus/me', reps, ctrl.bonusMe);
 router.get('/bonus/summary', staff, ctrl.bonusSummary);
 router.get('/bonus/rules', ctrl.bonusRules);
 router.post('/bonus/rules', admin, ctrl.createBonusRule);
+router.patch('/bonus/rules/:id', admin, validate(idParam), ctrl.updateBonusRule);
 router.patch('/bonus/rules/:id/active', admin, validate(idParam), ctrl.setBonusRuleActive);
 router.get('/bonus/awards', staff, ctrl.bonusAwards);
 router.post('/bonus/awards/:id/pay', admin, validate(idParam), ctrl.payBonusAward);

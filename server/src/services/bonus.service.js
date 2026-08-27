@@ -168,9 +168,44 @@ async function createRule({ salesTarget, bonusAmount, effectiveFrom, isActive = 
   });
 }
 
-// A rule can be switched off, but its figures cannot be edited: awards already
-// granted quote the target and amount that were in force, and rewriting them
-// would rewrite what a rep was told they had earned.
+// Change a rule's figures or its start date — but only while nothing has been
+// awarded under it. Once a rep has been told they earned a bonus, the target
+// and amount behind it are a matter of record, and the way to change the deal
+// is a new rule rather than an edit to the old one.
+async function updateRule(id, { salesTarget, bonusAmount, effectiveFrom, note }, actor) {
+  const rule = await prisma.bonusRule.findUnique({
+    where: { id },
+    include: { _count: { select: { awards: true } } },
+  });
+  if (!rule) throw ApiError.notFound('Bonus rule not found');
+  if (rule._count.awards > 0) {
+    throw ApiError.badRequest(
+      `${rule._count.awards} rep(s) have already earned this bonus, so its figures are fixed. Add a new rule for the new terms and switch this one off.`,
+    );
+  }
+
+  const data = {};
+  if (salesTarget != null) {
+    const t = round2(salesTarget);
+    if (!(t > 0)) throw ApiError.badRequest('Sales target must be greater than zero');
+    data.salesTarget = t;
+  }
+  if (bonusAmount != null) {
+    const a = round2(bonusAmount);
+    if (!(a > 0)) throw ApiError.badRequest('Bonus amount must be greater than zero');
+    data.bonusAmount = a;
+  }
+  if (effectiveFrom != null) {
+    const from = new Date(effectiveFrom);
+    if (Number.isNaN(from.getTime())) throw ApiError.badRequest('Enter a valid start date');
+    data.effectiveFrom = from;
+  }
+  if (note !== undefined) data.note = note || null;
+  if (!Object.keys(data).length) return rule;
+
+  return prisma.bonusRule.update({ where: { id }, data });
+}
+
 async function setRuleActive(id, isActive) {
   const rule = await prisma.bonusRule.findUnique({ where: { id } });
   if (!rule) throw ApiError.notFound('Bonus rule not found');
@@ -221,6 +256,7 @@ module.exports = {
   summaryAllReps,
   listRules,
   createRule,
+  updateRule,
   setRuleActive,
   listAwards,
   markPaid,

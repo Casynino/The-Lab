@@ -538,6 +538,22 @@ function BonusSettings() {
   const [target, setTarget] = useState('');
   const [amount, setAmount] = useState('');
   const [from, setFrom] = useState('');
+  // When set, the form edits that rule instead of creating another one.
+  const [editingId, setEditingId] = useState(null);
+
+  // datetime-local wants local wall time, not an ISO string with a zone.
+  const toLocalInput = (d) => {
+    const dt = new Date(d);
+    const off = dt.getTimezoneOffset() * 60000;
+    return new Date(dt.getTime() - off).toISOString().slice(0, 16);
+  };
+  const startEdit = (r) => {
+    setEditingId(r.id);
+    setTarget(String(r.salesTarget));
+    setAmount(String(r.bonusAmount));
+    setFrom(toLocalInput(r.effectiveFrom));
+  };
+  const cancelEdit = () => { setEditingId(null); setTarget(''); setAmount(''); setFrom(''); };
 
   const { data: rules = [] } = useQuery({ queryKey: ['bonus-rules'], queryFn: async () => unwrap(await api.get('/commissions/bonus/rules')).data });
   const { data: progress } = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
@@ -550,7 +566,15 @@ function BonusSettings() {
       salesTarget: Number(target), bonusAmount: Number(amount),
       effectiveFrom: from ? new Date(from).toISOString() : new Date().toISOString(),
     }),
-    onSuccess: () => { toast.success('Bonus rule saved'); setTarget(''); setAmount(''); setFrom(''); refresh(); },
+    onSuccess: () => { toast.success('Bonus rule saved'); cancelEdit(); refresh(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const edit = useMutation({
+    mutationFn: () => api.patch(`/commissions/bonus/rules/${editingId}`, {
+      salesTarget: Number(target), bonusAmount: Number(amount),
+      effectiveFrom: from ? new Date(from).toISOString() : undefined,
+    }),
+    onSuccess: () => { toast.success('Bonus rule updated'); cancelEdit(); refresh(); },
     onError: (e) => toast.error(apiError(e)),
   });
   const toggle = useMutation({
@@ -569,9 +593,16 @@ function BonusSettings() {
       <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
         <Field label="Sales target" required><Input type="number" min="0" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="10000000" /></Field>
         <Field label="Bonus amount" required><Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></Field>
-        <Field label="Starts" hint="Blank means straight away"><Input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-        <div className="flex items-end">
-          <Button className="w-full" loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>Save bonus rule</Button>
+        <Field label="Counts sales from" hint="Blank means straight away"><Input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+        <div className="flex items-end gap-2">
+          {editingId ? (
+            <>
+              <Button className="flex-1" loading={edit.isPending} disabled={!valid} onClick={() => edit.mutate()}>Update</Button>
+              <Button variant="secondary" onClick={cancelEdit}>Cancel</Button>
+            </>
+          ) : (
+            <Button className="w-full" loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>Save bonus rule</Button>
+          )}
         </div>
       </div>
 
@@ -585,7 +616,11 @@ function BonusSettings() {
               <TD className="text-muted">{formatDateTime(r.effectiveFrom)}</TD>
               <TD>{r._count?.awards ?? 0}</TD>
               <TD>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-1">
+                  {/* Figures are only editable while nothing has been earned under them. */}
+                  {(r._count?.awards ?? 0) === 0 && (
+                    <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => startEdit(r)}>Edit</Button>
+                  )}
                   <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => toggle.mutate({ id: r.id, isActive: !r.isActive })}>
                     {r.isActive ? 'Switch off' : 'Switch on'}
                   </Button>
@@ -648,6 +683,8 @@ function BonusSettings() {
       )}
       <p className="px-4 py-3 text-xs text-faint">
         Bonus money never enters a rep's commission balance and never changes what a box is worth — it is paid on its own.
+        Sales count from the date set above, so moving that date back counts selling the reps have already done. A rule
+        can be edited freely until someone earns it; after that the terms are fixed and a new rule replaces it.
       </p>
     </Card>
   );

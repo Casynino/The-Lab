@@ -73,6 +73,12 @@ const createBonusRule = asyncHandler(async (req, res) => {
   return created(res, row);
 });
 
+const updateBonusRule = asyncHandler(async (req, res) => {
+  const row = await bonus.updateRule(req.params.id, req.body, req.user);
+  await audit.record(req, { action: 'UPDATE', entityType: 'BonusRule', entityId: row.id, newValues: { salesTarget: row.salesTarget, bonusAmount: row.bonusAmount, effectiveFrom: row.effectiveFrom } });
+  return ok(res, row);
+});
+
 const setBonusRuleActive = asyncHandler(async (req, res) => {
   const row = await bonus.setRuleActive(req.params.id, req.body.isActive);
   await audit.record(req, { action: 'UPDATE', entityType: 'BonusRule', entityId: row.id, newValues: { isActive: row.isActive } });
@@ -89,5 +95,5 @@ const payBonusAward = asyncHandler(async (req, res) => {
 
 module.exports = {
   listRates, createRate, deleteRate,
-  bonusMe, bonusSummary, bonusRules, createBonusRule, setBonusRuleActive, bonusAwards, payBonusAward,
+  bonusMe, bonusSummary, bonusRules, createBonusRule, updateBonusRule, setBonusRuleActive, bonusAwards, payBonusAward,
   me, getForRep, summary, rule, listWithdrawals, requestWithdrawal, decideWithdrawal };
