@@ -6,52 +6,13 @@ import { formatCurrency } from '@/lib/format';
 // reads as one journey with milestones, which is what it is — rather than two
 // separate bars racing each other. The track is scaled to the highest tier so
 // the distance between 10m and 15m is honest.
-export default function BonusProgress({ p, compact = false }) {
+export default function BonusProgress({ p }) {
   if (!p?.configured || !p.tiers?.length) return null;
 
   const top = p.tiers[p.tiers.length - 1].target;
   const pct = top > 0 ? Math.min(100, (p.sales / top) * 100) : 0;
   const claimable = p.claimable;
   const aim = p.next || p.tiers[p.tiers.length - 1];
-
-  // The dashboard is for getting to work, so the bonus gets one strip there and
-  // nothing more: where you are, how far to the next tier, what it pays. The
-  // full breakdown lives on the earnings page, which is where someone goes when
-  // they actually want to study it.
-  if (compact) {
-    return (
-      <div className={clsx(
-        'rounded-2xl border px-4 py-3',
-        claimable ? 'border-emerald-500/40 bg-emerald-500/[0.07]' : 'border-border bg-surface',
-      )}>
-        <div className="flex items-baseline justify-between gap-3">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Sales bonus</p>
-          {claimable ? (
-            <span className="flex items-center gap-1 text-xs font-semibold text-emerald-400">
-              <Trophy className="h-3.5 w-3.5" />
-              {formatCurrency(claimable.bonusAmount)} ready
-            </span>
-          ) : (
-            <span className="text-xs text-faint">{aim.progress}%</span>
-          )}
-        </div>
-
-        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]">
-          <div
-            className={clsx('h-full rounded-full transition-all duration-500', claimable ? 'bg-emerald-400' : 'bg-brand-500')}
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-
-        <p className="mt-2 text-xs text-muted">
-          <span className="font-semibold text-foreground">{formatCurrency(p.sales)}</span>
-          {claimable
-            ? <> sold · take it or push to {formatCurrency(aim.target)} for {formatCurrency(aim.bonusAmount)}</>
-            : <> of {formatCurrency(aim.target)} · earns {formatCurrency(aim.bonusAmount)}</>}
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className={clsx(
@@ -123,15 +84,13 @@ export default function BonusProgress({ p, compact = false }) {
         ))}
       </div>
 
-      {!compact && (
-        <p className="mt-3 text-xs text-muted">
+      <p className="mt-3 text-xs text-muted">
           {claimable && p.next
             ? <>You can take <span className="font-semibold text-emerald-400">{formatCurrency(claimable.bonusAmount)}</span> now, or reach {formatCurrency(p.next.target)} for <span className="font-semibold text-emerald-400">{formatCurrency(p.next.bonusAmount)}</span>. Taking a bonus starts your count again from zero.</>
             : claimable
               ? <>You can take <span className="font-semibold text-emerald-400">{formatCurrency(claimable.bonusAmount)}</span>. Taking it starts your count again from zero.</>
               : <>Reach {formatCurrency(p.next?.target ?? top)} to earn {formatCurrency(p.next?.bonusAmount ?? 0)}. Bonus is separate from your box commission.</>}
-        </p>
-      )}
+      </p>
     </div>
   );
 }

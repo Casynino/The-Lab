@@ -10,7 +10,7 @@ import api, { unwrap } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { tzGreeting, tzDateLabel } from '@/lib/tz';
-import BonusProgress from '@/components/BonusProgress';
+import ProgressRows from '@/components/ProgressRows';
 import { SETTLEMENT_STATUS_META } from '@/lib/constants';
 import OrderDetailModal from '@/components/OrderDetail';
 import { PageSpinner, EmptyState, Badge } from '@/components/ui';
@@ -102,7 +102,7 @@ export default function RepDashboard() {
       </div>
 
       {/* Sales bonus — separate from box commission, so it sits on its own. */}
-      {bonus?.configured && <BonusProgress p={bonus} compact />}
+      <ProgressRows commission={commission} bonus={bonus} />
 
       {/* Card grid */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
