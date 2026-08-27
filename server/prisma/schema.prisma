@@ -219,6 +219,9 @@ model User {
   @@index([roleId])
   @@index([warehouseId])
   @@map("users")
+  commissionRates      CommissionRate[] @relation("CommissionRateCreatedBy")
+  bonusRules           BonusRule[]      @relation("BonusRuleCreatedBy")
+  bonusAwardsPaid      BonusAward[]     @relation("BonusAwardPaidBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +236,8 @@ model Brand {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  products Product[]
+  products        Product[]
+  commissionRates CommissionRate[]
 
   @@map("brands")
 }
@@ -417,6 +421,7 @@ model SalesRepresentative {
   commissionWithdrawals CommissionWithdrawal[]
   dailyReports          DailyReport[]
   settlementPenalties   SettlementPenalty[]
+  bonusAwards           BonusAward[]
 
   @@index([region])
   @@map("sales_representatives")
@@ -1412,4 +1417,78 @@ model ExpenseCategory {
   createdAt DateTime @default(now())
 
   @@map("expense_categories")
+}
+
+
+// ── Commission rates ─────────────────────────────────────────────────────────
+// What one settled box of a brand earns, from `effectiveFrom` until a later row
+// supersedes it. The table is APPEND-ONLY: changing what a box pays means
+// adding a row with a future date, never editing an existing one. That is what
+// keeps settled history intact — a box is always priced by the row that was in
+// force when its ORDER was created, so a rate added today cannot reach back and
+// re-price work already done.
+model CommissionRate {
+  id            String   @id @default(cuid())
+  // NULL is the fallback rate, used by any brand without a rule of its own so
+  // a newly added brand still pays something rather than nothing.
+  brandId       String?
+  brand         Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  perBox        Decimal  @db.Decimal(14, 2)
+  effectiveFrom DateTime
+  note          String?
+  createdById   String?
+  createdBy     User?    @relation("CommissionRateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@unique([brandId, effectiveFrom])
+  @@index([brandId, effectiveFrom])
+  @@map("commission_rates")
+}
+
+// ── Sales performance bonus ──────────────────────────────────────────────────
+// Reach `salesTarget` of qualifying sales and earn `bonusAmount`. Deliberately
+// nothing to do with per-box commission: bonus money is never added into a
+// rep's commission balance, and never affects what a box is worth.
+model BonusRule {
+  id            String   @id @default(cuid())
+  salesTarget   Decimal  @db.Decimal(16, 2)
+  bonusAmount   Decimal  @db.Decimal(14, 2)
+  effectiveFrom DateTime
+  isActive      Boolean  @default(true)
+  note          String?
+  createdById   String?
+  createdBy     User?    @relation("BonusRuleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  awards BonusAward[]
+
+  @@index([effectiveFrom])
+  @@map("bonus_rules")
+}
+
+// A rep reaching a target. Written once when they cross it, so the moment and
+// the figures behind it survive later changes to the rule.
+model BonusAward {
+  id              String              @id @default(cuid())
+  salesRepId      String
+  salesRep        SalesRepresentative @relation(fields: [salesRepId], references: [id], onDelete: Cascade)
+  bonusRuleId     String
+  bonusRule       BonusRule           @relation(fields: [bonusRuleId], references: [id], onDelete: Cascade)
+  qualifyingSales Decimal             @db.Decimal(16, 2)
+  bonusAmount     Decimal             @db.Decimal(14, 2)
+  // ELIGIBLE (target reached) | PAID | CANCELLED
+  status          String              @default("ELIGIBLE")
+  unlockedAt      DateTime            @default(now())
+  paidAt          DateTime?
+  paidById        String?
+  paidBy          User?               @relation("BonusAwardPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // One award per rep per rule — crossing the line twice is still one bonus.
+  @@unique([salesRepId, bonusRuleId])
+  @@index([salesRepId])
+  @@map("bonus_awards")
 }

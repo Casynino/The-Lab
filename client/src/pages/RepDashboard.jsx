@@ -63,6 +63,10 @@ export default function RepDashboard() {
   const navigate = useNavigate();
   const [viewing, setViewing] = useState(null);
 
+  const { data: bonus } = useQuery({
+    queryKey: ['bonus', 'me'],
+    queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data,
+  });
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', 'me'],
     queryFn: async () => unwrap(await api.get('/dashboard/me')).data,
@@ -95,6 +99,41 @@ export default function RepDashboard() {
           {tzGreeting()}, {first}.
         </h1>
       </div>
+
+      {/* Sales bonus — separate from box commission, so it sits on its own. */}
+      {bonus?.configured && (
+        <div className={clsx(
+          'rounded-2xl border p-4',
+          bonus.unlocked ? 'border-emerald-500/40 bg-emerald-500/10' : 'border-border bg-surface',
+        )}>
+          {bonus.unlocked ? (
+            <>
+              <p className="text-sm font-semibold text-emerald-400">Bonus unlocked</p>
+              <p className="mt-1 text-3xl font-bold text-emerald-300">{formatCurrency(bonus.bonusAmount)}</p>
+              <p className="mt-1 text-xs text-muted">
+                {bonus.award?.status === 'PAID' ? 'Paid.' : 'The Lab will pay this separately from your commission.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Sales bonus</p>
+                  <p className="mt-0.5 text-xl font-bold text-foreground">{formatCurrency(bonus.sales)}</p>
+                </div>
+                <p className="text-right text-xs text-muted">of {formatCurrency(bonus.target)}</p>
+              </div>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${Math.min(100, bonus.progress)}%` }} />
+              </div>
+              <div className="mt-2 flex justify-between text-xs text-muted">
+                <span>{bonus.progress}%</span>
+                <span>{formatCurrency(bonus.remaining)} to go for {formatCurrency(bonus.bonusAmount)}</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Card grid */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

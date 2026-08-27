@@ -32,47 +32,152 @@ async function getRule() {
   return { boxThreshold, amountPerThreshold, perBox };
 }
 
-// ── Versioned commission rules ───────────────────────────────────────────────
-// The rule that applies to a settled box is the one that was in force WHEN THE
-// ORDER WAS CREATED — frozen on the settlement as commissionRuleVersion. That
-// means changing the rules never re-prices history: old orders keep paying the
-// old rate even when they are settled months later.
+// ── Commission rates ─────────────────────────────────────────────────────────
+// Rates live in the commission_rates table, not in this file, so The Doctor can
+// change them without a deploy. A box is priced by the row in force WHEN ITS
+// ORDER WAS CREATED — never when it was settled — so adding a rate today cannot
+// reach back and re-price work already done.
 //
-//   V1  flat rate per box for every brand (the configurable legacy rate)
-//   V2  per-brand rates, effective 1 Aug 2026 00:00 Tanzania time
-const COMMISSION_V2_FROM = '2026-08-01T00:00:00+03:00'; // EAT
+// The table is append-only and the API refuses a start date in the past, which
+// is what makes that guarantee structural rather than a promise.
 
-// Brand names are matched loosely (upper-cased, letters only) because the same
-// brand is spelled "Civlily" in production and "CIVILLY" in the seed data.
-// Anything not listed falls back to V2_DEFAULT, so a new brand still pays.
-const V2_RATES = { OHIS: 5000, CIVLILY: 3000, CIVILLY: 3000 };
-const V2_DEFAULT = 5000;
+// Brand names are matched by id, but the seed spells one brand "CIVILLY" and
+// production spells it "Civlily", so name lookups normalise before comparing.
 const normalizeBrand = (name) => String(name || '').toUpperCase().replace(/[^A-Z]/g, '');
 
-// Is an order created at `when` on the new rules?
-function ruleVersionFor(when) {
-  return new Date(when || Date.now()) >= new Date(COMMISSION_V2_FROM) ? 'V2' : 'V1';
+// Rates change rarely and are read on every settled line, so the whole table is
+// held for a short spell rather than queried per box. Any write clears it.
+let rateCache = null;
+let rateCacheAt = 0;
+const RATE_CACHE_MS = 60 * 1000;
+
+function clearRateCache() {
+  rateCache = null;
+  rateCacheAt = 0;
 }
 
-// Rate for one settled box, given the order's frozen rule and the box's brand.
-// `legacyPerBox` is the V1 rate (configurable in settings, currently 5,000).
-function rateForBox(ruleVersion, brandName, legacyPerBox) {
-  if (ruleVersion !== 'V2') return legacyPerBox;
-  const key = normalizeBrand(brandName);
-  return V2_RATES[key] ?? V2_DEFAULT;
+async function allRates() {
+  if (rateCache && Date.now() - rateCacheAt < RATE_CACHE_MS) return rateCache;
+  const rows = await prisma.commissionRate.findMany({
+    include: { brand: { select: { id: true, name: true } } },
+    orderBy: { effectiveFrom: 'asc' },
+  });
+  rateCache = rows.map((r) => ({
+    brandId: r.brandId,
+    brandKey: r.brand ? normalizeBrand(r.brand.name) : null,
+    perBox: toNumber(r.perBox),
+    effectiveFrom: new Date(r.effectiveFrom).getTime(),
+  }));
+  rateCacheAt = Date.now();
+  return rateCache;
+}
+
+// The rate for one box of `brand` on an order created at `when`: the latest row
+// for that brand that had already taken effect, else the fallback row.
+function pickRate(rates, brandKey, whenMs) {
+  let best = null;
+  let fallback = null;
+  for (const r of rates) {
+    if (r.effectiveFrom > whenMs) continue;
+    if (r.brandKey === brandKey && brandKey) {
+      if (!best || r.effectiveFrom > best.effectiveFrom) best = r;
+    } else if (r.brandId === null) {
+      if (!fallback || r.effectiveFrom > fallback.effectiveFrom) fallback = r;
+    }
+  }
+  return (best || fallback)?.perBox ?? 0;
+}
+
+// ── Admin writes ─────────────────────────────────────────────────────────────
+
+async function listRates() {
+  return prisma.commissionRate.findMany({
+    include: { brand: { select: { id: true, name: true } }, createdBy: { select: { name: true } } },
+    orderBy: [{ effectiveFrom: 'desc' }, { brandId: 'asc' }],
+  });
+}
+
+// Add a rate. The start date must be in the future, which is the whole reason
+// history is safe: a rate can never be introduced behind an order that has
+// already been issued, so no settled box can be re-priced. Editing an existing
+// rate is deliberately not offered for the same reason.
+async function createRate({ brandId, perBox, effectiveFrom, note }, actor) {
+  const amount = round2(perBox);
+  if (!(amount > 0)) throw ApiError.badRequest('Commission per box must be greater than zero');
+
+  const from = effectiveFrom ? new Date(effectiveFrom) : null;
+  if (!from || Number.isNaN(from.getTime())) throw ApiError.badRequest('Choose the date this rate starts');
+  if (from.getTime() <= Date.now()) {
+    throw ApiError.badRequest(
+      'A new rate must start in the future. Orders already issued keep the rate they were created under, so a start date in the past would re-price work that is already done.',
+    );
+  }
+
+  if (brandId) {
+    const brand = await prisma.brand.findUnique({ where: { id: brandId } });
+    if (!brand) throw ApiError.notFound('Brand not found');
+  }
+
+  try {
+    const row = await prisma.commissionRate.create({
+      data: { brandId: brandId || null, perBox: amount, effectiveFrom: from, note: note || null, createdById: actor?.id || null },
+    });
+    clearRateCache();
+    return row;
+  } catch (e) {
+    if (e.code === 'P2002') throw ApiError.badRequest('That brand already has a rate starting at exactly this time');
+    throw e;
+  }
+}
+
+// Remove a rate that has not taken effect yet. Once a rate is live it may have
+// priced an order, so it stays.
+async function deleteRate(id) {
+  const row = await prisma.commissionRate.findUnique({ where: { id } });
+  if (!row) throw ApiError.notFound('Rate not found');
+  if (new Date(row.effectiveFrom).getTime() <= Date.now()) {
+    throw ApiError.badRequest('This rate has already taken effect and cannot be removed — add a new rate to change what boxes earn from now on.');
+  }
+  await prisma.commissionRate.delete({ where: { id } });
+  clearRateCache();
+  return { deleted: true };
+}
+
+// Every rate in force on a given date, one row per brand — drives the rate card
+// and the admin screen.
+async function ratesOn(when = new Date()) {
+  const [rates, brands] = await Promise.all([
+    allRates(),
+    prisma.brand.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
+  ]);
+  const whenMs = new Date(when).getTime();
+  return brands.map((b) => ({
+    brandId: b.id,
+    brand: b.name,
+    perBox: pickRate(rates, normalizeBrand(b.name), whenMs),
+  }));
+}
+
+// Kept for callers that price a single box by brand NAME.
+async function rateForBrandAt(brandName, when) {
+  const rates = await allRates();
+  return pickRate(rates, normalizeBrand(brandName), new Date(when || Date.now()).getTime());
 }
 
 // What a rep has EARNED: every settled box priced with its own order's rule and
 // its own product's brand. Returns the total plus a per-brand breakdown.
-async function earnedForRep(salesRepId, legacyPerBox) {
-  const items = await prisma.saleItem.findMany({
-    where: { sale: { is: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' } } } },
-    select: {
-      baseQuantity: true,
-      product: { select: { brand: { select: { name: true } } } },
-      sale: { select: { settlement: { select: { commissionRuleVersion: true } } } },
-    },
-  });
+async function earnedForRep(salesRepId) {
+  const [items, rates] = await Promise.all([
+    prisma.saleItem.findMany({
+      where: { sale: { is: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' } } } },
+      select: {
+        baseQuantity: true,
+        product: { select: { brand: { select: { name: true } } } },
+        sale: { select: { soldAt: true, settlement: { select: { issuedAt: true } } } },
+      },
+    }),
+    allRates(),
+  ]);
 
   let earned = 0;
   let boxes = 0;
@@ -80,9 +185,10 @@ async function earnedForRep(salesRepId, legacyPerBox) {
   for (const it of items) {
     const qty = it.baseQuantity || 0;
     const brand = it.product?.brand?.name || '—';
-    // A sale whose settlement vanished (SetNull) falls back to the legacy rate.
-    const version = it.sale?.settlement?.commissionRuleVersion || 'V1';
-    const rate = rateForBox(version, brand, legacyPerBox);
+    // The order's issue date decides the rate. A sale whose settlement vanished
+    // falls back to its own date, which is never earlier.
+    const when = it.sale?.settlement?.issuedAt || it.sale?.soldAt || new Date();
+    const rate = pickRate(rates, normalizeBrand(brand), new Date(when).getTime());
     const amount = qty * rate;
     earned += amount;
     boxes += qty;
@@ -113,38 +219,30 @@ async function earnedForRep(salesRepId, legacyPerBox) {
 // brand names from the catalogue (production spells it "Civlily", the seed
 // "CIVILLY" — both resolve to the same rate). Drives the rate card in the UI.
 async function currentRates() {
-  const rule = await getRule();
-  const version = ruleVersionFor(new Date());
-  const brands = await prisma.brand
-    .findMany({ where: { isActive: true }, select: { name: true }, orderBy: { name: 'asc' } })
-    .catch(() => []);
-  const names = brands.length ? brands.map((b) => b.name) : Object.keys(V2_RATES);
-  return {
-    version,
-    effectiveFrom: COMMISSION_V2_FROM,
-    perBrand: names.map((name) => ({ brand: name, perBox: rateForBox(version, name, rule.perBox) })),
-  };
+  const perBrand = await ratesOn(new Date());
+  return { effectiveFrom: null, perBrand };
 }
 
 // Per-box rate for one product on one order — the number the "you earned X"
 // messages quote. Resolves the order's frozen rule and the product's brand.
 async function rateForProductOnOrder(settlementId, productId) {
-  const [rule, stl, prod] = await Promise.all([
-    getRule(),
+  const [rates, stl, prod] = await Promise.all([
+    allRates(),
     settlementId
-      ? prisma.settlement.findUnique({ where: { id: settlementId }, select: { commissionRuleVersion: true } }).catch(() => null)
+      ? prisma.settlement.findUnique({ where: { id: settlementId }, select: { issuedAt: true } }).catch(() => null)
       : null,
     productId
       ? prisma.product.findUnique({ where: { id: productId }, select: { brand: { select: { name: true } } } }).catch(() => null)
       : null,
   ]);
-  return rateForBox(stl?.commissionRuleVersion || 'V1', prod?.brand?.name, rule.perBox);
+  const when = stl?.issuedAt ? new Date(stl.issuedAt).getTime() : Date.now();
+  return pickRate(rates, normalizeBrand(prod?.brand?.name), when);
 }
 
 // Commission earned inside a date window (by sale date), priced per box with
 // each order's own rule. Used by the weekly and monthly reports.
 async function earnedBetween(start, end) {
-  const rule = await getRule();
+  const rates = await allRates();
   const items = await prisma.saleItem.findMany({
     where: {
       sale: {
@@ -159,13 +257,14 @@ async function earnedBetween(start, end) {
     select: {
       baseQuantity: true,
       product: { select: { brand: { select: { name: true } } } },
-      sale: { select: { salesRepId: true, settlement: { select: { commissionRuleVersion: true } } } },
+      sale: { select: { salesRepId: true, soldAt: true, settlement: { select: { issuedAt: true } } } },
     },
   });
   let total = 0;
   const byRep = new Map();
   for (const it of items) {
-    const rate = rateForBox(it.sale?.settlement?.commissionRuleVersion || 'V1', it.product?.brand?.name, rule.perBox);
+    const when = it.sale?.settlement?.issuedAt || it.sale?.soldAt || new Date();
+    const rate = pickRate(rates, normalizeBrand(it.product?.brand?.name), new Date(when).getTime());
     const amount = (it.baseQuantity || 0) * rate;
     total += amount;
     const id = it.sale.salesRepId;
@@ -201,7 +300,7 @@ async function withdrawalTotals(salesRepId) {
 async function computeForRep(salesRepId) {
   const rule = await getRule();
   const [earnedData, wt, penaltyData, rates, rep] = await Promise.all([
-    earnedForRep(salesRepId, rule.perBox),
+    earnedForRep(salesRepId),
     withdrawalTotals(salesRepId),
     penaltyBreakdownForRep(salesRepId),
     currentRates(),
@@ -377,14 +476,16 @@ async function decideWithdrawal(id, action, actor) {
 
 module.exports = {
   getRule,
-  ruleVersionFor,
-  rateForBox,
+  ratesOn,
+  listRates,
+  createRate,
+  deleteRate,
+  rateForBrandAt,
+  clearRateCache,
   earnedForRep,
   earnedBetween,
   currentRates,
   rateForProductOnOrder,
-  COMMISSION_V2_FROM,
-  V2_RATES,
   computeForRep,
   summaryAllReps,
   requestWithdrawal,

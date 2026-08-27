@@ -74,15 +74,10 @@ async function createForIssuance(client, { salesRepId, assignedValue, transferId
   const issued = issuedAt ? new Date(issuedAt) : new Date();
   const deadlineAt = dayjs(issued).add(SETTLEMENT_WINDOW_HOURS, 'hour').toDate();
   const settlementNumber = await nextDocNumber(client.settlement, 'settlementNumber', 'STL');
-  // Freeze the commission rule in force right now onto the order. Every box
-  // later settled against it is priced with THIS rule, so changing the rates
-  // never re-prices orders that already exist.
-  const commissionRuleVersion = require('./commission.service').ruleVersionFor(issued);
   return client.settlement.create({
     data: {
       settlementNumber,
       salesRepId,
-      commissionRuleVersion,
       assignedValue: round2(assignedValue),
       issuedAt: issued,
       deadlineAt,
@@ -128,13 +123,19 @@ async function list(filters, pagination) {
 // returned value, outstanding. `client` lets callers read uncommitted writes
 // from inside a transaction.
 async function orderBreakdown(s, client = prisma) {
-  const [transfer, settledRows, retRows, pendingRetRows, rule] = await Promise.all([
+  const [transfer, settledRows, retRows, pendingRetRows, rule, orderRates] = await Promise.all([
     s.transferId ? client.stockTransfer.findUnique({ where: { id: s.transferId }, include: { items: true } }) : null,
     client.saleItem.groupBy({ by: ['productId'], where: { sale: { settlementId: s.id, status: { not: 'CANCELLED' } } }, _sum: { baseQuantity: true } }),
     client.returnItem.groupBy({ by: ['productId'], where: { return: { settlementId: s.id, status: { in: ['APPROVED', 'COMPLETED'] } } }, _sum: { baseQuantity: true } }),
     client.returnItem.groupBy({ by: ['productId'], where: { return: { settlementId: s.id, status: 'PENDING' } }, _sum: { baseQuantity: true } }),
     commission.getRule(),
+    // The rates in force when this order was ISSUED. A later rate change cannot
+    // alter what an order already earned, so the breakdown is priced by its own
+    // date rather than today's.
+    commission.ratesOn(s.issuedAt || s.createdAt),
   ]);
+  const brandKey = (n) => String(n || '').toUpperCase().replace(/[^A-Z]/g, '');
+  const rateByBrand = new Map(orderRates.map((r) => [brandKey(r.brand), r.perBox]));
 
   const assignedMap = new Map();
   (transfer?.items || []).forEach((it) => assignedMap.set(it.productId, (assignedMap.get(it.productId) || 0) + it.baseQuantity));
@@ -172,7 +173,7 @@ async function orderBreakdown(s, client = prisma) {
     pendingReturnBoxes += pendingReturn;
     returnedValue += returned * toNumber(p.sellingPrice);
     remainingValue += remaining * toNumber(p.sellingPrice);
-    const perBox = commission.rateForBox(s.commissionRuleVersion || 'V1', p.brand?.name, rule.perBox);
+    const perBox = rateByBrand.get(brandKey(p.brand?.name)) ?? 0;
     commissionEarned += settled * perBox;
     return { productId: pid, name: p.name, sku: p.sku, brandId: p.brandId || null, commissionPerBox: perBox, sellingPrice: toNumber(p.sellingPrice), assigned, settled, returned, pendingReturn, remaining };
   });

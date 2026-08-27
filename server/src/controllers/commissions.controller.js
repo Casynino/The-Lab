@@ -5,6 +5,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { ok, created, paginated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
 const commission = require('../services/commission.service');
+const bonus = require('../services/bonus.service');
 const finance = require('../services/finance.service');
 const audit = require('../services/audit.service');
 const { ROLES } = require('../middleware/authorize');
@@ -46,4 +47,47 @@ const decideWithdrawal = asyncHandler(async (req, res) => {
   return ok(res, w);
 });
 
-module.exports = { me, getForRep, summary, rule, listWithdrawals, requestWithdrawal, decideWithdrawal };
+// ── Commission rates (admin) ─────────────────────────────────────────────────
+const listRates = asyncHandler(async (_req, res) => ok(res, await commission.listRates()));
+
+const createRate = asyncHandler(async (req, res) => {
+  const row = await commission.createRate(req.body, req.user);
+  await audit.record(req, { action: 'CREATE', entityType: 'CommissionRate', entityId: row.id, newValues: { brandId: row.brandId, perBox: row.perBox, effectiveFrom: row.effectiveFrom } });
+  return created(res, row);
+});
+
+const deleteRate = asyncHandler(async (req, res) => {
+  const out = await commission.deleteRate(req.params.id);
+  await audit.record(req, { action: 'DELETE', entityType: 'CommissionRate', entityId: req.params.id });
+  return ok(res, out);
+});
+
+// ── Sales bonus ──────────────────────────────────────────────────────────────
+const bonusMe = asyncHandler(async (req, res) => ok(res, await bonus.progressForRep(req.user.salesRepId)));
+const bonusSummary = asyncHandler(async (_req, res) => ok(res, await bonus.summaryAllReps()));
+const bonusRules = asyncHandler(async (_req, res) => ok(res, await bonus.listRules()));
+
+const createBonusRule = asyncHandler(async (req, res) => {
+  const row = await bonus.createRule(req.body, req.user);
+  await audit.record(req, { action: 'CREATE', entityType: 'BonusRule', entityId: row.id, newValues: { salesTarget: row.salesTarget, bonusAmount: row.bonusAmount, effectiveFrom: row.effectiveFrom } });
+  return created(res, row);
+});
+
+const setBonusRuleActive = asyncHandler(async (req, res) => {
+  const row = await bonus.setRuleActive(req.params.id, req.body.isActive);
+  await audit.record(req, { action: 'UPDATE', entityType: 'BonusRule', entityId: row.id, newValues: { isActive: row.isActive } });
+  return ok(res, row);
+});
+
+const bonusAwards = asyncHandler(async (req, res) => ok(res, await bonus.listAwards({ status: req.query.status })));
+
+const payBonusAward = asyncHandler(async (req, res) => {
+  const row = await bonus.markPaid(req.params.id, req.user, req.body?.notes);
+  await audit.record(req, { action: 'UPDATE', entityType: 'BonusAward', entityId: row.id, newValues: { status: 'PAID' } });
+  return ok(res, row);
+});
+
+module.exports = {
+  listRates, createRate, deleteRate,
+  bonusMe, bonusSummary, bonusRules, createBonusRule, setBonusRuleActive, bonusAwards, payBonusAward,
+  me, getForRep, summary, rule, listWithdrawals, requestWithdrawal, decideWithdrawal };

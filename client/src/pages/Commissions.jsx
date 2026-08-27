@@ -198,16 +198,9 @@ function PenaltyPolicyCard() {
 // when they were CREATED, so this card describes new orders only.
 function RatesCard({ rates }) {
   if (!rates?.perBrand?.length) return null;
-  const live = rates.version === 'V2';
-  const from = new Date(rates.effectiveFrom);
   return (
     <Card className="mt-4">
-      <CardHeader
-        title="Commission rate per box"
-        subtitle={live
-          ? 'These rates apply to every order created from 1 August 2026.'
-          : `New rates start ${from.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.`}
-      />
+      <CardHeader title="Commission rate per box" subtitle="What one settled box earns today." />
       <div className="grid grid-cols-2 gap-3 p-4 pt-0 sm:grid-cols-3">
         {rates.perBrand.map((r) => (
           <div key={r.brand} className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -220,6 +213,54 @@ function RatesCard({ rates }) {
       <p className="px-4 pb-4 text-xs text-faint">
         Orders you already have keep the rate they were issued with — nothing you have earned changes.
       </p>
+    </Card>
+  );
+}
+
+// Progress toward the sales bonus. Shown to the rep and on the admin list.
+function BonusProgressCard({ p }) {
+  if (!p?.configured) return null;
+  const pct = Math.max(0, Math.min(100, p.progress || 0));
+  return (
+    <Card className="mt-4">
+      <CardHeader
+        title="Sales bonus"
+        subtitle={p.unlocked ? 'Target reached — this is separate from your box commission.' : 'Separate from your box commission.'}
+      />
+      <div className="p-4 pt-0">
+        {p.unlocked ? (
+          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3">
+            <p className="text-sm font-semibold text-emerald-400">Bonus unlocked</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-300">{formatCurrency(p.bonusAmount)}</p>
+            <p className="mt-1 text-xs text-muted">
+              {p.award?.status === 'PAID' ? 'Paid.' : 'Waiting to be paid by The Lab.'}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-faint">Current sales</p>
+                <p className="text-xl font-bold text-foreground">{formatCurrency(p.sales)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-wide text-faint">Target</p>
+                <p className="text-xl font-bold text-muted">{formatCurrency(p.target)}</p>
+              </div>
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="mt-2 flex justify-between text-xs text-muted">
+              <span>{pct}% of the way</span>
+              <span>{formatCurrency(p.remaining)} to go</span>
+            </div>
+            <p className="mt-3 text-sm text-muted">
+              Reach the target and earn <span className="font-semibold text-emerald-400">{formatCurrency(p.bonusAmount)}</span>.
+            </p>
+          </>
+        )}
+      </div>
     </Card>
   );
 }
@@ -249,6 +290,7 @@ function RepView() {
   const [open, setOpen] = useState(false);
   const { data: c, isLoading } = useQuery({ queryKey: ['commissions', 'me'], queryFn: async () => unwrap(await api.get('/commissions/me')).data });
   const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'mine'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 20 } })) });
+  const { data: bonusProgress } = useQuery({ queryKey: ['bonus', 'me'], queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data });
 
   if (isLoading || !c) return <PageSpinner />;
 
@@ -317,6 +359,7 @@ function RepView() {
       {hasPenalties && <PenaltyBreakdown breakdown={c.penaltyBreakdown} />}
 
       <RatesCard rates={c.rates} />
+      <BonusProgressCard p={bonusProgress} />
 
       <Card className="mt-4">
         <CardHeader title="My withdrawal requests" subtitle={`Minimum withdrawal: ${formatCurrency(c.minWithdrawal)}`} />
@@ -387,6 +430,226 @@ function DeductModal({ reps, onClose }) {
         </p>
       </div>
     </Modal>
+  );
+}
+
+// ── Admin: commission rates ──────────────────────────────────────────────────
+// Rates are added, never edited. A new rate must start in the future, which is
+// what guarantees a settled box can never be re-priced — so the form offers a
+// start date rather than an "edit" button, and says why.
+function CommissionRateSettings() {
+  const qc = useQueryClient();
+  const [brandId, setBrandId] = useState('');
+  const [perBox, setPerBox] = useState('');
+  const [from, setFrom] = useState('');
+
+  const { data: rates = [] } = useQuery({
+    queryKey: ['commission-rates'],
+    queryFn: async () => unwrap(await api.get('/commissions/rates')).data,
+  });
+  const { data: brands = [] } = useQuery({
+    queryKey: ['brands'],
+    queryFn: async () => unwrap(await api.get('/brands')).data,
+  });
+
+  const add = useMutation({
+    mutationFn: () => api.post('/commissions/rates', {
+      brandId: brandId || null,
+      perBox: Number(perBox),
+      effectiveFrom: new Date(from).toISOString(),
+    }),
+    onSuccess: () => {
+      toast.success('New rate saved');
+      setPerBox(''); setFrom('');
+      ['commission-rates', 'commissions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id) => api.delete(`/commissions/rates/${id}`),
+    onSuccess: () => {
+      toast.success('Rate removed');
+      qc.invalidateQueries({ queryKey: ['commission-rates'] });
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const now = Date.now();
+  const valid = Number(perBox) > 0 && from && new Date(from).getTime() > now;
+
+  return (
+    <Card className="mt-6">
+      <CardHeader title="Commission rates" subtitle="What one settled box earns, per brand. Add a rate to change it from a future date." />
+      <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
+        <Field label="Brand" hint="Leave blank for all other brands">
+          <Select value={brandId} onChange={(e) => setBrandId(e.target.value)}>
+            <option value="">All other brands</option>
+            {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Commission per box" required>
+          <Input type="number" min="0" value={perBox} onChange={(e) => setPerBox(e.target.value)} placeholder="5000" />
+        </Field>
+        <Field label="Starts" required hint="Must be in the future">
+          <Input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <div className="flex items-end">
+          <Button className="w-full" loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>Save rate</Button>
+        </div>
+      </div>
+      <Table>
+        <THead><TR><TH>Brand</TH><TH className="text-right">Per box</TH><TH>Starts</TH><TH>Note</TH><TH /></TR></THead>
+        <TBody>
+          {rates.map((r) => {
+            const starts = new Date(r.effectiveFrom);
+            const future = starts.getTime() > now;
+            return (
+              <TR key={r.id}>
+                <TD className="font-medium text-foreground">{r.brand?.name || 'All other brands'}</TD>
+                <TD className="text-right font-semibold">{formatCurrency(r.perBox)}</TD>
+                <TD className={future ? 'text-amber-400' : 'text-muted'}>
+                  {starts.getFullYear() < 2000 ? 'From the beginning' : formatDateTime(starts)}
+                  {future && ' · not yet in force'}
+                </TD>
+                <TD className="text-faint">{r.note || '—'}</TD>
+                <TD>
+                  {/* Only a rate that has not priced anything yet can be taken back. */}
+                  {future && (
+                    <Button variant="ghost" className="px-2 py-1 text-xs text-rose-600" onClick={() => remove.mutate(r.id)}>Remove</Button>
+                  )}
+                </TD>
+              </TR>
+            );
+          })}
+        </TBody>
+      </Table>
+      <p className="px-4 py-3 text-xs text-faint">
+        A rate can only start in the future, and rates already in force cannot be edited or removed. That is what keeps
+        settled commission fixed: every box is paid at the rate that was in force when its order was created.
+      </p>
+    </Card>
+  );
+}
+
+// ── Admin: sales bonus ───────────────────────────────────────────────────────
+function BonusSettings() {
+  const qc = useQueryClient();
+  const [target, setTarget] = useState('');
+  const [amount, setAmount] = useState('');
+  const [from, setFrom] = useState('');
+
+  const { data: rules = [] } = useQuery({ queryKey: ['bonus-rules'], queryFn: async () => unwrap(await api.get('/commissions/bonus/rules')).data });
+  const { data: progress } = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
+  const { data: awards = [] } = useQuery({ queryKey: ['bonus-awards'], queryFn: async () => unwrap(await api.get('/commissions/bonus/awards')).data });
+
+  const refresh = () => ['bonus-rules', 'bonus-summary', 'bonus-awards'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+
+  const add = useMutation({
+    mutationFn: () => api.post('/commissions/bonus/rules', {
+      salesTarget: Number(target), bonusAmount: Number(amount),
+      effectiveFrom: from ? new Date(from).toISOString() : new Date().toISOString(),
+    }),
+    onSuccess: () => { toast.success('Bonus rule saved'); setTarget(''); setAmount(''); setFrom(''); refresh(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const toggle = useMutation({
+    mutationFn: ({ id, isActive }) => api.patch(`/commissions/bonus/rules/${id}/active`, { isActive }),
+    onSuccess: () => { refresh(); }, onError: (e) => toast.error(apiError(e)),
+  });
+  const pay = useMutation({
+    mutationFn: (id) => api.post(`/commissions/bonus/awards/${id}/pay`),
+    onSuccess: () => { toast.success('Bonus marked paid'); refresh(); }, onError: (e) => toast.error(apiError(e)),
+  });
+
+  const valid = Number(target) > 0 && Number(amount) > 0;
+  return (
+    <Card className="mt-6">
+      <CardHeader title="Sales bonus" subtitle="Reach a sales target, earn a bonus. Kept entirely separate from box commission." />
+      <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
+        <Field label="Sales target" required><Input type="number" min="0" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="10000000" /></Field>
+        <Field label="Bonus amount" required><Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></Field>
+        <Field label="Starts" hint="Blank means straight away"><Input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+        <div className="flex items-end">
+          <Button className="w-full" loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>Save bonus rule</Button>
+        </div>
+      </div>
+
+      <Table>
+        <THead><TR><TH>Target</TH><TH className="text-right">Bonus</TH><TH>Starts</TH><TH>Awards</TH><TH /></TR></THead>
+        <TBody>
+          {rules.map((r) => (
+            <TR key={r.id}>
+              <TD className="font-medium text-foreground">{formatCurrency(r.salesTarget)}</TD>
+              <TD className="text-right font-semibold text-emerald-500">{formatCurrency(r.bonusAmount)}</TD>
+              <TD className="text-muted">{formatDateTime(r.effectiveFrom)}</TD>
+              <TD>{r._count?.awards ?? 0}</TD>
+              <TD>
+                <div className="flex justify-end">
+                  <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => toggle.mutate({ id: r.id, isActive: !r.isActive })}>
+                    {r.isActive ? 'Switch off' : 'Switch on'}
+                  </Button>
+                </div>
+              </TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+
+      {!!progress?.items?.length && (
+        <>
+          <CardHeader title="Rep progress" subtitle="Against the rule in force now." />
+          <Table>
+            <THead><TR><TH>Rep</TH><TH className="text-right">Sales</TH><TH className="text-right">Target</TH><TH>Progress</TH><TH>Status</TH></TR></THead>
+            <TBody>
+              {progress.items.filter((i) => i.configured).map((i) => (
+                <TR key={i.salesRepId}>
+                  <TD className="font-medium text-foreground">{i.name}</TD>
+                  <TD className="text-right">{formatCurrency(i.sales)}</TD>
+                  <TD className="text-right text-muted">{formatCurrency(i.target)}</TD>
+                  <TD>
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
+                        <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(100, i.progress)}%` }} />
+                      </div>
+                      <span className="text-xs text-muted">{i.progress}%</span>
+                    </div>
+                  </TD>
+                  <TD>{i.unlocked ? <Badge className="bg-emerald-100 text-emerald-700">Unlocked</Badge> : <span className="text-xs text-faint">{formatCurrency(i.remaining)} to go</span>}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </>
+      )}
+
+      {!!awards.length && (
+        <>
+          <CardHeader title="Bonuses earned" />
+          <Table>
+            <THead><TR><TH>Rep</TH><TH className="text-right">Bonus</TH><TH>Unlocked</TH><TH>Status</TH><TH /></TR></THead>
+            <TBody>
+              {awards.map((a) => (
+                <TR key={a.id}>
+                  <TD className="font-medium text-foreground">{a.salesRep?.user?.name || a.salesRep?.code}</TD>
+                  <TD className="text-right font-semibold text-emerald-500">{formatCurrency(a.bonusAmount)}</TD>
+                  <TD className="text-muted">{formatDateTime(a.unlockedAt)}</TD>
+                  <TD><Badge className={a.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>{a.status}</Badge></TD>
+                  <TD>
+                    <div className="flex justify-end">
+                      {a.status !== 'PAID' && <Button className="px-2 py-1 text-xs" loading={pay.isPending} onClick={() => pay.mutate(a.id)}>Mark paid</Button>}
+                    </div>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </>
+      )}
+      <p className="px-4 py-3 text-xs text-faint">
+        Bonus money never enters a rep's commission balance and never changes what a box is worth — it is paid on its own.
+      </p>
+    </Card>
   );
 }
 
@@ -490,6 +753,9 @@ function AdminView() {
           </Table>
         )}
       </Card>
+
+      <CommissionRateSettings />
+      <BonusSettings />
     </>
   );
 }
