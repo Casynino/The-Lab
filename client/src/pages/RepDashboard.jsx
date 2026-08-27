@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import clsx from 'clsx';
 import {
-  ClipboardList, TrendingUp, Undo2, ArrowRight, Timer, Eye, NotebookPen,
+  ClipboardList, Undo2, ArrowRight, Timer, Eye, NotebookPen,
 } from 'lucide-react';
 import api, { unwrap } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -36,23 +36,23 @@ function DashCard({ icon: Icon, label, value, hint, badge, highlight, onClick })
           : 'border-border bg-surface hover:bg-elevated',
       )}
     >
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2.5 flex items-center justify-between">
         <span className={clsx(
-          'relative flex h-10 w-10 items-center justify-center rounded-xl',
-          highlight ? 'bg-brand-600 text-slate-950' : 'bg-elevated text-brand-500',
+          'relative flex h-8 w-8 items-center justify-center rounded-lg',
+          highlight ? 'bg-brand-500 text-slate-950' : 'bg-elevated text-brand-500',
         )}>
-          <Icon className="h-5 w-5" />
+          <Icon className="h-4 w-4" />
           {badge != null && (
             <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
               {badge}
             </span>
           )}
         </span>
-        <ArrowRight className="h-4 w-4 text-faint" />
+        <ArrowRight className="h-3.5 w-3.5 text-faint" />
       </div>
-      <span className="text-xs text-muted">{label}</span>
-      <span className="mt-0.5 text-xl font-bold text-foreground">{value}</span>
-      {hint && <span className="mt-0.5 text-xs text-faint">{hint}</span>}
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{label}</span>
+      <span className="mt-0.5 text-lg font-bold leading-tight text-foreground">{value}</span>
+      {hint && <span className="mt-0.5 line-clamp-1 text-[11px] text-faint">{hint}</span>}
     </motion.button>
   );
 }
@@ -84,11 +84,6 @@ export default function RepDashboard() {
     ? 'No open orders'
     : `${openSettlements} active order${openSettlements !== 1 ? 's' : ''} · settle now`;
 
-  const available = commission?.available || 0;
-  const commissionHint = available < 0
-    ? 'You owe The Lab — overdue penalties'
-    : available > 0 ? 'Available balance' : 'Settle boxes to earn commission';
-
   return (
     <div className="space-y-6">
       {/* Greeting */}
@@ -102,7 +97,7 @@ export default function RepDashboard() {
       </div>
 
       {/* Sales bonus — separate from box commission, so it sits on its own. */}
-      <ProgressRows commission={commission} bonus={bonus} />
+      <ProgressRows commission={commission} bonus={bonus} onOpenCommission={() => navigate('/commissions')} />
 
       {/* Card grid */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -110,7 +105,7 @@ export default function RepDashboard() {
           icon={ClipboardList}
           label="Request stock"
           value="Order from The Lab"
-          hint="Tap to request new inventory"
+          hint="Request new inventory"
           badge={pendingRequests > 0 ? pendingRequests : undefined}
           onClick={() => navigate('/stock-requests')}
         />
@@ -131,21 +126,12 @@ export default function RepDashboard() {
           onClick={() => navigate('/daily-reports')}
         />
         <DashCard
-          icon={TrendingUp}
-          label="My Earnings"
-          value={formatCurrency(available)}
-          hint={commissionHint}
-          onClick={() => navigate('/commissions')}
+          icon={Undo2}
+          label="Return stock"
+          value="Return to The Lab"
+          hint="Send back unsold boxes"
+          onClick={() => navigate('/settlements')}
         />
-        <div className="col-span-2 lg:col-span-4">
-          <DashCard
-            icon={Undo2}
-            label="Return stock"
-            value="Return to The Lab"
-            hint="Send back unsold boxes before the deadline"
-            onClick={() => navigate('/settlements')}
-          />
-        </div>
       </div>
 
       {/* Open orders */}
