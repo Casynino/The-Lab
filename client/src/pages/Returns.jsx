@@ -356,24 +356,34 @@ function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve })
 function HistoryRow({ r, onView }) {
   const meta = RETURN_STATUS_META[r.status] || RETURN_STATUS_META.PENDING;
   const totalBoxes = r.items.reduce((a, i) => a + i.quantity, 0);
+  // A processed return is history. Listing every line as its own chip meant one
+  // return could fill a phone screen — product names run to ~35 characters, so
+  // each chip took a full row and fourteen returns became an endless scroll.
+  // The first two lines are enough to recognise it; the rest is a tap away.
+  const lines = r.items.map((i) => `${formatNumber(i.quantity)}x ${i.product?.name}`);
+  const summary = lines.slice(0, 2).join(' · ') + (lines.length > 2 ? ` · +${lines.length - 2} more` : '');
   return (
-    <button onClick={() => onView(r.id)} className="w-full px-4 py-3 text-left transition hover:bg-elevated">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-foreground">{r.returnNumber}</span>
+    <button onClick={() => onView(r.id)} className="w-full px-4 py-2.5 text-left transition hover:bg-elevated">
+      <div className="flex items-center gap-2">
+        {/* The identifier never shrinks — a truncated "RET-2026…" is useless. */}
+        <span className="shrink-0 text-sm font-semibold text-foreground">{r.returnNumber}</span>
         <Badge className={meta.cls}>{meta.label}</Badge>
-        <span className="text-sm text-muted">{r.salesRep ? `${r.salesRep.user?.name} (${r.salesRep.code})` : r.customer?.name || '—'}</span>
-        {r.settlementNumber && <span className="text-xs text-faint">on {r.settlementNumber}</span>}
-        <span className="ml-auto shrink-0 text-sm font-bold tabular-nums text-foreground">{formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''}</span>
-        <span className="shrink-0 text-xs text-faint">{formatDate(r.processedAt)}</span>
+        <span className="ml-auto shrink-0 text-sm font-bold tabular-nums text-foreground">
+          {formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''}
+        </span>
+        <span className="hidden shrink-0 text-xs text-faint sm:inline">{formatDate(r.processedAt)}</span>
         <Eye className="h-3.5 w-3.5 shrink-0 text-faint" />
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {r.items.map((i) => (
-          <span key={i.id} className="inline-flex items-center gap-1 rounded-md bg-elevated px-2 py-0.5 text-xs text-muted">
-            <span className="font-bold tabular-nums text-foreground">{formatNumber(i.quantity)}×</span> {i.product?.name}
-          </span>
-        ))}
-      </div>
+      {/* Who and which order, then what came back — one truncated line, so a
+          return with five products is the same height as one with one. */}
+      <p className="mt-0.5 truncate text-xs text-muted">
+        {r.salesRep ? `${r.salesRep.user?.name} (${r.salesRep.code})` : r.customer?.name || '—'}
+        {r.settlementNumber ? ` · on ${r.settlementNumber}` : ''}
+      </p>
+      <p className="mt-0.5 truncate text-xs text-faint">
+        {summary}
+        <span className="sm:hidden"> · {formatDate(r.processedAt)}</span>
+      </p>
     </button>
   );
 }
