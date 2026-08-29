@@ -99,36 +99,38 @@ export default function Dashboard() {
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.2, 0.7, 0.3, 1] }}
-        className="relative mb-6 overflow-hidden rounded-2xl p-6 shadow-xl sm:p-7"
-        style={{ background: 'linear-gradient(110deg, #a3e635 0%, #34d399 45%, #22d3ee 100%)' }}
+        className="relative mb-5 overflow-hidden rounded-2xl border border-white/10 p-5 shadow-xl"
+        style={{ background: 'linear-gradient(115deg, #1a2e05 0%, #064e3b 42%, #0e3a4a 100%)' }}
       >
-        {/* A soft dark wash at the right keeps the account glass readable
-            without dulling the lit left-hand side. */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/25" aria-hidden="true" />
+        {/* One light source, top-left, in the brand colour. A flat bright fill
+            reads as a highlighter; a dark ground with a light on it reads as a
+            surface, and lets the numbers stay white and legible. */}
+        <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-brand-500/25 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-24 right-10 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" aria-hidden="true" />
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-black/20 px-2.5 py-1 text-[11px] font-semibold text-slate-950">
+              <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80 ring-1 ring-inset ring-white/15">
                 {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long' })}
               </span>
-              <span className="rounded-full bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-950">
+              <span className="rounded-full bg-brand-500/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-brand-300 ring-1 ring-inset ring-brand-500/30">
                 Administrator
               </span>
             </div>
-            <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
+            <h1 className="mt-2.5 text-2xl font-bold tracking-tight text-white">
               {tzGreeting()}, {firstName}.
             </h1>
-            <p className="mt-1 text-sm font-medium text-slate-900/70">Here is the whole business, and what is waiting on you.</p>
-            <div className="mt-4 text-[11px] font-bold uppercase tracking-wider text-slate-900/60">Total available business funds</div>
-            <div className="text-4xl font-black tabular-nums text-slate-950">{formatCurrency(totalFunds)}</div>
+            <p className="mt-0.5 text-sm text-white/60">Here is the whole business, and what is waiting on you.</p>
+            <div className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-white/50">Total available business funds</div>
+            <div className="text-3xl font-black tabular-nums text-brand-300 sm:text-4xl">{formatCurrency(totalFunds)}</div>
           </div>
           <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-3">
             {accounts.map((a) => {
               const Icon = ACCOUNT_ICON[a.type] || Wallet;
               return (
                 <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                  className="rounded-xl border border-black/10 bg-black/25 p-3 text-left backdrop-blur-sm transition hover:bg-black/35">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/70">
+                  className="cursor-pointer rounded-xl border border-white/10 bg-white/[0.06] p-3 text-left backdrop-blur-sm transition duration-200 hover:bg-white/[0.12]">
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">
                     <Icon className="h-3.5 w-3.5" /> {a.name}
                   </div>
                   <div className={clsx('mt-1 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
@@ -264,8 +266,39 @@ export default function Dashboard() {
         );
       })()}
 
-      {/* ── Today's business (all from Finance) ── */}
-      <div className="mb-3"><h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Today's business</h2><p className="text-xs text-faint">Money in and out since midnight, straight from Finance.</p></div>
+      {/* ── Today's business (all from Finance) ──
+          A figure on its own says how much and nothing about whether that is
+          good. The 30-day series is already on the page, so today is compared
+          against the fortnight behind it — no extra query, and the number
+          finally means something. */}
+      {(() => {
+        const days = charts?.daily || [];
+        const past = days.slice(0, -1).slice(-14).filter((d) => d.revenue > 0);
+        const avg = past.length ? past.reduce((a, d) => a + d.revenue, 0) / past.length : 0;
+        // Below three trading days there is no average worth comparing against,
+        // and a delta drawn from one quiet day would mislead more than it helps.
+        const cmp = past.length >= 3 && avg > 0
+          ? { pct: Math.round(((today.revenue - avg) / avg) * 100), avg }
+          : null;
+        return (
+          <>
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Today's business</h2>
+                <p className="text-xs text-faint">Money in and out since midnight, straight from Finance.</p>
+              </div>
+              {cmp && (
+                <span className={clsx(
+                  'rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                  cmp.pct >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400',
+                )}>
+                  {cmp.pct >= 0 ? '▲' : '▼'} {Math.abs(cmp.pct)}% vs the {formatCurrency(Math.round(cmp.avg))} daily average
+                </span>
+              )}
+            </div>
+          </>
+        );
+      })()}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Revenue" value={formatCurrency(today.revenue)} icon={TrendingUp} tone="emerald" />
         <StatCard label="Gross profit" value={formatCurrency(today.grossProfit)} icon={Wallet} tone="brand" onClick={() => navigate('/finance?tab=profit')} />
@@ -305,6 +338,84 @@ export default function Dashboard() {
             </button>
           );
         })}
+      </div>
+
+      {/* ── Where every box is ──
+          Five separate stat cards stated the same total five ways and never
+          said how the stock is split. One bar does: the whole holding, divided
+          where it actually sits, with the numbers underneath. */}
+      <div className="mt-8">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Inventory · where every box is</h2>
+            <p className="text-xs text-faint">Everything The Lab is carrying, in the warehouse and out with the reps.</p>
+          </div>
+          <button type="button" onClick={() => navigate('/inventory')} className="shrink-0 text-xs font-medium text-brand-500 hover:underline">
+            Inventory →
+          </button>
+        </div>
+
+        <Card>
+          <div className="p-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-3xl font-bold tabular-nums text-foreground">{formatCurrency(inventory.costValue)}</p>
+                <p className="mt-0.5 text-xs text-faint">stock value · at cost · selling {formatCurrency(inventory.sellingValue)}</p>
+              </div>
+              <p className="text-sm font-semibold tabular-nums text-muted">
+                {formatNumber(inventory.units)} boxes in stock
+              </p>
+            </div>
+
+            {(() => {
+              const wh = Math.max(0, inventory.warehouseBoxes || 0);
+              const rep = Math.max(0, inventory.repBoxes || 0);
+              const total = wh + rep;
+              const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+              const parts = [
+                { key: 'wh', label: 'In warehouse', value: wh, colour: '#a3e635', to: '/inventory' },
+                { key: 'rep', label: 'With reps', value: rep, colour: '#7c3aed', to: '/reps' },
+              ];
+              return (
+                <>
+                  <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    {parts.map((p) => (
+                      <div key={p.key} style={{ width: `${pct(p.value)}%`, background: p.colour }} title={`${p.label}: ${p.value}`} />
+                    ))}
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {parts.map((p) => (
+                      <button key={p.key} type="button" onClick={() => navigate(p.to)} className="text-left">
+                        <span className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ background: p.colour }} />
+                          <span className="text-xs text-muted">{p.label}</span>
+                        </span>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">{formatNumber(p.value)}</p>
+                        <p className="text-[11px] text-faint">{Math.round(pct(p.value))}% of stock</p>
+                      </button>
+                    ))}
+                    <div>
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                        <span className="text-xs text-muted">Sold this month</span>
+                      </span>
+                      <p className="mt-0.5 text-xl font-bold tabular-nums text-emerald-300">{formatNumber(month.boxes)}</p>
+                      <p className="text-[11px] text-faint">boxes settled</p>
+                    </div>
+                    <button type="button" onClick={() => navigate('/returns')} className="text-left">
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-sky-400" />
+                        <span className="text-xs text-muted">Returned today</span>
+                      </span>
+                      <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">{formatNumber(inventory.returnedToday)}</p>
+                      <p className="text-[11px] text-faint">boxes back</p>
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </Card>
       </div>
 
       {/* ── Charts ──
@@ -445,84 +556,6 @@ export default function Dashboard() {
           </Table>
         )}
       </Card>
-
-      {/* ── Where every box is ──
-          Five separate stat cards stated the same total five ways and never
-          said how the stock is split. One bar does: the whole holding, divided
-          where it actually sits, with the numbers underneath. */}
-      <div className="mt-8">
-        <div className="mb-3 flex items-baseline justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Inventory · where every box is</h2>
-            <p className="text-xs text-faint">Everything The Lab is carrying, in the warehouse and out with the reps.</p>
-          </div>
-          <button type="button" onClick={() => navigate('/inventory')} className="shrink-0 text-xs font-medium text-brand-500 hover:underline">
-            Inventory →
-          </button>
-        </div>
-
-        <Card>
-          <div className="p-5">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-3xl font-bold tabular-nums text-foreground">{formatCurrency(inventory.costValue)}</p>
-                <p className="mt-0.5 text-xs text-faint">stock value · at cost · selling {formatCurrency(inventory.sellingValue)}</p>
-              </div>
-              <p className="text-sm font-semibold tabular-nums text-muted">
-                {formatNumber(inventory.units)} boxes in stock
-              </p>
-            </div>
-
-            {(() => {
-              const wh = Math.max(0, inventory.warehouseBoxes || 0);
-              const rep = Math.max(0, inventory.repBoxes || 0);
-              const total = wh + rep;
-              const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
-              const parts = [
-                { key: 'wh', label: 'In warehouse', value: wh, colour: '#a3e635', to: '/inventory' },
-                { key: 'rep', label: 'With reps', value: rep, colour: '#7c3aed', to: '/reps' },
-              ];
-              return (
-                <>
-                  <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                    {parts.map((p) => (
-                      <div key={p.key} style={{ width: `${pct(p.value)}%`, background: p.colour }} title={`${p.label}: ${p.value}`} />
-                    ))}
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    {parts.map((p) => (
-                      <button key={p.key} type="button" onClick={() => navigate(p.to)} className="text-left">
-                        <span className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full" style={{ background: p.colour }} />
-                          <span className="text-xs text-muted">{p.label}</span>
-                        </span>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">{formatNumber(p.value)}</p>
-                        <p className="text-[11px] text-faint">{Math.round(pct(p.value))}% of stock</p>
-                      </button>
-                    ))}
-                    <div>
-                      <span className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                        <span className="text-xs text-muted">Sold this month</span>
-                      </span>
-                      <p className="mt-0.5 text-xl font-bold tabular-nums text-emerald-300">{formatNumber(month.boxes)}</p>
-                      <p className="text-[11px] text-faint">boxes settled</p>
-                    </div>
-                    <button type="button" onClick={() => navigate('/returns')} className="text-left">
-                      <span className="flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-sky-400" />
-                        <span className="text-xs text-muted">Returned today</span>
-                      </span>
-                      <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">{formatNumber(inventory.returnedToday)}</p>
-                      <p className="text-[11px] text-faint">boxes back</p>
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </Card>
-      </div>
 
       {/* Month context strip */}
       <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted">
