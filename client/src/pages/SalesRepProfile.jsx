@@ -415,60 +415,6 @@ export default function SalesRepProfile() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* ── Left column (wider) ── */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Active settlements */}
-          <Section icon={Timer} title="Active settlements" count={settlements.activeCount}>
-            {settlements.active.length === 0 ? (
-              <p className="py-2 text-sm text-faint">No active settlements — all orders are closed.</p>
-            ) : (
-              <div className="space-y-3">
-                {settlements.active.map((s) => {
-                  const meta = SETTLEMENT_STATUS_META[s.status] || {};
-                  return (
-                    <button key={s.id} onClick={() => setViewing(s.id)}
-                      className="w-full rounded-xl border border-border bg-elevated p-3 text-left transition hover:border-brand-500/40">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-foreground">{s.settlementNumber}</span>
-                        <div className="flex items-center gap-2">
-                          {s.pendingReturns > 0 && <Badge className="bg-amber-100 text-amber-700">Return review</Badge>}
-                          <Badge className={meta.cls}>{meta.label || s.status}</Badge>
-                        </div>
-                      </div>
-                      <div className="mt-1 text-xs text-faint">{s.products.join(', ') || '—'}</div>
-                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                        <span className="text-muted">Taken <b className="text-foreground">{formatNumber(s.boxesTaken)}</b></span>
-                        <span className="text-emerald-500">Settled <b>{formatNumber(s.boxesSettled)}</b></span>
-                        <span className="text-sky-400">Returned <b>{formatNumber(s.boxesReturned)}</b></span>
-                        <span className={s.boxesRemaining > 0 ? 'font-semibold text-rose-500' : 'text-muted'}>Remaining {formatNumber(s.boxesRemaining)}</span>
-                        <span className="ml-auto text-faint">{hoursLabel(s.hoursRemaining)} · bal {formatCurrency(s.balance)}</span>
-                        <ChevronRight className="h-3.5 w-3.5 text-brand-500" />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </Section>
-
-          {/* Current stock */}
-          <Section icon={Package} title="Stock in hand" count={stock.items.length} action={isAdmin && rep.isActive && <Button variant="ghost" className="text-xs" onClick={() => setAddOpen(true)}><PackagePlus className="h-3.5 w-3.5" /> Add stock</Button>}>
-            {stock.items.length === 0 ? (
-              <p className="py-2 text-sm text-faint">Holding no stock.</p>
-            ) : (
-              <Table>
-                <THead><TR><TH>Product</TH><TH>Boxes held</TH><TH>Value (cost)</TH></TR></THead>
-                <TBody>
-                  {stock.items.map((s) => (
-                    <TR key={s.productId}>
-                      <TD className="font-medium text-foreground">{s.name}</TD>
-                      <TD>{formatNumber(s.baseQuantity)} {s.baseUnitName || 'Box'}{s.baseQuantity !== 1 ? 'es' : ''}</TD>
-                      <TD>{formatCurrency(s.value)}</TD>
-                    </TR>
-                  ))}
-                </TBody>
-              </Table>
-            )}
-          </Section>
-
           {/* Performance */}
           <Section
             icon={TrendingUp}
@@ -580,6 +526,60 @@ export default function SalesRepProfile() {
             )}
           </div>
         </div>
+          {/* Active settlements */}
+          <Section icon={Timer} title="Active settlements" count={settlements.activeCount}>
+            {settlements.active.length === 0 ? (
+              <p className="py-2 text-sm text-faint">No active settlements — all orders are closed.</p>
+            ) : (
+              <div className="space-y-3">
+                {settlements.active.map((s) => {
+                  const meta = SETTLEMENT_STATUS_META[s.status] || {};
+                  return (
+                    <button key={s.id} onClick={() => setViewing(s.id)}
+                      className="w-full rounded-xl border border-border bg-elevated p-3 text-left transition hover:border-brand-500/40">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-foreground">{s.settlementNumber}</span>
+                        <div className="flex items-center gap-2">
+                          {s.pendingReturns > 0 && <Badge className="bg-amber-100 text-amber-700">Return review</Badge>}
+                          <Badge className={meta.cls}>{meta.label || s.status}</Badge>
+                        </div>
+                      </div>
+                      <div className="mt-1 text-xs text-faint">{s.products.join(', ') || '—'}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                        <span className="text-muted">Taken <b className="text-foreground">{formatNumber(s.boxesTaken)}</b></span>
+                        <span className="text-emerald-500">Settled <b>{formatNumber(s.boxesSettled)}</b></span>
+                        <span className="text-sky-400">Returned <b>{formatNumber(s.boxesReturned)}</b></span>
+                        <span className={s.boxesRemaining > 0 ? 'font-semibold text-rose-500' : 'text-muted'}>Remaining {formatNumber(s.boxesRemaining)}</span>
+                        <span className="ml-auto text-faint">{hoursLabel(s.hoursRemaining)} · bal {formatCurrency(s.balance)}</span>
+                        <ChevronRight className="h-3.5 w-3.5 text-brand-500" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
+
+          {/* Current stock */}
+          <Section icon={Package} title="Stock in hand" count={stock.items.length} action={isAdmin && rep.isActive && <Button variant="ghost" className="text-xs" onClick={() => setAddOpen(true)}><PackagePlus className="h-3.5 w-3.5" /> Add stock</Button>}>
+            {stock.items.length === 0 ? (
+              <p className="py-2 text-sm text-faint">Holding no stock.</p>
+            ) : (
+              <Table>
+                <THead><TR><TH>Product</TH><TH>Boxes held</TH><TH>Value (cost)</TH></TR></THead>
+                <TBody>
+                  {stock.items.map((s) => (
+                    <TR key={s.productId}>
+                      <TD className="font-medium text-foreground">{s.name}</TD>
+                      <TD>{formatNumber(s.baseQuantity)} {s.baseUnitName || 'Box'}{s.baseQuantity !== 1 ? 'es' : ''}</TD>
+                      <TD>{formatCurrency(s.value)}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
+          </Section>
+
 
         {/* ── Right column ── */}
         <div className="space-y-6">
@@ -661,7 +661,10 @@ export default function SalesRepProfile() {
             {activity.length === 0 ? (
               <p className="py-2 text-sm text-faint">No recorded activity yet.</p>
             ) : (
-              <ul className="space-y-3">
+              // Capped and scrolled inside itself. An unbounded feed made this
+              // column run hundreds of pixels past the other one, and nothing
+              // on the left could ever be long enough to meet it.
+              <ul className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
                 {activity.map((e, i) => {
                   const m = ACTIVITY_META[e.type] || ACTIVITY_META.STOCK_REQUEST;
                   const Icon = m.icon;
