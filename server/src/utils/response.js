@@ -19,7 +19,7 @@ function noContent(res) {
 }
 
 // Paginated list envelope.
-function paginated(res, items, { page, limit, total }) {
+function paginated(res, items, { page, limit, total, ...extra }) {
   return res.status(200).json({
     success: true,
     data: items,
@@ -29,6 +29,9 @@ function paginated(res, items, { page, limit, total }) {
       total,
       totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
       hasMore: page * limit < total,
+      // Anything else a caller passes rides along in meta — a page-level summary
+      // has to be computed from the whole result set, not the slice being sent.
+      ...extra,
     },
   });
 }

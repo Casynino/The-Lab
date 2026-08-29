@@ -175,7 +175,44 @@ const balances = asyncHandler(async (req, res) => {
   const total = rows.length;
   const paged = rows.slice(pagination.skip, pagination.skip + pagination.take);
 
-  return paginated(res, paged, { page: pagination.page, limit: pagination.limit, total });
+  // Totals and holdings are computed across EVERY row, not the page being sent.
+  // A summary drawn from one page would change as you paged through it, which
+  // is worse than not showing one.
+  const holders = new Map();
+  let totalBoxes = 0;
+  let totalValue = 0;
+  let lowCount = 0;
+  let outCount = 0;
+  for (const r of rows) {
+    totalBoxes += r.totalBase;
+    totalValue += r.value;
+    if (r.totalBase <= 0) outCount += 1;
+    else if (r.lowStock) lowCount += 1;
+    const perBox = r.totalBase > 0 ? r.value / r.totalBase : 0;
+    for (const loc of r.locations) {
+      const key = `${loc.type}:${loc.id}`;
+      const h = holders.get(key) || { type: loc.type, id: loc.id, name: loc.name, boxes: 0, value: 0 };
+      h.boxes += loc.baseQuantity;
+      h.value = round2(h.value + loc.baseQuantity * perBox);
+      holders.set(key, h);
+    }
+  }
+
+  const summary = {
+    totalBoxes,
+    totalValue: round2(totalValue),
+    productCount: rows.length,
+    lowCount,
+    outCount,
+    warehouseBoxes: [...holders.values()].filter((h) => h.type === 'WAREHOUSE').reduce((a, h) => a + h.boxes, 0),
+    repBoxes: [...holders.values()].filter((h) => h.type === 'SALES_REP').reduce((a, h) => a + h.boxes, 0),
+    holders: [...holders.values()].sort((a, b) => {
+      if ((a.type === 'WAREHOUSE') !== (b.type === 'WAREHOUSE')) return a.type === 'WAREHOUSE' ? -1 : 1;
+      return b.boxes - a.boxes;
+    }),
+  };
+
+  return paginated(res, paged, { page: pagination.page, limit: pagination.limit, total, summary });
 });
 
 // Raw ledger movements (audit trail), paginated and filterable.

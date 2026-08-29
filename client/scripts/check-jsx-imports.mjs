@@ -44,14 +44,46 @@ function boundNames(src) {
   return names;
 }
 
+// A stricter set: only what this file actually imports or declares. The set
+// above sweeps every identifier inside any braces, which makes an object
+// literal like { icon: PackageX } look like a binding of PackageX — the exact
+// blindness that let a missing icon import reach production.
+function importedOrDeclared(src) {
+  const names = new Set();
+  for (const m of src.matchAll(/import\s+([\s\S]*?)\s+from\s/g)) {
+    for (const id of m[1].match(/[A-Za-z0-9_$]+/g) || []) names.add(id);
+  }
+  for (const m of src.matchAll(/(?:function|class)\s+([A-Za-z0-9_$]+)/g)) names.add(m[1]);
+  for (const m of src.matchAll(/(?:const|let|var)\s+([A-Za-z0-9_$]+)/g)) names.add(m[1]);
+  // Deliberately NOT allowing `icon: X` here. Adding those would re-admit the
+  // very values being checked — which is what made the first attempt at this
+  // check pass a file that was missing the import. A component destructured out
+  // of props as { icon: Icon } is rendered as <Icon />, which the tag scan
+  // already covers.
+  return names;
+}
+
 const problems = [];
 for (const file of walk(ROOT)) {
   const src = readFileSync(file, 'utf8');
   const bound = boundNames(src);
   const seen = new Set();
-  for (const m of src.matchAll(/<([A-Z][A-Za-z0-9_$]*)\b/g)) {
-    const name = m[1];
-    if (seen.has(name) || bound.has(name)) continue;
+  const strict = importedOrDeclared(src);
+  // Two passes: tags checked against everything in scope, and components passed
+  // as values (icon: Foo) checked against imports and declarations only, since
+  // those render via <c.icon /> and never appear in angle brackets.
+  const used = [
+    ...[...src.matchAll(/<([A-Z][A-Za-z0-9_$]*)\b/g)].map((m) => ({ name: m[1], index: m.index, set: bound })),
+    // `icon: X` is a binding when it is destructured out of props — and those
+    // are always rendered as <X /> somewhere in the same file. When X never
+    // appears as a tag, it is a value being passed, and it has to be imported.
+    ...[...src.matchAll(/\bicon:\s*([A-Z][A-Za-z0-9_$]*)/g)]
+      .filter((m) => !new RegExp(`<${m[1]}\\b`).test(src))
+      .map((m) => ({ name: m[1], index: m.index, set: strict })),
+  ];
+  for (const m of used) {
+    const name = m.name;
+    if (seen.has(name) || m.set.has(name)) continue;
     seen.add(name);
     const line = src.slice(0, m.index).split('\n').length;
     problems.push({ file: relative(ROOT, file), name, line });

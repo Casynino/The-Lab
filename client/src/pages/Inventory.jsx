@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck } from 'lucide-react';
+import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, PackageX } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses, useSalesReps, useDebounce } from '@/lib/hooks';
 import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit } from '@/lib/format';
@@ -158,32 +158,107 @@ function Balances() {
         <Card><EmptyState title="No stock on hand" message="Receive stock to get started." icon={Boxes} /></Card>
       ) : (
         <>
-          {/* The page opened straight into a wall of cards with no total
-              anywhere. Four figures first: what it is worth, how much of it
-              there is, and how many lines need attention. */}
           {(() => {
-            const totalValue = rows.reduce((a, r) => a + (r.value || 0), 0);
-            const totalBoxes = rows.reduce((a, r) => a + (r.totalBase || 0), 0);
-            const lowCount = rows.filter((r) => r.lowStock && r.totalBase > 0).length;
-            const outCount = rows.filter((r) => (r.totalBase || 0) <= 0).length;
-            const cells = [
-              { label: 'Stock value', value: formatCurrency(totalValue), sub: `${rows.length} product${rows.length !== 1 ? 's' : ''} on this page`, tone: 'text-foreground' },
-              { label: 'Boxes on hand', value: formatNumber(totalBoxes), sub: 'across every location', tone: 'text-foreground' },
-              { label: 'Running low', value: formatNumber(lowCount), sub: lowCount ? 'reorder before they go' : 'nothing to reorder', tone: lowCount ? 'text-amber-300' : 'text-muted' },
-              { label: 'Out of stock', value: formatNumber(outCount), sub: outCount ? 'nothing left to sell' : 'all lines in stock', tone: outCount ? 'text-rose-400' : 'text-muted' },
+            const sm = data.meta?.summary;
+            if (!sm) return null;
+            const whPct = sm.totalBoxes > 0 ? (sm.warehouseBoxes / sm.totalBoxes) * 100 : 0;
+
+            // Four tinted cards. A flat grey row of numbers reads as a footnote;
+            // a tint and an icon per card gives each figure its own identity and
+            // lets the eye go straight to the one that is a problem.
+            const cards = [
+              { label: 'Stock value', value: formatCurrency(sm.totalValue), sub: `${formatNumber(sm.productCount)} products`,
+                icon: Boxes, ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.14]', chip: 'bg-brand-500/15 text-brand-400', num: 'text-foreground' },
+              { label: 'Boxes on hand', value: formatNumber(sm.totalBoxes), sub: 'everywhere in the business',
+                icon: Warehouse, ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.14]', chip: 'bg-sky-500/15 text-sky-400', num: 'text-foreground' },
+              { label: 'Running low', value: formatNumber(sm.lowCount), sub: sm.lowCount ? 'reorder before they go' : 'nothing to reorder',
+                icon: TrendingDown, ring: sm.lowCount ? 'ring-amber-500/30' : 'ring-white/[0.07]', glow: sm.lowCount ? 'from-amber-500/[0.16]' : 'from-white/[0.02]',
+                chip: 'bg-amber-500/15 text-amber-400', num: sm.lowCount ? 'text-amber-300' : 'text-muted' },
+              { label: 'Out of stock', value: formatNumber(sm.outCount), sub: sm.outCount ? 'nothing left to sell' : 'every line in stock',
+                icon: PackageX, ring: sm.outCount ? 'ring-rose-500/30' : 'ring-white/[0.07]', glow: sm.outCount ? 'from-rose-500/[0.16]' : 'from-white/[0.02]',
+                chip: 'bg-rose-500/15 text-rose-400', num: sm.outCount ? 'text-rose-400' : 'text-muted' },
             ];
+
             return (
-              <div className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.06] lg:grid-cols-4">
-                {cells.map((c) => (
-                  <div key={c.label} className="flex items-baseline justify-between gap-3 bg-surface px-4 py-2.5">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">{c.label}</p>
-                      <p className="truncate text-[11px] text-faint">{c.sub}</p>
+              <>
+                <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+                  {cards.map((c) => (
+                    <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
+                      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
+                      <div className="relative flex items-start justify-between gap-2">
+                        <p className="text-xs font-medium text-muted">{c.label}</p>
+                        <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+                      </div>
+                      <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
+                      <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
                     </div>
-                    <p className={`shrink-0 text-base font-bold tabular-nums ${c.tone}`}>{c.value}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+
+                {/* Who is holding the stock, across every product — the question
+                    that per-product chips could never answer, because it is a
+                    question about people, not about products. */}
+                <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <Card>
+                    <div className="p-5">
+                      <h3 className="text-sm font-semibold text-foreground">Where every box is</h3>
+                      <p className="mt-0.5 text-xs text-muted">Mutually exclusive, and they add up to everything.</p>
+                      <p className="mt-4 text-4xl font-bold leading-none tabular-nums text-foreground">
+                        {formatNumber(sm.totalBoxes)}
+                        <span className="ml-2 text-sm font-normal text-muted">boxes in the business</span>
+                      </p>
+                      <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="h-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${whPct}%` }} />
+                        <div className="h-full bg-violet-500/80" style={{ width: `${100 - whPct}%` }} />
+                      </div>
+                      <div className="mt-4 space-y-2.5">
+                        {[
+                          { label: 'In the store', value: sm.warehouseBoxes, colour: 'bg-brand-400' },
+                          { label: 'Out with the reps', value: sm.repBoxes, colour: 'bg-violet-400' },
+                        ].map((r) => (
+                          <div key={r.label} className="flex items-center gap-3">
+                            <span className={`h-2 w-2 shrink-0 rounded-full ${r.colour}`} />
+                            <span className="flex-1 text-sm text-muted">{r.label}</span>
+                            <span className="text-sm font-bold tabular-nums text-foreground">{formatNumber(r.value)}</span>
+                            <span className="w-10 text-right text-xs tabular-nums text-faint">
+                              {sm.totalBoxes > 0 ? Math.round((r.value / sm.totalBoxes) * 100) : 0}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+
+                  <Card>
+                    <div className="p-5">
+                      <h3 className="text-sm font-semibold text-foreground">Who is holding it</h3>
+                      <p className="mt-0.5 text-xs text-muted">Every location and rep, biggest first.</p>
+                      <div className="mt-4 max-h-[228px] space-y-2.5 overflow-y-auto pr-1">
+                        {sm.holders.map((h) => {
+                          const pct = sm.totalBoxes > 0 ? (h.boxes / sm.totalBoxes) * 100 : 0;
+                          const isStore = h.type === 'WAREHOUSE';
+                          return (
+                            <div key={`${h.type}:${h.id}`}>
+                              <div className="flex items-center gap-2">
+                                {isStore
+                                  ? <Warehouse className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+                                  : <Truck className="h-3.5 w-3.5 shrink-0 text-violet-400" />}
+                                <span className="min-w-0 flex-1 truncate text-sm text-foreground">{h.name}</span>
+                                <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{formatNumber(h.boxes)}</span>
+                                <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-faint">{formatCurrency(h.value)}</span>
+                              </div>
+                              <div className="mt-1 ml-5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                                <div className={`h-full rounded-full ${isStore ? 'bg-brand-500' : 'bg-violet-500'}`}
+                                  style={{ width: `${Math.max(2, pct)}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              </>
             );
           })()}
 
