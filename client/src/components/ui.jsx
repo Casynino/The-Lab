@@ -209,7 +209,7 @@ const STAT_TONES = {
   slate: { badge: 'from-slate-500 to-slate-700', glow: 'rgba(148,163,184,0.18)' },
 };
 
-export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onClick }) {
+export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onClick, compact = false }) {
   const t = STAT_TONES[tone] || STAT_TONES.brand;
   return (
     <motion.div
@@ -218,7 +218,7 @@ export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onCli
       transition={{ duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }}
       whileHover={onClick ? { y: -4 } : { y: -2 }}
       onClick={onClick}
-      className={clsx('card relative overflow-hidden p-5', onClick && 'cursor-pointer')}
+      className={clsx('card relative overflow-hidden', compact ? 'p-3.5' : 'p-5', onClick && 'cursor-pointer')}
     >
       {/* Soft corner glow in the tone colour. */}
       <div
@@ -227,15 +227,18 @@ export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onCli
         aria-hidden="true"
       />
       <div className="relative flex items-start justify-between gap-3">
-        <span className="text-sm font-medium text-muted">{label}</span>
+        <span className={clsx('font-medium text-muted', compact ? 'text-xs' : 'text-sm')}>{label}</span>
         {Icon && (
-          <span className={clsx('rounded-xl bg-gradient-to-br p-2.5 shadow-md', t.badge, t.dark ? 'text-slate-950' : 'text-white')}>
-            <Icon className="h-5 w-5" />
+          <span className={clsx('rounded-lg bg-gradient-to-br shadow-md', compact ? 'p-1.5' : 'rounded-xl p-2.5', t.badge, t.dark ? 'text-slate-950' : 'text-white')}>
+            <Icon className={compact ? 'h-3.5 w-3.5' : 'h-5 w-5'} />
           </span>
         )}
       </div>
-      <div className="relative mt-3 min-w-0 break-words text-lg font-bold leading-snug tracking-tight text-foreground sm:text-xl xl:text-2xl">{value}</div>
-      {hint && <div className="relative mt-1 text-xs text-faint">{hint}</div>}
+      <div className={clsx(
+        'relative min-w-0 break-words font-bold leading-snug tracking-tight text-foreground',
+        compact ? 'mt-1.5 text-base xl:text-lg' : 'mt-3 text-lg sm:text-xl xl:text-2xl',
+      )}>{value}</div>
+      {hint && <div className={clsx('relative text-faint', compact ? 'mt-0.5 text-[11px]' : 'mt-1 text-xs')}>{hint}</div>}
     </motion.div>
   );
 }
