@@ -248,16 +248,53 @@ function Balances() {
                     <div className="h-full bg-violet-500/70" style={{ width: `${100 - whPct}%` }} />
                   </div>
 
-                  <div className="mt-auto pt-3 text-[11px] text-muted">
-                    <span className="inline-flex items-center gap-1">
-                      <Warehouse className="h-3 w-3 text-brand-400" /> {formatNumber(inWarehouse)} in store
+                  <div className="mt-2.5 flex items-center justify-between text-[11px]">
+                    <span className="inline-flex items-center gap-1 text-brand-400">
+                      <Warehouse className="h-3 w-3" /> {formatNumber(inWarehouse)} in store
                     </span>
-                    <span className="mx-1.5 text-faint">·</span>
-                    <span className="inline-flex items-center gap-1">
-                      <Truck className="h-3 w-3 text-violet-400" /> {formatNumber(withReps)} with reps
+                    <span className="inline-flex items-center gap-1 text-violet-400">
+                      <Truck className="h-3 w-3" /> {formatNumber(withReps)} with reps
                     </span>
-                    <span className="mx-1.5 text-faint">·</span>
-                    <span className="text-faint">{r.locations.length} place{r.locations.length !== 1 ? 's' : ''}</span>
+                  </div>
+
+                  {/* Who is holding it. Removing this to make the cards line up
+                      threw away the answer to "which rep has my stock" — so it
+                      is back, as a fixed three rows rather than a wrapping row
+                      of chips. Three rows always, padded when there are fewer,
+                      so every card still ends at the same height. */}
+                  <div className="mt-auto space-y-1 border-t border-white/[0.06] pt-2.5">
+                    {(() => {
+                      const sorted = [...r.locations].sort((a, b) => {
+                        if ((a.type === 'WAREHOUSE') !== (b.type === 'WAREHOUSE')) return a.type === 'WAREHOUSE' ? -1 : 1;
+                        return b.baseQuantity - a.baseQuantity;
+                      });
+                      const top = sorted.slice(0, 3);
+                      const rest = sorted.length - top.length;
+                      const pad = Math.max(0, 3 - top.length);
+                      return (
+                        <>
+                          {top.map((loc, k) => (
+                            <div key={k} className="flex items-center justify-between gap-2">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                {loc.type === 'WAREHOUSE'
+                                  ? <Warehouse className="h-3 w-3 shrink-0 text-brand-400" />
+                                  : <Truck className="h-3 w-3 shrink-0 text-violet-400" />}
+                                <span className="truncate text-[11px] text-muted">{loc.name}</span>
+                              </span>
+                              <span className="shrink-0 text-[11px] font-bold tabular-nums text-foreground">
+                                {formatNumber(loc.baseQuantity)}
+                              </span>
+                            </div>
+                          ))}
+                          {Array.from({ length: pad }).map((_, k) => (
+                            <div key={`pad-${k}`} className="h-[17px]" aria-hidden="true" />
+                          ))}
+                          <div className="pt-0.5 text-[10px] text-faint">
+                            {rest > 0 ? `+${rest} more · ` : ''}{r.locations.length} place{r.locations.length !== 1 ? 's' : ''}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );
