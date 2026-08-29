@@ -12,6 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
+import { TZ_REGIONS } from '@/lib/regions';
 import OrderDetailModal from '@/components/OrderDetail';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
@@ -171,7 +172,10 @@ function EditRepModal({ rep, onClose }) {
         <Field label="Email" required><Input type="email" value={form.email} onChange={set('email')} placeholder="name@example.com" /></Field>
         <Field label="Phone"><Input value={form.phone} onChange={set('phone')} placeholder="07.." /></Field>
         <Field label="Region / location" hint="Where this rep sells — shown on their sales & profile">
-          <Input value={form.region} onChange={set('region')} placeholder="e.g. Dar Es Salaam" />
+          <Select value={form.region} onChange={set('region')}>
+            <option value="">— Select region —</option>
+            {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </Select>
         </Field>
         <Field label="Monthly target (TZS)" hint="Optional">
           <Input type="number" min="0" value={form.monthlyTarget} onChange={set('monthlyTarget')} placeholder="0" />

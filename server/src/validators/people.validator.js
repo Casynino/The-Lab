@@ -2,6 +2,22 @@
 
 const { z } = require('zod');
 const { id, paginationFields, boolQuery, money, positiveInt } = require('./common.validator');
+const { canonicalRegion } = require('../constants/regions');
+
+// A region is typed once and then grouped forever in the regional report, so a
+// stray spelling would split one market in two. Anything recognisable is
+// normalised to the official spelling; anything else is refused rather than
+// filed under a name that will never match.
+const tzRegion = z
+  .string()
+  .trim()
+  .max(120)
+  .optional()
+  .nullable()
+  .transform((v) => (v ? canonicalRegion(v) ?? v : v))
+  .refine((v) => !v || canonicalRegion(v) !== null, {
+    message: 'Choose one of the 31 regions of Tanzania',
+  });
 
 // --- Users -----------------------------------------------------------------
 const userCreate = {
@@ -17,7 +33,7 @@ const userCreate = {
     salesRep: z
       .object({
         code: z.string().trim().max(40).optional(),
-        region: z.string().trim().max(120).optional().nullable(),
+        region: tzRegion,
         phone: z.string().trim().max(40).optional().nullable(),
         monthlyTarget: money.optional().nullable(),
       })
@@ -46,7 +62,7 @@ const customerCreate = {
   body: z.object({
     name: z.string().trim().min(1).max(160),
     phone: z.string().trim().max(40).optional().nullable(),
-    region: z.string().trim().max(120).optional().nullable(),
+    region: tzRegion,
     address: z.string().trim().max(300).optional().nullable(),
     notes: z.string().trim().max(1000).optional().nullable(),
     salesRepId: id.optional().nullable(),
@@ -68,7 +84,7 @@ const salesRepCreate = {
   body: z.object({
     userId: id,
     code: z.string().trim().max(40).optional(),
-    region: z.string().trim().max(120).optional().nullable(),
+    region: tzRegion,
     phone: z.string().trim().max(40).optional().nullable(),
     monthlyTarget: money.optional().nullable(),
     isActive: z.boolean().optional(),
@@ -77,7 +93,7 @@ const salesRepCreate = {
 const salesRepUpdate = {
   body: z.object({
     code: z.string().trim().max(40).optional(),
-    region: z.string().trim().max(120).optional().nullable(),
+    region: tzRegion,
     phone: z.string().trim().max(40).optional().nullable(),
     monthlyTarget: money.optional().nullable(),
     isActive: z.boolean().optional(),
@@ -100,7 +116,7 @@ const warehouseCreate = {
   body: z.object({
     name: z.string().trim().min(1).max(160),
     code: z.string().trim().min(1).max(40),
-    region: z.string().trim().max(120).optional().nullable(),
+    region: tzRegion,
     address: z.string().trim().max(300).optional().nullable(),
     isPrimary: z.boolean().optional(),
     isActive: z.boolean().optional(),

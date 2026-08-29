@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSalesReps, useDebounce } from '@/lib/hooks';
 import { ROLES, CREDIT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { TZ_REGIONS } from '@/lib/regions';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea, Select,
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
@@ -34,7 +35,12 @@ function CustomerModal({ open, onClose, editing, reps, canAssign }) {
         <Field label="Name" required error={errors.name?.message}><Input {...register('name', { required: 'Name is required' })} /></Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Phone"><Input {...register('phone')} /></Field>
-          <Field label="Region"><Input {...register('region')} /></Field>
+          <Field label="Region">
+            <Select {...register('region')}>
+            <option value="">— Select region —</option>
+            {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </Select>
+          </Field>
         </div>
         <Field label="Address"><Input {...register('address')} /></Field>
         {canAssign && (

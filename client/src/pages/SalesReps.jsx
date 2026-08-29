@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Plus, UserCog, ChevronRight } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { formatCurrency, formatNumber, initials } from '@/lib/format';
+import { TZ_REGIONS } from '@/lib/regions';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, Pagination,
 } from '@/components/ui';
@@ -35,7 +36,12 @@ function RepModal({ onClose }) {
           </Select>
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Region"><Input value={region} onChange={(e) => setRegion(e.target.value)} /></Field>
+          <Field label="Region">
+            <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="">— Select region —</option>
+            {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </Select>
+          </Field>
           <Field label="Monthly target"><Input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(e.target.value)} /></Field>
         </div>
       </div>

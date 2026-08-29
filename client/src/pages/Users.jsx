@@ -7,6 +7,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useWarehouses, useDebounce } from '@/lib/hooks';
 import { ROLE_LABELS } from '@/lib/constants';
 import { formatDateTime } from '@/lib/format';
+import { TZ_REGIONS } from '@/lib/regions';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Select,
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
@@ -81,7 +82,12 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
           </Field>
         </div>
         {!isEdit && isRep && (
-          <Field label="Sales region"><Input {...register('region')} placeholder="e.g. Dar es Salaam" /></Field>
+          <Field label="Sales region" hint="Used to compare how regions are performing">
+            <Select {...register('region')}>
+            <option value="">— Select region —</option>
+            {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </Select>
+          </Field>
         )}
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" {...register('isActive')} className="h-4 w-4 rounded border-slate-300" /> Active
