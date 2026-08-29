@@ -16,6 +16,7 @@ import { sortByCanonical } from '@/lib/productOrder';
 import { TZ_REGIONS } from '@/lib/regions';
 import OrderDetailModal from '@/components/OrderDetail';
 import ProgressRows from '@/components/ProgressRows';
+import { TrendChart } from '@/components/charts';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
   Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, Textarea,
@@ -508,6 +509,76 @@ export default function SalesRepProfile() {
               </p>
             )}
           </Section>
+
+          {/* The shape behind the totals. A flat run of zeroes is as much of an
+              answer as a spike, which is why empty days are drawn, not skipped. */}
+          {data.trend?.length > 1 && (
+            <Section icon={TrendingUp} title="Daily settled sales"
+              action={<span className="text-xs text-faint">{period === 'all' ? 'last 30 days' : 'this period'}</span>}>
+              <TrendChart
+                data={data.trend}
+                height={200}
+                series={[{ key: 'revenue', name: 'Revenue', color: '#a3e635' }]}
+              />
+            </Section>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            {/* What to send them more of. */}
+            <Section icon={Boxes} title="Top products">
+              {!data.topProducts?.length ? (
+                <p className="text-sm text-faint">Nothing settled in this period.</p>
+              ) : (
+                <div className="space-y-2">
+                  {data.topProducts.map((t) => {
+                    const top = data.topProducts[0].boxes || 1;
+                    return (
+                      <div key={t.productId}>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-xs text-foreground">{t.name}</span>
+                          <span className="shrink-0 text-xs font-semibold tabular-nums text-muted">
+                            {formatNumber(t.boxes)} · {formatCurrency(t.revenue)}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                          <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400"
+                            style={{ width: `${Math.max(4, (t.boxes / top) * 100)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Section>
+
+            {/* The 72-hour contract is what the whole model exists to enforce,
+                so how well a rep keeps it is the clearest read on reliability. */}
+            {data.discipline && (
+              <Section icon={Timer} title="Settlement discipline">
+                <div className="grid grid-cols-2 gap-3">
+                  <Money
+                    label="On time"
+                    value={data.discipline.onTimeRate == null ? '—' : `${data.discipline.onTimeRate}%`}
+                    tone={data.discipline.onTimeRate >= 80 ? 'emerald' : data.discipline.onTimeRate >= 50 ? 'amber' : 'rose'}
+                    sub={`${data.discipline.totalOrders} order(s)`}
+                  />
+                  <Money label="Closed" value={formatNumber(data.discipline.closed)} sub="fully settled" />
+                  <Money label="Still open" value={formatNumber(data.discipline.open)} sub="in progress" />
+                  <Money
+                    label="Overdue now"
+                    value={formatNumber(data.discipline.overdue)}
+                    tone={data.discipline.overdue > 0 ? 'rose' : 'default'}
+                    sub="past deadline"
+                  />
+                </div>
+                {data.discipline.lateOrders > 0 && (
+                  <p className="mt-3 text-xs text-muted">
+                    {formatNumber(data.discipline.lateOrders)} order(s) have missed the 72-hour deadline at some point.
+                  </p>
+                )}
+              </Section>
+            )}
+          </div>
         </div>
 
         {/* ── Right column ── */}

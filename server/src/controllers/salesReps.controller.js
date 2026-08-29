@@ -191,6 +191,110 @@ async function repPerformance(salesRepId, range) {
   };
 }
 
+// Day-by-day settled boxes and revenue across the window, so the period filter
+// shows a shape and not just a total. All-time falls back to the last 30 days —
+// a chart spanning the whole history would be unreadable and is not the
+// question anyone is asking of a profile.
+async function repTrend(salesRepId, range) {
+  const from = range ? new Date(range.start) : new Date(Date.now() - 29 * 86400000);
+  const to = range ? new Date(range.end) : new Date();
+
+  const items = await prisma.saleItem.findMany({
+    where: {
+      sale: { is: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' }, soldAt: { gte: from, lte: to } } },
+    },
+    select: { baseQuantity: true, lineTotal: true, sale: { select: { soldAt: true } } },
+  });
+
+  // Bucket on the East Africa date, so a sale at 9pm local lands on the day it
+  // was made rather than the next one.
+  const byDay = new Map();
+  for (const it of items) {
+    const d = eatDateKey(it.sale.soldAt);
+    const row = byDay.get(d) || { date: d, boxes: 0, revenue: 0 };
+    row.boxes += it.baseQuantity || 0;
+    row.revenue += toNumber(it.lineTotal);
+    byDay.set(d, row);
+  }
+
+  // Fill the empty days: gaps in a line chart read as missing data rather than
+  // as a day with no sales, which is itself the useful signal.
+  const out = [];
+  const cursor = new Date(from);
+  for (let guard = 0; cursor <= to && guard < 400; guard += 1) {
+    const key = eatDateKey(cursor);
+    const row = byDay.get(key) || { date: key, boxes: 0, revenue: 0 };
+    out.push({ ...row, revenue: round2(row.revenue) });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return out;
+}
+
+const eatDateKey = (d) => new Date(new Date(d).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+
+// What this rep actually moves. Useful when deciding what to send them next.
+async function repTopProducts(salesRepId, range, limit = 6) {
+  const where = {
+    sale: {
+      is: {
+        salesRepId,
+        settlementId: { not: null },
+        status: { not: 'CANCELLED' },
+        ...(range ? { soldAt: { gte: range.start, lte: range.end } } : {}),
+      },
+    },
+  };
+  const grouped = await prisma.saleItem.groupBy({
+    by: ['productId'],
+    where,
+    _sum: { baseQuantity: true, lineTotal: true },
+  });
+  if (!grouped.length) return [];
+  const products = await prisma.product.findMany({
+    where: { id: { in: grouped.map((g) => g.productId) } },
+    select: { id: true, name: true, brand: { select: { name: true } } },
+  });
+  const pMap = new Map(products.map((x) => [x.id, x]));
+  return grouped
+    .map((g) => ({
+      productId: g.productId,
+      name: pMap.get(g.productId)?.name || 'Product',
+      brand: pMap.get(g.productId)?.brand?.name || null,
+      boxes: g._sum.baseQuantity || 0,
+      revenue: round2(toNumber(g._sum.lineTotal)),
+    }))
+    .sort((a, b) => b.boxes - a.boxes)
+    .slice(0, limit);
+}
+
+// How well this rep keeps the 72-hour contract — the thing the whole settlement
+// model exists to enforce, and the clearest read on whether they are reliable.
+async function repDiscipline(salesRepId) {
+  const [closed, open, overdue, lateOrders] = await Promise.all([
+    prisma.settlement.count({ where: { salesRepId, status: 'SETTLED' } }),
+    prisma.settlement.count({ where: { salesRepId, status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } } }),
+    prisma.settlement.count({ where: { salesRepId, status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] }, deadlineAt: { lt: new Date() } } }),
+    // An order that ever drew a daily late fine missed the deadline, whatever
+    // happened afterwards — including fines later forgiven, because forgiveness
+    // is a decision about money, not a change to what happened.
+    prisma.settlementPenalty.findMany({
+      where: { salesRepId, kind: 'LATE_FINE', settlementId: { not: null } },
+      select: { settlementId: true },
+      distinct: ['settlementId'],
+    }),
+  ]);
+  const total = closed + open;
+  const late = lateOrders.length;
+  return {
+    totalOrders: total,
+    closed,
+    open,
+    overdue,
+    lateOrders: late,
+    onTimeRate: total > 0 ? round2(((total - late) / total) * 100) : null,
+  };
+}
+
 // A merged, timestamped timeline from the rep's domain records — more meaningful
 // (and reliable) than raw audit rows. Newest first.
 async function repActivity(salesRepId) {
@@ -231,10 +335,13 @@ const getProfile = asyncHandler(async (req, res) => {
   // ?period=today|week|month, or nothing for all time.
   const periodKey = ['today', 'week', 'month'].includes(req.query.period) ? req.query.period : null;
   const range = periodKey ? eatRange(periodKey === 'today' ? 'day' : periodKey) : null;
-  const [performance, bonusProgress, activity] = await Promise.all([
+  const [performance, bonusProgress, activity, trend, topProducts, discipline] = await Promise.all([
     repPerformance(rep.id, range),
     bonus.progressForRep(rep.id).catch(() => null),
     repActivity(rep.id),
+    repTrend(rep.id, range).catch(() => []),
+    repTopProducts(rep.id, range).catch(() => []),
+    repDiscipline(rep.id).catch(() => null),
   ]);
 
   // Active (unsettled) settlements, with box breakdown + pending-return flags.
@@ -307,6 +414,9 @@ const getProfile = asyncHandler(async (req, res) => {
     settlements: { active: activeSettlements, activeCount: active.length, total: settlementsRes.total },
     performance,
     period: periodKey || 'all',
+    trend,
+    topProducts,
+    discipline,
     bonus: bonusProgress,
     activity,
   });
