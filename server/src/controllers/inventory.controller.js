@@ -143,6 +143,21 @@ const balances = asyncHandler(async (req, res) => {
     g.totalBase += b.baseQuantity;
   });
 
+  // A product with nothing left has no balance rows, so it never reached
+  // `grouped` — which meant it vanished from the page entirely and the
+  // out-of-stock count could only ever be zero. An empty line is exactly what
+  // an inventory page should be showing, so they are added back at zero.
+  //
+  // Only when looking at everything: a scope or location filter is asking
+  // "what is in this place", and a product that is nowhere is not an answer
+  // to that.
+  const unfiltered = scope === 'ALL' && !q.warehouseId && !q.salesRepId;
+  if (unfiltered) {
+    for (const prod of products) {
+      if (!grouped.has(prod.id)) grouped.set(prod.id, { productId: prod.id, locations: [], totalBase: 0 });
+    }
+  }
+
   let rows = [...grouped.values()].map((g) => {
     const p = pMap.get(g.productId);
     return {
@@ -154,7 +169,7 @@ const balances = asyncHandler(async (req, res) => {
       brandName: p.brand?.name || null,
       minStockLevel: p.minStockLevel,
       sellingPrice: toNumber(p.sellingPrice),
-      lowStock: p.minStockLevel > 0 && g.totalBase <= p.minStockLevel,
+      lowStock: g.totalBase > 0 && p.minStockLevel > 0 && g.totalBase <= p.minStockLevel,
       totalBase: g.totalBase,
       value: round2(g.totalBase * toNumber(p.purchasePrice)),
       locations: g.locations.sort((a, b) => b.baseQuantity - a.baseQuantity),
@@ -169,7 +184,11 @@ const balances = asyncHandler(async (req, res) => {
     const s = q.search.toLowerCase();
     rows = rows.filter((r) => r.name.toLowerCase().includes(s) || r.sku.toLowerCase().includes(s));
   }
-  rows.sort((a, b) => b.value - a.value);
+  rows.sort((a, b) => {
+    // Out of stock first, then running low, then by what the stock is worth.
+    const rank = (r) => (r.totalBase <= 0 ? 0 : r.lowStock ? 1 : 2);
+    return rank(a) - rank(b) || b.value - a.value;
+  });
 
   const pagination = parsePagination(q, { defaultLimit: 50 });
   const total = rows.length;
