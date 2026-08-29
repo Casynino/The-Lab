@@ -134,7 +134,7 @@ export default function Dashboard() {
       {/* ── Needs your attention ── */}
       <div className="mb-6">
         <div className="mb-3 flex items-center gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs your attention</h2>
+          <div><h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs your attention</h2><p className="text-xs text-faint">Nothing here moves until you decide.</p></div>
           {attentionCount === 0 && (
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" /> All clear</span>
           )}
@@ -151,7 +151,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Today's business (all from Finance) ── */}
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Today's business</h2>
+      <div className="mb-3"><h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Today's business</h2><p className="text-xs text-faint">Money in and out since midnight, straight from Finance.</p></div>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Revenue" value={formatCurrency(today.revenue)} icon={TrendingUp} tone="emerald" />
         <StatCard label="Gross profit" value={formatCurrency(today.grossProfit)} icon={Wallet} tone="brand" onClick={() => navigate('/finance?tab=profit')} />
@@ -178,7 +178,7 @@ export default function Dashboard() {
           going, and which region, rep and product carry it. */}
       {charts && (
         <div className="mb-6 space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Trend</h2>
+          <div><h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Trend</h2><p className="text-xs text-faint">Where the money has been going, and who is bringing it in.</p></div>
 
           <Card>
             <CardHeader title="Revenue and gross profit" subtitle="Last 30 days" />
@@ -204,10 +204,36 @@ export default function Dashboard() {
               )}
             </Card>
 
+            {/* Ranked rather than plotted: eight bars of similar length are hard
+                to order at a glance, where a numbered list is already ordered,
+                and it has room to carry the region alongside the money. */}
             <Card>
               <CardHeader title="Top reps" subtitle="Revenue this month" />
               {charts.byRep?.length ? (
-                <div className="px-2 pb-2"><BarChartCard data={charts.byRep} height={230} /></div>
+                <div className="space-y-2 p-4 pt-0">
+                  {charts.byRep.slice(0, 6).map((r, i) => {
+                    const top = charts.byRep[0].value || 1;
+                    return (
+                      <div key={r.name + i}>
+                        <div className="flex items-center gap-2.5">
+                          <span className={clsx(
+                            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
+                            i === 0 ? 'bg-brand-500 text-black' : 'bg-elevated text-muted',
+                          )}>
+                            {i + 1}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.name}</span>
+                          <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatCurrency(r.value)}</span>
+                        </div>
+                        <div className="mt-1 ml-7 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                          <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400"
+                            style={{ width: `${Math.max(4, (r.value / top) * 100)}%` }} />
+                        </div>
+                        {r.region && <p className="ml-7 mt-0.5 text-[11px] text-faint">{r.region}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <p className="px-5 pb-5 text-sm text-faint">No rep sales this month.</p>
               )}
@@ -228,7 +254,7 @@ export default function Dashboard() {
       {/* ── Brand performance ── */}
       {brands.length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2>
+          <div className="mb-3"><h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2><p className="text-xs text-faint">How OHIS and Civlily are each doing this month.</p></div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {brands.map((b) => {
               const t = BRAND_TONE[b.name?.toUpperCase()] || { ring: 'border-border', bg: 'bg-surface', badge: 'bg-elevated text-muted', dot: 'bg-border' };
@@ -285,16 +311,82 @@ export default function Dashboard() {
         )}
       </Card>
 
-      {/* ── Inventory overview ── */}
+      {/* ── Where every box is ──
+          Five separate stat cards stated the same total five ways and never
+          said how the stock is split. One bar does: the whole holding, divided
+          where it actually sits, with the numbers underneath. */}
       <div className="mt-8">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Inventory overview</h2>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-          <StatCard label="Inventory value" value={formatCurrency(inventory.costValue)} icon={Boxes} tone="brand" hint={`selling ${formatCurrency(inventory.sellingValue)}`} onClick={() => navigate('/inventory')} />
-          <StatCard label="Total boxes" value={formatNumber(inventory.units)} icon={Boxes} tone="slate" />
-          <StatCard label="In warehouse" value={formatNumber(inventory.warehouseBoxes)} icon={Warehouse} tone="emerald" onClick={() => navigate('/inventory')} />
-          <StatCard label="With reps" value={formatNumber(inventory.repBoxes)} icon={Truck} tone="violet" onClick={() => navigate('/reps')} />
-          <StatCard label="Returned today" value={formatNumber(inventory.returnedToday)} icon={Undo2} tone="sky" hint="boxes back to The Lab" onClick={() => navigate('/returns')} />
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Inventory · where every box is</h2>
+            <p className="text-xs text-faint">Everything The Lab is carrying, in the warehouse and out with the reps.</p>
+          </div>
+          <button type="button" onClick={() => navigate('/inventory')} className="shrink-0 text-xs font-medium text-brand-500 hover:underline">
+            Inventory →
+          </button>
         </div>
+
+        <Card>
+          <div className="p-5">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-3xl font-bold tabular-nums text-foreground">{formatCurrency(inventory.costValue)}</p>
+                <p className="mt-0.5 text-xs text-faint">stock value · at cost · selling {formatCurrency(inventory.sellingValue)}</p>
+              </div>
+              <p className="text-sm font-semibold tabular-nums text-muted">
+                {formatNumber(inventory.units)} boxes in stock
+              </p>
+            </div>
+
+            {(() => {
+              const wh = Math.max(0, inventory.warehouseBoxes || 0);
+              const rep = Math.max(0, inventory.repBoxes || 0);
+              const total = wh + rep;
+              const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+              const parts = [
+                { key: 'wh', label: 'In warehouse', value: wh, colour: '#a3e635', to: '/inventory' },
+                { key: 'rep', label: 'With reps', value: rep, colour: '#7c3aed', to: '/reps' },
+              ];
+              return (
+                <>
+                  <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                    {parts.map((p) => (
+                      <div key={p.key} style={{ width: `${pct(p.value)}%`, background: p.colour }} title={`${p.label}: ${p.value}`} />
+                    ))}
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {parts.map((p) => (
+                      <button key={p.key} type="button" onClick={() => navigate(p.to)} className="text-left">
+                        <span className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ background: p.colour }} />
+                          <span className="text-xs text-muted">{p.label}</span>
+                        </span>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">{formatNumber(p.value)}</p>
+                        <p className="text-[11px] text-faint">{Math.round(pct(p.value))}% of stock</p>
+                      </button>
+                    ))}
+                    <div>
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                        <span className="text-xs text-muted">Sold this month</span>
+                      </span>
+                      <p className="mt-0.5 text-xl font-bold tabular-nums text-emerald-300">{formatNumber(month.boxes)}</p>
+                      <p className="text-[11px] text-faint">boxes settled</p>
+                    </div>
+                    <button type="button" onClick={() => navigate('/returns')} className="text-left">
+                      <span className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-sky-400" />
+                        <span className="text-xs text-muted">Returned today</span>
+                      </span>
+                      <p className="mt-0.5 text-xl font-bold tabular-nums text-foreground">{formatNumber(inventory.returnedToday)}</p>
+                      <p className="text-[11px] text-faint">boxes back</p>
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </Card>
       </div>
 
       {/* Month context strip */}
