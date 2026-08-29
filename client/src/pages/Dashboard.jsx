@@ -229,7 +229,7 @@ export default function Dashboard() {
                       return (
                         <button key={g} type="button" onClick={() => setAttentionFilter(g)}
                           className={clsx(
-                            'cursor-pointer rounded-full px-3 py-1 text-xs font-medium transition duration-200',
+                            'cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium transition duration-200',
                             attentionFilter === g ? 'bg-brand-500 text-black' : 'bg-elevated text-muted hover:text-foreground',
                           )}>
                           {g} <span className="opacity-60">{n}</span>
@@ -241,24 +241,33 @@ export default function Dashboard() {
 
                 {/* Frosted rows over the page, per the glass style: a 1px light
                     border and a blur, so the list reads as raised rather than drawn. */}
-                <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
+                <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
+                  <div className="max-h-[168px] overflow-y-auto">
                   {shown.map((i, idx) => (
                     <button key={i.key} type="button" onClick={() => navigate(i.to)}
                       className={clsx(
-                        'flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition duration-200 hover:bg-white/[0.04]',
+                        'flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left transition duration-200 hover:bg-white/[0.04]',
                         idx > 0 && 'border-t border-white/[0.06]',
                       )}>
-                      <span className={clsx('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1', TONE[i.tone])}>
-                        <i.icon className="h-4 w-4" />
+                      <span className={clsx('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1', TONE[i.tone])}>
+                        <i.icon className="h-3.5 w-3.5" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-foreground">{i.title}</span>
-                        <span className="block truncate text-xs text-muted">{i.desc}</span>
+                        <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">{i.title}</span>
+                        <span className="block truncate text-[11px] leading-tight text-muted">{i.desc}</span>
                       </span>
-                      {i.value && <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{i.value}</span>}
-                      <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+                      {i.value && <span className="shrink-0 text-[13px] font-bold tabular-nums text-foreground">{i.value}</span>}
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" />
                     </button>
                   ))}
+                  </div>
+                  {/* Say how many are below the fold, so a capped list never
+                      hides the fact that there is more. */}
+                  {shown.length > 3 && (
+                    <div className="border-t border-white/[0.06] py-1.5 text-center text-[11px] text-faint">
+                      scroll for {shown.length - 3} more
+                    </div>
+                  )}
                 </div>
               </>
             )}
