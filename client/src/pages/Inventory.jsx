@@ -158,54 +158,110 @@ function Balances() {
         <Card><EmptyState title="No stock on hand" message="Receive stock to get started." icon={Boxes} /></Card>
       ) : (
         <>
+          {/* The page opened straight into a wall of cards with no total
+              anywhere. Four figures first: what it is worth, how much of it
+              there is, and how many lines need attention. */}
+          {(() => {
+            const totalValue = rows.reduce((a, r) => a + (r.value || 0), 0);
+            const totalBoxes = rows.reduce((a, r) => a + (r.totalBase || 0), 0);
+            const lowCount = rows.filter((r) => r.lowStock && r.totalBase > 0).length;
+            const outCount = rows.filter((r) => (r.totalBase || 0) <= 0).length;
+            const cells = [
+              { label: 'Stock value', value: formatCurrency(totalValue), sub: `${rows.length} product${rows.length !== 1 ? 's' : ''} on this page`, tone: 'text-foreground' },
+              { label: 'Boxes on hand', value: formatNumber(totalBoxes), sub: 'across every location', tone: 'text-foreground' },
+              { label: 'Running low', value: formatNumber(lowCount), sub: lowCount ? 'reorder before they go' : 'nothing to reorder', tone: lowCount ? 'text-amber-300' : 'text-muted' },
+              { label: 'Out of stock', value: formatNumber(outCount), sub: outCount ? 'nothing left to sell' : 'all lines in stock', tone: outCount ? 'text-rose-400' : 'text-muted' },
+            ];
+            return (
+              <div className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.06] lg:grid-cols-4">
+                {cells.map((c) => (
+                  <div key={c.label} className="flex items-baseline justify-between gap-3 bg-surface px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">{c.label}</p>
+                      <p className="truncate text-[11px] text-faint">{c.sub}</p>
+                    </div>
+                    <p className={`shrink-0 text-base font-bold tabular-nums ${c.tone}`}>{c.value}</p>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {rows.map((r, i) => (
-              <div key={r.productId} className="card-tile animate-rise" style={{ animationDelay: `${i * 35}ms` }}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold leading-tight text-foreground">{r.name}</div>
-                    <div className="mt-0.5 flex items-center gap-1.5">
-                      {r.brandName && <Badge className={BRAND_CHIP[r.brandName?.toUpperCase()] || 'bg-elevated text-muted'}>{r.brandName}</Badge>}
-                      <span className="text-xs text-faint">{r.sku}</span>
+            {rows.map((r, i) => {
+              // Where the stock sits, as two numbers rather than a row of chips.
+              // The chips wrapped to a different number of lines on every card,
+              // which is what made the grid ragged — and a reader cannot hold
+              // five names and five counts anyway. Warehouse against out-with-
+              // reps is the split that actually decides anything.
+              const inWarehouse = r.locations.filter((l) => l.type === 'WAREHOUSE').reduce((a, l) => a + l.baseQuantity, 0);
+              const withReps = Math.max(0, r.totalBase - inWarehouse);
+              const whPct = r.totalBase > 0 ? (inWarehouse / r.totalBase) * 100 : 0;
+              const out = r.totalBase <= 0;
+              const status = out ? 'Out' : r.lowStock ? 'Low' : 'OK';
+              const STATUS = {
+                Out: 'bg-rose-500/15 text-rose-400 ring-rose-500/25',
+                Low: 'bg-amber-500/15 text-amber-400 ring-amber-500/25',
+                OK: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/25',
+              };
+              return (
+                <div
+                  key={r.productId}
+                  className="animate-rise flex h-full flex-col rounded-2xl border border-white/[0.07] bg-surface p-4 transition duration-200 hover:border-white/15"
+                  style={{ animationDelay: `${i * 30}ms` }}
+                >
+                  {/* Brand and code first and small; the name is the heading. */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      {r.brandName && (
+                        <Badge className={BRAND_CHIP[r.brandName?.toUpperCase()] || 'bg-elevated text-muted'}>{r.brandName}</Badge>
+                      )}
+                      <span className="truncate text-[11px] text-faint">{r.sku}</span>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ${STATUS[status]}`}>
+                      {status}
+                    </span>
+                  </div>
+
+                  {/* Two fixed lines, so a long name never changes the card's height. */}
+                  <h3 className="mt-2 line-clamp-2 h-[2.5rem] text-sm font-semibold leading-tight text-foreground">
+                    {r.name}
+                  </h3>
+
+                  <div className="mt-3 flex items-end justify-between gap-2">
+                    <div>
+                      <div className={`text-3xl font-bold leading-none tabular-nums ${out ? 'text-rose-400' : r.lowStock ? 'text-amber-300' : 'text-foreground'}`}>
+                        {formatNumber(r.totalBase)}
+                      </div>
+                      <div className="mt-1 text-[11px] text-faint">{pluralizeUnit(r.baseUnitName)} on hand</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(r.value)}</div>
+                      <div className="text-[11px] text-faint">{formatCurrency(r.sellingPrice)} each</div>
                     </div>
                   </div>
-                  {r.lowStock && <Badge className="bg-rose-100 text-rose-700">Low</Badge>}
-                </div>
 
-                <div className="mt-4 flex items-end justify-between">
-                  <div>
-                    <div className={`text-2xl font-bold ${r.lowStock ? 'text-rose-600' : 'text-foreground'}`}>{formatNumber(r.totalBase)}</div>
-                    <div className="text-xs text-faint">{pluralizeUnit(r.baseUnitName)} on hand</div>
+                  {/* One bar, split where the stock is: filled part is in the
+                      warehouse, the rest is out with the reps. */}
+                  <div className="mt-3 flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                    <div className="h-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${whPct}%` }} />
+                    <div className="h-full bg-violet-500/70" style={{ width: `${100 - whPct}%` }} />
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-semibold text-foreground">{formatCurrency(r.sellingPrice)}</div>
-                    <div className="text-xs text-faint">per {(r.baseUnitName || 'unit').toLowerCase()}</div>
-                  </div>
-                </div>
 
-                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-elevated">
-                  <div
-                    className={`h-full rounded-full transition-all ${r.lowStock ? 'bg-rose-500' : 'bg-brand-500'}`}
-                    style={{ width: `${Math.max(4, Math.round((r.totalBase / max) * 100))}%` }}
-                  />
-                </div>
-
-                <div className="mt-3 border-t border-border pt-3">
-                  <div className="mb-1.5 flex items-center justify-between text-xs text-faint">
-                    <span>Value {formatCurrency(r.value)}</span>
-                    <span>{r.locations.length} location{r.locations.length !== 1 ? 's' : ''}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {r.locations.map((loc, k) => (
-                      <Badge key={k} className={loc.type === 'WAREHOUSE' ? 'bg-elevated text-muted' : 'bg-sky-100 text-sky-700'}>
-                        {loc.type === 'WAREHOUSE' ? <Warehouse className="h-3 w-3" /> : <Truck className="h-3 w-3" />}
-                        {(loc.name || '').split(' ')[0]}: {formatNumber(loc.baseQuantity)}
-                      </Badge>
-                    ))}
+                  <div className="mt-auto pt-3 text-[11px] text-muted">
+                    <span className="inline-flex items-center gap-1">
+                      <Warehouse className="h-3 w-3 text-brand-400" /> {formatNumber(inWarehouse)} in store
+                    </span>
+                    <span className="mx-1.5 text-faint">·</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Truck className="h-3 w-3 text-violet-400" /> {formatNumber(withReps)} with reps
+                    </span>
+                    <span className="mx-1.5 text-faint">·</span>
+                    <span className="text-faint">{r.locations.length} place{r.locations.length !== 1 ? 's' : ''}</span>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <div className="mt-4">
             <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
