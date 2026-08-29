@@ -11,6 +11,7 @@ import clsx from 'clsx';
 import api, { unwrap } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { TrendChart, BarChartCard, DonutChart } from '@/components/charts';
 import { tzGreeting, tzDateLabel } from '@/lib/tz';
 import {
   StatCard, Card, CardHeader, CardBody, PageSpinner, EmptyState, Badge, Button,
@@ -73,7 +74,7 @@ export default function Dashboard() {
   if (isLoading) return <PageSpinner label="Building your command center…" />;
   if (isError || !data) return <EmptyState title="Couldn't load the dashboard" message="Please try again shortly." icon={AlertTriangle} />;
 
-  const { accounts, totalFunds, today, month, brands, reps, attention, inventory } = data;
+  const { accounts, totalFunds, today, month, brands, reps, attention, inventory, charts} = data;
   const firstName = user?.name?.split(' ')[0] || 'there';
   const attentionCount =
     attention.stockRequests + attention.settlements + attention.returns +
@@ -170,6 +171,59 @@ export default function Dashboard() {
           </Button>
         ))}
       </div>
+
+      {/* ── Charts ──
+          The dashboard could say what today was worth but never whether that
+          was good. These give the totals a shape: where the money has been
+          going, and which region, rep and product carry it. */}
+      {charts && (
+        <div className="mb-6 space-y-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Trend</h2>
+
+          <Card>
+            <CardHeader title="Revenue and gross profit" subtitle="Last 30 days" />
+            <div className="px-2 pb-2">
+              <TrendChart
+                data={charts.daily}
+                height={240}
+                series={[
+                  { key: 'revenue', name: 'Revenue', color: '#a3e635' },
+                  { key: 'profit', name: 'Gross profit', color: '#34d399' },
+                ]}
+              />
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <Card>
+              <CardHeader title="Revenue by region" subtitle="This month" />
+              {charts.byRegion?.length ? (
+                <div className="px-2 pb-2"><DonutChart data={charts.byRegion} height={230} /></div>
+              ) : (
+                <p className="px-5 pb-5 text-sm text-faint">No sales recorded this month.</p>
+              )}
+            </Card>
+
+            <Card>
+              <CardHeader title="Top reps" subtitle="Revenue this month" />
+              {charts.byRep?.length ? (
+                <div className="px-2 pb-2"><BarChartCard data={charts.byRep} height={230} /></div>
+              ) : (
+                <p className="px-5 pb-5 text-sm text-faint">No rep sales this month.</p>
+              )}
+            </Card>
+
+            <Card>
+              <CardHeader title="Top products" subtitle="Revenue this month" />
+              {charts.topProducts?.length ? (
+                <div className="px-2 pb-2"><BarChartCard data={charts.topProducts} height={230} color="#f59e0b" /></div>
+              ) : (
+                <p className="px-5 pb-5 text-sm text-faint">Nothing sold this month.</p>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* ── Brand performance ── */}
       {brands.length > 0 && (

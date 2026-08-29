@@ -247,6 +247,101 @@ async function brandBreakdown() {
   };
 }
 
+// ── Chart series for the dashboard ───────────────────────────────────────────
+// The dashboard reported totals and nothing else, so it could say what today
+// was worth but never whether that was good. These give the numbers a shape:
+// where the money has been going, and which brand, region, rep and product
+// carry it.
+
+const eatDayKey = (d) => new Date(new Date(d).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+
+// Revenue, gross profit and boxes per day. Empty days are emitted as zeros — a
+// gap in a line reads as missing data rather than as a quiet day, and a quiet
+// day is itself the thing worth seeing.
+async function dailySeries(days = 30) {
+  const to = new Date();
+  const from = new Date(to.getTime() - (days - 1) * 86400000);
+  const items = await prisma.saleItem.findMany({
+    where: { sale: { is: { status: { not: 'CANCELLED' }, soldAt: { gte: from, lte: to } } } },
+    select: { baseQuantity: true, lineTotal: true, unitCost: true, sale: { select: { soldAt: true } } },
+  });
+
+  const byDay = new Map();
+  for (const it of items) {
+    const k = eatDayKey(it.sale.soldAt);
+    const row = byDay.get(k) || { revenue: 0, profit: 0, boxes: 0 };
+    const rev = toNumber(it.lineTotal);
+    row.revenue += rev;
+    row.profit += rev - toNumber(it.unitCost) * (it.baseQuantity || 0);
+    row.boxes += it.baseQuantity || 0;
+    byDay.set(k, row);
+  }
+
+  const out = [];
+  const cur = new Date(from);
+  for (let i = 0; i < days; i += 1) {
+    const k = eatDayKey(cur);
+    const row = byDay.get(k) || { revenue: 0, profit: 0, boxes: 0 };
+    out.push({ date: k, revenue: round2(row.revenue), profit: round2(row.profit), boxes: row.boxes });
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return out;
+}
+
+// "Which region is doing best" — a question only answerable now that regions
+// come from a fixed list instead of free text.
+async function revenueByRegion(range) {
+  const rows = await prisma.sale.groupBy({
+    by: ['region'],
+    where: { status: { not: 'CANCELLED' }, soldAt: { gte: range.start, lte: range.end } },
+    _sum: { total: true },
+  });
+  return rows
+    .map((r) => ({ name: r.region || 'Unassigned', value: round2(toNumber(r._sum.total)) }))
+    .filter((r) => r.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+async function revenueByRep(range) {
+  const rows = await prisma.sale.groupBy({
+    by: ['salesRepId'],
+    where: { status: { not: 'CANCELLED' }, salesRepId: { not: null }, soldAt: { gte: range.start, lte: range.end } },
+    _sum: { total: true },
+  });
+  if (!rows.length) return [];
+  const reps = await prisma.salesRepresentative.findMany({
+    where: { id: { in: rows.map((r) => r.salesRepId) } },
+    include: { user: { select: { name: true } } },
+  });
+  const m = new Map(reps.map((r) => [r.id, r]));
+  return rows
+    .map((r) => ({
+      name: m.get(r.salesRepId)?.user?.name || m.get(r.salesRepId)?.code || 'Rep',
+      region: m.get(r.salesRepId)?.region || null,
+      value: round2(toNumber(r._sum.total)),
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+}
+
+async function topProductsByRevenue(range, limit = 6) {
+  const rows = await prisma.saleItem.groupBy({
+    by: ['productId'],
+    where: { sale: { is: { status: { not: 'CANCELLED' }, soldAt: { gte: range.start, lte: range.end } } } },
+    _sum: { lineTotal: true, baseQuantity: true },
+  });
+  if (!rows.length) return [];
+  const prods = await prisma.product.findMany({
+    where: { id: { in: rows.map((r) => r.productId) } },
+    select: { id: true, name: true },
+  });
+  const m = new Map(prods.map((x) => [x.id, x.name]));
+  return rows
+    .map((r) => ({ name: m.get(r.productId) || 'Product', value: round2(toNumber(r._sum.lineTotal)), boxes: r._sum.baseQuantity || 0 }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
+}
+
 // ── Command center ───────────────────────────────────────────────────────────
 // One composed payload for the admin dashboard: where the money is, today's
 // business (all from Finance), per-brand performance, rep performance, what
@@ -259,6 +354,15 @@ async function command() {
 
   const todayR = await epochRange('today');
   const monthR = await epochRange('month');
+
+  // Chart data, gathered in parallel with the rest and never allowed to break
+  // the dashboard: an empty chart is a far better failure than a blank page.
+  const chartsPromise = Promise.all([
+    dailySeries(30).catch(() => []),
+    revenueByRegion(monthR).catch(() => []),
+    revenueByRep(monthR).catch(() => []),
+    topProductsByRevenue(monthR).catch(() => []),
+  ]).then(([daily, byRegion, byRep, topProducts]) => ({ daily, byRegion, byRep, topProducts }));
 
   const [fin, profMonth, bd, stl, low, val, repsRows, repBal, commAll, supplierRows, products, pendCounts, salesTodayRows, salesMonthRows, activeStl, retTodayAgg, retSubmittedToday, retSubmittedTodayBoxes] = await Promise.all([
     finance.overview('today'),
@@ -359,6 +463,8 @@ async function command() {
   const warehouseBoxes = val.items.reduce((x, it) => x + it.warehouseBase, 0);
   const repBoxes = val.items.reduce((x, it) => x + it.repBase, 0);
 
+  const charts = await chartsPromise;
+
   return {
     accounts: fin.accounts,
     totalFunds: fin.cashPosition,
@@ -394,6 +500,10 @@ async function command() {
       repBoxes,
       returnedToday: retTodayAgg._sum.baseQuantity || 0,
     },
+    // The shape behind the totals. Everything here is scoped to the same month
+    // range the rest of the payload uses, except the trend, which is a rolling
+    // 30 days so the line does not restart on the 1st.
+    charts,
   };
 }
 
