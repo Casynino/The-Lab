@@ -8,6 +8,8 @@ const { parsePagination } = require('../utils/pagination');
 const inventory = require('../services/inventory.service');
 const stockCount = require('../services/stockCount.service');
 const commission = require('../services/commission.service');
+const bonus = require('../services/bonus.service');
+const { eatRange } = require('../utils/dates');
 const settlement = require('../services/settlement.service');
 const { toNumber, round2 } = require('../utils/money');
 const audit = require('../services/audit.service');
@@ -125,26 +127,67 @@ const get = asyncHandler(async (req, res) => {
 });
 
 // Lifetime box flow for a rep: received (issued in), sold (settled), returned.
-async function repPerformance(salesRepId, boxesSold) {
-  const [recv, ret] = await Promise.all([
+// Performance over a window. `range` null means all time, which is what the
+// profile used to show and nothing else. Each figure is filtered on the date
+// that actually marks the event — stock leaving on dispatch, a sale on its sale
+// date, a return when it was processed — rather than one shared timestamp, so a
+// week's numbers describe that week.
+async function repPerformance(salesRepId, range) {
+  const inRange = (field) => (range ? { [field]: { gte: range.start, lte: range.end } } : {});
+
+  const [recv, ret, soldAgg, revenueAgg] = await Promise.all([
     prisma.stockTransferItem.aggregate({
-      where: { transfer: { is: { direction: 'WAREHOUSE_TO_REP', toRepId: salesRepId, status: { not: 'CANCELLED' } } } },
+      where: {
+        transfer: {
+          is: {
+            direction: 'WAREHOUSE_TO_REP',
+            toRepId: salesRepId,
+            status: { not: 'CANCELLED' },
+            ...inRange('dispatchedAt'),
+          },
+        },
+      },
       _sum: { baseQuantity: true },
     }),
     prisma.returnItem.aggregate({
-      where: { return: { is: { salesRepId, status: { in: ['APPROVED', 'COMPLETED'] } } } },
+      where: { return: { is: { salesRepId, status: { in: ['APPROVED', 'COMPLETED'] }, ...inRange('processedAt') } } },
       _sum: { baseQuantity: true },
     }),
+    // Boxes settled in the window. All-time this equals commission.boxesSettled,
+    // but it has to be recomputed per window rather than reused.
+    prisma.saleItem.aggregate({
+      where: { sale: { is: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' }, ...inRange('soldAt') } } },
+      _sum: { baseQuantity: true },
+    }),
+    prisma.sale.aggregate({
+      where: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' }, ...inRange('soldAt') },
+      _sum: { total: true },
+    }),
   ]);
+
   const received = recv._sum.baseQuantity || 0;
   const returned = ret._sum.baseQuantity || 0;
-  const sold = boxesSold || 0;
+  const sold = soldAgg._sum.baseQuantity || 0;
+
+  // What those settled boxes earned, priced by each order's own rule.
+  let commissionEarned = 0;
+  if (range) {
+    const earned = await commission.earnedBetween(range.start, range.end).catch(() => null);
+    commissionEarned = earned ? round2(earned.byRep.get(salesRepId) || 0) : 0;
+  } else {
+    const c = await commission.computeForRep(salesRepId).catch(() => null);
+    commissionEarned = c ? c.earned : 0;
+  }
+
   return {
     received,
     sold,
     returned,
-    net: received - sold - returned,
+    // Held only means anything all-time; over a window it is a flow, not a stock.
+    net: range ? null : received - sold - returned,
     conversion: received > 0 ? round2((sold / received) * 100) : 0,
+    revenue: round2(toNumber(revenueAgg._sum.total)),
+    commissionEarned,
   };
 }
 
@@ -185,8 +228,14 @@ const getProfile = asyncHandler(async (req, res) => {
     commission.computeForRep(rep.id),
     settlement.list({ salesRepId: rep.id }, { skip: 0, take: 200, orderBy: { deadlineAt: 'asc' } }),
   ]);
-  const performance = await repPerformance(rep.id, comm.boxesSettled);
-  const activity = await repActivity(rep.id);
+  // ?period=today|week|month, or nothing for all time.
+  const periodKey = ['today', 'week', 'month'].includes(req.query.period) ? req.query.period : null;
+  const range = periodKey ? eatRange(periodKey === 'today' ? 'day' : periodKey) : null;
+  const [performance, bonusProgress, activity] = await Promise.all([
+    repPerformance(rep.id, range),
+    bonus.progressForRep(rep.id).catch(() => null),
+    repActivity(rep.id),
+  ]);
 
   // Active (unsettled) settlements, with box breakdown + pending-return flags.
   const active = settlementsRes.items.filter((s) => s.status !== 'SETTLED');
@@ -257,6 +306,8 @@ const getProfile = asyncHandler(async (req, res) => {
     },
     settlements: { active: activeSettlements, activeCount: active.length, total: settlementsRes.total },
     performance,
+    period: periodKey || 'all',
+    bonus: bonusProgress,
     activity,
   });
 });

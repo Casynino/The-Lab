@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 import {
   ArrowLeft, Package, Timer, Wallet, AlertTriangle, TrendingUp, History,
   ShieldCheck, ShieldAlert, Power, CheckCircle2, Clock, Undo2, ClipboardList,
@@ -14,6 +15,7 @@ import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } fr
 import { sortByCanonical } from '@/lib/productOrder';
 import { TZ_REGIONS } from '@/lib/regions';
 import OrderDetailModal from '@/components/OrderDetail';
+import ProgressRows from '@/components/ProgressRows';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
   Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, Textarea,
@@ -295,10 +297,16 @@ export default function SalesRepProfile() {
   const [editOpen, setEditOpen] = useState(false); // "Edit details" modal
   const [deducting, setDeducting] = useState(false); // "Deduct commission" modal
 
+  // Which window the performance figures cover. Kept in the query key so
+  // switching period refetches rather than showing last period's numbers.
+  const [period, setPeriod] = useState('all');
   const { data, isLoading } = useQuery({
-    queryKey: ['sales-rep-profile', id],
-    queryFn: async () => unwrap(await api.get(`/sales-reps/${id}/profile`)).data,
+    queryKey: ['sales-rep-profile', id, period],
+    queryFn: async () => unwrap(await api.get(`/sales-reps/${id}/profile`, {
+      params: period === 'all' ? {} : { period },
+    })).data,
     refetchInterval: 60_000,
+    keepPreviousData: true,
   });
 
   const toggleActive = useMutation({
@@ -461,19 +469,55 @@ export default function SalesRepProfile() {
           </Section>
 
           {/* Performance */}
-          <Section icon={TrendingUp} title="Performance summary">
+          <Section
+            icon={TrendingUp}
+            title="Performance"
+            action={
+              <div className="flex gap-1 rounded-lg border border-border bg-elevated p-0.5">
+                {[['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['all', 'All time']].map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setPeriod(k)}
+                    className={clsx(
+                      'rounded-md px-2.5 py-1 text-xs font-medium transition',
+                      period === k ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            }
+          >
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
               <Money label="Received" value={formatNumber(perf.received)} tone="brand" sub="boxes" />
               <Money label="Sold" value={formatNumber(perf.sold)} tone="emerald" sub="settled" />
               <Money label="Returned" value={formatNumber(perf.returned)} sub="boxes" />
-              <Money label="Net (held)" value={formatNumber(perf.net)} sub="boxes" />
+              {/* Held is a stock, not a flow — it only means anything all-time. */}
+              {perf.net != null
+                ? <Money label="Net (held)" value={formatNumber(perf.net)} sub="boxes" />
+                : <Money label="Revenue" value={formatCurrency(perf.revenue)} tone="emerald" sub="settled value" />}
               <Money label="Conversion" value={`${perf.conversion}%`} tone={perf.conversion >= 80 ? 'emerald' : 'amber'} sub="sold / received" />
             </div>
+            {perf.commissionEarned != null && (
+              <p className="mt-3 text-xs text-muted">
+                Commission earned {period === 'all' ? 'in total' : 'in this period'}:{' '}
+                <span className="font-semibold text-emerald-400">{formatCurrency(perf.commissionEarned)}</span>
+                {perf.net == null && <> · Revenue {formatCurrency(perf.revenue)}</>}
+              </p>
+            )}
           </Section>
         </div>
 
         {/* ── Right column ── */}
         <div className="space-y-6">
+          {/* The same two bars the rep sees, so a conversation about their
+              progress is had over identical numbers. */}
+          <ProgressRows
+            commission={{ available: c.available, minWithdrawal: c.threshold }}
+            bonus={data.bonus}
+          />
           {/* Commission overview */}
           <Section icon={Wallet} title="Commission overview"
             action={isAdmin && (
