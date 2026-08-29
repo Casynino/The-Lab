@@ -143,56 +143,6 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* ── This month ──
-          The month's revenue, profit and volume were a line of grey text at the
-          very bottom of the page, under everything. It is the question an owner
-          opens the app to answer, so it sits under the hero, and the margin —
-          which was not shown at all — is the figure that says whether the
-          revenue above it was worth earning. */}
-      <div className="mb-5">
-        <div className="mb-2 flex items-baseline justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-              This month · {tzDateLabel({ month: 'long' })}
-            </h2>
-            <p className="text-xs text-faint">What the business has earned since the 1st.</p>
-          </div>
-          <button type="button" onClick={() => navigate('/finance')}
-            className="shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
-            Open Finance →
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.06] sm:grid-cols-3">
-          {(() => {
-            const margin = month.revenue > 0 ? (month.grossProfit / month.revenue) * 100 : null;
-            const cells = [
-              {
-                label: 'Revenue', value: formatCurrency(month.revenue),
-                sub: `${formatNumber(month.boxes)} boxes settled`, tone: 'text-foreground',
-              },
-              {
-                label: 'Gross profit', value: formatCurrency(month.grossProfit),
-                sub: margin == null ? 'no sales yet' : `${margin.toFixed(1)}% margin`,
-                tone: month.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-400',
-              },
-              {
-                label: 'Boxes sold', value: formatNumber(month.boxes),
-                sub: month.revenue > 0 ? `${formatCurrency(Math.round(month.revenue / Math.max(1, month.boxes)))} a box` : 'nothing settled yet',
-                tone: 'text-foreground',
-              },
-            ];
-            return cells.map((c) => (
-              <div key={c.label} className="bg-surface p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{c.label}</p>
-                <p className={clsx('mt-1 text-2xl font-bold tabular-nums', c.tone)}>{c.value}</p>
-                <p className="mt-0.5 text-[11px] text-faint">{c.sub}</p>
-              </div>
-            ));
-          })()}
-        </div>
-      </div>
-
       {/* ── Needs your attention ──
           Seven tiles showing a number each told you how many of something there
           were, but not what any of it was or which mattered. A list says the
@@ -354,7 +304,66 @@ export default function Dashboard() {
         <StatCard label="Gross profit" value={formatCurrency(today.grossProfit)} icon={Wallet} tone="brand" onClick={() => navigate('/finance?tab=profit')} />
         <StatCard label="Expenses" value={formatCurrency(today.expenses)} icon={Receipt} tone="rose" onClick={() => navigate('/finance?tab=expenses')} />
         <StatCard label="Net profit" value={formatCurrency(today.netProfit)} icon={Scale} tone={today.netProfit >= 0 ? 'violet' : 'rose'} />
+        <StatCard
+          label="Boxes sold"
+          value={formatNumber((charts?.daily || []).slice(-1)[0]?.boxes || 0)}
+          icon={Boxes}
+          tone="sky"
+          hint="settled today"
+        />
         <StatCard label="Cash flow" value={formatCurrency(today.netCash)} icon={today.netCash >= 0 ? ArrowDownLeft : ArrowUpRight} tone={today.netCash >= 0 ? 'emerald' : 'rose'} hint={`in ${formatCurrency(today.moneyIn)} · out ${formatCurrency(today.moneyOut)}`} onClick={() => navigate('/finance?tab=cashflow')} />
+      </div>
+
+      {/* ── This month ──
+          The month's revenue, profit and volume were a line of grey text at the
+          very bottom of the page, under everything. It is the question an owner
+          opens the app to answer, so it sits under the hero, and the margin —
+          which was not shown at all — is the figure that says whether the
+          revenue above it was worth earning. */}
+      <div className="mb-5">
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+              This month · {tzDateLabel({ month: 'long' })}
+            </h2>
+            <p className="text-xs text-faint">The running total today is measured against.</p>
+          </div>
+          <button type="button" onClick={() => navigate('/finance')}
+            className="shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
+            Open Finance →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.06] sm:grid-cols-3">
+          {(() => {
+            const margin = month.revenue > 0 ? (month.grossProfit / month.revenue) * 100 : null;
+            const cells = [
+              {
+                label: 'Revenue', value: formatCurrency(month.revenue),
+                sub: `${formatNumber(month.boxes)} boxes settled`, tone: 'text-foreground',
+              },
+              {
+                label: 'Gross profit', value: formatCurrency(month.grossProfit),
+                sub: margin == null ? 'no sales yet' : `${margin.toFixed(1)}% margin`,
+                tone: month.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-400',
+              },
+              {
+                label: 'Boxes sold', value: formatNumber(month.boxes),
+                sub: month.revenue > 0 ? `${formatCurrency(Math.round(month.revenue / Math.max(1, month.boxes)))} a box` : 'nothing settled yet',
+                tone: 'text-foreground',
+              },
+            ];
+            return cells.map((c) => (
+              <div key={c.label} className="flex items-baseline justify-between gap-3 bg-surface px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">{c.label}</p>
+                  <p className="truncate text-[11px] text-faint">{c.sub}</p>
+                </div>
+                <p className={clsx('shrink-0 text-base font-bold tabular-nums', c.tone)}>{c.value}</p>
+              </div>
+            ));
+          })()}
+        </div>
       </div>
 
       {/* ── Quick actions ──
