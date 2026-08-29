@@ -270,7 +270,6 @@ function Balances() {
               // five names and five counts anyway. Warehouse against out-with-
               // reps is the split that actually decides anything.
               const inWarehouse = r.locations.filter((l) => l.type === 'WAREHOUSE').reduce((a, l) => a + l.baseQuantity, 0);
-              const withReps = Math.max(0, r.totalBase - inWarehouse);
               const whPct = r.totalBase > 0 ? (inWarehouse / r.totalBase) * 100 : 0;
               const out = r.totalBase <= 0;
               const status = out ? 'Out' : r.lowStock ? 'Low' : 'OK';
@@ -323,15 +322,10 @@ function Balances() {
                     <div className="h-full bg-violet-500/70" style={{ width: `${100 - whPct}%` }} />
                   </div>
 
-                  <div className="mt-2.5 flex items-center justify-between text-[11px]">
-                    <span className="inline-flex items-center gap-1 text-brand-400">
-                      <Warehouse className="h-3 w-3" /> {formatNumber(inWarehouse)} in store
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-violet-400">
-                      <Truck className="h-3 w-3" /> {formatNumber(withReps)} with reps
-                    </span>
-                  </div>
-
+                  {/* No "in store / with reps" line here: the warehouse is the
+                      first row of the list below and states the same number, so
+                      the summary printed every count twice. The bar already
+                      carries the split. */}
                   {/* Who is holding it. Removing this to make the cards line up
                       threw away the answer to "which rep has my stock" — so it
                       is back, as a fixed three rows rather than a wrapping row
