@@ -64,3 +64,25 @@ export function initials(name = '') {
     .join('')
     .toUpperCase();
 }
+
+// Whole percentages of a total that ADD UP TO 100. Rounding each share on its
+// own is the obvious way and it is wrong: 3 of 8 and 5 of 8 round to 38% and
+// 63%, and a reader who adds them gets 101 and is right to distrust the page.
+// Largest-remainder: floor everything, then hand the leftover points to the
+// shares that lost the most in the rounding.
+export function sharePercents(values, total) {
+  const n = values.length;
+  if (!total || total <= 0) return new Array(n).fill(0);
+  const raw = values.map((v) => (v / total) * 100);
+  const out = raw.map(Math.floor);
+  let left = 100 - out.reduce((a, x) => a + x, 0);
+  const byRemainder = raw
+    .map((v, i) => [v - Math.floor(v), i])
+    .sort((a, b) => b[0] - a[0]);
+  for (const [, i] of byRemainder) {
+    if (left <= 0) break;
+    out[i] += 1;
+    left -= 1;
+  }
+  return out;
+}

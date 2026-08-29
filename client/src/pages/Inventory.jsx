@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, PackageX } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses, useSalesReps, useDebounce } from '@/lib/hooks';
-import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, sharePercents } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
 import { MOVEMENT_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
@@ -212,16 +212,19 @@ function Balances() {
                         <div className="h-full bg-violet-500/80" style={{ width: `${100 - whPct}%` }} />
                       </div>
                       <div className="mt-4 space-y-2.5">
-                        {[
-                          { label: 'In the store', value: sm.warehouseBoxes, colour: 'bg-brand-400' },
-                          { label: 'Out with the reps', value: sm.repBoxes, colour: 'bg-violet-400' },
-                        ].map((r) => (
+                        {(() => {
+                          const shares = sharePercents([sm.warehouseBoxes, sm.repBoxes], sm.totalBoxes);
+                          return [
+                            { label: 'In the store', value: sm.warehouseBoxes, share: shares[0], colour: 'bg-brand-400' },
+                            { label: 'Out with the reps', value: sm.repBoxes, share: shares[1], colour: 'bg-violet-400' },
+                          ];
+                        })().map((r) => (
                           <div key={r.label} className="flex items-center gap-3">
                             <span className={`h-2 w-2 shrink-0 rounded-full ${r.colour}`} />
                             <span className="flex-1 text-sm text-muted">{r.label}</span>
                             <span className="text-sm font-bold tabular-nums text-foreground">{formatNumber(r.value)}</span>
                             <span className="w-10 text-right text-xs tabular-nums text-faint">
-                              {sm.totalBoxes > 0 ? Math.round((r.value / sm.totalBoxes) * 100) : 0}%
+                              {r.share}%
                             </span>
                           </div>
                         ))}

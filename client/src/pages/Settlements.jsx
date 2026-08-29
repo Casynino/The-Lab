@@ -5,15 +5,15 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import {
   Timer, AlertTriangle, Clock, CheckCircle2, Eye,
-  ChevronRight, Wallet, TrendingDown, ShieldCheck,
+  ChevronRight, Wallet, ShieldCheck, PackageOpen, Boxes, Users, Truck,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatDateTime, formatNumber, sharePercents } from '@/lib/format';
 import OrderDetailModal from '@/components/OrderDetail';
 import {
-  PageHeader, Card, StatCard, PageSpinner, EmptyState, Badge, Button,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -226,7 +226,39 @@ function PendingApprovals({ onReview }) {
   );
 }
 
-// ── Staff / admin view: full table ──────────────────────────────────────────
+// ── Staff / admin view ───────────────────────────────────────────────────────
+
+// One filter chip. Replaces the lone dropdown: the counts are the point — you
+// can see there are four overdue orders before deciding to look at them, which
+// a <select> can never show.
+function FilterChip({ label, count, active, tone, onClick }) {
+  const TONE = {
+    slate: 'bg-white/10 text-foreground ring-white/20',
+    sky: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
+    amber: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+    rose: 'bg-rose-500/15 text-rose-300 ring-rose-500/30',
+    emerald: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        'inline-flex cursor-pointer items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400',
+        active ? TONE[tone] : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground',
+      )}
+    >
+      {label}
+      {count != null && (
+        <span className={clsx('rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums',
+          active ? 'bg-black/25' : 'bg-white/[0.07] text-faint')}>
+          {formatNumber(count)}
+        </span>
+      )}
+    </button>
+  );
+}
 
 function StaffSettlements({ viewing, setViewing }) {
   const [page, setPage] = useState(1);
@@ -235,6 +267,7 @@ function StaffSettlements({ viewing, setViewing }) {
   const { data: summary } = useQuery({
     queryKey: ['settlements', 'summary'],
     queryFn: async () => unwrap(await api.get('/settlements/summary')).data,
+    refetchInterval: 60_000,
   });
 
   const { data, isLoading } = useQuery({
@@ -242,71 +275,260 @@ function StaffSettlements({ viewing, setViewing }) {
     queryFn: async () => unwrap(await api.get('/settlements', { params: { page, limit: 15, status: status || undefined } })),
   });
 
+  const pick = (next) => { setStatus(next); setPage(1); };
+
+  const b = summary?.boxes || { issued: 0, settled: 0, returned: 0, remaining: 0 };
+  const sc = summary?.statusCounts || {};
+  const pct = (n, of) => (of > 0 ? (n / of) * 100 : 0);
+
+  const cards = summary ? [
+    {
+      label: 'Outstanding', value: formatCurrency(summary.outstandingValue), icon: Timer,
+      sub: `${summary.outstandingCount} live order${summary.outstandingCount === 1 ? '' : 's'}`,
+      ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300',
+    },
+    {
+      label: 'Boxes with reps', value: formatNumber(b.remaining), icon: PackageOpen,
+      sub: 'still to settle or return',
+      ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.12]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300',
+    },
+    {
+      label: 'Overdue', value: formatNumber(summary.overdueCount), icon: AlertTriangle,
+      sub: summary.overdueCount ? formatCurrency(summary.overdueValue) : 'nobody is late',
+      ring: summary.overdueCount ? 'ring-rose-500/30' : 'ring-white/[0.07]',
+      glow: summary.overdueCount ? 'from-rose-500/[0.14]' : 'from-white/[0.02]',
+      chip: 'bg-rose-500/15 text-rose-300', num: summary.overdueCount ? 'text-rose-300' : 'text-foreground',
+    },
+    {
+      label: 'Due within 12h', value: formatNumber(summary.approachingCount), icon: Clock,
+      sub: summary.approachingCount ? 'chase these today' : 'nothing closing yet',
+      ring: summary.approachingCount ? 'ring-amber-500/30' : 'ring-white/[0.07]',
+      glow: summary.approachingCount ? 'from-amber-500/[0.14]' : 'from-white/[0.02]',
+      chip: 'bg-amber-500/15 text-amber-300', num: summary.approachingCount ? 'text-amber-300' : 'text-foreground',
+    },
+    {
+      label: 'Boxes settled', value: formatNumber(summary.lifetime?.boxesSettled || 0), icon: CheckCircle2,
+      sub: `${formatNumber(summary.totalOrders || 0)} orders, all time`,
+      ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300',
+    },
+  ] : [];
+
+  // The boxes on every live order, split by what has happened to them. These
+  // four add up: issued = settled + returned + still out.
+  const flowShares = sharePercents([b.settled, b.returned, b.remaining], b.issued);
+  const flow = [
+    { label: 'Settled by the rep', value: b.settled, share: flowShares[0], dot: 'bg-emerald-400', bar: 'bg-emerald-500' },
+    { label: 'Returned to the store', value: b.returned, share: flowShares[1], dot: 'bg-sky-400', bar: 'bg-sky-500' },
+    { label: 'Still out, unaccounted', value: b.remaining, share: flowShares[2], dot: 'bg-violet-400', bar: 'bg-violet-500' },
+  ];
+
+  const chips = [
+    { key: '', label: 'All orders', count: summary?.totalOrders, tone: 'slate' },
+    { key: 'OPEN', label: 'Open', count: sc.OPEN, tone: 'sky' },
+    { key: 'PARTIAL', label: 'Partial', count: sc.PARTIAL, tone: 'amber' },
+    { key: 'OVERDUE', label: 'Overdue', count: sc.OVERDUE, tone: 'rose' },
+    { key: 'SETTLED', label: 'Settled', count: sc.SETTLED, tone: 'emerald' },
+  ];
+
   return (
     <div>
       <PendingApprovals onReview={setViewing} />
+
       {summary && (
-        <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
-          <StatCard label="Outstanding" value={formatCurrency(summary.outstandingValue)} icon={Timer} tone="brand" hint={`${summary.outstandingCount} active order${summary.outstandingCount !== 1 ? 's' : ''}`} />
-          <StatCard label="Approaching deadline" value={summary.approachingCount} icon={Clock} tone="amber" hint="within 12 hours" />
-          <StatCard label="Overdue (>72h)" value={summary.overdueCount} icon={AlertTriangle} tone="rose" hint={formatCurrency(summary.overdueValue)} />
-          <StatCard label="Total orders" value={data?.meta?.total ?? '—'} icon={CheckCircle2} tone="emerald" />
-        </div>
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+            {cards.map((c) => (
+              <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
+                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
+                <div className="relative flex items-start justify-between gap-2">
+                  <p className="text-xs font-medium text-muted">{c.label}</p>
+                  <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+                </div>
+                <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
+                <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mb-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* What the live orders are MADE OF. The money cards say what they
+                are worth; this says how many boxes are actually in play. */}
+            <Card>
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">The boxes on contract</h3>
+                    <p className="mt-0.5 text-xs text-muted">Every box issued on a live order, and what became of it.</p>
+                  </div>
+                  <span className="rounded-lg bg-violet-500/15 p-1.5 text-violet-300"><Boxes className="h-3.5 w-3.5" /></span>
+                </div>
+
+                <p className="mt-4 text-4xl font-bold leading-none tabular-nums text-foreground">
+                  {formatNumber(b.issued)}
+                  <span className="ml-2 text-sm font-normal text-muted">boxes issued, not yet closed</span>
+                </p>
+
+                {b.issued > 0 ? (
+                  <>
+                    <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                      {flow.map((f) => (
+                        <div key={f.label} className={`h-full ${f.bar}`} style={{ width: `${pct(f.value, b.issued)}%` }} />
+                      ))}
+                    </div>
+                    <div className="mt-4 space-y-2.5">
+                      {flow.map((f) => (
+                        <div key={f.label} className="flex items-center gap-3">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${f.dot}`} />
+                          <span className="flex-1 text-sm text-muted">{f.label}</span>
+                          <span className="text-sm font-bold tabular-nums text-foreground">{formatNumber(f.value)}</span>
+                          <span className="w-10 text-right text-xs tabular-nums text-faint">
+                            {f.share}%
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-4 text-sm text-faint">No boxes are out on contract. Every issued box has been settled or returned.</p>
+                )}
+              </div>
+            </Card>
+
+            {/* Who is actually holding it. The same question the Inventory page
+                answers for the store — here it is scoped to what is owed. */}
+            <Card>
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Who owes what</h3>
+                    <p className="mt-0.5 text-xs text-muted">Live orders only, biggest debt first.</p>
+                  </div>
+                  <span className="rounded-lg bg-brand-500/15 p-1.5 text-brand-300"><Users className="h-3.5 w-3.5" /></span>
+                </div>
+
+                {summary.byRep?.length ? (
+                  <div className="mt-4 max-h-[232px] space-y-2.5 overflow-y-auto pr-1">
+                    {summary.byRep.map((r) => {
+                      const share = pct(r.outstanding, summary.outstandingValue);
+                      return (
+                        <button
+                          key={r.salesRepId}
+                          type="button"
+                          onClick={() => pick('')}
+                          className="w-full cursor-pointer rounded-lg px-1 py-1 text-left transition duration-200 hover:bg-white/[0.04]"
+                        >
+                          <div className="flex items-center gap-2">
+                            {r.overdueCount > 0
+                              ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+                              : <Truck className="h-3.5 w-3.5 shrink-0 text-brand-400" />}
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{r.name}</span>
+                            <span className="w-24 shrink-0 text-right text-sm font-bold tabular-nums text-foreground">
+                              {formatCurrency(r.outstanding)}
+                            </span>
+                          </div>
+                          <div className="ml-5 mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                            <div className={clsx('h-full rounded-full', r.overdueCount > 0 ? 'bg-rose-500' : 'bg-brand-500')}
+                              style={{ width: `${Math.max(2, share)}%` }} />
+                          </div>
+                          {/* Who owes what is only half the question — when it
+                              is due is the other half, and it decides who gets
+                              chased first. */}
+                          <div className="ml-5 mt-1 flex items-center gap-2 text-[11px] text-faint">
+                            <span className="tabular-nums">{formatNumber(r.boxesRemaining)} boxes</span>
+                            <span className="text-white/15">·</span>
+                            <span className="tabular-nums">{r.activeOrders} order{r.activeOrders === 1 ? '' : 's'}</span>
+                            <span className="ml-auto tabular-nums">
+                              {r.overdueCount > 0
+                                ? <span className="text-rose-400">{r.overdueCount} overdue</span>
+                                : hoursLabel(r.nearestHoursRemaining)}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-faint">Nobody is holding stock on an open order.</p>
+                )}
+              </div>
+            </Card>
+          </div>
+        </>
       )}
 
       <Card>
-        <div className="border-b border-border p-4">
-          <select className="input sm:w-48" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-            <option value="">All statuses</option>
-            {Object.entries(SETTLEMENT_STATUS_META).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
+          {chips.map((c) => (
+            <FilterChip
+              key={c.key || 'all'}
+              label={c.label}
+              count={c.count}
+              tone={c.tone}
+              active={status === c.key}
+              onClick={() => pick(c.key)}
+            />
+          ))}
         </div>
 
         {isLoading ? <PageSpinner /> : !data?.data?.length ? (
-          <EmptyState title="No orders yet" message="Orders open automatically when stock is issued to a rep." icon={Timer} />
+          <EmptyState title="No orders here" message="Orders open automatically when stock is issued to a rep." icon={Timer} />
         ) : (
           <>
             <Table>
               <THead>
                 <TR>
-                  <TH>Order</TH><TH>Rep</TH><TH>Value</TH>
-                  <TH>Settled</TH><TH>Balance</TH>
+                  <TH>Order</TH><TH>Rep</TH>
+                  <TH>Boxes</TH>
+                  <TH>Value</TH><TH>Settled</TH><TH>Balance</TH>
                   <TH>Deadline</TH><TH>Status</TH><TH />
                 </TR>
               </THead>
               <TBody>
-                {data.data.map((s) => (
-                  <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
-                    <TD className="font-medium">{s.settlementNumber}</TD>
-                    <TD>{s.salesRep?.user?.name}</TD>
-                    <TD>{formatCurrency(s.assignedValue)}</TD>
-                    <TD className="text-emerald-500">{formatCurrency(s.paid)}</TD>
-                    <TD className={s.balance > 0 ? 'font-semibold text-rose-500' : 'text-faint'}>{formatCurrency(s.balance)}</TD>
-                    <TD>
-                      {s.status === 'SETTLED' ? (
-                        // Finalized order — no countdown, no overdue, just when it closed.
-                        <div className="inline-flex items-center gap-1 text-xs text-emerald-500">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Settled{s.settledAt ? ` · ${formatDateTime(s.settledAt)}` : ''}
+                {data.data.map((s) => {
+                  const bx = s.boxes || { issued: 0, settled: 0, returned: 0, remaining: 0 };
+                  const done = bx.settled + bx.returned;
+                  return (
+                    <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
+                      <TD className="font-medium">{s.settlementNumber}</TD>
+                      <TD>{s.salesRep?.user?.name}</TD>
+                      {/* What the order is made of, not only what it is worth. */}
+                      <TD>
+                        <div className="flex items-baseline gap-1 tabular-nums">
+                          <span className="font-semibold text-foreground">{formatNumber(done)}</span>
+                          <span className="text-faint">/ {formatNumber(bx.issued)}</span>
                         </div>
-                      ) : (
-                        <>
-                          <div className="text-muted">{formatDateTime(s.deadlineAt)}</div>
-                          <div className={clsx('text-xs', s.hoursRemaining < 0 ? 'text-rose-500' : s.approaching ? 'text-amber-500' : 'text-faint')}>
-                            {hoursLabel(s.hoursRemaining)}
+                        <div className="mt-1 flex h-1 w-20 overflow-hidden rounded-full bg-white/[0.07]">
+                          <div className="h-full bg-emerald-500" style={{ width: `${pct(bx.settled, bx.issued)}%` }} />
+                          <div className="h-full bg-sky-500" style={{ width: `${pct(bx.returned, bx.issued)}%` }} />
+                        </div>
+                      </TD>
+                      <TD>{formatCurrency(s.assignedValue)}</TD>
+                      <TD className="text-emerald-500">{formatCurrency(s.paid)}</TD>
+                      <TD className={s.balance > 0 ? 'font-semibold text-rose-500' : 'text-faint'}>{formatCurrency(s.balance)}</TD>
+                      <TD>
+                        {s.status === 'SETTLED' ? (
+                          // Finalized order — no countdown, no overdue, just when it closed.
+                          <div className="inline-flex items-center gap-1 text-xs text-emerald-500">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Settled{s.settledAt ? ` · ${formatDateTime(s.settledAt)}` : ''}
                           </div>
-                        </>
-                      )}
-                    </TD>
-                    <TD><Badge className={SETTLEMENT_STATUS_META[s.status]?.cls}>{SETTLEMENT_STATUS_META[s.status]?.label}</Badge></TD>
-                    <TD>
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600">
-                        Open <Eye className="h-3.5 w-3.5" />
-                      </span>
-                    </TD>
-                  </TR>
-                ))}
+                        ) : (
+                          <>
+                            <div className="text-muted">{formatDateTime(s.deadlineAt)}</div>
+                            <div className={clsx('text-xs', s.hoursRemaining < 0 ? 'text-rose-500' : s.approaching ? 'text-amber-500' : 'text-faint')}>
+                              {hoursLabel(s.hoursRemaining)}
+                            </div>
+                          </>
+                        )}
+                      </TD>
+                      <TD><Badge className={SETTLEMENT_STATUS_META[s.status]?.cls}>{SETTLEMENT_STATUS_META[s.status]?.label}</Badge></TD>
+                      <TD>
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600">
+                          Open <Eye className="h-3.5 w-3.5" />
+                        </span>
+                      </TD>
+                    </TR>
+                  );
+                })}
               </TBody>
             </Table>
             <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />

@@ -88,6 +88,53 @@ async function createForIssuance(client, { salesRepId, assignedValue, transferId
   });
 }
 
+// Boxes for a set of orders, in three queries rather than one breakdown per
+// row. The money columns say what an order is WORTH; these say what it is MADE
+// OF — how many boxes went out, how many the rep has settled, how many came
+// back, and how many are still unaccounted for. Issued comes from the transfer
+// that opened the order, which is the same source orderBreakdown() prices, so
+// the list and the order screen can never disagree.
+async function boxesForOrders(rows) {
+  const out = new Map();
+  if (!rows.length) return out;
+  const ids = rows.map((r) => r.id);
+  const transferIds = rows.map((r) => r.transferId).filter(Boolean);
+
+  const [issuedRows, saleRows, retRows] = await Promise.all([
+    transferIds.length
+      ? prisma.stockTransferItem.groupBy({ by: ['transferId'], where: { transferId: { in: transferIds } }, _sum: { baseQuantity: true } })
+      : [],
+    prisma.sale.findMany({
+      where: { settlementId: { in: ids }, status: { not: 'CANCELLED' } },
+      select: { settlementId: true, items: { select: { baseQuantity: true } } },
+    }),
+    prisma.return.findMany({
+      where: { settlementId: { in: ids }, status: { in: ['APPROVED', 'COMPLETED'] } },
+      select: { settlementId: true, items: { select: { baseQuantity: true } } },
+    }),
+  ]);
+
+  const issuedByTransfer = new Map(issuedRows.map((r) => [r.transferId, r._sum.baseQuantity || 0]));
+  const rollUp = (docs) => {
+    const m = new Map();
+    for (const d of docs) {
+      const n = d.items.reduce((a, it) => a + (it.baseQuantity || 0), 0);
+      m.set(d.settlementId, (m.get(d.settlementId) || 0) + n);
+    }
+    return m;
+  };
+  const settledBy = rollUp(saleRows);
+  const returnedBy = rollUp(retRows);
+
+  for (const r of rows) {
+    const issued = (r.transferId && issuedByTransfer.get(r.transferId)) || 0;
+    const settled = settledBy.get(r.id) || 0;
+    const returned = returnedBy.get(r.id) || 0;
+    out.set(r.id, { issued, settled, returned, remaining: Math.max(0, issued - settled - returned) });
+  }
+  return out;
+}
+
 async function list(filters, pagination) {
   const where = {};
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
@@ -114,7 +161,12 @@ async function list(filters, pagination) {
     prisma.settlement.findMany({ where, include: INCLUDE, skip: pagination.skip, take: pagination.take, orderBy }),
     prisma.settlement.count({ where }),
   ]);
-  return { items: rows.map(decorate), total };
+  // Every row carries its box count, so the table can show what an order is
+  // made of without opening it.
+  const items = rows.map(decorate);
+  const boxes = await boxesForOrders(rows);
+  for (const it of items) it.boxes = boxes.get(it.id) || { issued: 0, settled: 0, returned: 0, remaining: 0 };
+  return { items, total };
 }
 
 // Per-order breakdown — box by box. For each product: issued (assigned) vs
@@ -618,6 +670,18 @@ async function summary() {
   // Per-rep rollup: who is holding how much, how much they have settled, what
   // is still outstanding, and how close their nearest deadline is. Answers
   // "which rep owes me the most right now" without reading every order.
+  // Boxes, not just money. An order is a pile of boxes under a 72-hour
+  // contract; "TSh 2,552,500 outstanding" never says how many are actually
+  // sitting in a rep's room waiting to be settled or returned.
+  const boxMap = await boxesForOrders(decorated);
+  const boxes = { issued: 0, settled: 0, returned: 0, remaining: 0 };
+  for (const b of boxMap.values()) {
+    boxes.issued += b.issued;
+    boxes.settled += b.settled;
+    boxes.returned += b.returned;
+    boxes.remaining += b.remaining;
+  }
+
   const byRepMap = new Map();
   for (const s of decorated) {
     const id = s.salesRepId;
@@ -633,10 +697,12 @@ async function summary() {
       overdueCount: 0,
       overdueValue: 0,
       approachingCount: 0,
+      boxesRemaining: 0,
       nearestDeadlineAt: null,
       nearestHoursRemaining: null,
     };
     row.activeOrders += 1;
+    row.boxesRemaining += boxMap.get(s.id)?.remaining || 0;
     row.orderValue += toNumber(s.assignedValue);
     row.settled += s.paid;
     row.returned += s.returned;
@@ -668,6 +734,31 @@ async function summary() {
   // returned. This is the figure that must drop the moment a rep settles or
   // returns, and rise when new stock is issued. (assignedValue is the gross
   // value issued and never moves, so it is reported separately.)
+  // Everything ever, so the page can state the record as well as the moment.
+  // Counted from the sale and return lines themselves rather than from the
+  // orders, so a cancelled sale drops out on its own.
+  const [totalOrders, lifeSettled, lifeReturned] = await Promise.all([
+    prisma.settlement.count(),
+    prisma.saleItem.aggregate({
+      _sum: { baseQuantity: true },
+      where: { sale: { settlementId: { not: null }, status: { not: 'CANCELLED' } } },
+    }),
+    prisma.returnItem.aggregate({
+      _sum: { baseQuantity: true },
+      where: { return: { settlementId: { not: null }, status: { in: ['APPROVED', 'COMPLETED'] } } },
+    }),
+  ]);
+
+  // The four states every order is in, right now. Derived from the same
+  // decorated rows the cards use, so a row can never be counted twice or
+  // missed — settled is simply everything that is not still live.
+  const statusCounts = {
+    OPEN: decorated.filter((s) => s.status === 'OPEN').length,
+    PARTIAL: decorated.filter((s) => s.status === 'PARTIAL').length,
+    OVERDUE: overdue.length,
+    SETTLED: Math.max(0, totalOrders - decorated.length),
+  };
+
   const outstandingValue = round2(decorated.reduce((acc, s) => acc + s.balance, 0));
   const issuedValue = round2(decorated.reduce((acc, s) => acc + toNumber(s.assignedValue), 0));
   const settledValue = round2(decorated.reduce((acc, s) => acc + s.paid, 0));
@@ -676,6 +767,13 @@ async function summary() {
   return {
     outstandingCount: decorated.length,
     outstandingValue,
+    totalOrders,
+    statusCounts,
+    boxes,
+    lifetime: {
+      boxesSettled: lifeSettled._sum.baseQuantity || 0,
+      boxesReturned: lifeReturned._sum.baseQuantity || 0,
+    },
     issuedValue,
     settledValue,
     returnedValue,
