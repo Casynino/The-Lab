@@ -29,6 +29,8 @@ const summary = asyncHandler(async (_req, res) => {
   return ok(res, await settlement.summary());
 });
 
+const analytics = asyncHandler(async (_req, res) => ok(res, await settlement.analytics()));
+
 const get = asyncHandler(async (req, res) => {
   const s = await settlement.get(req.params.id);
   if (req.user.role === ROLES.SALES_REP && s.salesRepId !== req.user.salesRepId) {
@@ -115,6 +117,6 @@ const extendDeadline = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  list, summary, get, settle, refreshOverdue, extendDeadline, selfExtend,
+  list, summary, analytics, get, settle, refreshOverdue, extendDeadline, selfExtend,
   submitSettlement, pendingApprovals, approveSubmission, rejectSubmission, paymentAccounts,
 };

@@ -737,7 +737,7 @@ async function summary() {
   // Everything ever, so the page can state the record as well as the moment.
   // Counted from the sale and return lines themselves rather than from the
   // orders, so a cancelled sale drops out on its own.
-  const [totalOrders, lifeSettled, lifeReturned] = await Promise.all([
+  const [totalOrders, lifeSettled, lifeReturned, firstSettledSale] = await Promise.all([
     prisma.settlement.count(),
     prisma.saleItem.aggregate({
       _sum: { baseQuantity: true },
@@ -746,6 +746,14 @@ async function summary() {
     prisma.returnItem.aggregate({
       _sum: { baseQuantity: true },
       where: { return: { settlementId: { not: null }, status: { in: ['APPROVED', 'COMPLETED'] } } },
+    }),
+    // The date "all time" actually starts — the first sale the lifetime count
+    // includes. Same where-clause as the count, so the label can never claim a
+    // period the number does not cover.
+    prisma.sale.findFirst({
+      where: { settlementId: { not: null }, status: { not: 'CANCELLED' } },
+      orderBy: { soldAt: 'asc' },
+      select: { soldAt: true },
     }),
   ]);
 
@@ -773,6 +781,7 @@ async function summary() {
     lifetime: {
       boxesSettled: lifeSettled._sum.baseQuantity || 0,
       boxesReturned: lifeReturned._sum.baseQuantity || 0,
+      since: firstSettledSale?.soldAt || null,
     },
     issuedValue,
     settledValue,
@@ -908,6 +917,162 @@ async function extendDeadline(id, { deadlineAt, additionalHours }) {
   return decorate(updated);
 }
 
+
+// ── "How are we doing" — settlement performance over time ────────────────────
+//
+// Everything here is measured against the CONTRACT, not against deadlineAt.
+// A self-extension REWRITES deadlineAt (+96h) and stores the original in
+// preExtensionDeadline, so "settledAt <= deadlineAt" would grade the orders
+// that ran longest as on time. The contract window is issuedAt + 72h, or
+// + 168h when the rep took the extension — the deal as the rep experienced
+// it, immune to the rewrite.
+const median = (xs) => {
+  if (!xs.length) return null;
+  const a = [...xs].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+const hoursBetween = (a, b) => (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000;
+
+// EAT week bucket for a date. Done in JS (UTC+3 fixed offset — Tanzania has no
+// DST) rather than in SQL, where the session timezone has bitten before.
+function eatWeekStart(d) {
+  const t = new Date(new Date(d).getTime() + 3 * 3_600_000); // shift to EAT wall-clock
+  const dow = (t.getUTCDay() + 6) % 7; // Monday = 0
+  const monday = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - dow));
+  return monday; // EAT wall-clock Monday 00:00, as a UTC-encoded date
+}
+
+async function analytics() {
+  const now = Date.now();
+  const [orders, submissions, returns, fineAgg, expiryCount] = await Promise.all([
+    prisma.settlement.findMany({
+      select: {
+        id: true, salesRepId: true, status: true, issuedAt: true, createdAt: true,
+        settledAt: true, selfExtendedAt: true,
+        salesRep: { select: { code: true, user: { select: { name: true } } } },
+      },
+    }),
+    prisma.settlementSubmission.findMany({
+      where: { decidedAt: { not: null } },
+      select: { submittedAt: true, decidedAt: true },
+    }),
+    prisma.return.findMany({
+      where: { decidedAt: { not: null }, settlementId: { not: null } },
+      select: { createdAt: true, decidedAt: true },
+    }),
+    prisma.settlementPenalty.groupBy({
+      by: ['status'],
+      where: { kind: 'LATE_FINE' },
+      _sum: { amount: true },
+    }),
+    prisma.settlementPenalty.count({ where: { kind: 'EXPIRY_FINE', status: 'APPLIED' } }),
+  ]);
+
+  const windowHoursFor = (o) => (o.selfExtendedAt ? SETTLEMENT_WINDOW_HOURS + SELF_EXTENSION_HOURS : SETTLEMENT_WINDOW_HOURS);
+  const issuedAtOf = (o) => o.issuedAt || o.createdAt;
+
+  // Decided = closed with a close time. Orders closed before settledAt existed
+  // (or by a path that missed it) cannot be graded and are counted separately
+  // rather than silently folded into either side.
+  const decided = orders.filter((o) => o.status === 'SETTLED' && o.settledAt);
+  const ungradeable = orders.filter((o) => o.status === 'SETTLED' && !o.settledAt).length;
+  const live = orders.filter((o) => o.status !== 'SETTLED');
+  const isOnTime = (o) => hoursBetween(issuedAtOf(o), o.settledAt) <= windowHoursFor(o);
+  const inside = decided.filter(isOnTime);
+  const currentlyLate = live.filter((o) => (now - new Date(issuedAtOf(o)).getTime()) / 3_600_000 > windowHoursFor(o)).length;
+
+  // Weekly cohorts by ISSUE week — issuedAt never gets rewritten, so a cohort's
+  // membership is stable forever. A cohort younger than the maximum contract
+  // (168h) still has orders that could legitimately close on time, so it is
+  // dropped rather than shown as a false dip.
+  const cohorts = new Map();
+  for (const o of orders) {
+    const wk = eatWeekStart(issuedAtOf(o)).toISOString().slice(0, 10);
+    const c = cohorts.get(wk) || { week: wk, decided: 0, onTime: 0, open: 0 };
+    if (o.status === 'SETTLED' && o.settledAt) {
+      c.decided += 1;
+      if (isOnTime(o)) c.onTime += 1;
+    } else c.open += 1;
+    cohorts.set(wk, c);
+  }
+  // A cohort's rate is FINAL either when every order in it is decided, or when
+  // even its youngest possible order (issued at the end of the week) has had
+  // the full 168h maximum contract. c.week encodes the EAT Monday as a UTC
+  // date, so the real UTC end of that issue week is week − 3h + 7d.
+  const maxWindowMs = (SETTLEMENT_WINDOW_HOURS + SELF_EXTENSION_HOURS) * 3_600_000;
+  const cohortMature = (c) => {
+    const weekEndUtc = new Date(c.week).getTime() - 3 * 3_600_000 + 7 * 24 * 3_600_000;
+    return now >= weekEndUtc + maxWindowMs;
+  };
+  const trend = [...cohorts.values()]
+    .filter((c) => c.decided > 0 && (c.open === 0 || cohortMature(c)))
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .slice(-8)
+    .map((c) => ({
+      week: c.week,
+      decided: c.decided,
+      open: c.open,
+      onTimeRate: c.decided > 0 ? round2((c.onTime / c.decided) * 100) : null,
+    }));
+
+  // Per-rep discipline, worst first — this list exists to generate phone calls.
+  const byRepMap = new Map();
+  for (const o of decided) {
+    const r = byRepMap.get(o.salesRepId) || {
+      salesRepId: o.salesRepId,
+      name: o.salesRep?.user?.name || o.salesRep?.code || 'Rep',
+      decided: 0, onTime: 0, hours: [],
+    };
+    r.decided += 1;
+    if (isOnTime(o)) r.onTime += 1;
+    r.hours.push(hoursBetween(issuedAtOf(o), o.settledAt));
+    byRepMap.set(o.salesRepId, r);
+  }
+  const byRep = [...byRepMap.values()]
+    .map((r) => ({
+      salesRepId: r.salesRepId,
+      name: r.name,
+      decided: r.decided,
+      onTimeRate: round2((r.onTime / r.decided) * 100),
+      medianHours: round2(median(r.hours) ?? 0),
+    }))
+    .sort((a, b) => a.onTimeRate - b.onTimeRate || b.decided - a.decided);
+
+  // Fairness: the rep's 72-hour clock keeps running while WE decide things.
+  const fines = { charged: 0, waived: 0 };
+  for (const f of fineAgg) {
+    const amt = toNumber(f._sum.amount);
+    fines.charged += amt;
+    if (f.status === 'WAIVED') fines.waived += amt;
+  }
+
+  return {
+    onTime: {
+      rate: decided.length ? round2((inside.length / decided.length) * 100) : null,
+      decided: decided.length,
+      inside: inside.length,
+      ungradeable,
+      medianHoursToClose: round2(median(decided.map((o) => hoursBetween(issuedAtOf(o), o.settledAt))) ?? 0),
+      currentlyLate,
+      liveOrders: live.length,
+    },
+    trend,
+    byRep,
+    fairness: {
+      medianApprovalHours: round2(median(submissions.map((x) => hoursBetween(x.submittedAt, x.decidedAt))) ?? 0),
+      approvalsDecided: submissions.length,
+      medianReturnHours: round2(median(returns.map((x) => hoursBetween(x.createdAt, x.decidedAt))) ?? 0),
+      returnsDecided: returns.length,
+      expiryFines: expiryCount,
+      finesCharged: round2(fines.charged),
+      finesWaived: round2(fines.waived),
+      waiverRate: fines.charged > 0 ? round2((fines.waived / fines.charged) * 100) : null,
+      extensionsUsed: orders.filter((o) => o.selfExtendedAt).length,
+    },
+  };
+}
+
 module.exports = {
   SETTLEMENT_WINDOW_HOURS,
   createForIssuance,
@@ -924,6 +1089,7 @@ module.exports = {
   refreshOverdue,
   sendDueReminders,
   summary,
+  analytics,
   decorate,
   extendDeadline,
 };

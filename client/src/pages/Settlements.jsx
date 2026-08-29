@@ -5,12 +5,12 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import {
   Timer, AlertTriangle, Clock, CheckCircle2, Eye,
-  ChevronRight, Wallet, ShieldCheck, PackageOpen, Boxes, Users, Truck,
+  ChevronRight, Wallet, ShieldCheck, PackageOpen, Boxes, Users, Truck, Gauge,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatDateTime, formatNumber, sharePercents } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime, formatNumber, sharePercents } from '@/lib/format';
 import OrderDetailModal from '@/components/OrderDetail';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
@@ -226,6 +226,152 @@ function PendingApprovals({ onReview }) {
   );
 }
 
+// ── "How are we doing" — performance over time ──────────────────────────────
+// Everything above this answers "what is owed right now". This answers whether
+// the 72-hour contract is actually being kept, and which way it is moving.
+// On-time is graded against the CONTRACT (72h, or 168h when the rep extended),
+// never against deadlineAt — an extension rewrites deadlineAt, and grading by
+// it would score the orders that ran longest as the most punctual.
+
+const rateTone = (r) => (r == null ? 'text-muted' : r >= 85 ? 'text-emerald-300' : r >= 70 ? 'text-amber-300' : 'text-rose-400');
+const rateBar = (r) => (r == null ? 'bg-white/20' : r >= 85 ? 'bg-emerald-500' : r >= 70 ? 'bg-amber-500' : 'bg-rose-500');
+
+function HowAreWeDoing() {
+  const { data: a } = useQuery({
+    queryKey: ['settlements', 'analytics'],
+    queryFn: async () => unwrap(await api.get('/settlements/analytics')).data,
+    refetchInterval: 120_000,
+  });
+  if (!a) return null;
+
+  const ot = a.onTime;
+  const fair = a.fairness || {};
+  const cells = [
+    { label: 'Approval wait', value: fair.approvalsDecided ? `${Math.round(fair.medianApprovalHours)}h` : '—', sub: fair.approvalsDecided ? `median, ${fair.approvalsDecided} decided` : 'nothing decided yet' },
+    { label: 'Return wait', value: fair.returnsDecided ? `${Math.round(fair.medianReturnHours)}h` : '—', sub: fair.returnsDecided ? `median, ${fair.returnsDecided} decided` : 'nothing decided yet' },
+    { label: 'Fines forgiven', value: fair.waiverRate != null ? `${Math.round(fair.waiverRate)}%` : '—', sub: fair.finesCharged > 0 ? `of ${formatCurrency(fair.finesCharged)} charged` : 'no fines charged' },
+    { label: 'Extensions taken', value: formatNumber(fair.extensionsUsed || 0), sub: fair.expiryFines > 0 ? `${fair.expiryFines} expiry fine${fair.expiryFines === 1 ? '' : 's'}` : 'the +96h option' },
+  ];
+
+  return (
+    <div className="mb-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Gauge className="h-4 w-4 text-brand-500" />
+        <h2 className="text-base font-bold text-foreground">How are we doing</h2>
+      </div>
+
+      {/* The verdict + the direction, in one card. */}
+      <Card>
+        <div className="p-5">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[230px_1fr]">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Inside the window</h3>
+              <p className="mt-0.5 text-xs text-muted">Closed orders that beat their contract.</p>
+              <p className={clsx('mt-4 text-4xl font-bold leading-none tabular-nums', rateTone(ot.rate))}>
+                {ot.rate != null ? `${Math.round(ot.rate)}%` : '—'}
+              </p>
+              <p className="mt-2 text-xs text-faint">
+                {ot.decided > 0
+                  ? `${ot.inside} of ${ot.decided} closed orders · median ${Math.round(ot.medianHoursToClose)}h of the 72`
+                  : 'No closed orders to grade yet.'}
+              </p>
+              {ot.currentlyLate > 0 && (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-400">
+                  <AlertTriangle className="h-3.5 w-3.5" /> {ot.currentlyLate} live order{ot.currentlyLate === 1 ? '' : 's'} past contract now
+                </p>
+              )}
+            </div>
+
+            {/* Weekly cohorts by ISSUE week. A week appears only once its rate
+                is final — every order decided, or the whole 168h maximum has
+                elapsed — so the last column is never a false dip. */}
+            <div className="min-w-0">
+              {a.trend.length >= 2 ? (
+                <>
+                  <div className="flex h-[120px] items-end gap-2">
+                    {a.trend.map((w) => (
+                      <div key={w.week} className="group flex h-full flex-1 flex-col items-center justify-end gap-1">
+                        <span className={clsx('text-[10px] font-semibold tabular-nums', rateTone(w.onTimeRate))}>
+                          {w.onTimeRate != null ? Math.round(w.onTimeRate) : '·'}
+                        </span>
+                        <div
+                          className={clsx('w-full max-w-[38px] rounded-t transition duration-200 group-hover:opacity-80', rateBar(w.onTimeRate))}
+                          style={{ height: `${Math.max(3, w.onTimeRate ?? 0)}%` }}
+                          title={`Week of ${formatDate(w.week)} — ${w.onTimeRate != null ? `${Math.round(w.onTimeRate)}% on time` : 'no closes'} (${w.decided} closed)`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-1 flex gap-2">
+                    {a.trend.map((w) => (
+                      <span key={w.week} className="flex-1 text-center text-[10px] tabular-nums text-faint">
+                        {formatDate(w.week).slice(0, 6)}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex h-full min-h-[120px] items-center justify-center rounded-xl bg-white/[0.03] text-sm text-faint">
+                  The week-by-week trend appears once two full weeks have closed their orders.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Worst first — this list exists to generate phone calls. */}
+        <Card>
+          <div className="p-5">
+            <h3 className="text-sm font-semibold text-foreground">Who keeps the contract</h3>
+            <p className="mt-0.5 text-xs text-muted">Closed orders only, weakest on-time rate first.</p>
+            {a.byRep.length ? (
+              <div className="mt-4 max-h-[220px] space-y-3 overflow-y-auto pr-1">
+                {a.byRep.map((r) => (
+                  <div key={r.salesRepId}>
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{r.name}</span>
+                      <span className="shrink-0 text-[11px] tabular-nums text-faint">
+                        {r.decided} order{r.decided === 1 ? '' : 's'} · median {Math.round(r.medianHours)}h
+                      </span>
+                      <span className={clsx('w-12 shrink-0 text-right text-sm font-bold tabular-nums', rateTone(r.onTimeRate))}>
+                        {Math.round(r.onTimeRate)}%
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className={clsx('h-full rounded-full', rateBar(r.onTimeRate))} style={{ width: `${Math.max(2, r.onTimeRate)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-faint">Nobody has closed an order yet.</p>
+            )}
+          </div>
+        </Card>
+
+        {/* The fairness check: the rep's clock keeps running while WE decide. */}
+        <Card>
+          <div className="p-5">
+            <h3 className="text-sm font-semibold text-foreground">Is it them, or is it us?</h3>
+            <p className="mt-0.5 text-xs text-muted">The rep's 72 hours keep running while these wait.</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {cells.map((c) => (
+                <div key={c.label} className="rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/[0.06]">
+                  <p className="text-[11px] font-medium text-muted">{c.label}</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-foreground">{c.value}</p>
+                  <p className="mt-0.5 text-[10px] text-faint">{c.sub}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 // ── Staff / admin view ───────────────────────────────────────────────────────
 
 // One filter chip. Replaces the lone dropdown: the counts are the point — you
@@ -307,8 +453,12 @@ function StaffSettlements({ viewing, setViewing }) {
       chip: 'bg-amber-500/15 text-amber-300', num: summary.approachingCount ? 'text-amber-300' : 'text-foreground',
     },
     {
-      label: 'Boxes settled', value: formatNumber(summary.lifetime?.boxesSettled || 0), icon: CheckCircle2,
-      sub: `${formatNumber(summary.totalOrders || 0)} orders, all time`,
+      // "85 orders, all time" was dishonest twice over: the orders count is a
+      // different population (every contract ever opened, including ones that
+      // settled nothing), and "all time" names no date. The sub now states
+      // exactly when this number starts counting — the first settled sale.
+      label: 'Boxes settled by reps', value: formatNumber(summary.lifetime?.boxesSettled || 0), icon: CheckCircle2,
+      sub: summary.lifetime?.since ? `since ${formatDate(summary.lifetime.since)}` : 'no boxes settled yet',
       ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300',
     },
   ] : [];
@@ -455,6 +605,8 @@ function StaffSettlements({ viewing, setViewing }) {
           </div>
         </>
       )}
+
+      <HowAreWeDoing />
 
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">

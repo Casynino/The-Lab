@@ -15,6 +15,7 @@ const settlers = requireRoles(ROLES.SALES_REP, ROLES.WAREHOUSE_STAFF);
 router.use(authenticate);
 router.get('/', validate(settlementQuery), ctrl.list); // reps see their own (scoped in controller)
 router.get('/summary', staff, ctrl.summary);
+router.get('/analytics', staff, ctrl.analytics); // "how are we doing" — performance over time
 router.get('/pending-approvals', staff, ctrl.pendingApprovals); // approval center (before /:id)
 router.get('/payment-accounts', ctrl.paymentAccounts); // account choices for reps (no balances)
 // Approve / reject a settlement submission — The Doctor verifies the money.
