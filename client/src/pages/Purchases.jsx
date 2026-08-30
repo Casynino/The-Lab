@@ -43,7 +43,14 @@ function POModal({ onClose, editing }) {
   const onProduct = (i, productId) => {
     const product = products.find((p) => p.id === productId);
     const base = product?.packagings?.find((k) => k.isBaseUnit) || product?.packagings?.[0];
-    setRow(i, { productId, packagingUnitId: base?.packagingUnitId || '' });
+    // The buying price is already on the product — typing it again on every
+    // order is work the system can do, and a chance to fat-finger a cost that
+    // becomes COGS. Still editable, because a supplier's price does move.
+    setRow(i, {
+      productId,
+      packagingUnitId: base?.packagingUnitId || '',
+      unitCost: Number(product?.purchasePrice) || 0,
+    });
   };
 
   const payload = () => ({
@@ -97,8 +104,18 @@ function POModal({ onClose, editing }) {
                 <Select value={r.productId} onChange={(e) => onProduct(i, e.target.value)} className="min-w-[160px] flex-1"><option value="">Product…</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
                 <Select value={r.packagingUnitId} onChange={(e) => setRow(i, { packagingUnitId: e.target.value })} className="w-32" disabled={!product}>{pkgs.map((pk) => <option key={pk.id} value={pk.packagingUnitId}>{pk.packagingUnit.name} (×{pk.baseQuantity})</option>)}</Select>
                 <Input type="number" min="1" value={r.quantity} onChange={(e) => setRow(i, { quantity: e.target.value })} className="w-20" placeholder="Qty" />
-                <Input type="number" min="0" value={r.unitCost} onChange={(e) => setRow(i, { unitCost: e.target.value })} className="w-28" placeholder="Cost/base" />
-                <button type="button" onClick={() => setRows(rows.filter((_, idx) => idx !== i))} className="text-faint hover:text-rose-600"><X className="h-4 w-4" /></button>
+                <Input type="number" min="0" value={r.unitCost} onChange={(e) => setRow(i, { unitCost: e.target.value })} className="w-28" placeholder="Cost/box" />
+                {(() => {
+                  const pk = pkgs.find((k) => k.packagingUnitId === r.packagingUnitId);
+                  const boxes = (Number(r.quantity) || 0) * (pk?.baseQuantity || 1);
+                  const line = boxes * (Number(r.unitCost) || 0);
+                  return line > 0 ? (
+                    <span className="whitespace-nowrap text-xs tabular-nums text-muted">
+                      {formatNumber(boxes)} boxes · <b className="text-foreground">{formatCurrency(line)}</b>
+                    </span>
+                  ) : null;
+                })()}
+                <button type="button" onClick={() => setRows(rows.filter((_, idx) => idx !== i))} className="ml-auto text-faint hover:text-rose-400"><X className="h-4 w-4" /></button>
               </div>
             );
           })}
@@ -114,7 +131,33 @@ function POModal({ onClose, editing }) {
           <Field label="Expected arrival"><Input type="date" value={expectedArrival} onChange={(e) => setExpectedArrival(e.target.value)} /></Field>
         </div>
         <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
-        <p className="text-xs text-faint">Shipping/clearing/other costs are allocated across items as landed cost when you receive the PO.</p>
+        {(() => {
+          const goods = rows.reduce((n, r) => {
+            const product = products.find((p) => p.id === r.productId);
+            const pk = (product?.packagings || []).find((k) => k.packagingUnitId === r.packagingUnitId);
+            return n + (Number(r.quantity) || 0) * (pk?.baseQuantity || 1) * (Number(r.unitCost) || 0);
+          }, 0);
+          const extras = (Number(costs.shippingCost) || 0) + (Number(costs.clearingCost) || 0) + (Number(costs.otherCost) || 0);
+          const boxes = rows.reduce((n, r) => {
+            const product = products.find((p) => p.id === r.productId);
+            const pk = (product?.packagings || []).find((k) => k.packagingUnitId === r.packagingUnitId);
+            return n + (Number(r.quantity) || 0) * (pk?.baseQuantity || 1);
+          }, 0);
+          if (!goods && !extras) return null;
+          return (
+            <div className="flex flex-wrap items-baseline justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
+              <span className="text-xs text-muted">
+                {formatNumber(boxes)} box{boxes === 1 ? '' : 'es'} · goods {formatCurrency(goods)}
+                {extras > 0 && <> · shipping &amp; costs {formatCurrency(extras)}</>}
+              </span>
+              <span className="text-sm font-bold tabular-nums text-foreground">
+                {formatCurrency(goods + extras)}
+                {boxes > 0 && <span className="ml-2 text-[11px] font-normal text-faint">{formatCurrency((goods + extras) / boxes)} a box</span>}
+              </span>
+            </div>
+          );
+        })()}
+        <p className="text-xs text-faint">Cost per box is filled in from the product's buying price — change it if this supplier charged something else. Shipping, clearing and other costs are spread across the boxes as landed cost when you receive the order.</p>
       </div>
     </Modal>
   );
