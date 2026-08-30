@@ -267,7 +267,14 @@ async function listPenalties({ salesRepId, settlementId, page = 1, limit = 20, i
     }),
     prisma.settlementPenalty.count({ where }),
   ]);
-  return { items, total };
+  // Whole-table counts by status, so the client never derives a badge from
+  // one page of a paginated list — with 142 live fines and a page of 50, the
+  // badge understated by 92 and nobody could tell.
+  const [applied, waived] = await Promise.all([
+    prisma.settlementPenalty.count({ where: { ...where, status: 'APPLIED' } }),
+    prisma.settlementPenalty.count({ where: { ...where, status: 'WAIVED' } }),
+  ]);
+  return { items, total, counts: { applied, waived } };
 }
 
 module.exports = {

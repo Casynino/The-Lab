@@ -344,7 +344,21 @@ async function profitOverview(opts = 'month') {
   const [items, products, reps, val] = await Promise.all([
     prisma.saleItem.findMany({
       where,
-      select: { baseQuantity: true, lineTotal: true, productId: true, sale: { select: { salesRepId: true } } },
+      select: {
+        baseQuantity: true,
+        lineTotal: true,
+        unitCost: true,
+        productId: true,
+        sale: {
+          select: {
+            salesRepId: true,
+            discount: true,
+            subtotal: true,
+            settlementId: true,
+            settlement: { select: { issuedAt: true, createdAt: true } },
+          },
+        },
+      },
     }),
     prisma.product.findMany({ select: { id: true, name: true, purchasePrice: true, sellingPrice: true, brand: { select: { id: true, name: true } } } }),
     prisma.salesRepresentative.findMany({ include: { user: { select: { name: true } } } }),
@@ -353,47 +367,96 @@ async function profitOverview(opts = 'month') {
 
   const pMap = new Map(products.map((p) => [p.id, p]));
   const repName = new Map(reps.map((r) => [r.id, r.user?.name || r.code]));
-  const fin = (o) => ({
-    ...o,
-    revenue: round2(o.revenue),
-    cost: round2(o.cost),
-    profit: round2(o.revenue - o.cost),
-    margin: o.revenue > 0 ? round2(((o.revenue - o.cost) / o.revenue) * 100) : 0,
-  });
+  const fin = (o) => {
+    const revenue = round2(o.revenue);
+    const cost = round2(o.cost);
+    const commission = round2(o.commission || 0);
+    const profit = round2(revenue - cost);
+    return {
+      ...o,
+      revenue,
+      cost,
+      profit,
+      margin: revenue > 0 ? round2((profit / revenue) * 100) : 0,
+      commission,
+      // What the business keeps after the goods AND the rep are paid — the
+      // number the owner means when he asks what he makes.
+      contribution: round2(profit - commission),
+      contributionMargin: revenue > 0 ? round2(((profit - commission) / revenue) * 100) : 0,
+    };
+  };
 
   let revenue = 0;
   let cost = 0;
   let boxes = 0;
+  let commissionTotal = 0;
   const byBrand = new Map();
   const byProduct = new Map();
   const byRep = new Map();
 
+  const commission = require('./commission.service');
   for (const it of items) {
     const p = pMap.get(it.productId);
     if (!p) continue;
-    const rev = toNumber(it.lineTotal);
-    const c = it.baseQuantity * toNumber(p.purchasePrice);
+    // Revenue net of the sale-level discount, allocated to each line by its
+    // share of the subtotal. lineTotal alone is pre-discount, so summing it
+    // would report money the customer never owed.
+    const saleDiscount = toNumber(it.sale?.discount);
+    const saleSubtotal = toNumber(it.sale?.subtotal);
+    const gross = toNumber(it.lineTotal);
+    const rev = saleDiscount > 0 && saleSubtotal > 0
+      ? round2(gross - saleDiscount * (gross / saleSubtotal))
+      : gross;
+    // COGS at the cost frozen when the box sold (SaleItem.unitCost) — the same
+    // basis every other report uses. Pricing history at the CURRENT purchase
+    // price silently rewrote past profit on every import. Old rows that
+    // predate cost capture carry 0 and fall back to today's price.
+    const unitCost = toNumber(it.unitCost);
+    const c = it.baseQuantity * (unitCost > 0 ? unitCost : toNumber(p.purchasePrice));
+    // Commission accrues the moment a box settles, priced by the ORDER's date
+    // — so it is a real cost of these very boxes, not of some later payout.
+    // Direct warehouse sales have no settlement and no commission.
+    const comm = it.sale?.settlementId
+      ? it.baseQuantity * (await commission.rateForBrandAt(p.brand?.name, it.sale.settlement?.issuedAt || it.sale.settlement?.createdAt))
+      : 0;
     revenue += rev;
     cost += c;
     boxes += it.baseQuantity;
+    commissionTotal += comm;
 
     const bId = p.brand?.id || 'none';
-    const b = byBrand.get(bId) || { brandId: bId, name: p.brand?.name || '—', revenue: 0, cost: 0, boxes: 0 };
-    b.revenue += rev; b.cost += c; b.boxes += it.baseQuantity; byBrand.set(bId, b);
+    const b = byBrand.get(bId) || { brandId: bId, name: p.brand?.name || '—', revenue: 0, cost: 0, boxes: 0, commission: 0 };
+    b.revenue += rev; b.cost += c; b.boxes += it.baseQuantity; b.commission += comm; byBrand.set(bId, b);
 
-    const pr = byProduct.get(it.productId) || { productId: it.productId, name: p.name, brandName: p.brand?.name || '—', revenue: 0, cost: 0, boxes: 0, profitPerBox: toNumber(p.sellingPrice) - toNumber(p.purchasePrice) };
-    pr.revenue += rev; pr.cost += c; pr.boxes += it.baseQuantity; byProduct.set(it.productId, pr);
+    const pr = byProduct.get(it.productId) || {
+      productId: it.productId, name: p.name, brandName: p.brand?.name || '—',
+      revenue: 0, cost: 0, boxes: 0, commission: 0,
+      catalogueProfitPerBox: toNumber(p.sellingPrice) - toNumber(p.purchasePrice),
+    };
+    pr.revenue += rev; pr.cost += c; pr.boxes += it.baseQuantity; pr.commission += comm; byProduct.set(it.productId, pr);
 
     const rid = it.sale?.salesRepId || 'direct';
-    const r = byRep.get(rid) || { salesRepId: rid, name: rid === 'direct' ? 'Direct (admin)' : (repName.get(rid) || '—'), revenue: 0, cost: 0, boxes: 0 };
-    r.revenue += rev; r.cost += c; r.boxes += it.baseQuantity; byRep.set(rid, r);
+    const r = byRep.get(rid) || { salesRepId: rid, name: rid === 'direct' ? 'Direct (admin)' : (repName.get(rid) || '—'), revenue: 0, cost: 0, boxes: 0, commission: 0 };
+    r.revenue += rev; r.cost += c; r.boxes += it.baseQuantity; r.commission += comm; byRep.set(rid, r);
   }
 
   return {
-    period: period || 'month',
-    totals: { ...fin({ revenue, cost }), boxes },
+    period: period || 'custom',
+    // The window the figures actually cover — with an epoch set, "All time"
+    // is really "since go-live", and the client must be able to say so.
+    range: range ? { start: range.start, end: range.end } : null,
+    epochAt: epoch || null,
+    totals: { ...fin({ revenue, cost, commission: commissionTotal }), boxes },
     byBrand: [...byBrand.values()].map(fin).sort((a, b) => b.profit - a.profit),
-    byProduct: [...byProduct.values()].map((p) => ({ ...fin(p), profitPerBox: round2(p.profitPerBox) })).sort((a, b) => b.profit - a.profit).slice(0, 12),
+    byProduct: [...byProduct.values()]
+      .map((p) => ({
+        ...fin(p),
+        // Actual money per box in THIS period, not today's catalogue spread —
+        // the catalogue figure is returned alongside, labelled as such.
+        profitPerBox: p.boxes > 0 ? round2((p.revenue - p.cost) / p.boxes) : 0,
+        catalogueProfitPerBox: round2(p.catalogueProfitPerBox),
+      }))
+      .sort((a, b) => b.profit - a.profit),
     byRep: [...byRep.values()].filter((r) => r.boxes > 0).map(fin).sort((a, b) => b.profit - a.profit),
     inventoryValue: {
       costValue: val.totals.totalValue,

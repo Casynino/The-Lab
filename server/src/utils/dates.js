@@ -7,6 +7,13 @@ const isoWeek = require('dayjs/plugin/isoWeek');
 dayjs.extend(utc);
 dayjs.extend(isoWeek);
 
+// ── Tanzania time (Africa/Dar_es_Salaam = UTC+3, no DST) ─────────────────────
+// Everything date-shaped is anchored to the business's clock, not the server's.
+const EAT_OFFSET_H = 3;
+const eatNow = () => dayjs().utc().add(EAT_OFFSET_H, 'hour');
+// Convert an EAT-clock dayjs back to the real UTC instant it represents.
+const eatToUtc = (d) => d.subtract(EAT_OFFSET_H, 'hour');
+
 // Resolve a named period ("today" | "week" | "month" | "year") or an explicit
 // from/to pair into a concrete [start, end) range for ledger/sales queries.
 function resolveRange({ period, from, to, start, end } = {}) {
@@ -15,23 +22,28 @@ function resolveRange({ period, from, to, start, end } = {}) {
   if (start && end) {
     return { start: new Date(start), end: new Date(end), label: 'custom' };
   }
+  // Day boundaries are the BUSINESS's day, not the server's. On Vercel the
+  // server clock is UTC, so dayjs().startOf('day') would put the first three
+  // hours of every Tanzanian morning into yesterday's figures — a sale at
+  // 01:30 EAT on Sep 1 must not land in August's revenue.
   if (from || to) {
-    const start = from ? dayjs(from).startOf('day') : dayjs().subtract(30, 'day').startOf('day');
-    const end = to ? dayjs(to).endOf('day') : dayjs().endOf('day');
-    return { start: start.toDate(), end: end.toDate(), label: 'custom' };
+    const s = from ? dayjs.utc(from).startOf('day') : eatNow().subtract(30, 'day').startOf('day');
+    const e = to ? dayjs.utc(to).endOf('day') : eatNow().endOf('day');
+    return { start: eatToUtc(s).toDate(), end: eatToUtc(e).toDate(), label: 'custom' };
   }
 
-  const now = dayjs();
+  const now = eatNow();
+  const win = (unit, label) => {
+    const s = now.startOf(unit === 'week' ? 'isoWeek' : unit);
+    const e = now.endOf(unit === 'week' ? 'isoWeek' : unit);
+    return { start: eatToUtc(s).toDate(), end: eatToUtc(e).toDate(), label };
+  };
   switch (period) {
-    case 'today':
-      return { start: now.startOf('day').toDate(), end: now.endOf('day').toDate(), label: 'today' };
-    case 'week':
-      return { start: now.startOf('isoWeek').toDate(), end: now.endOf('isoWeek').toDate(), label: 'week' };
-    case 'year':
-      return { start: now.startOf('year').toDate(), end: now.endOf('year').toDate(), label: 'year' };
+    case 'today': return win('day', 'today');
+    case 'week': return win('week', 'week');
+    case 'year': return win('year', 'year');
     case 'month':
-    default:
-      return { start: now.startOf('month').toDate(), end: now.endOf('month').toDate(), label: 'month' };
+    default: return win('month', 'month');
   }
 }
 
@@ -43,13 +55,6 @@ function daysOverdue(dueDate, reference = new Date()) {
   const d = daysBetween(dueDate, reference);
   return d > 0 ? d : 0;
 }
-
-// ── Tanzania time (Africa/Dar_es_Salaam = UTC+3, no DST) ─────────────────────
-// All scheduled reports are anchored to the business's clock, not the server's.
-const EAT_OFFSET_H = 3;
-const eatNow = () => dayjs().utc().add(EAT_OFFSET_H, 'hour');
-// Convert an EAT-clock dayjs back to the real UTC instant it represents.
-const eatToUtc = (d) => d.subtract(EAT_OFFSET_H, 'hour');
 
 // Exact UTC datetime window for an EAT-local day / isoWeek / month containing
 // `anchor` (an EAT-clock dayjs). Returns { start, end, label } with Dates.

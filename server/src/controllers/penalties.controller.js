@@ -32,12 +32,12 @@ const list = asyncHandler(async (req, res) => {
   }
   if (q.settlementId) filters.settlementId = q.settlementId;
 
-  const { items, total } = await penaltyService.listPenalties({
+  const { items, total, counts } = await penaltyService.listPenalties({
     ...filters,
     page: pagination.page,
     limit: pagination.limit,
   });
-  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
+  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total, counts });
 });
 
 // POST /penalties/:id/waive — forgive one fine (admin): stays on record,

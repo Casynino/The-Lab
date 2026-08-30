@@ -367,6 +367,10 @@ async function summaryAllReps() {
       paid: round2(items.reduce((s, i) => s + i.paid, 0)),
       pending: round2(items.reduce((s, i) => s + i.pending, 0)),
       penalties: round2(items.reduce((s, i) => s + i.penalties, 0)),
+      // What is actually withdrawable / in flight — the business's true
+      // payable. `pending` above is earned − paid, which still contains fines.
+      available: round2(items.reduce((s, i) => s + Math.max(0, i.available), 0)),
+      requested: round2(items.reduce((s, i) => s + (i.pendingRequests || 0), 0)),
     },
     items,
   };

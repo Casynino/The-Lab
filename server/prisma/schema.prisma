@@ -1363,7 +1363,7 @@ enum FinanceTxnType {
 
 model BusinessAccount {
   id             String             @id @default(cuid())
-  name           String
+  name           String @unique
   type           FinanceAccountType @default(CASH)
   brandId        String? // account is reserved for this brand's payments (null = any brand, e.g. Cash)
   currency       String             @default("TZS")

@@ -4,7 +4,7 @@ const prisma = require('../config/prisma');
 const ApiError = require('../utils/ApiError');
 const inventory = require('./inventory.service');
 const { nextDocNumber } = require('../utils/numbering');
-const { toNumber, round2 } = require('../utils/money');
+const { toNumber, round2, formatCurrency } = require('../utils/money');
 
 // --- Suppliers -------------------------------------------------------------
 
@@ -110,6 +110,22 @@ async function updatePurchaseOrder(id, payload) {
   const po = await prisma.purchaseOrder.findUnique({ where: { id } });
   if (!po) throw ApiError.notFound('Purchase order not found');
   if (po.status === 'RECEIVED') throw ApiError.badRequest('A received purchase order cannot be edited');
+
+  // A PO with money already paid against it cannot simply be cancelled:
+  // cancelling removes it from "purchased" AND its payments from "paid" at
+  // once, so the supplier's outstanding balance quietly swallows real money.
+  // The payments must be reversed (or moved to the supplier's balance) first.
+  if (payload.status === 'CANCELLED') {
+    const paid = await prisma.financeTransaction.aggregate({
+      where: { refType: 'PurchaseOrder', refId: id, direction: 'OUT' },
+      _sum: { amount: true },
+    });
+    if (toNumber(paid._sum.amount) > 0) {
+      throw ApiError.badRequest(
+        `${formatCurrency(toNumber(paid._sum.amount))} has been paid against this order. Delete or reassign those payments in Finance before cancelling, or the supplier balance would silently absorb them.`,
+      );
+    }
+  }
 
   const data = {};
   ['status', 'currency', 'notes', 'warehouseId'].forEach((f) => {

@@ -47,13 +47,13 @@ async function ensureDefaults() {
   ensured = true;
 }
 
+// Delegates to resolveRange so every window is the BUSINESS's day (EAT), not
+// the server's. This function used dayjs() directly, which on Vercel (UTC)
+// shifted every boundary three hours — the first sales of each Tanzanian
+// morning were landing in the previous day, week and month.
 function periodRange(period) {
-  const now = dayjs();
-  if (period === 'today') return { start: now.startOf('day').toDate(), end: now.endOf('day').toDate() };
-  if (period === 'week') return { start: now.startOf('week').toDate(), end: now.endOf('week').toDate() };
-  if (period === 'month') return { start: now.startOf('month').toDate(), end: now.endOf('month').toDate() };
-  if (period === 'year') return { start: now.startOf('year').toDate(), end: now.endOf('year').toDate() };
-  return null; // all time
+  if (!period || period === 'all') return null; // all time
+  return resolveRange({ period });
 }
 
 // --- Accounts --------------------------------------------------------------
@@ -89,8 +89,8 @@ async function accountBalances() {
 async function defaultAccount() {
   await ensureDefaults();
   return (
-    (await prisma.businessAccount.findFirst({ where: { isDefault: true, isActive: true } })) ||
-    (await prisma.businessAccount.findFirst({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }))
+    (await prisma.businessAccount.findFirst({ where: { isDefault: true, isActive: true }, orderBy: { createdAt: 'asc' } })) ||
+    (await prisma.businessAccount.findFirst({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }))
   );
 }
 
@@ -459,6 +459,30 @@ async function transferBetweenAccounts({ fromAccountId, toAccountId, amount, not
 async function deleteTransaction(id) {
   const existing = await prisma.financeTransaction.findUnique({ where: { id } });
   if (!existing) throw ApiError.notFound('Transaction not found');
+  // Rows that mirror a source document cannot be deleted here: the next
+  // backfill would quietly re-create them — into the DEFAULT account, dated
+  // from the document — so the "deleted" money would reappear somewhere else.
+  // The honest way to remove them is to cancel the document they mirror.
+  if (existing.refType === 'Sale') {
+    throw ApiError.badRequest('This row mirrors a sale. Cancel the sale itself and this entry follows — deleting it here would only make the books disagree with the sales record.');
+  }
+  if (existing.refType === 'CommissionWithdrawal') {
+    throw ApiError.badRequest('This row mirrors a commission payout. Reverse the payout from the Commissions screen instead.');
+  }
+  // A transfer is two legs of one movement. Removing one leg would conjure
+  // money out of (or into) thin air, so both legs go together.
+  if (existing.type === 'TRANSFER') {
+    await prisma.financeTransaction.deleteMany({
+      where: {
+        OR: [
+          { id },
+          { type: 'TRANSFER', refType: 'Transfer', refId: id },
+          ...(existing.refType === 'Transfer' && existing.refId ? [{ id: existing.refId }] : []),
+        ],
+      },
+    });
+    return existing;
+  }
   await prisma.financeTransaction.delete({ where: { id } });
   return existing;
 }
@@ -497,7 +521,10 @@ function epochWhere(range, epoch) {
 async function flowBetween(start, end) {
   // Internal account-to-account transfers move balances but are not business
   // cash flow (they would inflate money-in AND money-out by the same amount).
-  const where = { type: { not: 'TRANSFER' } };
+  // Only active accounts: the opening balance sums active accounts' openings,
+  // so counting a deactivated account's movements here would make
+  // Opening + In − Out drift from the account balances it must reconcile to.
+  const where = { type: { not: 'TRANSFER' }, account: { is: { isActive: true } } };
   if (start || end) where.occurredAt = { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) };
   const [i, o] = await Promise.all([
     prisma.financeTransaction.aggregate({ where: { ...where, direction: 'IN' }, _sum: { amount: true } }),
@@ -564,7 +591,8 @@ async function report(opts = {}) {
     margin: prof.totals.margin,
     boxesSold: prof.totals.boxes,
     expenses,
-    netProfit: round2(prof.totals.profit - expenses),
+    commissionAccrued: prof.totals.commission,
+    netProfit: round2(prof.totals.profit - prof.totals.commission - expenses),
     supplierPayments,
     commissionPaid,
     otherIncome,
@@ -830,7 +858,11 @@ async function overview(period = 'month') {
     .sort((a, b) => b.amount - a.amount);
 
   const grossProfit = prof.totals.profit;
-  const netProfit = round2(grossProfit - expenses);
+  // Commission accrues the moment boxes settle — it is a cost of the very
+  // sales in this window, and the biggest selling cost the business has.
+  // Leaving it out overstated every "net profit" the owner could see.
+  const commissionAccrued = prof.totals.commission;
+  const netProfit = round2(grossProfit - commissionAccrued - expenses);
 
   // ── Per-brand finance: each brand's P&L, cash movement and inventory value,
   // computed from real transactions/records only. Scales to any brand count.
@@ -855,7 +887,7 @@ async function overview(period = 'month') {
   }
   const profByBrand = new Map(prof.byBrand.map((b) => [b.brandId, b]));
   const brandFinance = allBrands.map((b) => {
-    const p = profByBrand.get(b.id) || { revenue: 0, cost: 0, profit: 0, boxes: 0, margin: 0 };
+    const p = profByBrand.get(b.id) || { revenue: 0, cost: 0, profit: 0, boxes: 0, margin: 0, commission: 0 };
     let moneyIn = 0;
     let moneyOut = 0;
     let brandExpenses = 0;
@@ -878,8 +910,9 @@ async function overview(period = 'month') {
       grossProfit: p.profit,
       margin: p.margin,
       boxesSold: p.boxes,
+      commission: round2(p.commission || 0),
       expenses: round2(brandExpenses),
-      netProfit: round2(p.profit - brandExpenses),
+      netProfit: round2(p.profit - (p.commission || 0) - brandExpenses),
       moneyIn: round2(moneyIn),
       moneyOut: round2(moneyOut),
       netCash: round2(moneyIn - moneyOut),
@@ -897,11 +930,15 @@ async function overview(period = 'month') {
     revenue: prof.totals.revenue,
     cogs: prof.totals.cost,
     grossProfit,
+    commissionAccrued,
     expenses,
     netProfit,
     expenseBreakdown,
     byBrand: prof.byBrand,
-    outstandingCommission: round2(commSummary.totals.pending),
+    // What the business actually owes reps right now: withdrawable balances
+    // plus requests in flight. The old figure (earned − paid) included fines
+    // the reps will never receive.
+    outstandingCommission: round2(commSummary.totals.available + commSummary.totals.requested),
     inventoryValue: {
       cost: inv.totals.totalValue,
       selling: inv.totals.retailValue,

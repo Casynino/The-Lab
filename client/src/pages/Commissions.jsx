@@ -776,8 +776,11 @@ function AdminView() {
     queryKey: ['penalties', 'all'],
     queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 50 } })),
   });
-  // Only fines still charged are worth a badge — forgiven ones need no attention.
-  const activeFines = (penaltyData?.data || []).filter((p) => p.status !== 'WAIVED').length;
+  // Only fines still charged are worth a badge — counted by the SERVER over
+  // the whole table. Counting the visible page understated it as soon as the
+  // history outgrew one page.
+  const activeFines = penaltyData?.meta?.counts?.applied
+    ?? (penaltyData?.data || []).filter((p) => p.status !== 'WAIVED').length;
   const pendingWithdrawals = (wd?.data || []).filter((w) => w.status === 'PENDING').length;
 
   const applyPenalties = useMutation({
@@ -803,7 +806,10 @@ function AdminView() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <StatCard label="Total earned" value={formatCurrency(summary.totals.earned)} icon={Coins} tone="violet" />
         <StatCard label="Total paid" value={formatCurrency(summary.totals.paid)} icon={Wallet} tone="emerald" />
-        <StatCard label="Total pending" value={formatCurrency(summary.totals.pending)} icon={Clock} tone="amber" />
+        {/* "Total pending" was earned − paid, which still contained fines the
+            reps will never receive — this is the money actually withdrawable. */}
+        <StatCard label="Available to withdraw" value={formatCurrency(summary.totals.available ?? summary.totals.pending)} icon={Clock} tone="amber"
+          hint={summary.totals.requested > 0 ? `+ ${formatCurrency(summary.totals.requested)} requested` : 'after fines & payouts'} />
         <StatCard label="Total penalties" value={formatCurrency(summary.totals.penalties)} icon={AlertTriangle} tone="rose" />
       </div>
 
@@ -846,13 +852,26 @@ function AdminView() {
             <TR key={i.salesRepId}>
               <TD className="font-medium">{i.name}</TD>
               <TD>{formatNumber(i.boxesSettled)}</TD>
-              <TD>{formatCurrency(i.earned)}</TD>
+              {/* An agreed one-off adjustment makes Earned differ from boxes ×
+                  rate — say so on the row, or the arithmetic looks broken. */}
+              <TD>
+                {formatCurrency(i.earned)}
+                {Number(i.adjustment) !== 0 && (
+                  <span
+                    className="ml-1 cursor-help text-amber-400"
+                    title={`${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`}
+                  >*</span>
+                )}
+              </TD>
               <TD className={i.penalties > 0 ? 'text-rose-400 font-semibold' : 'text-faint'}>
                 {i.penalties > 0 ? `−${formatCurrency(i.penalties)}` : '—'}
               </TD>
               <TD>{formatCurrency(i.paid)}</TD>
               <TD className={i.available < 0 ? 'text-rose-400 font-semibold' : ''}>
                 {formatCurrency(i.available)}
+                {i.pendingRequests > 0 && (
+                  <div className="text-[10px] text-faint">{formatCurrency(i.pendingRequests)} requested</div>
+                )}
               </TD>
             </TR>
           ))}</TBody>

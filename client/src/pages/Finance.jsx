@@ -222,12 +222,15 @@ function Overview() {
 
       {/* Profit waterfall */}
       <Card>
-        <CardHeader title="Real business profit" subtitle={`Revenue − cost of goods − expenses · ${PERIODS.find((p) => p[0] === period)[1].toLowerCase()}`} />
+        <CardHeader title="Real business profit" subtitle={`Revenue − goods − rep commission − expenses · ${PERIODS.find((p) => p[0] === period)[1].toLowerCase()}`} />
         <CardBody>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+          {/* Commission was missing from every net-profit line the owner could
+              see — his largest selling cost, silently excluded. */}
+          <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
             <Money label="Revenue" value={data.revenue} tone="emerald" />
             <Money label="− COGS" value={data.cogs} tone="slate" />
             <Money label="= Gross profit" value={data.grossProfit} tone="brand" />
+            <Money label="− Commission" value={data.commissionAccrued ?? 0} tone="amber" />
             <Money label="− Expenses" value={data.expenses} tone="rose" />
             <Money label="= Net profit" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
           </div>
@@ -244,16 +247,17 @@ function Overview() {
                 <CardBody>
                   <div className="mb-3 flex items-center justify-between">
                     <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-bold text-brand-400">{b.name}</span>
-                    <span className="text-xs text-faint">{formatNumber(b.boxesSold)} boxes sold</span>
+                    <span className="text-xs text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'} sold</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2.5">
                     <Money label="Revenue" value={b.revenue} tone="emerald" />
                     <Money label="− COGS" value={b.cogs} tone="slate" />
                     <Money label="Gross profit" value={b.grossProfit} tone="brand" />
+                    <Money label="− Commission" value={b.commission ?? 0} tone="amber" />
                     <Money label="− Expenses" value={b.expenses} tone="rose" />
                     <Money label="Net profit" value={b.netProfit} tone={b.netProfit >= 0 ? 'emerald' : 'rose'} big />
-                    <Money label="Net cash" value={b.netCash} tone={b.netCash >= 0 ? 'default' : 'rose'} />
                   </div>
+                  <div className="mt-2 text-xs text-faint">Net cash {formatCurrency(b.netCash)}</div>
                   <div className="mt-2 flex flex-wrap justify-between gap-2 border-t border-border pt-2 text-xs text-faint">
                     <span>Money in {formatCurrency(b.moneyIn)} · out {formatCurrency(b.moneyOut)}</span>
                     <span>Inventory {formatCurrency(b.inventoryValue)} ({formatNumber(b.inventoryUnits)} boxes)</span>
@@ -298,7 +302,7 @@ function Overview() {
         <StatCard label="Inventory (cost)" value={formatCurrency(data.inventoryValue.cost)} icon={Boxes} tone="slate" hint={`${formatNumber(data.inventoryValue.units)} boxes`} />
         <StatCard label="Inventory (selling)" value={formatCurrency(data.inventoryValue.selling)} icon={Boxes} tone="emerald" />
         <StatCard label="Potential profit" value={formatCurrency(data.inventoryValue.potential)} icon={TrendingUp} tone="brand" hint="locked in stock" />
-        <StatCard label="Outstanding commission" value={formatCurrency(data.outstandingCommission)} icon={Coins} tone="amber" hint="owed to reps" />
+        <StatCard label="Outstanding commission" value={formatCurrency(data.outstandingCommission)} icon={Coins} tone="amber" hint="withdrawable + requests in flight" />
       </div>
 
       {brand.length > 0 && (
@@ -312,7 +316,7 @@ function Overview() {
 }
 
 function Money({ label, value, tone, big }) {
-  const tones = { emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-400', slate: 'text-muted', default: 'text-foreground' };
+  const tones = { emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-400', amber: 'text-amber-500', slate: 'text-muted', default: 'text-foreground' };
   return (
     <div className={`rounded-xl border border-border bg-elevated p-3 ${big ? 'ring-1 ring-brand-500/30' : ''}`}>
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
@@ -525,50 +529,99 @@ function ProfitTab() {
     queryFn: async () => unwrap(await api.get('/dashboard/brands')).data,
   });
   if (isLoading || !data) return <PageSpinner />;
-  // /dashboard/brands returns { brands: [...], totals } — the per-brand rows
-  // live under .brands (same shape the Dashboard consumes).
   const stockByBrand = new Map((brandStockData?.brands || []).map((b) => [b.brandId, b]));
+  const t = data.totals;
+
+  // Say what window the figures actually cover. With a finance epoch set,
+  // "All time" really means "since go-live" — the owner asked "what time?"
+  // about a card once already; no figure gets to be vague about its period.
+  const windowLabel = period === 'all'
+    ? (data.epochAt ? `since ${formatDate(data.epochAt)} — the day finance went live` : 'all recorded sales')
+    : data.range ? `${formatDate(data.range.start)} → ${formatDate(data.range.end)}` : '';
+
+  const cards = [
+    { label: 'Revenue', value: formatCurrency(t.revenue), icon: TrendingUp, sub: `${formatNumber(t.boxes)} boxes sold`,
+      ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
+    { label: 'Cost of goods', value: formatCurrency(t.cost), icon: Package, sub: 'at cost when each box sold',
+      ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', chip: 'bg-white/10 text-muted', num: 'text-foreground' },
+    { label: 'Gross profit', value: formatCurrency(t.profit), icon: Wallet, sub: `${t.margin}% margin`,
+      ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
+    { label: 'Rep commission', value: formatCurrency(t.commission), icon: Coins, sub: 'earned on these boxes',
+      ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.12]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
+    { label: 'You keep', value: `${t.contributionMargin}%`, icon: Scale, sub: `${formatCurrency(t.contribution)} after goods & reps`,
+      ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
+  ];
+
+  const perBoxKept = (row) => (row.boxes > 0 ? row.contribution / row.boxes : 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         {PROFIT_PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
+        {windowLabel && <span className="ml-2 text-xs text-faint">{windowLabel}</span>}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Total revenue" value={formatCurrency(data.totals.revenue)} icon={TrendingUp} tone="emerald" hint={`${formatNumber(data.totals.boxes)} boxes sold`} />
-        <StatCard label="Cost of goods sold" value={formatCurrency(data.totals.cost)} icon={Package} tone="slate" />
-        <StatCard label="Gross profit" value={formatCurrency(data.totals.profit)} icon={Wallet} tone="brand" />
-        <StatCard label="Profit margin" value={`${data.totals.margin}%`} icon={Scale} tone="violet" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+        {cards.map((c) => (
+          <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
+            <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
+            <div className="relative flex items-start justify-between gap-2">
+              <p className="text-xs font-medium text-muted">{c.label}</p>
+              <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+            </div>
+            <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
+            <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Brand performance — scales to any number of brands */}
+      {/* Per brand: the full money path, ending at the number the owner
+          actually means — what is left after the goods AND the rep. */}
       {data.byBrand.length > 0 && (
         <div>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">What each brand makes</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {data.byBrand.map((b) => {
               const stock = stockByBrand.get(b.brandId);
+              const path = [
+                { label: 'Revenue', v: b.revenue, cls: 'text-foreground' },
+                { label: '− Goods', v: -b.cost, cls: 'text-muted' },
+                { label: '− Commission', v: -b.commission, cls: 'text-amber-400' },
+              ];
               return (
                 <Card key={b.brandId}>
-                  <CardBody>
-                    <div className="mb-3 flex items-center justify-between">
+                  <div className="p-5">
+                    <div className="flex items-center justify-between">
                       <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-bold text-brand-400">{b.name}</span>
-                      <span className="text-sm font-bold text-foreground">{b.margin}% margin</span>
+                      <span className="text-xs text-faint">{formatNumber(b.boxes)} box{b.boxes === 1 ? '' : 'es'}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-2.5">
-                      <Money label="Revenue" value={b.revenue} />
-                      <Money label="Cost" value={b.cost} tone="slate" />
-                      <Money label="Profit" value={b.profit} tone="emerald" />
+                    <p className={`mt-3 text-3xl font-bold leading-none tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {b.contributionMargin}%
+                    </p>
+                    <p className="mt-1 text-xs text-faint">kept — {formatCurrency(b.contribution)} after goods & reps</p>
+                    <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3">
+                      {path.map((r) => (
+                        <div key={r.label} className="flex items-baseline justify-between">
+                          <span className="text-xs text-muted">{r.label}</span>
+                          <span className={`text-sm font-semibold tabular-nums ${r.cls}`}>{formatCurrency(Math.abs(r.v))}</span>
+                        </div>
+                      ))}
+                      <div className="flex items-baseline justify-between border-t border-white/[0.06] pt-1.5">
+                        <span className="text-xs font-semibold text-foreground">= You keep</span>
+                        <span className={`text-sm font-bold tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {formatCurrency(b.contribution)}
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-faint">
-                      <span>{formatNumber(b.boxes)} boxes sold</span>
-                      {stock && <span>Inventory value {formatCurrency(stock.stockValue)} ({formatNumber(stock.stockUnits)} boxes)</span>}
-                    </div>
-                  </CardBody>
+                    {stock && (
+                      <p className="mt-3 text-[11px] text-faint">
+                        Inventory {formatCurrency(stock.stockValue)} ({formatNumber(stock.stockUnits)} boxes)
+                      </p>
+                    )}
+                  </div>
                 </Card>
               );
             })}
@@ -579,24 +632,27 @@ function ProfitTab() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Inventory value (cost)" value={formatCurrency(data.inventoryValue.costValue)} icon={Boxes} tone="slate" hint={`${formatNumber(data.inventoryValue.units)} boxes on hand`} />
         <StatCard label="Potential revenue" value={formatCurrency(data.inventoryValue.potentialRevenue)} icon={TrendingUp} tone="emerald" hint="if all sold at selling price" />
-        <StatCard label="Potential profit" value={formatCurrency(data.inventoryValue.potentialProfit)} icon={Wallet} tone="brand" hint="locked in current stock" />
+        <StatCard label="Potential profit" value={formatCurrency(data.inventoryValue.potentialProfit)} icon={Wallet} tone="brand" hint="before commissions" />
       </div>
 
+      {/* Every product, one by one — the whole catalogue, not a top list. */}
       <Card>
-        <CardHeader title="Most profitable products" subtitle="By profit in the selected period" />
+        <CardHeader title="Every product, one by one" subtitle="What each one brings in and what you keep, best first" />
         <CardBody>
           {!data.byProduct.length ? <EmptyState title="No sales in this period" icon={Package} /> : (
             <Table>
-              <THead><TR><TH>Product</TH><TH>Boxes sold</TH><TH>Profit / box</TH><TH>Revenue</TH><TH>Profit</TH><TH>Margin</TH></TR></THead>
+              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Goods</TH><TH>Commission</TH><TH>You keep</TH><TH>Kept / box</TH><TH>Margin</TH></TR></THead>
               <TBody>
                 {data.byProduct.map((p) => (
                   <TR key={p.productId}>
                     <TD className="font-medium text-foreground">{p.name}</TD>
                     <TD>{formatNumber(p.boxes)}</TD>
-                    <TD>{formatCurrency(p.profitPerBox)}</TD>
                     <TD>{formatCurrency(p.revenue)}</TD>
-                    <TD className="font-semibold text-emerald-500">{formatCurrency(p.profit)}</TD>
-                    <TD>{p.margin}%</TD>
+                    <TD className="text-muted">{formatCurrency(p.cost)}</TD>
+                    <TD className="text-amber-400">{formatCurrency(p.commission)}</TD>
+                    <TD className={`font-semibold ${p.contribution >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(p.contribution)}</TD>
+                    <TD className="tabular-nums">{formatCurrency(perBoxKept(p))}</TD>
+                    <TD>{p.contributionMargin}%</TD>
                   </TR>
                 ))}
               </TBody>
@@ -606,19 +662,20 @@ function ProfitTab() {
       </Card>
 
       <Card>
-        <CardHeader title="Profit by sales rep" subtitle="Revenue & profit from settled boxes" />
+        <CardHeader title="Profit by sales rep" subtitle="What each rep's settled boxes bring in, after their commission" />
         <CardBody>
           {!data.byRep.length ? <EmptyState title="No rep sales in this period" icon={TrendingUp} /> : (
             <Table>
-              <THead><TR><TH>Sales rep</TH><TH>Boxes sold</TH><TH>Revenue</TH><TH>Profit</TH><TH>Margin</TH></TR></THead>
+              <THead><TR><TH>Sales rep</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Their commission</TH><TH>You keep</TH><TH>Margin</TH></TR></THead>
               <TBody>
                 {data.byRep.map((r) => (
                   <TR key={r.salesRepId}>
                     <TD className="font-medium text-foreground">{r.name}</TD>
                     <TD>{formatNumber(r.boxes)}</TD>
                     <TD>{formatCurrency(r.revenue)}</TD>
-                    <TD className="font-semibold text-emerald-500">{formatCurrency(r.profit)}</TD>
-                    <TD>{r.margin}%</TD>
+                    <TD className="text-amber-400">{formatCurrency(r.commission)}</TD>
+                    <TD className={`font-semibold ${r.contribution >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(r.contribution)}</TD>
+                    <TD>{r.contributionMargin}%</TD>
                   </TR>
                 ))}
               </TBody>
