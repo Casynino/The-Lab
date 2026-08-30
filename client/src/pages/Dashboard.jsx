@@ -173,23 +173,25 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-            <div className={clsx('mt-3 grid grid-cols-1 gap-2', heroAccounts.length >= 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+            {/* Rows, not cards. Boxing each balance put a card inside a card
+                and made three small panels compete with the headline; the bar
+                above already carries the proportions, so these only have to
+                name them. Hairline dividers, one line each, numbers aligned. */}
+            <div className="mt-4 divide-y divide-white/10">
               {heroAccounts.map((a) => {
                 const i = a._i;
                 const Icon = ACCOUNT_ICON[a.type] || Wallet;
                 const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
                 return (
                   <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                    className="cursor-pointer rounded-2xl border border-white/10 bg-white/[0.07] p-3 text-left backdrop-blur-sm transition duration-200 hover:border-white/25 hover:bg-white/[0.13]">
-                    <div className="flex items-center gap-1.5">
-                      <span className={clsx('h-2 w-2 shrink-0 rounded-full', HERO_DOT[i % HERO_DOT.length])} />
-                      <Icon className="h-3.5 w-3.5 shrink-0 text-white/50" />
-                      <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-white/55">{a.name}</span>
-                    </div>
-                    <div className={clsx('mt-1.5 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
+                    className="group flex w-full cursor-pointer items-center gap-3 py-2.5 text-left transition duration-200 hover:opacity-80">
+                    <span className={clsx('h-2.5 w-2.5 shrink-0 rounded-full', HERO_DOT[i % HERO_DOT.length])} />
+                    <Icon className="h-4 w-4 shrink-0 text-white/45" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/75">{a.name}</span>
+                    <span className={clsx('shrink-0 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
                       {formatCurrency(a.balance)}
-                    </div>
-                    <div className="text-[10px] text-white/40">{share}% of the total</div>
+                    </span>
+                    <span className="w-10 shrink-0 text-right text-xs tabular-nums text-white/40">{share}%</span>
                   </button>
                 );
               })}
