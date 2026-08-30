@@ -17,13 +17,15 @@ const STAFF = ['ADMIN', 'WAREHOUSE_STAFF'];
 // Sidebar sections follow the daily workflow (most used at the top), not the
 // system's modules. A section header only renders when the role can see at
 // least one of its items.
+// Each section carries its own icon, so the sidebar reads as labelled
+// departments rather than a flat list broken up by grey text.
 export const NAV_GROUPS = [
-  ['overview', 'Business Overview'],
-  ['operations', 'Operations'],
-  ['reports', 'Reports & Analytics'],
-  ['people', 'People'],
-  ['tools', 'Tools'],
-  ['admin', 'Administration'],
+  ['overview', 'Business Overview', 'LayoutDashboard'],
+  ['operations', 'Operations', 'Boxes'],
+  ['reports', 'Reports & Analytics', 'BarChart3'],
+  ['people', 'People', 'Users'],
+  ['tools', 'Tools', 'Wrench'],
+  ['admin', 'Administration', 'ShieldCheck'],
 ];
 
 export const NAV = [

@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
   ClipboardCheck, UserCog, Repeat, BarChart3, ScrollText, ShieldCheck, Settings,
   Bell, Menu, X, LogOut, ChevronDown, User, Lock, Eye, EyeOff, Loader2,
-  Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt, Wallet,
+  Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt, Wallet, Wrench,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NAV, NAV_GROUPS, ROLE_LABELS, ROLES } from '@/lib/constants';
@@ -19,6 +19,7 @@ const ICONS = {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
   ClipboardCheck, UserCog, Repeat, BarChart3, ScrollText, ShieldCheck, Settings,
   Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt,
+  Wrench,
 };
 
 // Small "action required" count pill (e.g. pending settlements/returns).
@@ -49,13 +50,13 @@ function NavItems({ items, counts = {}, onNavigate }) {
         key={item.to}
         to={item.to}
         onClick={onNavigate}
-        className={`flex items-center gap-3 rounded-xl py-2 pr-3 text-sm font-medium transition-all ${indent ? 'pl-6' : 'pl-3'} ${
+        className={`flex items-center gap-2.5 rounded-lg py-2 pr-3 text-sm font-medium transition-all duration-200 ${indent ? 'pl-5' : 'pl-2.5'} ${
           active
-            ? 'bg-brand-600 text-slate-950 shadow-[0_4px_16px_-4px_rgba(190,242,100,0.45)]'
-            : 'text-muted hover:bg-white/5 hover:text-white'
+            ? 'bg-brand-500/15 text-brand-300 ring-1 ring-inset ring-brand-500/30'
+            : 'text-muted hover:bg-white/[0.06] hover:text-white'
         }`}
       >
-        <Icon className="h-5 w-5 flex-shrink-0" />
+        <Icon className="h-4 w-4 flex-shrink-0" />
         <span className="flex-1 truncate">{item.label}</span>
         <CountPill count={countFor(item)} />
       </NavLink>
@@ -67,15 +68,16 @@ function NavItems({ items, counts = {}, onNavigate }) {
   // cluster (e.g. Operations → Stock Management).
   return (
     <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-      {NAV_GROUPS.map(([key, label], gi) => {
+      {NAV_GROUPS.map(([key, label, groupIcon], gi) => {
         const groupItems = items.filter((i) => i.group === key);
         if (groupItems.length === 0) return null;
+        const GroupIcon = ICONS[groupIcon] || Package;
         const rows = [];
         let lastSub = null;
         for (const item of groupItems) {
           if (item.sub && item.sub !== lastSub) {
             rows.push(
-              <div key={`sub-${item.sub}`} className="px-3 pb-0.5 pt-1 text-[10px] font-medium uppercase tracking-wider text-faint/80">
+              <div key={`sub-${item.sub}`} className="pb-0.5 pl-3 pt-1.5 text-[10px] font-medium uppercase tracking-wider text-faint/70">
                 {item.sub}
               </div>,
             );
@@ -84,9 +86,16 @@ function NavItems({ items, counts = {}, onNavigate }) {
           rows.push(renderLink(item, !!item.sub));
         }
         return (
-          <div key={key} className={gi > 0 ? 'pt-3' : ''}>
-            <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">{label}</div>
-            <div className="space-y-1">{rows}</div>
+          <div key={key} className={gi > 0 ? 'pt-4' : ''}>
+            {/* The section header carries its own icon, so a group reads as a
+                department rather than grey text floating above a list. */}
+            <div className="flex items-center gap-2 px-2 pb-1.5">
+              <GroupIcon className="h-3.5 w-3.5 shrink-0 text-faint" />
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">{label}</span>
+            </div>
+            {/* A hairline rail down the left, with the items hanging off it —
+                the group is visibly one thing instead of neighbours. */}
+            <div className="ml-[15px] space-y-0.5 border-l border-white/[0.08] pl-2">{rows}</div>
           </div>
         );
       })}
@@ -207,7 +216,28 @@ export default function Layout() {
       <aside className="hidden w-60 flex-col border-r border-border bg-[#0c0c0e] md:sticky md:top-0 md:flex md:h-screen xl:w-64">
         <Brand />
         <NavItems items={items} counts={pendingActions} />
-        <div className="border-t border-white/5 p-3 text-[11px] text-faint"><span className="font-semibold uppercase tracking-wider">The Lab</span> · Developed by Nino</div>
+        {/* Who is signed in, then the way out — the two things a sidebar foot
+            is for. The credit line stays, quietly, beneath them. */}
+        <div className="border-t border-white/[0.07] p-3">
+          <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.04] px-2.5 py-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-500/15 text-xs font-bold text-brand-300">
+              {initials(user?.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-white">{user?.name}</div>
+              <div className="truncate text-[11px] text-faint">{ROLE_LABELS[user?.role] || user?.role}</div>
+            </div>
+          </div>
+          <button
+            onClick={logout}
+            className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/[0.08] py-2 text-sm font-medium text-muted transition duration-200 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-300"
+          >
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
+          <div className="mt-2.5 text-center text-[10px] text-faint/70">
+            <span className="font-semibold uppercase tracking-wider">The Lab</span> · Developed by Nino
+          </div>
+        </div>
       </aside>
 
       {/* Sidebar (mobile drawer) */}
