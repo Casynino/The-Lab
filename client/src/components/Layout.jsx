@@ -85,6 +85,11 @@ function NavItems({ items, counts = {}, onNavigate }) {
           lastSub = item.sub || null;
           rows.push(renderLink(item, !!item.sub));
         }
+        // Home belongs to no department — it is the way back to everything,
+        // so it stands alone with no header and no rail above it.
+        if (!label) {
+          return <div key={key} className="space-y-0.5 pb-1">{rows}</div>;
+        }
         return (
           <div key={key} className={gi > 0 ? 'pt-4' : ''}>
             {/* The section header carries its own icon, so a group reads as a
