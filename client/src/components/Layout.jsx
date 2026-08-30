@@ -69,7 +69,15 @@ function NavItems({ items, counts = {}, onNavigate }) {
   return (
     <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
       {NAV_GROUPS.map(([key, label, groupIcon], gi) => {
-        const groupItems = items.filter((i) => i.group === key);
+        // Shortest label first, so each group forms a ladder rather than a
+        // ragged block — the eye can run down the left edge and the names
+        // grow instead of jumping. Ties keep the order they were written in,
+        // which is the order the work happens.
+        const groupItems = items
+          .filter((i) => i.group === key)
+          .map((item, idx) => ({ item, idx }))
+          .sort((a, b) => a.item.label.length - b.item.label.length || a.idx - b.idx)
+          .map(({ item }) => item);
         if (groupItems.length === 0) return null;
         const GroupIcon = ICONS[groupIcon] || Package;
         const rows = [];
