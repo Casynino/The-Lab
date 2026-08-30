@@ -382,8 +382,8 @@ function Overview({ onNavigate, onOwnerMoney }) {
     briefing.push(`${formatCurrency(flow.moneyIn)} came in and ${formatCurrency(flow.moneyOut)} went out ${periodLabel}.`);
     if (data.netProfit !== 0) {
       briefing.push(data.netProfit >= 0
-        ? `After goods, commissions and expenses, ${formatCurrency(data.netProfit)} is real profit.`
-        : `After goods, commissions and expenses, the period is ${formatCurrency(Math.abs(data.netProfit))} in the red.`);
+        ? `After the boxes and expenses, ${formatCurrency(data.netProfit)} was earned — most of it back in stock, not cash.`
+        : `After the boxes and expenses, the period is ${formatCurrency(Math.abs(data.netProfit))} in the red.`);
     }
     if (ny.supplierOutstanding > 0) briefing.push(`Suppliers are still owed ${formatCurrency(ny.supplierOutstanding)}.`);
   }
@@ -425,7 +425,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
             <p className="mt-2 text-xs text-white/60">across all accounts, right now</p>
             <span className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${data.netProfit >= 0 ? 'bg-emerald-400/15 text-emerald-300' : 'bg-rose-400/15 text-rose-300'}`}>
               {data.netProfit >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-              {formatCurrency(data.netProfit)} real profit · {periodLabel}
+              {formatCurrency(data.netProfit)} earned · {periodLabel}
             </span>
           </div>
           <div className="border-white/10 lg:border-l lg:pl-6">
@@ -449,11 +449,31 @@ function Overview({ onNavigate, onOwnerMoney }) {
           <SectionHead label="Whose money is this?" sub="Every wallet you hold — what the supplier is owed now, and what is yours." />
 
           {/* The headline split, as one joined strip. */}
+          {/* "Yours, free to use" only appears when it differs from the cash
+              held. With nothing owed the two were the same figure printed
+              twice, side by side, which reads as a mistake. */}
           <SegmentStrip segments={[
-            { label: 'Cash you hold', value: formatCurrency(data.cashSplit.totalCash), sub: 'across every account', tone: 'brand' },
-            { label: 'Owed to suppliers now', value: formatCurrency(data.cashSplit.setAside), sub: 'cost of boxes already sold', tone: data.cashSplit.setAside > 0 ? 'rose' : 'slate' },
-            { label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' },
-            { label: 'Invoice for shelf stock', value: formatCurrency(data.cashSplit.dueLater || 0), sub: 'falls due only as it sells', tone: (data.cashSplit.dueLater || 0) > 0 ? 'amber' : 'slate' },
+            {
+              label: 'Cash you hold',
+              value: formatCurrency(data.cashSplit.totalCash),
+              sub: data.cashSplit.setAside > 0 ? 'across every account' : 'across every account — all of it yours',
+              tone: 'brand',
+            },
+            {
+              label: 'Owed to suppliers now',
+              value: formatCurrency(data.cashSplit.setAside),
+              sub: data.cashSplit.setAside > 0 ? 'cost of boxes already sold' : 'nothing due right now',
+              tone: data.cashSplit.setAside > 0 ? 'rose' : 'slate',
+            },
+            ...(data.cashSplit.setAside > 0
+              ? [{ label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' }]
+              : []),
+            {
+              label: 'Invoice for shelf stock',
+              value: formatCurrency(data.cashSplit.dueLater || 0),
+              sub: (data.cashSplit.dueLater || 0) > 0 ? 'falls due only as it sells' : 'nothing invoiced',
+              tone: (data.cashSplit.dueLater || 0) > 0 ? 'amber' : 'slate',
+            },
           ]} />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -724,7 +744,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
 
       {/* ── Real profit ── */}
       <div className="space-y-3">
-        <SectionHead label="Real business profit" sub={`Revenue − goods − rep commission − expenses · ${periodLabel}`} />
+        <SectionHead label="What the business earned" sub={`Revenue − goods − expenses · ${periodLabel} · rep pay is yours, not the business's`} />
         <Card>
           <CardBody>
             <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
