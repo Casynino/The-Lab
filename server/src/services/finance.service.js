@@ -291,7 +291,17 @@ async function recordTransaction(data, actor) {
   });
 }
 
-const recordExpense = (data, actor) => recordTransaction({ ...data, direction: 'OUT', type: 'EXPENSE' }, actor);
+// Money spent on stock is not a P&L expense — the cost of those boxes reaches
+// profit as COGS when they sell. Recording it as EXPENSE charged the business
+// twice (once here, once in COGS): OHIS's stock buys went through this flow
+// and pushed its brand net TSh 3.3M below the truth. The category the user
+// picks still shows on the row; only the P&L treatment changes.
+const isStockPurchaseCategory = (c) => /stock\s*purchase/i.test(String(c || ''));
+const recordExpense = (data, actor) => recordTransaction({
+  ...data,
+  direction: 'OUT',
+  type: isStockPurchaseCategory(data.category) ? 'STOCK_PURCHASE' : 'EXPENSE',
+}, actor);
 const recordIncome = (data, actor) => recordTransaction({ ...data, direction: 'IN', type: 'INCOME' }, actor);
 
 // Automatic money-in for a completed cash sale (settlement or direct warehouse).
