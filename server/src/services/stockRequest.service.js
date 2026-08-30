@@ -12,7 +12,9 @@ const INCLUDE = {
   salesRep: { include: { user: { select: { name: true } } } },
   warehouse: { select: { id: true, name: true } },
   decidedBy: { select: { id: true, name: true } },
-  items: { include: { product: true, packagingUnit: true } },
+  // product.packagings carries each packaging's baseQuantity, which is what
+  // turns a carton count into a box count.
+  items: { include: { product: { include: { packagings: true } }, packagingUnit: true } },
 };
 
 async function resolveWarehouseId(requested) {
@@ -138,7 +140,12 @@ function withBoxes(rows) {
     let requested = 0;
     let approved = 0;
     for (const it of r.items || []) {
-      const factor = it.packagingUnit?.baseQuantity ?? 1;
+      // How many boxes one unit of the chosen packaging holds. That lives on
+      // ProductPackaging (this product in this packaging), NOT on the
+      // packaging unit itself — reading it from the unit always yielded
+      // undefined, so a request for 2 cartons counted as 2 boxes.
+      const factor = (it.product?.packagings || [])
+        .find((k) => k.packagingUnitId === it.packagingUnitId)?.baseQuantity ?? 1;
       requested += (it.quantityRequested || 0) * factor;
       // baseQuantity is written on approval; before that there is nothing to
       // count, and quantityApproved falls back to what was asked for.
@@ -168,6 +175,10 @@ async function list(filters, pagination) {
       status: true,
       requestedAt: true,
       totalValue: true,
+      // The request points AT its settlement; the settlement does not carry a
+      // stockRequestId. Querying the reverse direction found nothing and
+      // reported every issued order as unsettled.
+      settlementId: true,
       // Only fulfilled requests contribute boxes, and their items carry
       // baseQuantity — written at approval, which is the moment stock moved.
       items: { select: { baseQuantity: true } },
@@ -175,11 +186,14 @@ async function list(filters, pagination) {
     orderBy: { requestedAt: 'asc' },
   });
   const issuedStatuses = new Set(['FULFILLED']);
-  const settledIds = new Set(
-    (await prisma.settlement.findMany({
-      where: { status: 'SETTLED', stockRequestId: { in: allMatching.map((r) => r.id) } },
-      select: { stockRequestId: true },
-    })).map((x) => x.stockRequestId),
+  const linkedIds = allMatching.map((r) => r.settlementId).filter(Boolean);
+  const settledSettlementIds = new Set(
+    linkedIds.length
+      ? (await prisma.settlement.findMany({
+          where: { id: { in: linkedIds }, status: 'SETTLED' },
+          select: { id: true },
+        })).map((x) => x.id)
+      : [],
   );
   let boxes = 0;
   let value = 0;
@@ -192,7 +206,7 @@ async function list(filters, pagination) {
       issued += 1;
       for (const it of r.items) boxes += it.baseQuantity || 0;
       value += toNumber(r.totalValue);
-      if (settledIds.has(r.id)) settled += 1;
+      if (r.settlementId && settledSettlementIds.has(r.settlementId)) settled += 1;
     } else if (r.status === 'PENDING') pending += 1;
     else refused += 1; // rejected or cancelled — never left the warehouse
   }
