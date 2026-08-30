@@ -1075,6 +1075,33 @@ async function overview(period = 'month') {
 
   ownerMoney.owedToSuppliers = needsYou.supplierOutstanding;
 
+  // ── What the business is really worth ───────────────────────────────────
+  // Profit alone answers "did the boxes sell for more than they cost". It
+  // does NOT answer "am I ahead", because the stock those boxes came from is
+  // partly the supplier's money. Everything the business OWNS against
+  // everything it OWES — the only figure that settles the question.
+  const settlement = require('./settlement.service');
+  const stl = await settlement.summary().catch(() => null);
+  const repsOwe = round2(stl?.outstandingValue || 0);
+  const owns = [
+    { label: 'Cash in accounts', amount: cashPosition },
+    { label: 'Stock on the shelf', amount: round2(inv.totals.totalValue), hint: 'at what it cost you' },
+    { label: 'Owed to you by reps', amount: repsOwe, hint: 'boxes issued, not yet settled' },
+  ];
+  const owes = [
+    { label: 'Owed to suppliers', amount: needsYou.supplierOutstanding, hint: 'stock they financed' },
+    { label: 'Owed to reps', amount: round2(commSummary.totals.available + commSummary.totals.requested), hint: 'commission they can withdraw' },
+  ];
+  const totalOwns = round2(owns.reduce((a, x) => a + x.amount, 0));
+  const totalOwes = round2(owes.reduce((a, x) => a + x.amount, 0));
+  const position = {
+    owns,
+    owes,
+    totalOwns,
+    totalOwes,
+    worth: round2(totalOwns - totalOwes),
+  };
+
   return {
     period,
     cashPosition,
@@ -1082,6 +1109,7 @@ async function overview(period = 'month') {
     flow,
     needsYou,
     ownerMoney,
+    position,
     brandFinance,
     revenue: prof.totals.revenue,
     cogs: prof.totals.cost,
