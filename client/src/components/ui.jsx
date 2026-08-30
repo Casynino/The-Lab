@@ -121,7 +121,7 @@ export const TR = ({ children, className, ...props }) => (
   </tr>
 );
 export const TH = ({ children, className }) => <th className={clsx('th', className)}>{children}</th>;
-export const TD = ({ children, className }) => <td className={clsx('td', className)}>{children}</td>;
+export const TD = ({ children, className, ...props }) => <td className={clsx('td', className)} {...props}>{children}</td>;
 
 // --- Pagination -------------------------------------------------------------
 export function Pagination({ page, totalPages, total, onChange }) {
