@@ -311,28 +311,26 @@ function Overview({ onNavigate }) {
   if (isLoading || !data) return <PageSpinner />;
   const flow = data.flow?.[period] || data.flow?.month || { moneyIn: 0, moneyOut: 0, net: 0 };
   const donut = data.expenseBreakdown.map((e) => ({ name: e.category, value: e.amount }));
+  const accountsDonut = data.accounts.filter((a) => a.balance > 0).map((a) => ({ name: a.name, value: a.balance }));
   const periodLabel = PERIODS.find((p) => p[0] === period)[1].toLowerCase();
   const ny = data.needsYou || {};
   const hasSeries = (cf?.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
 
-  // The briefing: one or two short readings of the period, hardest-hitting
-  // first. A figure says how much; only a sentence says whether that is good.
+  // The briefing lives inside the hero now: two or three short readings of
+  // the period, hardest-hitting first.
   const briefing = [];
   if (flow.moneyIn === 0 && flow.moneyOut === 0) {
     briefing.push('Nothing has moved ' + (period === 'all' ? 'yet' : periodLabel) + '. The figures below are the whole story.');
   } else {
-    briefing.push(`${formatCurrency(flow.moneyIn)} came in and ${formatCurrency(flow.moneyOut)} went out ${periodLabel} — the business ${flow.net >= 0 ? 'kept' : 'gave back'} ${formatCurrency(Math.abs(flow.net))} in cash.`);
-    if (data.netProfit < 0) {
-      briefing.push(`After goods, commissions and expenses this period is ${formatCurrency(Math.abs(data.netProfit))} in the red.`);
-    } else if (data.netProfit > 0) {
-      briefing.push(`After goods, commissions and expenses, ${formatCurrency(data.netProfit)} is real profit.`);
+    briefing.push(`${formatCurrency(flow.moneyIn)} came in and ${formatCurrency(flow.moneyOut)} went out ${periodLabel}.`);
+    if (data.netProfit !== 0) {
+      briefing.push(data.netProfit >= 0
+        ? `After goods, commissions and expenses, ${formatCurrency(data.netProfit)} is real profit.`
+        : `After goods, commissions and expenses, the period is ${formatCurrency(Math.abs(data.netProfit))} in the red.`);
     }
-    if (ny.supplierOutstanding > 0) {
-      briefing.push(`Suppliers are still owed ${formatCurrency(ny.supplierOutstanding)} — they are financing your stock.`);
-    }
+    if (ny.supplierOutstanding > 0) briefing.push(`Suppliers are still owed ${formatCurrency(ny.supplierOutstanding)}.`);
   }
 
-  // What is actually waiting for the owner. Empty means genuinely nothing.
   const attention = [
     ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
     ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
@@ -340,8 +338,6 @@ function Overview({ onNavigate }) {
     ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
   ].filter(Boolean);
 
-  // The finance desk: every department, its job in one line, and its live
-  // number — so the tabs stop being labels and become places.
   const desks = [
     { tab: 'profit', title: 'Profit', line: 'What you make — per brand, and box by box', value: formatCurrency(data.netProfit), tone: data.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300' },
     { tab: 'cashflow', title: 'Cash Flow', line: 'Opening to closing, and what moved it', value: formatCurrency(data.cashPosition), tone: 'text-brand-300' },
@@ -352,7 +348,7 @@ function Overview({ onNavigate }) {
   ];
 
   return (
-    <div className="space-y-7">
+    <div className="space-y-6">
       <div className="flex flex-wrap gap-1.5">
         {PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
@@ -360,19 +356,41 @@ function Overview({ onNavigate }) {
         ))}
       </div>
 
-      {/* ── The briefing ── */}
-      <div className="space-y-3">
-        <SectionHead label="The briefing" sub="Short readings of the period, hardest-hitting first." />
-        <div className="rounded-2xl border border-white/[0.08] bg-surface px-5 py-4">
-          {briefing.map((b, i) => (
-            <p key={i} className={`text-sm leading-relaxed ${i === 0 ? 'text-foreground' : 'mt-1 text-muted'}`}>{b}</p>
-          ))}
+      {/* ── Hero: the one number the business runs on, with the briefing
+             beside it — the same gradient identity as the Dashboard hero. ── */}
+      <div className="relative overflow-hidden rounded-3xl p-6 sm:p-7"
+        style={{ background: 'linear-gradient(115deg, #1a2e05 0%, #064e3b 42%, #0e3a4a 100%)' }}>
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-400/10 blur-3xl" aria-hidden="true" />
+        <div className="relative grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-300">Cash in hand</p>
+            <p className="mt-2 text-4xl font-bold leading-none tabular-nums text-white">{formatCurrency(data.cashPosition)}</p>
+            <p className="mt-2 text-xs text-white/60">across all accounts, right now</p>
+            <span className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${data.netProfit >= 0 ? 'bg-emerald-400/15 text-emerald-300' : 'bg-rose-400/15 text-rose-300'}`}>
+              {data.netProfit >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+              {formatCurrency(data.netProfit)} real profit · {periodLabel}
+            </span>
+          </div>
+          <div className="border-white/10 lg:border-l lg:pl-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">The briefing</p>
+            <div className="mt-2 space-y-1.5">
+              {briefing.map((b, i) => (
+                <p key={i} className={`text-sm leading-relaxed ${i === 0 ? 'text-white' : 'text-white/70'}`}>{b}</p>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* ── The business, by brand — the first thing after the briefing.
-             This IS the overview of the business: what each brand puts in
-             the owner's pocket, side by side. ── */}
+      {/* ── One joined strip: the flow of the period ── */}
+      <SegmentStrip segments={[
+        { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `collected ${periodLabel}`, tone: 'emerald' },
+        { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `paid ${periodLabel}`, tone: 'rose' },
+        { label: 'Net cash flow', value: formatCurrency(flow.net), sub: flow.net >= 0 ? 'more came in than left' : 'more left than came in', tone: flow.net >= 0 ? 'sky' : 'amber' },
+        { label: 'Owed to suppliers', value: formatCurrency(ny.supplierOutstanding || 0), sub: ny.supplierOutstanding > 0 ? 'they are financing your stock' : 'all settled', tone: ny.supplierOutstanding > 0 ? 'amber' : 'slate' },
+      ]} />
+
+      {/* ── The business, by brand ── */}
       {(data.brandFinance || []).length > 0 && (
         <div className="space-y-3">
           <SectionHead label="The business, by brand" sub="What each brand puts in your pocket — never mixed." />
@@ -409,15 +427,17 @@ function Overview({ onNavigate }) {
                         <p className="mt-1 text-sm font-bold tabular-nums text-brand-300">{b.margin}%</p>
                       </div>
                     </div>
-                    {/* This brand's share of the profit both brands made. */}
                     <div className="mt-4 flex items-center gap-3">
                       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
                         <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${Math.max(2, share)}%` }} />
                       </div>
                       <span className="text-[11px] tabular-nums text-faint">{Math.round(share)}% of profit</span>
                     </div>
+                    {/* No "net cash" here any more: that figure was the brand's
+                        tagged money-flow, which read as cash the brand HOLDS —
+                        and it does not. Cash lives in accounts, shown below. */}
                     <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] text-faint">
-                      Inventory {formatCurrency(b.inventoryValue)} ({formatNumber(b.inventoryUnits)} boxes) · net cash {formatCurrency(b.netCash)}
+                      Inventory {formatCurrency(b.inventoryValue)} ({formatNumber(b.inventoryUnits)} boxes)
                     </p>
                   </div>
                 </div>
@@ -427,15 +447,35 @@ function Overview({ onNavigate }) {
         </div>
       )}
 
-      {/* ── The money right now ── */}
-      <div className="space-y-3">
-        <SectionHead label="The money, right now" sub="Where cash stands and how it moved." />
-        <SegmentStrip segments={[
-          { label: 'Cash position', value: formatCurrency(data.cashPosition), sub: 'across all accounts', tone: 'brand' },
-          { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `collected ${periodLabel}`, tone: 'emerald' },
-          { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `paid ${periodLabel}`, tone: 'rose' },
-          { label: 'Net cash flow', value: formatCurrency(flow.net), sub: flow.net >= 0 ? 'more came in than left' : 'more left than came in', tone: flow.net >= 0 ? 'sky' : 'amber' },
-        ]} />
+      {/* ── Charts row: motion + where the cash sits ── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader title="The money, in motion" subtitle="Money in and out, month by month — the last six" />
+          <div className="px-2 pb-3">
+            {hasSeries ? (
+              <TrendChart
+                data={cf.series}
+                series={[
+                  { key: 'moneyIn', name: 'Money in', color: '#34d399' },
+                  { key: 'moneyOut', name: 'Money out', color: '#fb7185' },
+                ]}
+                height={230}
+              />
+            ) : (
+              <div className="flex h-[170px] items-center justify-center text-sm text-faint">The trend fills in as months of activity accumulate.</div>
+            )}
+          </div>
+        </Card>
+        <Card>
+          <CardHeader title="Where the cash sits" subtitle="Each account's share" />
+          <CardBody>
+            {accountsDonut.length ? (
+              <DonutChart data={accountsDonut} height={230} />
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-sm text-faint">No account holds money right now.</div>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
       {/* ── Needs you ── */}
@@ -476,24 +516,41 @@ function Overview({ onNavigate }) {
         </Card>
       </div>
 
-      {/* ── Motion ── */}
-      <div className="space-y-3">
-        <SectionHead label="The money, in motion" sub="Money in and out, month by month — the last six." />
+      {/* ── Products table + expense donut ── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader title="The products carrying the business" subtitle={`Best first, by what you keep · ${periodLabel}`} />
+          {!(data.topProducts || []).length ? (
+            <CardBody><div className="py-6 text-center text-sm text-faint">No sales in this period.</div></CardBody>
+          ) : (
+            <Table>
+              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>You keep</TH><TH>Margin</TH></TR></THead>
+              <TBody>
+                {data.topProducts.map((p) => (
+                  <TR key={p.productId} className="cursor-pointer" onClick={() => onNavigate?.('profit')}>
+                    <TD className="font-medium text-foreground">
+                      {p.name}
+                      {p.brandName && <span className="ml-1.5 text-[11px] text-faint">{p.brandName}</span>}
+                    </TD>
+                    <TD>{formatNumber(p.boxes)}</TD>
+                    <TD>{formatCurrency(p.revenue)}</TD>
+                    <TD className={`font-semibold ${p.contribution >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(p.contribution)}</TD>
+                    <TD>{p.contributionMargin}%</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+          )}
+        </Card>
         <Card>
-          <div className="px-2 pb-3 pt-3">
-            {hasSeries ? (
-              <TrendChart
-                data={cf.series}
-                series={[
-                  { key: 'moneyIn', name: 'Money in', color: '#34d399' },
-                  { key: 'moneyOut', name: 'Money out', color: '#fb7185' },
-                ]}
-                height={210}
-              />
+          <CardHeader title="Where money goes" subtitle={`Expenses by category · ${periodLabel}`} />
+          <CardBody>
+            {donut.length === 0 ? (
+              <div className="flex h-[200px] items-center justify-center text-sm text-faint">No expenses in this period</div>
             ) : (
-              <div className="flex h-[150px] items-center justify-center text-sm text-faint">The trend fills in as months of activity accumulate.</div>
+              <DonutChart data={donut} height={230} />
             )}
-          </div>
+          </CardBody>
         </Card>
       </div>
 
@@ -512,38 +569,6 @@ function Overview({ onNavigate }) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* ── Accounts + expenses ── */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Accounts" subtitle="Where the money is" />
-          <CardBody className="space-y-2">
-            {data.accounts.map((a) => {
-              const Icon = ACCOUNT_ICON[a.type] || Wallet;
-              return (
-                <div key={a.id} className="flex items-center gap-3 rounded-xl border border-border bg-elevated p-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-500/10 text-brand-400"><Icon className="h-4 w-4" /></span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold text-foreground">{a.name}{a.isDefault && <span className="ml-1.5 text-[10px] text-faint">· default</span>}</div>
-                    <div className="truncate text-xs text-faint">{a.notes || `In ${formatCurrency(a.moneyIn)} · Out ${formatCurrency(a.moneyOut)}`}</div>
-                  </div>
-                  <div className={`text-sm font-bold tabular-nums ${a.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(a.balance)}</div>
-                </div>
-              );
-            })}
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="Expense breakdown" subtitle={`Where money went · ${periodLabel}`} />
-          <CardBody>
-            {donut.length === 0 ? (
-              <div className="flex h-[220px] items-center justify-center text-sm text-faint">No expenses in this period</div>
-            ) : (
-              <DonutChart data={donut} height={240} />
-            )}
-          </CardBody>
-        </Card>
       </div>
     </div>
   );

@@ -1028,6 +1028,17 @@ async function overview(period = 'month') {
     netProfit,
     expenseBreakdown,
     byBrand: prof.byBrand,
+    // The five products that matter most this period, for the front page —
+    // name, boxes, and what each one left in the owner's pocket.
+    topProducts: (prof.byProduct || []).slice(0, 5).map((x) => ({
+      productId: x.productId,
+      name: x.name,
+      brandName: x.brandName,
+      boxes: x.boxes,
+      revenue: x.revenue,
+      contribution: x.contribution,
+      contributionMargin: x.contributionMargin,
+    })),
     // What the business actually owes reps right now: withdrawable balances
     // plus requests in flight. The old figure (earned − paid) included fines
     // the reps will never receive.
