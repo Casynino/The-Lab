@@ -984,11 +984,30 @@ async function overview(period = 'month') {
     };
   });
 
+  // What is waiting for the owner, so the Overview can lead with it — the
+  // Target-style "needs you" strip: nothing here means genuinely nothing.
+  const [poAgg, poPayAgg, wdAgg, pendingApprovals] = await Promise.all([
+    prisma.purchaseOrder.aggregate({ where: { status: { not: 'CANCELLED' } }, _sum: { totalCost: true } }),
+    prisma.financeTransaction.aggregate({
+      where: { direction: 'OUT', refType: { in: ['PurchaseOrder', 'Supplier'] } },
+      _sum: { amount: true },
+    }),
+    prisma.commissionWithdrawal.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
+    prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
+  ]);
+  const needsYou = {
+    supplierOutstanding: round2(Math.max(0, toNumber(poAgg._sum.totalCost) - toNumber(poPayAgg._sum.amount))),
+    pendingWithdrawals: { count: wdAgg._count, amount: round2(toNumber(wdAgg._sum.amount)) },
+    pendingApprovals,
+    negativeAccounts: accounts.filter((a) => a.balance < 0).map((a) => a.name),
+  };
+
   return {
     period,
     cashPosition,
     accounts,
     flow,
+    needsYou,
     brandFinance,
     revenue: prof.totals.revenue,
     cogs: prof.totals.cost,

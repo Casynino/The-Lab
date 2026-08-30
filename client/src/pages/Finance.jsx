@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   Wallet, TrendingUp, TrendingDown, Banknote, Landmark, Smartphone, Coins,
   Plus, Trash2, Pencil, ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Boxes, Receipt, PiggyBank,
-  Factory, Package, Scale, FileBarChart, ChevronRight,
+  Factory, Package, Scale, FileBarChart, ChevronRight, ShieldCheck, AlertTriangle,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts } from '@/lib/hooks';
@@ -256,56 +256,164 @@ function MoneyModal({ mode, accounts, categories, onClose }) {
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
-function Overview() {
+// Uppercase micro-header with a plain-English subtitle — the section rhythm
+// the owner pointed at in the Target admin.
+function SectionHead({ label, sub }) {
+  return (
+    <div className="border-l-2 border-brand-500/70 pl-3">
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-300">{label}</h2>
+      {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
+    </div>
+  );
+}
+
+function Overview({ onNavigate }) {
   const [period, setPeriod] = usePeriod();
   const { data, isLoading } = useQuery({
     queryKey: ['finance', 'overview', period],
     queryFn: async () => unwrap(await api.get('/finance/overview', { params: { period } })).data,
     refetchInterval: 60_000,
   });
+  const { data: cf } = useQuery({
+    queryKey: ['finance', 'cashflow', 'all'],
+    queryFn: async () => unwrap(await api.get('/finance/cashflow', { params: { period: 'all' } })).data,
+  });
   if (isLoading || !data) return <PageSpinner />;
   const flow = data.flow?.[period] || data.flow?.month || { moneyIn: 0, moneyOut: 0, net: 0 };
   const donut = data.expenseBreakdown.map((e) => ({ name: e.category, value: e.amount }));
-  const brand = (data.byBrand || []).map((b) => ({ name: b.name, value: b.profit }));
+  const periodLabel = PERIODS.find((p) => p[0] === period)[1].toLowerCase();
+  const ny = data.needsYou || {};
+  const hasSeries = (cf?.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
+
+  // The briefing: one or two short readings of the period, hardest-hitting
+  // first. A figure says how much; only a sentence says whether that is good.
+  const briefing = [];
+  if (flow.moneyIn === 0 && flow.moneyOut === 0) {
+    briefing.push('Nothing has moved ' + (period === 'all' ? 'yet' : periodLabel) + '. The figures below are the whole story.');
+  } else {
+    briefing.push(`${formatCurrency(flow.moneyIn)} came in and ${formatCurrency(flow.moneyOut)} went out ${periodLabel} — the business ${flow.net >= 0 ? 'kept' : 'gave back'} ${formatCurrency(Math.abs(flow.net))} in cash.`);
+    if (data.netProfit < 0) {
+      briefing.push(`After goods, commissions and expenses this period is ${formatCurrency(Math.abs(data.netProfit))} in the red.`);
+    } else if (data.netProfit > 0) {
+      briefing.push(`After goods, commissions and expenses, ${formatCurrency(data.netProfit)} is real profit.`);
+    }
+    if (ny.supplierOutstanding > 0) {
+      briefing.push(`Suppliers are still owed ${formatCurrency(ny.supplierOutstanding)} — they are financing your stock.`);
+    }
+  }
+
+  // What is actually waiting for the owner. Empty means genuinely nothing.
+  const attention = [
+    ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
+    ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
+    ny.supplierOutstanding > 0 && { icon: Factory, tone: 'text-rose-300 bg-rose-500/15', text: `Suppliers are owed ${formatCurrency(ny.supplierOutstanding)}`, tab: 'suppliers' },
+    ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
+  ].filter(Boolean);
+
+  // The finance desk: every department, its job in one line, and its live
+  // number — so the tabs stop being labels and become places.
+  const desks = [
+    { tab: 'profit', title: 'Profit', line: 'What you make — per brand, and box by box', value: formatCurrency(data.netProfit), tone: data.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300' },
+    { tab: 'cashflow', title: 'Cash Flow', line: 'Opening to closing, and what moved it', value: formatCurrency(data.cashPosition), tone: 'text-brand-300' },
+    { tab: 'suppliers', title: 'Suppliers', line: 'Who you buy from and what you owe them', value: formatCurrency(ny.supplierOutstanding || 0), tone: ny.supplierOutstanding > 0 ? 'text-rose-300' : 'text-faint' },
+    { tab: 'expenses', title: 'Expenses', line: 'What the business spends, by category', value: formatCurrency(data.expenses), tone: 'text-foreground' },
+    { tab: 'commissions', title: 'Commissions', line: 'What the reps have earned and can withdraw', value: formatCurrency(data.outstandingCommission), tone: data.outstandingCommission > 0 ? 'text-amber-300' : 'text-faint' },
+    { tab: 'ledger', title: 'The Ledger', line: 'Every shilling in and out, in one register', value: null, tone: '' },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <div className="flex flex-wrap gap-1.5">
         {PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
+            className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
 
-      {/* Hero: cash position + flow */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <TintCard label="Cash position" value={formatCurrency(data.cashPosition)} icon={PiggyBank} tone="brand" sub="across all accounts" />
-        <TintCard label="Money in" value={formatCurrency(flow.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub={PERIODS.find((p) => p[0] === period)[1].toLowerCase()} />
-        <TintCard label="Money out" value={formatCurrency(flow.moneyOut)} icon={ArrowUpRight} tone="rose" sub={PERIODS.find((p) => p[0] === period)[1].toLowerCase()} />
-        <TintCard label="Net cash flow" value={formatCurrency(flow.net)} icon={flow.net >= 0 ? TrendingUp : TrendingDown} tone={flow.net >= 0 ? 'emerald' : 'rose'} sub={flow.net >= 0 ? 'more came in than left' : 'more left than came in'} />
+      {/* ── The briefing ── */}
+      <div className="space-y-3">
+        <SectionHead label="The briefing" sub="Short readings of the period, hardest-hitting first." />
+        <div className="rounded-2xl border border-white/[0.08] bg-surface px-5 py-4">
+          {briefing.map((b, i) => (
+            <p key={i} className={`text-sm leading-relaxed ${i === 0 ? 'text-foreground' : 'mt-1 text-muted'}`}>{b}</p>
+          ))}
+        </div>
       </div>
 
-      {/* Profit waterfall */}
-      <Card>
-        <CardHeader title="Real business profit" subtitle={`Revenue − goods − rep commission − expenses · ${PERIODS.find((p) => p[0] === period)[1].toLowerCase()}`} />
-        <CardBody>
-          {/* Commission was missing from every net-profit line the owner could
-              see — his largest selling cost, silently excluded. */}
-          <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
-            <Money label="Revenue" value={data.revenue} tone="emerald" />
-            <Money label="− COGS" value={data.cogs} tone="slate" />
-            <Money label="= Gross profit" value={data.grossProfit} tone="brand" />
-            <Money label="− Commission" value={data.commissionAccrued ?? 0} tone="amber" />
-            <Money label="− Expenses" value={data.expenses} tone="rose" />
-            <Money label="= Net profit" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
-          </div>
-        </CardBody>
-      </Card>
+      {/* ── The money right now ── */}
+      <div className="space-y-3">
+        <SectionHead label="The money, right now" sub="Where cash stands and how it moved." />
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <TintCard label="Cash position" value={formatCurrency(data.cashPosition)} icon={PiggyBank} tone="brand" sub="across all accounts" />
+          <TintCard label="Money in" value={formatCurrency(flow.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub={periodLabel} />
+          <TintCard label="Money out" value={formatCurrency(flow.moneyOut)} icon={ArrowUpRight} tone="rose" sub={periodLabel} />
+          <TintCard label="Net cash flow" value={formatCurrency(flow.net)} icon={flow.net >= 0 ? TrendingUp : TrendingDown} tone={flow.net >= 0 ? 'emerald' : 'rose'} sub={flow.net >= 0 ? 'more came in than left' : 'more left than came in'} />
+        </div>
+      </div>
 
-      {/* Brand finances — never mixed, always separated (scales to any brand) */}
+      {/* ── Needs you ── */}
+      <div className="space-y-3">
+        <SectionHead label="Needs you" sub="Only what is actually waiting for a decision." />
+        {attention.length === 0 ? (
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] px-5 py-4 text-sm text-muted">
+            Nothing is waiting. Every settlement is decided, no withdrawal is pending, and no account is below zero.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-surface">
+            {attention.map((a, i) => (
+              <button key={i} type="button" onClick={() => onNavigate?.(a.tab)}
+                className="flex w-full cursor-pointer items-center gap-3 border-b border-white/[0.05] px-5 py-3 text-left transition duration-200 last:border-0 hover:bg-white/[0.04]">
+                <span className={`rounded-lg p-1.5 ${a.tone}`}><a.icon className="h-3.5 w-3.5" /></span>
+                <span className="flex-1 text-sm text-foreground">{a.text}</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Real profit ── */}
+      <div className="space-y-3">
+        <SectionHead label="Real business profit" sub={`Revenue − goods − rep commission − expenses · ${periodLabel}`} />
+        <Card>
+          <CardBody>
+            <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
+              <Money label="Revenue" value={data.revenue} tone="emerald" />
+              <Money label="− COGS" value={data.cogs} tone="slate" />
+              <Money label="= Gross profit" value={data.grossProfit} tone="brand" />
+              <Money label="− Commission" value={data.commissionAccrued ?? 0} tone="amber" />
+              <Money label="− Expenses" value={data.expenses} tone="rose" />
+              <Money label="= Net profit" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* ── Motion ── */}
+      <div className="space-y-3">
+        <SectionHead label="The money, in motion" sub="Money in and out, month by month — the last six." />
+        <Card>
+          <div className="px-2 pb-3 pt-3">
+            {hasSeries ? (
+              <TrendChart
+                data={cf.series}
+                series={[
+                  { key: 'moneyIn', name: 'Money in', color: '#34d399' },
+                  { key: 'moneyOut', name: 'Money out', color: '#fb7185' },
+                ]}
+                height={210}
+              />
+            ) : (
+              <div className="flex h-[150px] items-center justify-center text-sm text-faint">The trend fills in as months of activity accumulate.</div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Brands ── */}
       {(data.brandFinance || []).length > 0 && (
-        <div>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Brand finances</h2>
+        <div className="space-y-3">
+          <SectionHead label="Brand finances" sub="Never mixed, always separated — each brand's own books." />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {data.brandFinance.map((b) => (
               <Card key={b.brandId}>
@@ -322,9 +430,8 @@ function Overview() {
                     <Money label="− Expenses" value={b.expenses} tone="rose" />
                     <Money label="Net profit" value={b.netProfit} tone={b.netProfit >= 0 ? 'emerald' : 'rose'} big />
                   </div>
-                  <div className="mt-2 text-xs text-faint">Net cash {formatCurrency(b.netCash)}</div>
                   <div className="mt-2 flex flex-wrap justify-between gap-2 border-t border-border pt-2 text-xs text-faint">
-                    <span>Money in {formatCurrency(b.moneyIn)} · out {formatCurrency(b.moneyOut)}</span>
+                    <span>Net cash {formatCurrency(b.netCash)}</span>
                     <span>Inventory {formatCurrency(b.inventoryValue)} ({formatNumber(b.inventoryUnits)} boxes)</span>
                   </div>
                 </CardBody>
@@ -334,7 +441,24 @@ function Overview() {
         </div>
       )}
 
-      {/* Accounts + expense breakdown */}
+      {/* ── The desk ── */}
+      <div className="space-y-3">
+        <SectionHead label="The finance desk" sub="Every department, its job, and its number." />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {desks.map((d) => (
+            <button key={d.tab} type="button" onClick={() => onNavigate?.(d.tab)}
+              className="cursor-pointer rounded-2xl border border-white/[0.08] bg-surface p-4 text-left transition duration-200 hover:border-white/20 hover:bg-white/[0.03]">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-foreground">{d.title}</span>
+                {d.value != null && <span className={`text-sm font-bold tabular-nums ${d.tone}`}>{d.value}</span>}
+              </div>
+              <p className="mt-1 text-xs text-muted">{d.line}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Accounts + expenses ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader title="Accounts" subtitle="Where the money is" />
@@ -348,34 +472,23 @@ function Overview() {
                     <div className="text-sm font-semibold text-foreground">{a.name}{a.isDefault && <span className="ml-1.5 text-[10px] text-faint">· default</span>}</div>
                     <div className="truncate text-xs text-faint">{a.notes || `In ${formatCurrency(a.moneyIn)} · Out ${formatCurrency(a.moneyOut)}`}</div>
                   </div>
-                  <div className={`text-right font-bold tabular-nums ${a.balance < 0 ? 'text-rose-500' : 'text-foreground'}`}>{formatCurrency(a.balance)}</div>
+                  <div className={`text-sm font-bold tabular-nums ${a.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(a.balance)}</div>
                 </div>
               );
             })}
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Expense breakdown" subtitle={`Where money went · ${PERIODS.find((p) => p[0] === period)[1].toLowerCase()}`} />
+          <CardHeader title="Expense breakdown" subtitle={`Where money went · ${periodLabel}`} />
           <CardBody>
-            {donut.length ? <DonutChart data={donut} /> : <EmptyState title="No expenses in this period" icon={Receipt} />}
+            {donut.length === 0 ? (
+              <div className="flex h-[220px] items-center justify-center text-sm text-faint">No expenses in this period</div>
+            ) : (
+              <DonutChart data={donut} height={240} />
+            )}
           </CardBody>
         </Card>
       </div>
-
-      {/* Inventory value + commission + profit by brand */}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Inventory (cost)" value={formatCurrency(data.inventoryValue.cost)} icon={Boxes} tone="slate" hint={`${formatNumber(data.inventoryValue.units)} boxes`} />
-        <StatCard label="Inventory (selling)" value={formatCurrency(data.inventoryValue.selling)} icon={Boxes} tone="emerald" />
-        <StatCard label="Potential profit" value={formatCurrency(data.inventoryValue.potential)} icon={TrendingUp} tone="brand" hint="locked in stock" />
-        <StatCard label="Outstanding commission" value={formatCurrency(data.outstandingCommission)} icon={Coins} tone="amber" hint="withdrawable + requests in flight" />
-      </div>
-
-      {brand.length > 0 && (
-        <Card>
-          <CardHeader title="Profit by brand" subtitle="Gross profit this month" />
-          <CardBody>{<BarChartCard data={brand} color="#84cc16" height={200} />}</CardBody>
-        </Card>
-      )}
     </div>
   );
 }
@@ -1389,14 +1502,16 @@ export default function Finance() {
         </div>
       </PageHeader>
 
-      <div className="mb-6 flex flex-wrap gap-1.5">
+      <div className="mb-6 flex flex-wrap gap-2">
         {TABS.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${tab === k ? 'bg-elevated text-foreground shadow-sm' : 'text-muted hover:bg-elevated/60'}`}>{label}</button>
+            className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k
+              ? 'bg-brand-500 text-slate-950 ring-brand-500'
+              : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>
 
-      {tab === 'overview' && <Overview />}
+      {tab === 'overview' && <Overview onNavigate={setTab} />}
       {tab === 'profit' && <ProfitTab />}
       {tab === 'cashflow' && <CashFlowTab />}
       {tab === 'suppliers' && <SuppliersTab accounts={accounts} />}
