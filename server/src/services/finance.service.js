@@ -1301,6 +1301,7 @@ async function overview(period = 'month') {
     brandFinance,
     revenue: prof.totals.revenue,
     cogs: prof.totals.cost,
+    boxesSold: prof.totals.boxes,
     grossProfit,
     commissionAccrued,
     expenses,

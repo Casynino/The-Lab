@@ -753,11 +753,20 @@ function Overview({ onNavigate, onOwnerMoney }) {
                 stock is not a running cost — it becomes cost of goods when the
                 boxes sell, and it is already inside COGS above. Say so. */}
             {data.expenses === 0 && (
-              <p className="mt-3 text-xs leading-relaxed text-muted">
-                <b className="text-foreground">No running costs recorded yet.</b> Money spent on stock is not an expense — it becomes
-                cost of goods when the boxes sell, and it is already counted in COGS above. Rent, transport, airtime and the like
-                will show here once you record them with the <b className="text-foreground">Expense</b> button.
-              </p>
+              <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
+                <p className="text-xs font-semibold text-foreground">No running costs recorded yet — and buying stock is not one</p>
+                <p className="text-xs leading-relaxed text-muted">
+                  When you buy boxes you have not lost the money, you have turned it into stock on your shelf. The cost counts
+                  the day a box <b className="text-foreground">sells</b> — that is the {formatCurrency(data.cogs)} of COGS above,
+                  the cost of the {formatNumber(data.boxesSold ?? 0)} boxes sold. Counting it when you buy instead would show a
+                  huge loss in the month you stock up and a false profit in the month you sell.
+                </p>
+                <p className="text-xs leading-relaxed text-muted">
+                  Paying {data.cashSplit?.supplierLabel || 'your supplier'} is settling a debt, not a cost — the cost was already
+                  taken on when you received the goods. Running costs like rent, transport and airtime belong here; record them
+                  with the <b className="text-foreground">Expense</b> button and they will show.
+                </p>
+              </div>
             )}
           </CardBody>
         </Card>
