@@ -17,5 +17,6 @@ router.get('/:id', validate(idParam), ctrl.getPO);
 router.post('/', validate(poCreate), ctrl.createPO);
 router.put('/:id', validate({ ...idParam, ...poUpdate }), ctrl.updatePO);
 router.post('/:id/receive', validate({ ...idParam, ...poReceive }), ctrl.receivePO);
+router.delete('/:id', validate(idParam), ctrl.deletePO); // only before it lands
 
 module.exports = router;

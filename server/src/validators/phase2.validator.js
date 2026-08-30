@@ -55,6 +55,10 @@ const poUpdate = {
     shippingCost: money.optional(),
     clearingCost: money.optional(),
     otherCost: money.optional(),
+    // Lines can be corrected while the order has not landed — a quantity
+    // mistyped when placing the order should not require deleting it.
+    items: z.array(poItem).min(1).optional(),
+    supplierId: id.optional(),
   }),
 };
 const poReceive = { body: z.object({ actualArrival: dateStr, stockAlreadyCounted: z.boolean().optional() }) };

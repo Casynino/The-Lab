@@ -155,7 +155,7 @@ async function updatePurchaseOrder(id, payload) {
   }
 
   const data = {};
-  ['status', 'currency', 'notes', 'warehouseId'].forEach((f) => {
+  ['status', 'currency', 'notes', 'warehouseId', 'supplierId'].forEach((f) => {
     if (payload[f] !== undefined) data[f] = payload[f];
   });
   ['orderedAt', 'expectedArrival'].forEach((f) => {
@@ -170,7 +170,68 @@ async function updatePurchaseOrder(id, payload) {
     const other = data.otherCost ?? toNumber(po.otherCost);
     data.totalCost = round2(toNumber(po.goodsCost) + shipping + clearing + other);
   }
+  // Correcting the lines while the order has not landed: replace them
+  // wholesale and reprice, the same way the order was costed when created. A
+  // received order never reaches here — it is refused above, because its
+  // boxes are already on the shelf at a cost derived from these lines.
+  if (payload.items) {
+    return prisma.$transaction(async (tx) => {
+      const lines = [];
+      for (const i of payload.items) {
+        const { baseQuantity } = await inventory.convertToBase(tx, i.productId, i.packagingUnitId, i.quantity);
+        // Same shape createPurchaseOrder writes — there is no lineTotal column
+        // on a purchase line; the goods total is derived from unitCost x
+        // baseQuantity, exactly as it is on create.
+        lines.push({
+          productId: i.productId,
+          packagingUnitId: i.packagingUnitId,
+          quantity: i.quantity,
+          baseQuantity,
+          unitCost: round2(i.unitCost || 0),
+        });
+      }
+      const goodsCost = round2(lines.reduce((sum, l) => sum + l.unitCost * l.baseQuantity, 0));
+      const shipping = data.shippingCost ?? toNumber(po.shippingCost);
+      const clearing = data.clearingCost ?? toNumber(po.clearingCost);
+      const other = data.otherCost ?? toNumber(po.otherCost);
+      await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
+      return tx.purchaseOrder.update({
+        where: { id },
+        data: {
+          ...data,
+          goodsCost,
+          totalCost: round2(goodsCost + shipping + clearing + other),
+          items: { create: lines },
+        },
+        include: PO_INCLUDE,
+      });
+    });
+  }
+
   return prisma.purchaseOrder.update({ where: { id }, data, include: PO_INCLUDE });
+}
+
+// Delete a purchase order outright. Only ever safe before it lands: once
+// received its boxes are on the shelf and its cost is inside every profit
+// figure, so removing the order would strand the stock with no origin. Money
+// paid against it blocks deletion too — the payment would survive its reason.
+async function deletePurchaseOrder(id) {
+  const po = await prisma.purchaseOrder.findUnique({ where: { id } });
+  if (!po) throw ApiError.notFound('Purchase order not found');
+  if (po.status === 'RECEIVED') {
+    throw ApiError.badRequest('This order has already been received — its boxes are in the warehouse. Adjust the stock instead of deleting the order it came from.');
+  }
+  const paid = await prisma.financeTransaction.aggregate({
+    where: { refType: 'PurchaseOrder', refId: id, direction: 'OUT' },
+    _sum: { amount: true },
+  });
+  if (toNumber(paid._sum.amount) > 0) {
+    throw ApiError.badRequest(
+      `${formatCurrency(toNumber(paid._sum.amount))} has been paid against this order. Remove those payments in Finance first, or the money would outlive its reason.`,
+    );
+  }
+  await prisma.purchaseOrder.delete({ where: { id } });
+  return po;
 }
 
 // Receive a PO into the warehouse: allocate shipping/clearing/other across
@@ -251,6 +312,7 @@ module.exports = {
   listPurchaseOrders,
   getPurchaseOrder,
   updatePurchaseOrder,
+  deletePurchaseOrder,
   receivePurchaseOrder,
   PO_INCLUDE,
 };

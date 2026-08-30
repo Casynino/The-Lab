@@ -44,6 +44,17 @@ const listPOs = asyncHandler(async (req, res) => {
 
 const getPO = asyncHandler(async (req, res) => ok(res, await purchase.getPurchaseOrder(req.params.id)));
 
+const deletePO = asyncHandler(async (req, res) => {
+  const po = await purchase.deletePurchaseOrder(req.params.id);
+  await audit.record(req, {
+    action: 'DELETE',
+    entityType: 'PurchaseOrder',
+    entityId: req.params.id,
+    oldValues: { poNumber: po.poNumber, supplierId: po.supplierId, totalCost: po.totalCost, status: po.status },
+  });
+  return ok(res, { deleted: true, poNumber: po.poNumber });
+});
+
 const createPO = asyncHandler(async (req, res) => {
   const po = await purchase.createPurchaseOrder(req.body, req.user);
   await audit.record(req, { action: 'CREATE', entityType: 'PurchaseOrder', entityId: po.id, newValues: { poNumber: po.poNumber, totalCost: po.totalCost } });
@@ -62,4 +73,4 @@ const receivePO = asyncHandler(async (req, res) => {
   return ok(res, po);
 });
 
-module.exports = { listSuppliers, createSupplier, updateSupplier, removeSupplier, listPOs, getPO, createPO, updatePO, receivePO };
+module.exports = { listSuppliers, createSupplier, updateSupplier, removeSupplier, listPOs, getPO, deletePO, createPO, updatePO, receivePO };

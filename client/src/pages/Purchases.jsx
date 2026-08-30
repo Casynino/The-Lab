@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Ship, PackageCheck, X, Pencil } from 'lucide-react';
+import { Plus, Ship, PackageCheck, X, Pencil, Trash2 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
@@ -11,19 +11,33 @@ import {
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
-function POModal({ onClose }) {
+function POModal({ onClose, editing }) {
   const qc = useQueryClient();
   const { data: products = [] } = useProducts();
   const { data: warehouses = [] } = useWarehouses();
   const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers', 'opts'], queryFn: async () => unwrap(await api.get('/suppliers', { params: { limit: 200 } })).data });
 
-  const [supplierId, setSupplierId] = useState('');
-  const [rows, setRows] = useState([{ productId: '', packagingUnitId: '', quantity: 1, unitCost: 0 }]);
-  const [costs, setCosts] = useState({ shippingCost: 0, clearingCost: 0, otherCost: 0 });
-  const [expectedArrival, setExpectedArrival] = useState('');
-  const [orderedAt, setOrderedAt] = useState('');
-  const [warehouseId, setWarehouseId] = useState('');
-  const [notes, setNotes] = useState('');
+  const day = (d) => (d ? String(d).slice(0, 10) : '');
+  const [supplierId, setSupplierId] = useState(editing?.supplierId || '');
+  const [rows, setRows] = useState(
+    editing?.items?.length
+      ? editing.items.map((i) => ({
+          productId: i.productId,
+          packagingUnitId: i.packagingUnitId,
+          quantity: i.quantity,
+          unitCost: Number(i.unitCost) || 0,
+        }))
+      : [{ productId: '', packagingUnitId: '', quantity: 1, unitCost: 0 }],
+  );
+  const [costs, setCosts] = useState({
+    shippingCost: Number(editing?.shippingCost) || 0,
+    clearingCost: Number(editing?.clearingCost) || 0,
+    otherCost: Number(editing?.otherCost) || 0,
+  });
+  const [expectedArrival, setExpectedArrival] = useState(day(editing?.expectedArrival));
+  const [orderedAt, setOrderedAt] = useState(day(editing?.orderedAt));
+  const [warehouseId, setWarehouseId] = useState(editing?.warehouseId || '');
+  const [notes, setNotes] = useState(editing?.notes || '');
 
   const setRow = (i, p) => setRows(rows.map((r, idx) => (idx === i ? { ...r, ...p } : r)));
   const onProduct = (i, productId) => {
@@ -32,27 +46,35 @@ function POModal({ onClose }) {
     setRow(i, { productId, packagingUnitId: base?.packagingUnitId || '' });
   };
 
-  const create = useMutation({
-    mutationFn: () => api.post('/purchase-orders', {
-      supplierId,
-      items: rows.filter((r) => r.productId && r.quantity > 0).map((r) => ({ productId: r.productId, packagingUnitId: r.packagingUnitId, quantity: Number(r.quantity), unitCost: Number(r.unitCost) || 0 })),
-      shippingCost: Number(costs.shippingCost) || 0,
-      clearingCost: Number(costs.clearingCost) || 0,
-      otherCost: Number(costs.otherCost) || 0,
-      warehouseId: warehouseId || undefined,
-      orderedAt: orderedAt || undefined,
-      expectedArrival: expectedArrival || undefined,
-      notes: notes || undefined,
-    }),
-    onSuccess: () => { toast.success('Purchase order created'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); onClose(); },
+  const payload = () => ({
+    supplierId,
+    items: rows.filter((r) => r.productId && r.quantity > 0).map((r) => ({ productId: r.productId, packagingUnitId: r.packagingUnitId, quantity: Number(r.quantity), unitCost: Number(r.unitCost) || 0 })),
+    shippingCost: Number(costs.shippingCost) || 0,
+    clearingCost: Number(costs.clearingCost) || 0,
+    otherCost: Number(costs.otherCost) || 0,
+    warehouseId: warehouseId || undefined,
+    orderedAt: orderedAt || undefined,
+    expectedArrival: expectedArrival || undefined,
+    notes: notes || undefined,
+  });
+
+  const save = useMutation({
+    mutationFn: () => (editing
+      ? api.put(`/purchase-orders/${editing.id}`, payload())
+      : api.post('/purchase-orders', payload())),
+    onSuccess: () => {
+      toast.success(editing ? 'Purchase order updated' : 'Purchase order created');
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      onClose();
+    },
     onError: (e) => toast.error(apiError(e)),
   });
 
   const valid = supplierId && rows.some((r) => r.productId && r.quantity > 0);
 
   return (
-    <Modal open onClose={onClose} size="lg" title="New purchase order (import)"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={create.isPending} disabled={!valid} onClick={() => create.mutate()}>Create PO</Button></>}>
+    <Modal open onClose={onClose} size="lg" title={editing ? `Edit ${editing.poNumber}` : 'New purchase order (import)'}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>{editing ? 'Save changes' : 'Create PO'}</Button></>}>
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Supplier" required>
@@ -130,6 +152,16 @@ function PurchaseOrders() {
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({ queryKey: ['purchase-orders', { page }], queryFn: async () => unwrap(await api.get('/purchase-orders', { params: { page, limit: 15 } })) });
+  const [editing, setEditing] = useState(null);
+  const del = useMutation({
+    mutationFn: (id) => api.delete(`/purchase-orders/${id}`),
+    onSuccess: (r) => {
+      toast.success(`${r.data?.data?.poNumber || 'Order'} deleted`);
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
   const receive = useMutation({
     mutationFn: (id) => api.post(`/purchase-orders/${id}/receive`, {}),
     onSuccess: () => { toast.success('Received into warehouse'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
@@ -205,9 +237,38 @@ function PurchaseOrders() {
                   <TD>{formatCurrency(po.totalCost)}</TD>
                   <TD className="text-faint">{formatDate(po.expectedArrival)}</TD>
                   <TD><Badge className={PO_STATUS_META[po.status]?.cls}>{PO_STATUS_META[po.status]?.label}</Badge></TD>
-                  <TD>{po.status !== 'RECEIVED' && po.status !== 'CANCELLED' && (
-                    <Button variant="secondary" className="px-3 py-1 text-xs" onClick={() => { if (confirm(`Receive ${po.poNumber} into the warehouse?`)) receive.mutate(po.id); }}><PackageCheck className="h-4 w-4" /> Receive</Button>
-                  )}</TD>
+                  {/* Edit and delete are offered only before the order lands.
+                      Once received its boxes are on the shelf at a cost taken
+                      from these lines, so changing or removing it would leave
+                      stock with no origin — the server refuses it too. */}
+                  <TD>
+                    <div className="flex items-center justify-end gap-2">
+                      {po.status !== 'RECEIVED' && po.status !== 'CANCELLED' && (
+                        <>
+                          <button
+                            title="Edit this order"
+                            onClick={() => setEditing(po)}
+                            className="cursor-pointer text-faint transition hover:text-brand-400"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            title="Delete this order"
+                            onClick={() => {
+                              if (confirm(`Delete ${po.poNumber}? The stock has not arrived, so nothing leaves your warehouse.`)) del.mutate(po.id);
+                            }}
+                            className="cursor-pointer text-faint transition hover:text-rose-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                          <Button variant="secondary" className="px-3 py-1 text-xs" onClick={() => { if (confirm(`Receive ${po.poNumber} into the warehouse?`)) receive.mutate(po.id); }}><PackageCheck className="h-4 w-4" /> Receive</Button>
+                        </>
+                      )}
+                      {po.status === 'RECEIVED' && (
+                        <span className="text-[11px] text-faint">on the shelf</span>
+                      )}
+                    </div>
+                  </TD>
                 </TR>
               ))}
             </TBody>
@@ -216,6 +277,7 @@ function PurchaseOrders() {
         </>
       )}
       {open && <POModal onClose={() => setOpen(false)} />}
+      {editing && <POModal editing={editing} onClose={() => setEditing(null)} />}
     </Card>
     </div>
   );
