@@ -1173,14 +1173,22 @@ async function overview(period = 'month') {
       cash: row.cash,
       moneyIn: row.moneyIn,
       moneyOut: row.moneyOut,
-      // Is the cash on hand cost or profit? The cost of the boxes sold is
-      // covered first, out of everything already spent putting stock back.
-      // Once that is met — and for both brands it is, several times over —
-      // whatever is left in the wallet is profit, not money owed to anyone.
+      // Is the cash on hand cost or profit? Split it the same way the SALES
+      // split. Money in a wallet has no label on it: every shilling that came
+      // in was partly the cost of a box and partly profit, in a fixed ratio,
+      // so the money still sitting there carries that same ratio. Saying "the
+      // cost is covered, so all of it is profit" was technically defensible
+      // and useless — it told the owner he holds pure profit when what he
+      // holds is simply what has not been spent yet.
       spentOnStock: stockSpend,
       costStillToCover,
-      costPart,
-      profitPart: round2(row.cash - costPart),
+      // The share of every shilling sold that was the cost of the boxes.
+      costShare: p.revenue > 0 ? round2((costOfSold / p.revenue) * 100) : 0,
+      profitShare: p.revenue > 0 ? round2(((p.revenue - costOfSold) / p.revenue) * 100) : 0,
+      costPart: p.revenue > 0 ? round2(row.cash * (costOfSold / p.revenue)) : 0,
+      profitPart: p.revenue > 0
+        ? round2(row.cash - round2(row.cash * (costOfSold / p.revenue)))
+        : row.cash,
       // Profit that has already gone back into stock rather than sitting here.
       profitReinvested: round2(Math.max(0, stockSpend - costOfSold)),
       // What the brand's sales were made of, so "where is the cost and where

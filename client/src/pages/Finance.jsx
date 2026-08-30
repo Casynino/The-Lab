@@ -528,25 +528,42 @@ function Overview({ onNavigate, onOwnerMoney }) {
                             money he is holding, which part is cost and which
                             is profit. Cost is covered first out of everything
                             already spent putting stock back. */}
+                        {/* The owner's question: of the money he is HOLDING,
+                            which part is cost and which is profit. Split by
+                            the same ratio as the sales that produced it —
+                            every shilling that came in was part cost, part
+                            profit, so what is still sitting there carries the
+                            same mix. */}
                         <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
                           <p className="text-xs font-semibold text-foreground">Of the {formatCurrency(b.cash)} you are holding</p>
-                          <div className="mt-2.5 space-y-2">
+
+                          <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                            <div className="h-full bg-rose-500" style={{ width: `${b.costShare}%` }} />
+                            <div className="h-full bg-emerald-500" style={{ width: `${b.profitShare}%` }} />
+                          </div>
+
+                          <div className="mt-3 space-y-2">
                             <div className="flex items-baseline justify-between gap-3">
-                              <span className="text-xs text-muted">To put stock back</span>
-                              <span className="text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.costPart)}</span>
+                              <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                                <span className="h-2 w-2 rounded-full bg-rose-400" /> Cost of the goods — to buy stock again
+                              </span>
+                              <span className="text-sm font-bold tabular-nums text-rose-400">
+                                {formatCurrency(b.costPart)} <span className="text-[11px] font-normal text-faint">({Math.round(b.costShare)}%)</span>
+                              </span>
                             </div>
                             <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.06] pt-2">
-                              <span className="text-xs font-semibold text-foreground">Your profit</span>
-                              <span className="text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.profitPart)}</span>
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                                <span className="h-2 w-2 rounded-full bg-emerald-400" /> Your profit
+                              </span>
+                              <span className="text-sm font-bold tabular-nums text-emerald-400">
+                                {formatCurrency(b.profitPart)} <span className="text-[11px] font-normal text-faint">({Math.round(b.profitShare)}%)</span>
+                              </span>
                             </div>
                           </div>
-                          <p className="mt-2.5 text-[11px] leading-relaxed text-faint">
-                            {b.costStillToCover > 0 ? (
-                              <>The boxes you sold cost {formatCurrency(b.costOfSold)} and you have put {formatCurrency(b.spentOnStock)} back into stock, so {formatCurrency(b.costStillToCover)} of cost is still to cover.</>
-                            ) : (
-                              <>The boxes you sold cost {formatCurrency(b.costOfSold)} and you have already put {formatCurrency(b.spentOnStock)} back into stock — the cost is covered, so what is left is yours.</>
-                            )}
-                            {b.profitReinvested > 0 && <> A further {formatCurrency(b.profitReinvested)} of your profit has already gone back into stock rather than staying here.</>}
+
+                          <p className="mt-2.5 border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-faint">
+                            For every 100 shillings of {b.brandName} you sold, <b className="text-muted">{Math.round(b.costShare)}</b> was the cost of the boxes
+                            and <b className="text-muted">{Math.round(b.profitShare)}</b> was profit. The money still in this wallet splits the same way.
                           </p>
                         </div>
                       </>
@@ -632,7 +649,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
                         <span className="text-base font-bold tabular-nums text-rose-400">− {formatCurrency(b.cogs)}</span>
                       </div>
                       <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.08] pt-2.5">
-                        <span className="text-sm font-semibold text-foreground">Left in the business</span>
+                        <span className="text-sm font-semibold text-foreground">Earned on these sales</span>
                         <span className={`text-xl font-bold tabular-nums ${(b.revenue - b.cogs) >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>
                           {formatCurrency(b.revenue - b.cogs)}
                         </span>
@@ -730,7 +747,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
             <CardBody><div className="py-6 text-center text-sm text-faint">No sales in this period.</div></CardBody>
           ) : (
             <Table>
-              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>You keep</TH><TH>Margin</TH></TR></THead>
+              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Earned</TH><TH>Margin</TH></TR></THead>
               <TBody>
                 {data.topProducts.map((p) => (
                   <TR key={p.productId} className="cursor-pointer" onClick={() => onNavigate?.('profit')}>
@@ -1109,7 +1126,10 @@ function ProfitTab() {
     // Reported, never deducted — the owner pays reps himself, in cash.
     { label: 'Reps earned', value: formatCurrency(t.commission), icon: Coins, sub: 'you pay this, not the business',
       ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.12]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
-    { label: 'You keep', value: `${t.contributionMargin}%`, icon: Scale, sub: `${formatCurrency(t.contribution)} after the boxes`,
+    // NOT "you keep": the owner does not hold this money — most of it has
+    // already gone back to the supplier and into stock. It is what the sales
+    // earned, and saying otherwise is what made him distrust the page.
+    { label: 'Earned on sales', value: `${t.contributionMargin}%`, icon: Scale, sub: `${formatCurrency(t.contribution)} — mostly back in stock, not cash`,
       ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
   ];
 
@@ -1161,7 +1181,7 @@ function ProfitTab() {
                     <p className={`mt-3 text-3xl font-bold leading-none tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {b.contributionMargin}%
                     </p>
-                    <p className="mt-1 text-xs text-faint">kept — {formatCurrency(b.contribution)} after the boxes</p>
+                    <p className="mt-1 text-xs text-faint">earned on sales — {formatCurrency(b.contribution)} after the boxes</p>
                     <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3">
                       {path.map((r) => (
                         <div key={r.label} className="flex items-baseline justify-between">
@@ -1170,7 +1190,7 @@ function ProfitTab() {
                         </div>
                       ))}
                       <div className="flex items-baseline justify-between border-t border-white/[0.06] pt-1.5">
-                        <span className="text-xs font-semibold text-foreground">= You keep</span>
+                        <span className="text-xs font-semibold text-foreground">= Earned</span>
                         <span className={`text-sm font-bold tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {formatCurrency(b.contribution)}
                         </span>
@@ -1201,7 +1221,7 @@ function ProfitTab() {
         <CardBody>
           {!data.byProduct.length ? <EmptyState title="No sales in this period" icon={Package} /> : (
             <Table>
-              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Goods</TH><TH>You keep</TH><TH>Kept / box</TH><TH>Margin</TH></TR></THead>
+              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Goods</TH><TH>Earned</TH><TH>Earned / box</TH><TH>Margin</TH></TR></THead>
               <TBody>
                 {data.byProduct.map((p) => (
                   <TR key={p.productId}>
@@ -1225,7 +1245,7 @@ function ProfitTab() {
         <CardBody>
           {!data.byRep.length ? <EmptyState title="No rep sales in this period" icon={TrendingUp} /> : (
             <Table>
-              <THead><TR><TH>Sales rep</TH><TH>Boxes</TH><TH>Revenue</TH><TH>They earned</TH><TH>You keep</TH><TH>Margin</TH></TR></THead>
+              <THead><TR><TH>Sales rep</TH><TH>Boxes</TH><TH>Revenue</TH><TH>They earned</TH><TH>Business earned</TH><TH>Margin</TH></TR></THead>
               <TBody>
                 {data.byRep.map((r) => (
                   <TR key={r.salesRepId}>
