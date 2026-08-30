@@ -440,96 +440,113 @@ function Overview({ onNavigate, onOwnerMoney }) {
       </div>
 
       {/* ── Whose money is this? ───────────────────────────────────────────
-             The owner's question, in his words: "I have 364,000 for Civlily
-             — what is mine and what is for Bonge?" Every other panel talked
-             about profit; this one talks about the cash he can touch. ── */}
+             Rebuilt as wallet cards: an icon chip, the account's own colour,
+             a thick split bar, and the three figures that made the money —
+             cost of the boxes, what the reps took, what is left. The plain
+             stacked rows this replaced read as a document, not a dashboard. */}
       {data.cashSplit && (
         <div className="space-y-3">
-          <SectionHead label="Whose money is this?" sub="Your cash, split between what you owe and what you keep." />
-          <Card>
-            <div className="p-5">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="text-3xl font-bold leading-none tabular-nums text-foreground">{formatCurrency(data.cashSplit.totalCash)}</p>
-                  <p className="mt-1 text-xs text-muted">cash you have right now, across every account</p>
-                </div>
-                <div className="flex gap-6">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-rose-300">Set aside</p>
-                    <p className="mt-1 text-xl font-bold tabular-nums text-rose-400">{formatCurrency(data.cashSplit.setAside)}</p>
-                    <p className="text-[11px] text-faint">for your suppliers</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">Yours</p>
-                    <p className="mt-1 text-xl font-bold tabular-nums text-emerald-400">{formatCurrency(data.cashSplit.yours)}</p>
-                    <p className="text-[11px] text-faint">free to use</p>
-                  </div>
-                </div>
-              </div>
+          <SectionHead label="Whose money is this?" sub="Every wallet you hold — what the supplier is owed now, and what is yours." />
 
-              {data.cashSplit.totalCash > 0 && (
-                <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                  <div className="h-full bg-rose-500" style={{ width: `${(data.cashSplit.setAside / data.cashSplit.totalCash) * 100}%` }} />
-                  <div className="h-full bg-emerald-500" style={{ width: `${(data.cashSplit.yours / data.cashSplit.totalCash) * 100}%` }} />
-                </div>
-              )}
+          {/* The headline split, as one joined strip. */}
+          <SegmentStrip segments={[
+            { label: 'Cash you hold', value: formatCurrency(data.cashSplit.totalCash), sub: 'across every account', tone: 'brand' },
+            { label: 'Owed to suppliers now', value: formatCurrency(data.cashSplit.setAside), sub: 'cost of boxes already sold', tone: data.cashSplit.setAside > 0 ? 'rose' : 'slate' },
+            { label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' },
+            { label: 'Invoice for shelf stock', value: formatCurrency(data.cashSplit.dueLater || 0), sub: 'falls due only as it sells', tone: (data.cashSplit.dueLater || 0) > 0 ? 'amber' : 'slate' },
+          ]} />
 
-              {/* One row per pot of money, so he can see it account by account. */}
-              <div className="mt-5 space-y-3 border-t border-white/[0.06] pt-4">
-                {data.cashSplit.buckets.map((b) => (
-                  <div key={b.key} className="rounded-xl bg-white/[0.02] p-3.5 ring-1 ring-white/[0.06]">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="text-sm font-semibold text-foreground">
-                        {b.brandName}
-                        <span className="ml-2 text-[11px] font-normal text-faint">
-                          {b.accounts.filter((a) => a.balance !== 0).map((a) => a.name).join(', ') || 'no account holds money'}
-                        </span>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {data.cashSplit.buckets.filter((b) => b.cash > 0 || b.revenue > 0).map((b, i) => {
+              const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
+              const named = b.accounts.filter((a) => a.balance !== 0);
+              const Icon = named[0] ? (ACCOUNT_ICON[data.accounts.find((a) => a.name === named[0].name)?.type] || Wallet) : Wallet;
+              const yoursPct = b.cash > 0 ? (b.yours / b.cash) * 100 : 0;
+              return (
+                <div key={b.key} className={`relative overflow-hidden rounded-2xl bg-surface ring-1 ${tint.ring}`}>
+                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tint.glow} to-transparent`} aria-hidden="true" />
+                  <div className="relative p-5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-4 w-4" /></span>
+                        <div>
+                          <p className="text-sm font-bold text-foreground">{b.brandName}</p>
+                          <p className="text-[11px] text-faint">{named.map((a) => a.name).join(', ') || 'no account holds money'}</p>
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${b.setAside > 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                        {b.setAside > 0 ? 'Supplier owed' : 'All yours'}
                       </span>
-                      <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(b.cash)}</span>
                     </div>
+
+                    <p className="mt-4 text-3xl font-bold leading-none tabular-nums text-foreground">{formatCurrency(b.cash)}</p>
+                    <p className="mt-1 text-xs text-faint">cash in this wallet</p>
+
                     {b.cash > 0 && (
-                      <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className="h-full bg-rose-500" style={{ width: `${(b.setAside / b.cash) * 100}%` }} />
-                        <div className="h-full bg-emerald-500" style={{ width: `${(b.yours / b.cash) * 100}%` }} />
+                      <>
+                        <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                          <div className="h-full bg-rose-500" style={{ width: `${100 - yoursPct}%` }} />
+                          <div className="h-full bg-emerald-500" style={{ width: `${yoursPct}%` }} />
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                            <span className="h-2 w-2 rounded-full bg-rose-400" />
+                            {b.supplierName || 'Supplier'} <b className="tabular-nums text-foreground">{formatCurrency(b.setAside)}</b>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
+                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                            Yours <b className="tabular-nums text-foreground">{formatCurrency(b.yours)}</b>
+                          </span>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Where the cost is, and where the profit is. */}
+                    {b.revenue > 0 && (
+                      <div className="mt-4 grid grid-cols-3 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
+                        <div className="bg-gradient-to-br from-rose-500/[0.08] to-transparent p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Cost of boxes sold</p>
+                          <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.costOfSold)}</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-amber-500/[0.08] to-transparent p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Paid to reps</p>
+                          <p className="mt-1 text-sm font-bold tabular-nums text-amber-300">{formatCurrency(b.commission)}</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-emerald-500/[0.10] to-transparent p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Your profit</p>
+                          <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.profitEarned)}</p>
+                        </div>
                       </div>
                     )}
-                    <p className="mt-2 text-xs leading-relaxed text-muted">
-                      {b.owed > 0 ? (
-                        <>
-                          <b className="text-rose-400">{formatCurrency(b.setAside)}</b> of this belongs to {b.supplierName || 'your supplier'}
-                          {b.yours > 0
-                            ? <> and <b className="text-emerald-400">{formatCurrency(b.yours)}</b> is yours.</>
-                            : <> — all of it.</>}
-                          {b.shortfall > 0 && <> You still owe <b className="text-foreground">{formatCurrency(b.shortfall)}</b> beyond this.</>}
-                        </>
-                      ) : (
-                        <>Nothing is owed here — <b className="text-emerald-400">{formatCurrency(b.yours)}</b> is all yours.</>
-                      )}
+
+                    <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-faint">
+                      {b.setAside > 0
+                        ? <>{formatCurrency(b.setAside)} of this wallet is {b.supplierName}&apos;s, for boxes already sold.</>
+                        : <>Nothing is due right now{b.paidAhead > 0 && <> — you have paid {b.supplierName} {formatCurrency(b.paidAhead)} more than the sold boxes cost</>}.</>}
+                      {b.dueLater > 0 && <> {b.supplierName} still has {formatCurrency(b.dueLater)} invoiced for stock on your shelf; it falls due as those boxes sell.</>}
                     </p>
                   </div>
-                ))}
-              </div>
-
-              {/* Your own money, kept apart from the business's. Paying rep
-                  commissions from your pocket is recorded here so it never
-                  looks like the business earned it. */}
-              <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">
-                <span className="text-xs text-muted">
-                  Your own money —
-                  {' '}put in <b className="tabular-nums text-sky-300">{formatCurrency(data.ownerMoney?.contributed || 0)}</b>,
-                  {' '}taken out <b className="tabular-nums text-foreground">{formatCurrency(data.ownerMoney?.drawn || 0)}</b>
-                </span>
-                <div className="ml-auto flex gap-2">
-                  <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')}>
-                    <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
-                  </Button>
-                  <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
-                    <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
-                  </Button>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+
+          {/* Your own money — a slim bar, not a card of its own. */}
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.08] bg-surface px-5 py-3.5">
+            <span className="rounded-lg bg-sky-500/15 p-1.5 text-sky-300"><PiggyBank className="h-3.5 w-3.5" /></span>
+            <span className="text-xs text-muted">
+              Your own money — put in <b className="tabular-nums text-sky-300">{formatCurrency(data.ownerMoney?.contributed || 0)}</b>,
+              {' '}taken out <b className="tabular-nums text-foreground">{formatCurrency(data.ownerMoney?.drawn || 0)}</b>
+            </span>
+            <div className="ml-auto flex gap-2">
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')}>
+                <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
+              </Button>
+              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
+                <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
+              </Button>
             </div>
-          </Card>
+          </div>
         </div>
       )}
 
@@ -538,7 +555,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
         { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `collected ${periodLabel}`, tone: 'emerald' },
         { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `paid ${periodLabel}`, tone: 'rose' },
         { label: 'Net cash flow', value: formatCurrency(flow.net), sub: flow.net >= 0 ? 'more came in than left' : 'more left than came in', tone: flow.net >= 0 ? 'sky' : 'amber' },
-        { label: 'Owed to suppliers', value: formatCurrency(ny.supplierOutstanding || 0), sub: ny.supplierOutstanding > 0 ? 'they are financing your stock' : 'all settled', tone: ny.supplierOutstanding > 0 ? 'amber' : 'slate' },
+        { label: 'Supplier invoice left', value: formatCurrency(ny.supplierOutstanding || 0), sub: ny.supplierOutstanding > 0 ? 'due as the shelf stock sells' : 'all settled', tone: ny.supplierOutstanding > 0 ? 'amber' : 'slate' },
       ]} />
 
       {/* ── The business, by brand ──────────────────────────────────────────

@@ -1076,21 +1076,25 @@ async function overview(period = 'month') {
   ownerMoney.owedToSuppliers = needsYou.supplierOutstanding;
 
   // ── Whose money is this? ────────────────────────────────────────────────
-  // The owner pays Bonge monthly and wants the supplier's share held back,
-  // not spent. For each pot of cash he actually has: how much belongs to the
-  // supplier who financed the stock, and how much is genuinely his. Accounts
-  // and suppliers both carry a brandId, so Civlily cash meets Civlily debt.
+  // The supplier is paid the COST of the boxes that actually SOLD — not the
+  // whole stock bill. The rest of his invoice comes due only as the boxes on
+  // the shelf sell. Setting aside the entire outstanding balance was wrong:
+  // it demanded money the owner does not owe yet, and hid the profit that is
+  // genuinely his. Everything above the cost of sold goods is his.
   const suppliersForSplit = await supplierSummaries();
-  const debtByBrand = new Map();
-  const supplierNameByBrand = new Map();
+  const supplierByBrand = new Map();
   for (const sup of suppliersForSplit) {
-    if (!(sup.outstanding > 0)) continue;
     const key = sup.brandId || 'general';
-    debtByBrand.set(key, round2((debtByBrand.get(key) || 0) + sup.outstanding));
-    if (!supplierNameByBrand.has(key)) supplierNameByBrand.set(key, sup.name);
+    const row = supplierByBrand.get(key) || { outstanding: 0, paid: 0, name: null };
+    row.outstanding = round2(row.outstanding + sup.outstanding);
+    row.paid = round2(row.paid + sup.totalPaid);
+    if (!row.name && sup.outstanding > 0) row.name = sup.name;
+    if (!row.name) row.name = sup.name;
+    supplierByBrand.set(key, row);
   }
   const brandNameById = new Map(allBrands.map((b) => [b.id, b.name]));
-  // Group the cash by the brand its account belongs to.
+  const profitByBrandId = new Map((prof.byBrand || []).map((b) => [b.brandId, b]));
+
   const cashByBrand = new Map();
   for (const a of accounts) {
     const key = a.brandId || 'general';
@@ -1099,31 +1103,49 @@ async function overview(period = 'month') {
     row.accounts.push({ name: a.name, balance: a.balance });
     cashByBrand.set(key, row);
   }
-  for (const key of debtByBrand.keys()) {
+  for (const key of supplierByBrand.keys()) {
     if (!cashByBrand.has(key)) cashByBrand.set(key, { key, cash: 0, accounts: [] });
   }
+
   const buckets = [...cashByBrand.values()].map((row) => {
-    const owed = debtByBrand.get(row.key) || 0;
-    // The supplier's share of the cash on hand — never more than there is.
-    const setAside = round2(Math.min(row.cash, owed));
+    const sup = supplierByBrand.get(row.key) || { outstanding: 0, paid: 0, name: null };
+    const p = profitByBrandId.get(row.key) || { cost: 0, commission: 0, profit: 0, revenue: 0 };
+    const costOfSold = round2(p.cost);
+    // What the supplier is owed RIGHT NOW: the cost of what has sold, less
+    // what he has already been paid — and never more than he is actually
+    // invoiced for. Overpayment shows as zero due, not as a negative.
+    const dueNow = round2(Math.min(sup.outstanding, Math.max(0, costOfSold - sup.paid)));
+    // His remaining invoice, which falls due only as shelf stock sells.
+    const dueLater = round2(Math.max(0, sup.outstanding - dueNow));
+    const paidAhead = round2(Math.max(0, sup.paid - costOfSold));
+    const setAside = round2(Math.min(row.cash, dueNow));
     return {
       key: row.key,
       brandName: row.key === 'general' ? 'General business' : (brandNameById.get(row.key) || 'Brand'),
-      supplierName: supplierNameByBrand.get(row.key) || null,
+      supplierName: sup.name,
       accounts: row.accounts,
       cash: row.cash,
-      owed,
+      // What the brand's sales were made of, so "where is the cost and where
+      // is the profit" is answered on the row itself.
+      revenue: round2(p.revenue),
+      costOfSold,
+      commission: round2(p.commission || 0),
+      profitEarned: round2(p.contribution ?? p.profit),
+      supplierPaid: sup.paid,
+      supplierOwedTotal: sup.outstanding,
+      dueNow,
+      dueLater,
+      paidAhead,
       setAside,
       yours: round2(row.cash - setAside),
-      // What would still be owed after handing over every shilling here.
-      shortfall: round2(Math.max(0, owed - row.cash)),
     };
   }).sort((a, b) => b.cash - a.cash);
+
   const cashSplit = {
     totalCash: cashPosition,
     setAside: round2(buckets.reduce((a, b) => a + b.setAside, 0)),
     yours: round2(buckets.reduce((a, b) => a + b.yours, 0)),
-    shortfall: round2(buckets.reduce((a, b) => a + b.shortfall, 0)),
+    dueLater: round2(buckets.reduce((a, b) => a + b.dueLater, 0)),
     buckets,
   };
 
