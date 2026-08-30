@@ -964,7 +964,23 @@ async function overview(period = 'month') {
     ]);
     const moneyIn = round2(toNumber(inAgg._sum.amount));
     const moneyOut = round2(toNumber(outAgg._sum.amount));
-    flow[p] = { moneyIn, moneyOut, net: round2(moneyIn - moneyOut) };
+    // The owner's own money is not trade, but it does move the balances. The
+    // overview showed only the trading net (2,439,500) directly under the cash
+    // held (2,915,500) — the same 476,000 gap that made the cash-flow
+    // statement disagree with reality. Carried here so the two reconcile.
+    const [oIn, oOut] = await Promise.all([
+      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'IN', type: 'OWNER_CONTRIBUTION' }, _sum: { amount: true } }),
+      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'OUT', type: 'OWNER_DRAWING' }, _sum: { amount: true } }),
+    ]);
+    const ownerNet = round2(toNumber(oIn._sum.amount) - toNumber(oOut._sum.amount));
+    flow[p] = {
+      moneyIn,
+      moneyOut,
+      ownerNet,
+      net: round2(moneyIn - moneyOut),
+      // What the accounts actually moved by: trade plus the owner's money.
+      netWithOwner: round2(moneyIn - moneyOut + ownerNet),
+    };
   }
 
   // Expenses + breakdown for the selected period.
@@ -1233,8 +1249,13 @@ async function overview(period = 'month') {
     };
   }).sort((a, b) => b.cash - a.cash);
 
+  // Name the supplier when there is only one owed, so the cards can say
+  // "due to Bonge" rather than the vaguer "suppliers".
+  const owedNames = [...new Set(buckets.filter((b) => b.supplierOwedTotal > 0 && b.supplierName).map((b) => b.supplierName))];
   const cashSplit = {
     totalCash: cashPosition,
+    supplierLabel: owedNames.length === 1 ? owedNames[0] : 'your suppliers',
+    paidAhead: round2(buckets.reduce((a, b) => a + b.paidAhead, 0)),
     setAside: round2(buckets.reduce((a, b) => a + b.setAside, 0)),
     yours: round2(buckets.reduce((a, b) => a + b.yours, 0)),
     dueLater: round2(buckets.reduce((a, b) => a + b.dueLater, 0)),

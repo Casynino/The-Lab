@@ -120,6 +120,7 @@ function SegmentStrip({ segments, size = 'lg' }) {
 // Dark-theme badge tints. The old bg-emerald-100/rose-100 were light-theme
 // chips glowing on a dark page.
 const DIR_BADGE = { IN: 'bg-emerald-500/15 text-emerald-300', OUT: 'bg-rose-500/15 text-rose-300' };
+const round2ui = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 // Default to All time so the dashboard opens showing the full business history.
 function usePeriod() { return useState('all'); }
@@ -373,21 +374,6 @@ function Overview({ onNavigate, onOwnerMoney }) {
   const ny = data.needsYou || {};
   const hasSeries = (cf?.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
 
-  // The briefing lives inside the hero now: two or three short readings of
-  // the period, hardest-hitting first.
-  const briefing = [];
-  if (flow.moneyIn === 0 && flow.moneyOut === 0) {
-    briefing.push('Nothing has moved ' + (period === 'all' ? 'yet' : periodLabel) + '. The figures below are the whole story.');
-  } else {
-    briefing.push(`${formatCurrency(flow.moneyIn)} came in and ${formatCurrency(flow.moneyOut)} went out ${periodLabel}.`);
-    if (data.netProfit !== 0) {
-      briefing.push(data.netProfit >= 0
-        ? `After the boxes and expenses, ${formatCurrency(data.netProfit)} was earned — most of it back in stock, not cash.`
-        : `After the boxes and expenses, the period is ${formatCurrency(Math.abs(data.netProfit))} in the red.`);
-    }
-    if (ny.supplierOutstanding > 0) briefing.push(`Suppliers are still owed ${formatCurrency(ny.supplierOutstanding)}.`);
-  }
-
   const attention = [
     ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
     ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
@@ -413,45 +399,26 @@ function Overview({ onNavigate, onOwnerMoney }) {
         ))}
       </div>
 
-      {/* ── Hero: the one number the business runs on, with the briefing
-             beside it — the same gradient identity as the Dashboard hero. ── */}
-      <div className="relative overflow-hidden rounded-3xl p-6 sm:p-7"
-        style={{ background: 'linear-gradient(115deg, #1a2e05 0%, #064e3b 42%, #0e3a4a 100%)' }}>
-        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-brand-400/10 blur-3xl" aria-hidden="true" />
-        <div className="relative grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr]">
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-300">Cash in hand</p>
-            <p className="mt-2 text-4xl font-bold leading-none tabular-nums text-white">{formatCurrency(data.cashPosition)}</p>
-            <p className="mt-2 text-xs text-white/60">across all accounts, right now</p>
-            <span className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${data.netProfit >= 0 ? 'bg-emerald-400/15 text-emerald-300' : 'bg-rose-400/15 text-rose-300'}`}>
-              {data.netProfit >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-              {formatCurrency(data.netProfit)} earned · {periodLabel}
-            </span>
-          </div>
-          <div className="border-white/10 lg:border-l lg:pl-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/50">The briefing</p>
-            <div className="mt-2 space-y-1.5">
-              {briefing.map((b, i) => (
-                <p key={i} className={`text-sm leading-relaxed ${i === 0 ? 'text-white' : 'text-white/70'}`}>{b}</p>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ── Whose money is this? ───────────────────────────────────────────
              Rebuilt as wallet cards: an icon chip, the account's own colour,
              a thick split bar, and the three figures that made the money —
              cost of the boxes, what the reps took, what is left. The plain
              stacked rows this replaced read as a document, not a dashboard. */}
-      {data.cashSplit && (
+      {data.cashSplit && (() => {
+        const supplierLabel = data.cashSplit.supplierLabel || 'your suppliers';
+        const totalOwed = round2ui((data.cashSplit.setAside || 0) + (data.cashSplit.dueLater || 0));
+        return (
         <div className="space-y-3">
-          <SectionHead label="Whose money is this?" sub="Every wallet you hold — what the supplier is owed now, and what is yours." />
+          <SectionHead label="Whose money is this?" sub={`Every wallet you hold — what ${supplierLabel} is owed, and what is yours.`} />
 
           {/* The headline split, as one joined strip. */}
           {/* "Yours, free to use" only appears when it differs from the cash
               held. With nothing owed the two were the same figure printed
               twice, side by side, which reads as a mistake. */}
+          {/* "Owed to suppliers now: 0" beside a 12,242,000 invoice made the
+              owner ask whether he owes anything at all. He does — the whole
+              bill — but none of it is due until the stock sells. The labels
+              now say TOTAL and DUE TODAY, which cannot be read as each other. */}
           <SegmentStrip segments={[
             {
               label: 'Cash you hold',
@@ -460,21 +427,38 @@ function Overview({ onNavigate, onOwnerMoney }) {
               tone: 'brand',
             },
             {
-              label: 'Owed to suppliers now',
+              label: `Total you owe ${supplierLabel}`,
+              value: formatCurrency(totalOwed),
+              sub: totalOwed > 0 ? 'the whole bill, paid as stock sells' : 'nothing outstanding',
+              tone: totalOwed > 0 ? 'amber' : 'slate',
+            },
+            {
+              label: 'Of that, due today',
               value: formatCurrency(data.cashSplit.setAside),
-              sub: data.cashSplit.setAside > 0 ? 'cost of boxes already sold' : 'nothing due right now',
-              tone: data.cashSplit.setAside > 0 ? 'rose' : 'slate',
+              sub: data.cashSplit.setAside > 0
+                ? 'cost of boxes already sold'
+                : (data.cashSplit.paidAhead > 0
+                    ? `nothing — you are ${formatCurrency(data.cashSplit.paidAhead)} ahead`
+                    : 'nothing due right now'),
+              tone: data.cashSplit.setAside > 0 ? 'rose' : 'emerald',
             },
             ...(data.cashSplit.setAside > 0
               ? [{ label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' }]
               : []),
-            {
-              label: 'Invoice for shelf stock',
-              value: formatCurrency(data.cashSplit.dueLater || 0),
-              sub: (data.cashSplit.dueLater || 0) > 0 ? 'falls due only as it sells' : 'nothing invoiced',
-              tone: (data.cashSplit.dueLater || 0) > 0 ? 'amber' : 'slate',
-            },
           ]} />
+
+          <p className="text-xs leading-relaxed text-muted">
+            {totalOwed > 0 ? (
+              <>
+                You owe {supplierLabel} <b className="text-foreground">{formatCurrency(totalOwed)}</b> in total — but none of it is due yet.
+                {' '}{supplierLabel} is paid the cost of the boxes as they sell, and the boxes you have already sold are covered
+                {data.cashSplit.paidAhead > 0 && <> ({formatCurrency(data.cashSplit.paidAhead)} more than covered)</>}.
+                {' '}The rest falls due as the stock on your shelf sells.
+              </>
+            ) : (
+              <>You owe {supplierLabel} nothing — every box you have taken is paid for.</>
+            )}
+          </p>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {data.cashSplit.buckets.filter((b) => b.cash > 0 || b.revenue > 0).map((b, i) => {
@@ -621,14 +605,24 @@ function Overview({ onNavigate, onOwnerMoney }) {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── One joined strip: the flow of the period ── */}
+      {/* The net here must be the net that reaches the accounts, or it sits
+          near "cash you hold" disagreeing with it by the owner's own money. */}
       <SegmentStrip segments={[
-        { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `collected ${periodLabel}`, tone: 'emerald' },
-        { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `paid ${periodLabel}`, tone: 'rose' },
-        { label: 'Net cash flow', value: formatCurrency(flow.net), sub: flow.net >= 0 ? 'more came in than left' : 'more left than came in', tone: flow.net >= 0 ? 'sky' : 'amber' },
-        { label: 'Supplier invoice left', value: formatCurrency(ny.supplierOutstanding || 0), sub: ny.supplierOutstanding > 0 ? 'due as the shelf stock sells' : 'all settled', tone: ny.supplierOutstanding > 0 ? 'amber' : 'slate' },
+        { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `the business collected ${periodLabel}`, tone: 'emerald' },
+        { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `the business paid ${periodLabel}`, tone: 'rose' },
+        ...((flow.ownerNet ?? 0) !== 0
+          ? [{ label: 'Your own money', value: formatCurrency(flow.ownerNet), sub: flow.ownerNet >= 0 ? 'you put in' : 'you took out', tone: 'sky' }]
+          : []),
+        {
+          label: 'Net movement',
+          value: formatCurrency(flow.netWithOwner ?? flow.net),
+          sub: (flow.netWithOwner ?? flow.net) >= 0 ? 'what the accounts gained' : 'what the accounts lost',
+          tone: (flow.netWithOwner ?? flow.net) >= 0 ? 'sky' : 'amber',
+        },
       ]} />
 
       {/* ── The business, by brand ──────────────────────────────────────────
@@ -753,8 +747,18 @@ function Overview({ onNavigate, onOwnerMoney }) {
               <Money label="= Gross profit" value={data.grossProfit} tone="brand" />
               <Money label="Reps earned" value={data.commissionAccrued ?? 0} tone="amber" />
               <Money label="− Expenses" value={data.expenses} tone="rose" />
-              <Money label="= Net profit" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
+              <Money label="= Earned" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
             </div>
+            {/* A bare "Expenses 0" reads as broken. It is not: money spent on
+                stock is not a running cost — it becomes cost of goods when the
+                boxes sell, and it is already inside COGS above. Say so. */}
+            {data.expenses === 0 && (
+              <p className="mt-3 text-xs leading-relaxed text-muted">
+                <b className="text-foreground">No running costs recorded yet.</b> Money spent on stock is not an expense — it becomes
+                cost of goods when the boxes sell, and it is already counted in COGS above. Rent, transport, airtime and the like
+                will show here once you record them with the <b className="text-foreground">Expense</b> button.
+              </p>
+            )}
           </CardBody>
         </Card>
       </div>
@@ -789,7 +793,12 @@ function Overview({ onNavigate, onOwnerMoney }) {
           <CardHeader title="Where money goes" subtitle={`Expenses by category · ${periodLabel}`} />
           <CardBody>
             {donut.length === 0 ? (
-              <div className="flex h-[200px] items-center justify-center text-sm text-faint">No expenses in this period</div>
+              <div className="flex h-[200px] flex-col items-center justify-center gap-1 px-6 text-center">
+                <p className="text-sm text-muted">No running costs recorded</p>
+                <p className="text-xs leading-relaxed text-faint">
+                  Stock purchases are not expenses — they count as cost of goods when the boxes sell.
+                </p>
+              </div>
             ) : (
               <DonutChart data={donut} height={230} />
             )}
