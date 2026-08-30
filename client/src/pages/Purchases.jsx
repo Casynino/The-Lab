@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Ship, PackageCheck, X, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Ship, PackageCheck, X, Pencil, Trash2, Eye } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
@@ -147,12 +147,115 @@ function SupplierModal({ editing, onClose }) {
   );
 }
 
+// Open any order and see what was in it. A received order is history and
+// stays read-only — its boxes are on the shelf at a cost taken from these
+// lines — but history you cannot look at is not much of a record.
+function PODetailModal({ po, onClose, onEdit, onDelete, onReceive }) {
+  const landed = po.status === 'RECEIVED';
+  const boxes = (po.items || []).reduce((n, i) => n + (i.baseQuantity || 0), 0);
+  const goods = (po.items || []).reduce((n, i) => n + Number(i.unitCost || 0) * (i.baseQuantity || 0), 0);
+  const extras = Number(po.shippingCost || 0) + Number(po.clearingCost || 0) + Number(po.otherCost || 0);
+
+  return (
+    <Modal open onClose={onClose} size="xl" title={po.poNumber}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
+          {!landed && po.status !== 'CANCELLED' && (
+            <>
+              <Button variant="secondary" onClick={() => { onClose(); onDelete(po); }}>
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+              <Button variant="secondary" onClick={() => { onClose(); onEdit(po); }}>
+                <Pencil className="h-4 w-4" /> Edit
+              </Button>
+              <Button onClick={() => { onClose(); onReceive(po); }}>
+                <PackageCheck className="h-4 w-4" /> Receive into warehouse
+              </Button>
+            </>
+          )}
+        </>
+      }>
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-white/[0.08] bg-surface px-4 py-3">
+          <Badge className={PO_STATUS_META[po.status]?.cls}>{PO_STATUS_META[po.status]?.label}</Badge>
+          <span className="text-sm text-foreground">{po.supplier?.name}</span>
+          {po.warehouse?.name && <span className="text-xs text-faint">into {po.warehouse.name}</span>}
+          <span className="ml-auto text-xs text-faint">
+            {po.orderedAt && <>Ordered {formatDate(po.orderedAt)}</>}
+            {po.expectedArrival && <> · Expected {formatDate(po.expectedArrival)}</>}
+            {po.actualArrival && <> · Arrived {formatDate(po.actualArrival)}</>}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: 'Boxes', value: formatNumber(boxes), sub: landed ? 'on the shelf' : 'on the way' },
+            { label: 'Goods', value: formatCurrency(goods), sub: 'before shipping' },
+            { label: 'Shipping & clearing', value: formatCurrency(extras), sub: 'spread across the boxes' },
+            { label: 'Total cost', value: formatCurrency(po.totalCost), sub: boxes > 0 ? `${formatCurrency(Number(po.totalCost) / boxes)} a box` : '\u2014' },
+          ].map((c) => (
+            <div key={c.label} className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">{c.label}</p>
+              <p className="mt-1 text-base font-bold tabular-nums text-foreground">{c.value}</p>
+              <p className="text-[10px] text-faint">{c.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <div className="mb-2 text-sm font-semibold text-foreground">What was ordered</div>
+          <Table>
+            <THead>
+              <TR><TH>Product</TH><TH>Ordered</TH><TH>Boxes</TH><TH className="text-right">Cost / box</TH><TH className="text-right">Line total</TH></TR>
+            </THead>
+            <TBody>
+              {(po.items || []).map((i) => (
+                <TR key={i.id}>
+                  <TD className="font-medium text-foreground">
+                    {i.product?.name}
+                    {i.product?.sku && <span className="ml-1.5 text-[11px] text-faint">{i.product.sku}</span>}
+                  </TD>
+                  <TD>{formatNumber(i.quantity)} {i.packagingUnit?.name || 'unit'}{i.quantity === 1 ? '' : 's'}</TD>
+                  <TD className="font-semibold tabular-nums text-foreground">{formatNumber(i.baseQuantity)}</TD>
+                  <TD className="text-right tabular-nums">{formatCurrency(i.unitCost)}</TD>
+                  <TD className="text-right font-semibold tabular-nums">{formatCurrency(Number(i.unitCost || 0) * (i.baseQuantity || 0))}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </div>
+
+        {po.notes && (
+          <div className="rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Notes</p>
+            <p className="mt-1 text-sm text-muted">{po.notes}</p>
+          </div>
+        )}
+
+        <p className="text-[11px] leading-relaxed text-faint">
+          {landed
+            ? 'This order has been received — its boxes are in the warehouse and its cost is already counted, so it can no longer be changed.'
+            : 'These boxes are not in Inventory yet. Receiving the order is what puts them on the shelf and spreads the shipping and clearing across them as landed cost.'}
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
 function PurchaseOrders() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({ queryKey: ['purchase-orders', { page }], queryFn: async () => unwrap(await api.get('/purchase-orders', { params: { page, limit: 15 } })) });
   const [editing, setEditing] = useState(null);
+  const [viewing, setViewing] = useState(null);
+  const askDelete = (po) => {
+    if (confirm(`Delete ${po.poNumber}? The stock has not arrived, so nothing leaves your warehouse.`)) del.mutate(po.id);
+  };
+  const askReceive = (po) => {
+    if (confirm(`Receive ${po.poNumber} into the warehouse?`)) receive.mutate(po.id);
+  };
   const del = useMutation({
     mutationFn: (id) => api.delete(`/purchase-orders/${id}`),
     onSuccess: (r) => {
@@ -228,8 +331,8 @@ function PurchaseOrders() {
             <THead><TR><TH>PO</TH><TH>Supplier</TH><TH>Boxes</TH><TH>Products</TH><TH>Total cost</TH><TH>Expected</TH><TH>Status</TH><TH /></TR></THead>
             <TBody>
               {data.data.map((po) => (
-                <TR key={po.id}>
-                  <TD className="font-medium">{po.poNumber}</TD>
+                <TR key={po.id} className="cursor-pointer" onClick={() => setViewing(po)}>
+                  <TD className="font-medium text-foreground">{po.poNumber}</TD>
                   <TD>{po.supplier?.name}</TD>
                   {/* Boxes, not just how many product lines were on the form. */}
                   <TD className="font-semibold tabular-nums text-foreground">{formatNumber(po.boxes ?? 0)}</TD>
@@ -243,25 +346,30 @@ function PurchaseOrders() {
                       stock with no origin — the server refuses it too. */}
                   <TD>
                     <div className="flex items-center justify-end gap-2">
+                      <button
+                        title="Open this order"
+                        onClick={(e) => { e.stopPropagation(); setViewing(po); }}
+                        className="cursor-pointer text-faint transition hover:text-brand-400"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
                       {po.status !== 'RECEIVED' && po.status !== 'CANCELLED' && (
                         <>
                           <button
                             title="Edit this order"
-                            onClick={() => setEditing(po)}
+                            onClick={(e) => { e.stopPropagation(); setEditing(po); }}
                             className="cursor-pointer text-faint transition hover:text-brand-400"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
                           <button
                             title="Delete this order"
-                            onClick={() => {
-                              if (confirm(`Delete ${po.poNumber}? The stock has not arrived, so nothing leaves your warehouse.`)) del.mutate(po.id);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); askDelete(po); }}
                             className="cursor-pointer text-faint transition hover:text-rose-400"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
-                          <Button variant="secondary" className="px-3 py-1 text-xs" onClick={() => { if (confirm(`Receive ${po.poNumber} into the warehouse?`)) receive.mutate(po.id); }}><PackageCheck className="h-4 w-4" /> Receive</Button>
+                          <Button variant="secondary" className="px-3 py-1 text-xs" onClick={(e) => { e.stopPropagation(); askReceive(po); }}><PackageCheck className="h-4 w-4" /> Receive</Button>
                         </>
                       )}
                       {po.status === 'RECEIVED' && (
@@ -278,6 +386,15 @@ function PurchaseOrders() {
       )}
       {open && <POModal onClose={() => setOpen(false)} />}
       {editing && <POModal editing={editing} onClose={() => setEditing(null)} />}
+      {viewing && (
+        <PODetailModal
+          po={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={setEditing}
+          onDelete={askDelete}
+          onReceive={askReceive}
+        />
+      )}
     </Card>
     </div>
   );
