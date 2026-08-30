@@ -356,7 +356,13 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
   try {
     const amt = round2(toNumber(amount));
     if (!(amt > 0)) return null;
-    const acc = await defaultAccount();
+    // Reps are paid in physical cash, never from M-Pesa or Airtel. Those are
+    // the brands' income accounts and commission has no business touching
+    // them; pinning it to a CASH account keeps the two apart for good.
+    const acc = (await prisma.businessAccount.findFirst({
+      where: { type: 'CASH', isActive: true },
+      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
+    })) || (await defaultAccount());
     if (!acc) return null;
     // The owner pays reps directly from his pocket — no business account is
     // involved on either side. Posting a contribution INTO an account put
@@ -686,7 +692,7 @@ async function report(opts = {}) {
     boxesSold: prof.totals.boxes,
     expenses,
     commissionAccrued: prof.totals.commission,
-    netProfit: round2(prof.totals.profit - prof.totals.commission - expenses),
+    netProfit: round2(prof.totals.profit - expenses),
     supplierPayments,
     commissionPaid,
     otherIncome,
@@ -952,11 +958,11 @@ async function overview(period = 'month') {
     .sort((a, b) => b.amount - a.amount);
 
   const grossProfit = prof.totals.profit;
-  // Commission accrues the moment boxes settle — it is a cost of the very
-  // sales in this window, and the biggest selling cost the business has.
-  // Leaving it out overstated every "net profit" the owner could see.
+  // What the boxes earned reps — reported, never subtracted. The owner funds
+  // every commission himself, so it never leaves the business's money and
+  // cannot reduce what the business made.
   const commissionAccrued = prof.totals.commission;
-  const netProfit = round2(grossProfit - commissionAccrued - expenses);
+  const netProfit = round2(grossProfit - expenses);
 
   // ── Per-brand finance: each brand's P&L, cash movement and inventory value,
   // computed from real transactions/records only. Scales to any brand count.
@@ -1006,7 +1012,7 @@ async function overview(period = 'month') {
       boxesSold: p.boxes,
       commission: round2(p.commission || 0),
       expenses: round2(brandExpenses),
-      netProfit: round2(p.profit - (p.commission || 0) - brandExpenses),
+      netProfit: round2(p.profit - brandExpenses),
       moneyIn: round2(moneyIn),
       moneyOut: round2(moneyOut),
       netCash: round2(moneyIn - moneyOut),
@@ -1065,7 +1071,7 @@ async function overview(period = 'month') {
     where: { direction: 'OUT', type: 'EXPENSE', ...epochWhere(null, epoch) },
     _sum: { amount: true },
   });
-  const earnedAllTime = round2(lifetime.totals.profit - lifetime.totals.commission - round2(toNumber(lifetimeExpAgg._sum.amount)));
+  const earnedAllTime = round2(lifetime.totals.profit - round2(toNumber(lifetimeExpAgg._sum.amount)));
   // Every shilling of rep commission comes out of the owner's pocket, so the
   // payouts themselves are the record of what he has put in. The business
   // owes him this back when it can afford to.
@@ -1116,6 +1122,17 @@ async function overview(period = 'month') {
   const brandNameById = new Map(allBrands.map((b) => [b.id, b.name]));
   const profitByBrandId = new Map((prof.byBrand || []).map((b) => [b.brandId, b]));
 
+  // What has actually been spent putting stock back — supplier payments and
+  // stock purchases, by the brand the money BOUGHT (not the account it left).
+  // This is what decides whether the cost of the boxes sold has been covered
+  // yet, and therefore whether the cash on hand is cost or profit.
+  const stockSpendRows = await prisma.financeTransaction.groupBy({
+    by: ['brandId'],
+    where: { direction: 'OUT', type: 'STOCK_PURCHASE' },
+    _sum: { amount: true },
+  });
+  const stockSpendByBrand = new Map(stockSpendRows.map((r) => [r.brandId || 'general', round2(toNumber(r._sum.amount))]));
+
   const cashByBrand = new Map();
   for (const a of accounts) {
     const key = a.brandId || 'general';
@@ -1137,6 +1154,9 @@ async function overview(period = 'month') {
     const sup = supplierByBrand.get(row.key) || { outstanding: 0, paid: 0, name: null };
     const p = profitByBrandId.get(row.key) || { cost: 0, commission: 0, profit: 0, revenue: 0 };
     const costOfSold = round2(p.cost);
+    const stockSpend = stockSpendByBrand.get(row.key) || 0;
+    const costStillToCover = round2(Math.max(0, costOfSold - stockSpend));
+    const costPart = round2(Math.min(row.cash, costStillToCover));
     // What the supplier is owed RIGHT NOW: the cost of what has sold, less
     // what he has already been paid — and never more than he is actually
     // invoiced for. Overpayment shows as zero due, not as a negative.
@@ -1153,6 +1173,16 @@ async function overview(period = 'month') {
       cash: row.cash,
       moneyIn: row.moneyIn,
       moneyOut: row.moneyOut,
+      // Is the cash on hand cost or profit? The cost of the boxes sold is
+      // covered first, out of everything already spent putting stock back.
+      // Once that is met — and for both brands it is, several times over —
+      // whatever is left in the wallet is profit, not money owed to anyone.
+      spentOnStock: stockSpend,
+      costStillToCover,
+      costPart,
+      profitPart: round2(row.cash - costPart),
+      // Profit that has already gone back into stock rather than sitting here.
+      profitReinvested: round2(Math.max(0, stockSpend - costOfSold)),
       // What the brand's sales were made of, so "where is the cost and where
       // is the profit" is answered on the row itself.
       revenue: round2(p.revenue),

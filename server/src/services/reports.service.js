@@ -378,11 +378,14 @@ async function profitOverview(opts = 'month') {
       cost,
       profit,
       margin: revenue > 0 ? round2((profit / revenue) * 100) : 0,
+      // Reported, never deducted. The owner pays every rep from his own
+      // pocket, so commission never comes out of the business's money and has
+      // no business reducing what the business made. It is carried here so a
+      // screen can say what the boxes earned reps, as information.
       commission,
-      // What the business keeps after the goods AND the rep are paid — the
-      // number the owner means when he asks what he makes.
-      contribution: round2(profit - commission),
-      contributionMargin: revenue > 0 ? round2(((profit - commission) / revenue) * 100) : 0,
+      // What the business keeps: the money in, less what the boxes cost.
+      contribution: profit,
+      contributionMargin: revenue > 0 ? round2((profit / revenue) * 100) : 0,
     };
   };
 

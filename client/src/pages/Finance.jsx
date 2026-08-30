@@ -523,6 +523,32 @@ function Overview({ onNavigate, onOwnerMoney }) {
                         <p className="mt-2 text-[11px] text-faint">
                           {formatCurrency(b.moneyIn)} in − {formatCurrency(b.moneyOut)} out = the {formatCurrency(b.cash)} above. All time.
                         </p>
+
+                        {/* The owner's question, answered on the card: of the
+                            money he is holding, which part is cost and which
+                            is profit. Cost is covered first out of everything
+                            already spent putting stock back. */}
+                        <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
+                          <p className="text-xs font-semibold text-foreground">Of the {formatCurrency(b.cash)} you are holding</p>
+                          <div className="mt-2.5 space-y-2">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="text-xs text-muted">To put stock back</span>
+                              <span className="text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.costPart)}</span>
+                            </div>
+                            <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.06] pt-2">
+                              <span className="text-xs font-semibold text-foreground">Your profit</span>
+                              <span className="text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.profitPart)}</span>
+                            </div>
+                          </div>
+                          <p className="mt-2.5 text-[11px] leading-relaxed text-faint">
+                            {b.costStillToCover > 0 ? (
+                              <>The boxes you sold cost {formatCurrency(b.costOfSold)} and you have put {formatCurrency(b.spentOnStock)} back into stock, so {formatCurrency(b.costStillToCover)} of cost is still to cover.</>
+                            ) : (
+                              <>The boxes you sold cost {formatCurrency(b.costOfSold)} and you have already put {formatCurrency(b.spentOnStock)} back into stock — the cost is covered, so what is left is yours.</>
+                            )}
+                            {b.profitReinvested > 0 && <> A further {formatCurrency(b.profitReinvested)} of your profit has already gone back into stock rather than staying here.</>}
+                          </p>
+                        </div>
                       </>
                     )}
 
@@ -688,7 +714,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
               <Money label="Revenue" value={data.revenue} tone="emerald" />
               <Money label="− COGS" value={data.cogs} tone="slate" />
               <Money label="= Gross profit" value={data.grossProfit} tone="brand" />
-              <Money label="− Commission" value={data.commissionAccrued ?? 0} tone="amber" />
+              <Money label="Reps earned" value={data.commissionAccrued ?? 0} tone="amber" />
               <Money label="− Expenses" value={data.expenses} tone="rose" />
               <Money label="= Net profit" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
             </div>
@@ -1080,9 +1106,10 @@ function ProfitTab() {
       ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', chip: 'bg-white/10 text-muted', num: 'text-foreground' },
     { label: 'Gross profit', value: formatCurrency(t.profit), icon: Wallet, sub: `${t.margin}% margin`,
       ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
-    { label: 'Rep commission', value: formatCurrency(t.commission), icon: Coins, sub: 'earned on these boxes',
+    // Reported, never deducted — the owner pays reps himself, in cash.
+    { label: 'Reps earned', value: formatCurrency(t.commission), icon: Coins, sub: 'you pay this, not the business',
       ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.12]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
-    { label: 'You keep', value: `${t.contributionMargin}%`, icon: Scale, sub: `${formatCurrency(t.contribution)} after goods & reps`,
+    { label: 'You keep', value: `${t.contributionMargin}%`, icon: Scale, sub: `${formatCurrency(t.contribution)} after the boxes`,
       ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
   ];
 
@@ -1123,7 +1150,6 @@ function ProfitTab() {
               const path = [
                 { label: 'Revenue', v: b.revenue, cls: 'text-foreground' },
                 { label: '− Goods', v: -b.cost, cls: 'text-muted' },
-                { label: '− Commission', v: -b.commission, cls: 'text-amber-400' },
               ];
               return (
                 <Card key={b.brandId}>
@@ -1135,7 +1161,7 @@ function ProfitTab() {
                     <p className={`mt-3 text-3xl font-bold leading-none tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {b.contributionMargin}%
                     </p>
-                    <p className="mt-1 text-xs text-faint">kept — {formatCurrency(b.contribution)} after goods & reps</p>
+                    <p className="mt-1 text-xs text-faint">kept — {formatCurrency(b.contribution)} after the boxes</p>
                     <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3">
                       {path.map((r) => (
                         <div key={r.label} className="flex items-baseline justify-between">
@@ -1175,7 +1201,7 @@ function ProfitTab() {
         <CardBody>
           {!data.byProduct.length ? <EmptyState title="No sales in this period" icon={Package} /> : (
             <Table>
-              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Goods</TH><TH>Commission</TH><TH>You keep</TH><TH>Kept / box</TH><TH>Margin</TH></TR></THead>
+              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Goods</TH><TH>You keep</TH><TH>Kept / box</TH><TH>Margin</TH></TR></THead>
               <TBody>
                 {data.byProduct.map((p) => (
                   <TR key={p.productId}>
@@ -1183,7 +1209,6 @@ function ProfitTab() {
                     <TD>{formatNumber(p.boxes)}</TD>
                     <TD>{formatCurrency(p.revenue)}</TD>
                     <TD className="text-muted">{formatCurrency(p.cost)}</TD>
-                    <TD className="text-amber-400">{formatCurrency(p.commission)}</TD>
                     <TD className={`font-semibold ${p.contribution >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(p.contribution)}</TD>
                     <TD className="tabular-nums">{formatCurrency(perBoxKept(p))}</TD>
                     <TD>{p.contributionMargin}%</TD>
@@ -1200,7 +1225,7 @@ function ProfitTab() {
         <CardBody>
           {!data.byRep.length ? <EmptyState title="No rep sales in this period" icon={TrendingUp} /> : (
             <Table>
-              <THead><TR><TH>Sales rep</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Their commission</TH><TH>You keep</TH><TH>Margin</TH></TR></THead>
+              <THead><TR><TH>Sales rep</TH><TH>Boxes</TH><TH>Revenue</TH><TH>They earned</TH><TH>You keep</TH><TH>Margin</TH></TR></THead>
               <TBody>
                 {data.byRep.map((r) => (
                   <TR key={r.salesRepId}>
