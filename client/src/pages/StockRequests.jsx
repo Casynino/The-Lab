@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import {
   Plus, Minus, X, Search, ShoppingCart, ClipboardList, Eye,
-  Loader2, CheckCircle2, Pencil, ChevronRight, Clock, XCircle, Ban,
+  Loader2, CheckCircle2, Pencil, ChevronRight, Clock, XCircle, Ban, Boxes, Wallet, Timer,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -608,48 +608,108 @@ function StaffRequestTable({ onView }) {
   // shows decided ones unless the filter explicitly asks for pending.
   const rows = (data?.data || []).filter((r) => status === 'PENDING' || r.status !== 'PENDING');
 
+  // What this page is really a record of: boxes leaving the warehouse. The
+  // table said "2 line(s)", which counts products on a form and tells you
+  // nothing about stock. These add up what is on screen.
+  const pageBoxes = rows.reduce((a, r) => a + (r.boxesApproved || boxCount(r)), 0);
+  const pageValue = rows.reduce((a, r) => a + orderDisplayValue(r), 0);
+  const settledCount = rows.filter((r) => r.settlement?.status === 'SETTLED').length;
+  const openCount = rows.filter((r) => r.status === 'FULFILLED' && r.settlement?.status !== 'SETTLED').length;
+
+  const chips = [
+    { key: '', label: 'All decided', tone: 'slate' },
+    ...Object.entries(REQUEST_STATUS_META).map(([k, v]) => ({ key: k, label: v.label, tone: k === 'REJECTED' ? 'rose' : k === 'PENDING' ? 'amber' : 'emerald' })),
+  ];
+  const TONE = {
+    slate: 'bg-white/10 text-foreground ring-white/20',
+    emerald: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+    amber: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+    rose: 'bg-rose-500/15 text-rose-300 ring-rose-500/30',
+  };
+
   return (
-    <Card>
-      <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
-        <h3 className="text-sm font-semibold text-muted">Request history</h3>
-        <select className="input ml-auto sm:w-48" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-          <option value="">All decided</option>
-          {Object.entries(REQUEST_STATUS_META).map(([k, v]) => (<option key={k} value={k}>{v.label}</option>))}
-        </select>
+    <div className="space-y-4">
+      {/* What left the warehouse, in the view you are looking at. */}
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {[
+          { label: 'Boxes issued', value: formatNumber(pageBoxes), icon: Boxes, sub: 'in this view',
+            ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
+          { label: 'Value issued', value: formatCurrency(pageValue), icon: Wallet, sub: `${formatNumber(rows.length)} order${rows.length === 1 ? '' : 's'}`,
+            ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
+          { label: 'Still open', value: formatNumber(openCount), icon: Timer, sub: 'issued, not yet settled',
+            ring: openCount > 0 ? 'ring-amber-500/30' : 'ring-white/[0.07]', glow: openCount > 0 ? 'from-amber-500/[0.14]' : 'from-white/[0.02]',
+            chip: 'bg-amber-500/15 text-amber-300', num: openCount > 0 ? 'text-amber-300' : 'text-foreground' },
+          { label: 'Settled', value: formatNumber(settledCount), icon: CheckCircle2, sub: 'closed and paid for',
+            ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
+        ].map((c) => (
+          <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
+            <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
+            <div className="relative flex items-start justify-between gap-2">
+              <p className="text-xs font-medium text-muted">{c.label}</p>
+              <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+            </div>
+            <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
+            <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
+          </div>
+        ))}
       </div>
 
-      {isLoading ? <PageSpinner /> : !rows.length ? (
-        <EmptyState title="No stock requests" icon={ClipboardList} />
-      ) : (
-        <>
-          <Table>
-            <THead>
-              <TR>
-                <TH>Order</TH><TH>Rep</TH><TH>Items</TH><TH>Value</TH><TH>Status</TH><TH>Requested</TH><TH />
-              </TR>
-            </THead>
-            <TBody>
-              {rows.map((r) => (
-                <TR key={r.id} className="cursor-pointer" onClick={() => onView(r)}>
-                  <TD className="font-medium">{r.requestNumber}</TD>
-                  <TD>{r.salesRep?.user?.name}</TD>
-                  <TD>{productCount(r)} line(s)</TD>
-                  <TD className="font-medium">{formatCurrency(orderDisplayValue(r))}</TD>
-                  <TD>{(() => { const ds = requestDisplayStatus(r); return <Badge className={ds.cls}>{ds.label}</Badge>; })()}</TD>
-                  <TD className="text-faint">{formatDateTime(r.requestedAt)}</TD>
-                  <TD>
-                    <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600">
-                      {r.status === 'PENDING' ? 'Review' : 'View'} <Eye className="h-3.5 w-3.5" />
-                    </span>
-                  </TD>
+      <Card>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
+          {chips.map((c) => (
+            <button key={c.key || 'all'} type="button" onClick={() => { setStatus(c.key); setPage(1); }}
+              className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
+                status === c.key ? TONE[c.tone] : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        {isLoading ? <PageSpinner /> : !rows.length ? (
+          <EmptyState title="No stock requests" icon={ClipboardList} />
+        ) : (
+          <>
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Order</TH><TH>Rep</TH><TH>Boxes out</TH><TH>Products</TH><TH>Value</TH><TH>Status</TH><TH>Requested</TH><TH />
                 </TR>
-              ))}
-            </TBody>
-          </Table>
-          <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
-        </>
-      )}
-    </Card>
+              </THead>
+              <TBody>
+                {rows.map((r) => {
+                  const asked = r.boxesRequested ?? boxCount(r);
+                  const given = r.boxesApproved ?? boxCount(r);
+                  const shortfall = r.status === 'FULFILLED' && asked > given;
+                  return (
+                    <TR key={r.id} className="cursor-pointer" onClick={() => onView(r)}>
+                      <TD className="font-medium">{r.requestNumber}</TD>
+                      <TD>{r.salesRep?.user?.name}</TD>
+                      {/* The number this page exists to record. */}
+                      <TD>
+                        <span className="font-semibold tabular-nums text-foreground">{formatNumber(given)}</span>
+                        {shortfall && (
+                          <span className="ml-1.5 text-[11px] text-amber-400">of {formatNumber(asked)} asked</span>
+                        )}
+                      </TD>
+                      <TD className="text-muted">{productCount(r)}</TD>
+                      <TD className="font-medium">{formatCurrency(orderDisplayValue(r))}</TD>
+                      <TD>{(() => { const ds = requestDisplayStatus(r); return <Badge className={ds.cls}>{ds.label}</Badge>; })()}</TD>
+                      <TD className="text-faint">{formatDateTime(r.requestedAt)}</TD>
+                      <TD>
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600">
+                          {r.status === 'PENDING' ? 'Review' : 'View'} <Eye className="h-3.5 w-3.5" />
+                        </span>
+                      </TD>
+                    </TR>
+                  );
+                })}
+              </TBody>
+            </Table>
+            <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
+          </>
+        )}
+      </Card>
+    </div>
   );
 }
 

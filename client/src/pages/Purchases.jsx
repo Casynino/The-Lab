@@ -5,7 +5,7 @@ import { Plus, Ship, PackageCheck, X, Pencil } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Select, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
@@ -135,7 +135,56 @@ function PurchaseOrders() {
     onSuccess: () => { toast.success('Received into warehouse'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
     onError: (e) => toast.error(apiError(e)),
   });
+  const otw = data?.meta?.onTheWay;
+
   return (
+    <div className="space-y-4">
+      {/* Stock bought but not landed. It is paid for or owed for and it is
+          coming, but it is not inventory yet — so until now it was invisible
+          between ordering it and it arriving, which is exactly the window
+          you need to plan around. */}
+      {otw && (
+        <div className={`relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ${otw.boxes > 0 ? 'ring-sky-500/25' : 'ring-white/[0.07]'}`}>
+          <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${otw.boxes > 0 ? 'from-sky-500/[0.12]' : 'from-white/[0.02]'} to-transparent`} aria-hidden="true" />
+          <div className="relative flex flex-wrap items-center gap-x-8 gap-y-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-lg bg-sky-500/15 p-1.5 text-sky-300"><Ship className="h-3.5 w-3.5" /></span>
+                <p className="text-xs font-medium text-muted">Stock on the way</p>
+              </div>
+              <p className={`mt-2 text-3xl font-bold leading-none tabular-nums ${otw.boxes > 0 ? 'text-sky-300' : 'text-foreground'}`}>
+                {formatNumber(otw.boxes)} <span className="text-sm font-normal text-muted">boxes</span>
+              </p>
+              <p className="mt-1 text-[11px] text-faint">
+                {otw.orders > 0
+                  ? `${formatNumber(otw.orders)} order${otw.orders === 1 ? '' : 's'} ordered, not yet arrived`
+                  : 'nothing ordered that has not arrived'}
+              </p>
+            </div>
+            {otw.orders > 0 && (
+              <>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Worth</p>
+                  <p className="mt-1.5 text-xl font-bold tabular-nums text-foreground">{formatCurrency(otw.value)}</p>
+                  <p className="text-[11px] text-faint">at landed cost</p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Next arrival</p>
+                  <p className="mt-1.5 text-xl font-bold tabular-nums text-foreground">
+                    {otw.nextArrival ? formatDate(otw.nextArrival) : '—'}
+                  </p>
+                  <p className="text-[11px] text-faint">{otw.nextArrival ? 'expected' : 'no date set'}</p>
+                </div>
+              </>
+            )}
+            <p className="ml-auto max-w-xs text-[11px] leading-relaxed text-faint">
+              These boxes are not in Inventory yet. They count the moment you press <b className="text-muted">Receive</b> on the order —
+              that is what puts them on the shelf and starts their cost.
+            </p>
+          </div>
+        </div>
+      )}
+
     <Card>
       <div className="flex items-center justify-between border-b border-border p-4">
         <span className="text-sm font-semibold text-foreground">Purchase orders</span>
@@ -144,13 +193,15 @@ function PurchaseOrders() {
       {isLoading ? <PageSpinner /> : !data?.data?.length ? <EmptyState title="No purchase orders" icon={Ship} /> : (
         <>
           <Table>
-            <THead><TR><TH>PO</TH><TH>Supplier</TH><TH>Items</TH><TH>Total cost</TH><TH>Expected</TH><TH>Status</TH><TH /></TR></THead>
+            <THead><TR><TH>PO</TH><TH>Supplier</TH><TH>Boxes</TH><TH>Products</TH><TH>Total cost</TH><TH>Expected</TH><TH>Status</TH><TH /></TR></THead>
             <TBody>
               {data.data.map((po) => (
                 <TR key={po.id}>
                   <TD className="font-medium">{po.poNumber}</TD>
                   <TD>{po.supplier?.name}</TD>
-                  <TD>{po.items.length}</TD>
+                  {/* Boxes, not just how many product lines were on the form. */}
+                  <TD className="font-semibold tabular-nums text-foreground">{formatNumber(po.boxes ?? 0)}</TD>
+                  <TD className="text-muted">{po.items.length}</TD>
                   <TD>{formatCurrency(po.totalCost)}</TD>
                   <TD className="text-faint">{formatDate(po.expectedArrival)}</TD>
                   <TD><Badge className={PO_STATUS_META[po.status]?.cls}>{PO_STATUS_META[po.status]?.label}</Badge></TD>
@@ -166,6 +217,7 @@ function PurchaseOrders() {
       )}
       {open && <POModal onClose={() => setOpen(false)} />}
     </Card>
+    </div>
   );
 }
 

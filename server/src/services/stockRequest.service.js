@@ -128,6 +128,26 @@ async function attachSettlements(items) {
   return items.map((i) => ({ ...i, settlement: i.settlementId ? map.get(i.settlementId) || null : null }));
 }
 
+// Boxes, not "2 line(s)". A line count says how many products were on the
+// request; it never says how many boxes left the warehouse — which is the
+// thing anyone reading this page actually wants to know. Requested and
+// approved are both carried, because they differ whenever an order is only
+// part-filled, and the difference is the story.
+function withBoxes(rows) {
+  return rows.map((r) => {
+    let requested = 0;
+    let approved = 0;
+    for (const it of r.items || []) {
+      const factor = it.packagingUnit?.baseQuantity ?? 1;
+      requested += (it.quantityRequested || 0) * factor;
+      // baseQuantity is written on approval; before that there is nothing to
+      // count, and quantityApproved falls back to what was asked for.
+      approved += it.baseQuantity || (it.quantityApproved != null ? it.quantityApproved * factor : 0);
+    }
+    return { ...r, boxesRequested: requested, boxesApproved: approved };
+  });
+}
+
 async function list(filters, pagination) {
   const where = {};
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
@@ -136,13 +156,13 @@ async function list(filters, pagination) {
     prisma.stockRequest.findMany({ where, include: INCLUDE, skip: pagination.skip, take: pagination.take, orderBy: pagination.orderBy }),
     prisma.stockRequest.count({ where }),
   ]);
-  return { items: await attachSettlements(items), total };
+  return { items: withBoxes(await attachSettlements(items)), total };
 }
 
 async function get(id) {
   const r = await prisma.stockRequest.findUnique({ where: { id }, include: INCLUDE });
   if (!r) throw ApiError.notFound('Stock request not found');
-  const [enriched] = await attachSettlements([r]);
+  const [enriched] = withBoxes(await attachSettlements([r]));
   return enriched;
 }
 

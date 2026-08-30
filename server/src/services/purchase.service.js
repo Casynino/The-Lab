@@ -93,11 +93,38 @@ async function listPurchaseOrders(filters, pagination) {
   const where = {};
   if (filters.status) where.status = filters.status;
   if (filters.supplierId) where.supplierId = filters.supplierId;
-  const [items, total] = await Promise.all([
+  const [items, total, incoming] = await Promise.all([
     prisma.purchaseOrder.findMany({ where, include: PO_INCLUDE, skip: pagination.skip, take: pagination.take, orderBy: pagination.orderBy }),
     prisma.purchaseOrder.count({ where }),
+    // Stock that is bought but has not landed: ordered or in transit, never
+    // received or cancelled. It is real — it is paid for or owed for — but it
+    // is not inventory yet, so it belongs in its own count rather than
+    // silently missing from the page until the day it arrives.
+    prisma.purchaseOrder.findMany({
+      where: { status: { in: ['DRAFT', 'ORDERED', 'IN_TRANSIT'] } },
+      include: { items: true, supplier: { select: { name: true } } },
+      orderBy: { expectedArrival: 'asc' },
+    }),
   ]);
-  return { items, total };
+
+  const boxesOf = (po) => (po.items || []).reduce((n, it) => n + (it.baseQuantity || 0), 0);
+  const withBoxes = items.map((po) => ({ ...po, boxes: boxesOf(po) }));
+  const onTheWay = {
+    orders: incoming.length,
+    boxes: incoming.reduce((n, po) => n + boxesOf(po), 0),
+    value: round2(incoming.reduce((n, po) => n + toNumber(po.totalCost), 0)),
+    nextArrival: incoming.find((po) => po.expectedArrival)?.expectedArrival || null,
+    orders_: incoming.map((po) => ({
+      id: po.id,
+      poNumber: po.poNumber,
+      supplier: po.supplier?.name || null,
+      status: po.status,
+      boxes: boxesOf(po),
+      totalCost: round2(toNumber(po.totalCost)),
+      expectedArrival: po.expectedArrival,
+    })),
+  };
+  return { items: withBoxes, total, onTheWay };
 }
 
 async function getPurchaseOrder(id) {

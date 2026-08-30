@@ -38,8 +38,8 @@ const removeSupplier = asyncHandler(async (req, res) => {
 const listPOs = asyncHandler(async (req, res) => {
   const q = req.validatedQuery || req.query;
   const pagination = parsePagination(q, { defaultSortBy: 'createdAt', defaultSortDir: 'desc' });
-  const { items, total } = await purchase.listPurchaseOrders(q, pagination);
-  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
+  const { items, total, onTheWay } = await purchase.listPurchaseOrders(q, pagination);
+  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total, onTheWay });
 });
 
 const getPO = asyncHandler(async (req, res) => ok(res, await purchase.getPurchaseOrder(req.params.id)));
