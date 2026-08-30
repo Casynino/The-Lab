@@ -68,7 +68,7 @@ function standingOf(r) {
     return {
       key: 'late', rank: 0,
       label: `${formatNumber(r.overdueOrders)} order${r.overdueOrders === 1 ? '' : 's'} late`,
-      detail: `since ${fromNow(r.oldestOverdueAt)}`,
+      detail: `oldest was due ${fromNow(r.oldestOverdueAt)}`,
       cls: 'bg-rose-500/15 text-rose-300 ring-rose-500/25',
       dot: 'bg-rose-400',
     };
@@ -77,7 +77,7 @@ function standingOf(r) {
     return {
       key: 'out', rank: 1,
       label: `${formatNumber(r.openOrders)} order${r.openOrders === 1 ? '' : 's'} running`,
-      detail: r.nextDeadlineAt ? `next due ${fromNow(r.nextDeadlineAt)}` : 'within the window',
+      detail: r.nextDeadlineAt ? `next due ${fromNow(r.nextDeadlineAt)}` : 'inside the window',
       cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/25',
       dot: 'bg-amber-400',
     };
