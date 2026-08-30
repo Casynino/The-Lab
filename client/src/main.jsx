@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import { AuthProvider } from '@/context/AuthContext';
 import { queryClient } from '@/lib/queryClient';
+import { watchForNewVersion } from '@/lib/version';
 import './index.css';
 
 // Every deploy renames the hashed chunks. A tab left open across one will ask
@@ -21,6 +22,8 @@ window.addEventListener('vite:preloadError', (event) => {
   window.location.reload();
 });
 window.addEventListener('load', () => sessionStorage.removeItem('chunkReloadAttempted'));
+
+watchForNewVersion();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
