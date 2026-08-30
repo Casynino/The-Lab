@@ -476,6 +476,7 @@ async function command() {
       moneyIn: fin.flow.today.moneyIn,
       moneyOut: fin.flow.today.moneyOut,
       netCash: fin.flow.today.net,
+      boxesSold: fin.boxesSold ?? 0,
     },
     month: { revenue: profMonth.totals.revenue, grossProfit: profMonth.totals.profit, boxes: profMonth.totals.boxes },
     brands,

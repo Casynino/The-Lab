@@ -63,6 +63,11 @@ function Mini({ label, value, sub }) {
   );
 }
 
+// One colour per account, used by the hero bar and its dots so a pocket is
+// recognisable at a glance.
+const HERO_BAR = ['bg-brand-400', 'bg-violet-400', 'bg-cyan-300', 'bg-amber-300'];
+const HERO_DOT = ['bg-brand-400', 'bg-violet-400', 'bg-cyan-300', 'bg-amber-300'];
+
 export default function Dashboard() {
   const [attentionFilter, setAttentionFilter] = useState('All');
   // The actual month by name, so "this month" can never be mistaken for
@@ -98,51 +103,88 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* ── Hero: greeting + the number that matters most ── */}
+      {/* ── Hero ────────────────────────────────────────────────────────────
+             The greeting used to take the top line and the money came third,
+             under two chips; the accounts were three flat tiles crammed to
+             the right. Now the money leads, the greeting is a byline, and the
+             accounts read as one bar split between them — which also shows at
+             a glance which pocket actually holds the business's cash. ── */}
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.2, 0.7, 0.3, 1] }}
-        className="relative mb-5 overflow-hidden rounded-2xl border border-white/10 p-5 shadow-xl"
-        style={{ background: 'linear-gradient(115deg, #1a2e05 0%, #064e3b 42%, #0e3a4a 100%)' }}
+        className="relative mb-5 overflow-hidden rounded-3xl border border-white/10 shadow-2xl"
+        style={{ background: 'linear-gradient(118deg, #14260a 0%, #06402f 45%, #0b3242 100%)' }}
       >
-        {/* One light source, top-left, in the brand colour. A flat bright fill
-            reads as a highlighter; a dark ground with a light on it reads as a
-            surface, and lets the numbers stay white and legible. */}
-        <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-brand-500/25 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-24 right-10 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" aria-hidden="true" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80 ring-1 ring-inset ring-white/15">
-                {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long' })}
+        {/* Two light sources and a hairline sheen, so the panel reads as a
+            surface catching light rather than a flat block of colour. */}
+        <div className="pointer-events-none absolute -left-24 -top-28 h-80 w-80 rounded-full bg-brand-400/25 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-28 right-0 h-72 w-72 rounded-full bg-cyan-300/12 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" aria-hidden="true" />
+
+        <div className="relative grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-center lg:gap-10 lg:p-7">
+          {/* The money, first. */}
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-300/90">Money you can use right now</p>
+            <p className="mt-2 text-4xl font-bold leading-none tracking-tight text-white sm:text-5xl">
+              {formatCurrency(totalFunds)}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={clsx(
+                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                today.netCash >= 0 ? 'bg-emerald-400/15 text-emerald-200' : 'bg-rose-400/15 text-rose-200',
+              )}>
+                {today.netCash >= 0 ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+                {formatCurrency(Math.abs(today.netCash))} {today.netCash >= 0 ? 'in' : 'out'} today
               </span>
-              <span className="rounded-full bg-brand-500/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-brand-300 ring-1 ring-inset ring-brand-500/30">
-                Administrator
-              </span>
+              {today.boxesSold > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80">
+                  <Boxes className="h-3 w-3" /> {formatNumber(today.boxesSold)} boxes sold today
+                </span>
+              )}
             </div>
-            <h1 className="mt-2.5 text-2xl font-bold tracking-tight text-white">
-              {tzGreeting()}, {firstName}.
-            </h1>
-            <p className="mt-0.5 text-sm text-white/60">Here is the whole business, and what is waiting on you.</p>
-            <div className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-white/50">Total available business funds</div>
-            <div className="text-3xl font-black tabular-nums text-brand-300 sm:text-4xl">{formatCurrency(totalFunds)}</div>
+            <p className="mt-4 text-sm text-white/55">
+              {tzGreeting()}, {firstName} · {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
           </div>
-          <div className="grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-3">
-            {accounts.map((a) => {
-              const Icon = ACCOUNT_ICON[a.type] || Wallet;
-              return (
-                <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                  className="cursor-pointer rounded-xl border border-white/10 bg-white/[0.06] p-3 text-left backdrop-blur-sm transition duration-200 hover:bg-white/[0.12]">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/50">
-                    <Icon className="h-3.5 w-3.5" /> {a.name}
-                  </div>
-                  <div className={clsx('mt-1 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
-                    {formatCurrency(a.balance)}
-                  </div>
-                </button>
-              );
-            })}
+
+          {/* Where that money sits — one bar, then the pockets. */}
+          <div className="min-w-0">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Where it sits</p>
+              <button onClick={() => navigate('/finance?tab=accounts')}
+                className="cursor-pointer text-[11px] font-semibold text-brand-300 transition hover:text-brand-200">
+                Open accounts →
+              </button>
+            </div>
+            {totalFunds > 0 && (
+              <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-white/10">
+                {accounts.map((a, i) => (
+                  <div key={a.id} className={HERO_BAR[i % HERO_BAR.length]}
+                    style={{ width: `${Math.max(0, (a.balance / totalFunds) * 100)}%` }} />
+                ))}
+              </div>
+            )}
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {accounts.map((a, i) => {
+                const Icon = ACCOUNT_ICON[a.type] || Wallet;
+                const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
+                return (
+                  <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
+                    className="cursor-pointer rounded-2xl border border-white/10 bg-white/[0.07] p-3 text-left backdrop-blur-sm transition duration-200 hover:border-white/25 hover:bg-white/[0.13]">
+                    <div className="flex items-center gap-1.5">
+                      <span className={clsx('h-2 w-2 shrink-0 rounded-full', HERO_DOT[i % HERO_DOT.length])} />
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-white/50" />
+                      <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-white/55">{a.name}</span>
+                    </div>
+                    <div className={clsx('mt-1.5 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
+                      {formatCurrency(a.balance)}
+                    </div>
+                    <div className="text-[10px] text-white/40">{share}% of the total</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </motion.div>
