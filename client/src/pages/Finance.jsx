@@ -808,9 +808,98 @@ function Money({ label, value, tone, big }) {
 }
 
 // ── Accounts tab ──────────────────────────────────────────────────────────────
+// Everything that has moved through one account, newest first, with a running
+// balance. The running balance is walked BACKWARDS from the account's current
+// balance: the newest row must end at the balance on the card, and each
+// earlier row is that figure with the later movements undone. Adding forwards
+// from an opening balance would drift the moment a page boundary hid a row.
+function AccountStatementModal({ account, onClose }) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useQuery({
+    queryKey: ['finance', 'account-statement', account.id, page],
+    queryFn: async () => unwrap(await api.get('/finance/transactions', {
+      params: { accountId: account.id, page, limit: 25, sortBy: 'occurredAt', sortDir: 'desc' },
+    })),
+  });
+  const rows = data?.data || [];
+  const sums = data?.meta?.sums;
+
+  // Balance after each row, newest first.
+  let running = account.balance;
+  const withBalance = rows.map((t) => {
+    const after = running;
+    running = Math.round((after - (t.direction === 'IN' ? Number(t.amount) : -Number(t.amount))) * 100) / 100;
+    return { ...t, balanceAfter: after };
+  });
+
+  const Icon = ACCOUNT_ICON[account.type] || Wallet;
+  return (
+    <Modal open onClose={onClose} size="xl" title={`${account.name} — every movement`}
+      footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/[0.08] bg-surface p-4">
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400"><Icon className="h-5 w-5" /></span>
+          <div>
+            <p className="text-xs text-muted">Balance now</p>
+            <p className={`text-2xl font-bold tabular-nums ${account.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(account.balance)}</p>
+          </div>
+          <div className="ml-auto flex gap-6 text-right">
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-muted">Came in</p>
+              <p className="text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(sums?.in ?? account.moneyIn)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-muted">Went out</p>
+              <p className="text-sm font-bold tabular-nums text-rose-400">{formatCurrency(sums?.out ?? account.moneyOut)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wider text-muted">Opening</p>
+              <p className="text-sm font-bold tabular-nums text-muted">{formatCurrency(account.openingBalance)}</p>
+            </div>
+          </div>
+        </div>
+        {account.notes && <p className="text-xs text-faint">{account.notes}</p>}
+
+        {isLoading ? <PageSpinner /> : !rows.length ? (
+          <EmptyState title="Nothing has moved through this account yet" icon={Receipt} />
+        ) : (
+          <>
+            <Table>
+              <THead>
+                <TR><TH>Date</TH><TH>Type</TH><TH>What it was</TH><TH className="text-right">In</TH><TH className="text-right">Out</TH><TH className="text-right">Balance</TH></TR>
+              </THead>
+              <TBody>
+                {withBalance.map((t) => (
+                  <TR key={t.id}>
+                    <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
+                    <TD><Badge className={DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
+                    <TD className="max-w-[260px] truncate text-foreground">
+                      {t.description || t.category || t.reference || '—'}
+                      {t.brandName && <span className="ml-1.5 text-[11px] text-faint">{t.brandName}</span>}
+                    </TD>
+                    <TD className="text-right font-semibold tabular-nums text-emerald-400">
+                      {t.direction === 'IN' ? formatCurrency(t.amount) : ''}
+                    </TD>
+                    <TD className="text-right font-semibold tabular-nums text-rose-400">
+                      {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
+                    </TD>
+                    <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function Accounts({ onQuick }) {
   const [addOpen, setAddOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [viewing, setViewing] = useState(null); // account whose statement is open
   const { data: accounts = [], isLoading } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   if (isLoading) return <PageSpinner />;
   const total = accounts.reduce((s, a) => s + a.balance, 0);
@@ -855,7 +944,12 @@ function Accounts({ onQuick }) {
           const Icon = ACCOUNT_ICON[a.type] || Wallet;
           const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
           return (
-            <div key={a.id} className={`relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ${tint.ring}`}>
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => setViewing(a)}
+              className={`relative cursor-pointer overflow-hidden rounded-2xl bg-surface p-5 text-left ring-1 transition duration-200 hover:ring-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${tint.ring}`}
+            >
               <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tint.glow} to-transparent`} aria-hidden="true" />
               <div className="relative flex items-center justify-between">
                 <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-5 w-5" /></span>
@@ -868,13 +962,19 @@ function Accounts({ onQuick }) {
                 <span className="text-emerald-400">In {formatCurrency(a.moneyIn)}</span>
                 <span className="text-rose-400">Out {formatCurrency(a.moneyOut)}</span>
               </div>
-              <div className="relative mt-1 text-[11px] text-faint">Opening {formatCurrency(a.openingBalance)}</div>
-            </div>
+              <div className="relative mt-1 flex items-center justify-between text-[11px] text-faint">
+                <span>Opening {formatCurrency(a.openingBalance)}</span>
+                <span className="inline-flex items-center gap-1 font-medium text-brand-400">
+                  See every movement <ChevronRight className="h-3 w-3" />
+                </span>
+              </div>
+            </button>
           );
         })}
       </div>
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
+      {viewing && <AccountStatementModal account={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }
