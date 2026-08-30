@@ -285,6 +285,63 @@ function MoneyModal({ mode, accounts, categories, onClose }) {
   );
 }
 
+// The owner's own money. Kept apart from trade on purpose: cash he puts in
+// is not the business earning, and profit he takes out is not a cost of
+// earning it. Both move an account balance and nothing else.
+function OwnerMoneyModal({ mode, accounts, onClose }) {
+  const qc = useQueryClient();
+  const isIn = mode === 'in';
+  const [form, setForm] = useState({
+    amount: '',
+    accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '',
+    occurredAt: new Date().toISOString().slice(0, 10),
+    description: isIn ? 'Commission paid from my own pocket' : '',
+    notes: '',
+  });
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const save = useMutation({
+    mutationFn: () => api.post('/finance/owner-money', {
+      direction: isIn ? 'IN' : 'OUT',
+      amount: Number(form.amount),
+      accountId: form.accountId,
+      occurredAt: form.occurredAt,
+      description: form.description.trim() || (isIn ? 'Owner put money in' : 'Owner took profit out'),
+      notes: form.notes.trim() || undefined,
+    }),
+    onSuccess: () => {
+      toast.success(isIn ? 'Recorded — your money is in the business' : 'Recorded — profit taken out');
+      invalidateFinance(qc);
+      onClose();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const valid = form.accountId && Number(form.amount) > 0;
+  return (
+    <Modal open onClose={onClose} title={isIn ? 'Put my own money in' : 'Take profit out'}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>
+          {isIn ? 'Record my money in' : 'Record profit taken'}
+        </Button></>}>
+      <div className="space-y-4">
+        <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
+          {isIn
+            ? 'Your personal cash entering the business — paying rep commissions out of your own pocket, or topping up an account. It is not counted as income, so it never inflates profit.'
+            : 'Profit you are taking out of the business for yourself. It is not counted as an expense, so it never reduces the profit the business earned.'}
+        </p>
+        <Field label="Amount (TZS)" required><Input type="number" min="0" value={form.amount} onChange={set('amount')} autoFocus placeholder="0" /></Field>
+        <Field label={isIn ? 'Into which account' : 'Out of which account'} required>
+          <Select value={form.accountId} onChange={set('accountId')}>
+            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
+          </Select>
+        </Field>
+        <Field label="Date"><Input type="date" value={form.occurredAt} onChange={set('occurredAt')} /></Field>
+        <Field label="What was it for"><Input value={form.description} onChange={set('description')} placeholder={isIn ? 'e.g. commissions for August' : 'e.g. personal drawing'} /></Field>
+        <Field label="Notes"><Textarea rows={2} value={form.notes} onChange={set('notes')} /></Field>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Overview tab ──────────────────────────────────────────────────────────────
 // Uppercase micro-header with a plain-English subtitle — the section rhythm
 // the owner pointed at in the Target admin.
@@ -297,7 +354,7 @@ function SectionHead({ label, sub }) {
   );
 }
 
-function Overview({ onNavigate }) {
+function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
   const { data, isLoading } = useQuery({
     queryKey: ['finance', 'overview', period],
@@ -393,7 +450,7 @@ function Overview({ onNavigate }) {
       {/* ── The business, by brand ── */}
       {(data.brandFinance || []).length > 0 && (
         <div className="space-y-3">
-          <SectionHead label="The business, by brand" sub="What each brand puts in your pocket — never mixed." />
+          <SectionHead label="The business, by brand" sub="What each brand has earned — not money withdrawn, and never mixed." />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {data.brandFinance.map((b) => {
               const totalNet = data.brandFinance.reduce((a, x) => a + Math.max(0, x.netProfit), 0);
@@ -411,7 +468,7 @@ function Overview({ onNavigate }) {
                       {formatCurrency(b.netProfit)}
                     </p>
                     <p className="mt-1 text-xs text-faint">
-                      in your pocket{b.revenue > 0 ? ` — ${keptPct}% of what it sold` : ''}
+                      earned{b.revenue > 0 ? ` — ${keptPct}% of what it sold` : ''}
                     </p>
                     <div className="mt-4 grid grid-cols-3 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
                       <div className="bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-3">
@@ -449,6 +506,84 @@ function Overview({ onNavigate }) {
           </div>
         </div>
       )}
+
+      {/* ── Where the profit actually is ──────────────────────────────────
+             The question the page kept provoking: "I have 1,589,500 profit
+             but the account holds 364,000 — why?" Because none of it has
+             been taken out; it turned into stock. Said plainly, once. ── */}
+      {(() => {
+        const om = data.ownerMoney || {};
+        const earned = om.earnedAllTime ?? 0;
+        const taken = om.drawn ?? 0;
+        const working = om.stillWorking ?? 0;
+        return (
+          <div className="space-y-3">
+            <SectionHead label="Where your profit is" sub="What the business earned, what you have taken, and what is still working." />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
+              <Card>
+                <div className="p-5">
+                  <div className="grid grid-cols-1 divide-y divide-white/[0.06] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                    <div className="pb-4 sm:pb-0 sm:pr-5">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Profit earned</p>
+                      <p className={`mt-2 text-2xl font-bold tabular-nums ${earned >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(earned)}</p>
+                      <p className="mt-1 text-[11px] text-faint">all time, after goods, commissions and expenses</p>
+                    </div>
+                    <div className="py-4 sm:px-5 sm:py-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">You have taken out</p>
+                      <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{formatCurrency(taken)}</p>
+                      <p className="mt-1 text-[11px] text-faint">{taken > 0 ? 'drawn for yourself' : 'nothing yet — it is all still in the business'}</p>
+                    </div>
+                    <div className="pt-4 sm:pl-5 sm:pt-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Still working</p>
+                      <p className={`mt-2 text-2xl font-bold tabular-nums ${working >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>{formatCurrency(working)}</p>
+                      <p className="mt-1 text-[11px] text-faint">earned but never withdrawn</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 border-t border-white/[0.06] pt-4">
+                    <p className="text-xs font-semibold text-foreground">Why it is not sitting in an account</p>
+                    <p className="mt-1 text-xs leading-relaxed text-muted">
+                      Money collected went straight back out — to Bonge and into more stock. Right now
+                      {' '}<b className="text-foreground">{formatCurrency(om.stockAtCost || 0)}</b> of it is boxes on your shelf
+                      {om.owedToSuppliers > 0 && <> and <b className="text-foreground">{formatCurrency(om.owedToSuppliers)}</b> of that stock is still financed by your supplier</>}.
+                      Cash in the accounts is only what has not been spent yet.
+                    </p>
+                    {om.contributed > 0 && (
+                      <p className="mt-2 text-xs text-muted">
+                        You have also put <b className="text-foreground">{formatCurrency(om.contributed)}</b> of your own money in — counted as yours, never as business income.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </Card>
+
+              <Card>
+                <div className="flex h-full flex-col p-5">
+                  <p className="text-sm font-semibold text-foreground">Your own money</p>
+                  <p className="mt-0.5 text-xs text-muted">Kept apart from the business's earnings, so profit stays honest.</p>
+                  <div className="mt-4 space-y-2.5">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xs text-muted">You put in</span>
+                      <span className="text-sm font-bold tabular-nums text-sky-300">{formatCurrency(om.contributed || 0)}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xs text-muted">You took out</span>
+                      <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(taken)}</span>
+                    </div>
+                  </div>
+                  <div className="mt-auto space-y-2 pt-5">
+                    <Button variant="secondary" className="w-full justify-center" onClick={() => onOwnerMoney?.('in')}>
+                      <ArrowDownLeft className="h-4 w-4" /> Put my own money in
+                    </Button>
+                    <Button variant="secondary" className="w-full justify-center" onClick={() => onOwnerMoney?.('out')}>
+                      <ArrowUpRight className="h-4 w-4" /> Take profit out
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Charts row: motion + where the cash sits ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -673,7 +808,10 @@ function Ledger({ expensesOnly }) {
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: brands = [] } = useQuery({ queryKey: ['brands', 'all'], queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data });
   const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined, category: category || undefined, search: search || undefined };
-  if (expensesOnly) params.direction = 'OUT';
+  // Only genuine expenses. Filtering on direction alone swept in account
+  // transfers, stock purchases and commission payouts, so "Spent in this
+  // view" reported money that was not spent and contradicted the Overview.
+  if (expensesOnly) { params.direction = 'OUT'; params.type = 'EXPENSE'; }
   else if (type) params.type = type;
   const { data, isLoading } = useQuery({
     queryKey: ['finance', 'transactions', { page, account, type, brand, category, search, expensesOnly }],
@@ -1602,6 +1740,7 @@ export default function Finance() {
   const [tab, setTabState] = useState(TABS.some(([k]) => k === urlTab) ? urlTab : 'overview');
   const setTab = (k) => { setTabState(k); setSearchParams(k === 'overview' ? {} : { tab: k }, { replace: true }); };
   const [money, setMoney] = useState(null); // 'income' | 'expense'
+  const [ownerMoney, setOwnerMoney] = useState(null); // 'in' | 'out'
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: categories = [] } = useQuery({ queryKey: ['finance', 'categories'], queryFn: async () => unwrap(await api.get('/finance/categories')).data });
 
@@ -1623,7 +1762,7 @@ export default function Finance() {
         ))}
       </div>
 
-      {tab === 'overview' && <Overview onNavigate={setTab} />}
+      {tab === 'overview' && <Overview onNavigate={setTab} onOwnerMoney={setOwnerMoney} />}
       {tab === 'profit' && <ProfitTab />}
       {tab === 'cashflow' && <CashFlowTab />}
       {tab === 'suppliers' && <SuppliersTab accounts={accounts} />}
@@ -1635,6 +1774,7 @@ export default function Finance() {
       {tab === 'archive' && <ArchiveTab />}
 
       {money && <MoneyModal mode={money} accounts={accounts} categories={categories} onClose={() => setMoney(null)} />}
+      {ownerMoney && <OwnerMoneyModal mode={ownerMoney} accounts={accounts} onClose={() => setOwnerMoney(null)} />}
     </div>
   );
 }

@@ -26,6 +26,7 @@ router.post('/categories', ctrl.createCategory);
 router.get('/transactions', ctrl.transactions);
 router.post('/income', ctrl.recordIncome);
 router.post('/expenses', ctrl.recordExpense);
+router.post('/owner-money', ctrl.recordOwnerMoney); // owner's own cash in / profit taken out
 router.post('/adjustments', requireRoles(ROLES.ADMIN), ctrl.recordAdjustment); // balance corrections (admin only)
 router.post('/transfers', requireRoles(ROLES.ADMIN), ctrl.transferBetween); // move money between accounts (admin only)
 router.put('/transactions/:id', ctrl.updateTransaction);

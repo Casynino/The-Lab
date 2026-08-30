@@ -1359,6 +1359,11 @@ enum FinanceTxnType {
   COMMISSION_PAYMENT
   TRANSFER
   ADJUSTMENT
+  // The owner's own money, kept apart from the business's earnings. Putting
+  // personal cash in is NOT income and taking profit out is NOT an expense —
+  // conflating either one makes the profit figure a fiction.
+  OWNER_CONTRIBUTION
+  OWNER_DRAWING
 }
 
 model BusinessAccount {

@@ -18,6 +18,10 @@ const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2 } = require('../utils/money');
 const { dayjs, resolveRange } = require('../utils/dates');
 
+// Movements that are NOT the business trading: internal transfers, and the
+// owner's own money going in or coming out. Excluded from money in/out.
+const NON_TRADE_TYPES = ['TRANSFER', 'OWNER_CONTRIBUTION', 'OWNER_DRAWING'];
+
 // Generic payment accounts — WHERE money sits. The brand a transaction belongs
 // to is a separate dimension (FinanceTransaction.brandId), so any brand can be
 // paid through any account and new accounts/brands never need a redesign.
@@ -297,6 +301,16 @@ async function recordTransaction(data, actor) {
 // and pushed its brand net TSh 3.3M below the truth. The category the user
 // picks still shows on the row; only the P&L treatment changes.
 const isStockPurchaseCategory = (c) => /stock\s*purchase/i.test(String(c || ''));
+// The owner's own money. A contribution is his personal cash entering the
+// business (he pays rep commissions this way); a drawing is profit he takes
+// out. Neither is trade: excluded from revenue, profit, and money in/out.
+const recordOwnerMoney = ({ direction, ...data }, actor) => recordTransaction({
+  ...data,
+  direction,
+  type: direction === 'IN' ? 'OWNER_CONTRIBUTION' : 'OWNER_DRAWING',
+  category: direction === 'IN' ? 'Owner contribution' : 'Owner drawing',
+}, actor);
+
 const recordExpense = (data, actor) => recordTransaction({
   ...data,
   direction: 'OUT',
@@ -564,7 +578,9 @@ async function flowBetween(start, end) {
   // Only active accounts: the opening balance sums active accounts' openings,
   // so counting a deactivated account's movements here would make
   // Opening + In − Out drift from the account balances it must reconcile to.
-  const where = { type: { not: 'TRANSFER' }, account: { is: { isActive: true } } };
+  // Transfers move balances without being business cash flow; owner money is
+  // the owner's, not the business's trading. Both would inflate in/out.
+  const where = { type: { notIn: NON_TRADE_TYPES }, account: { is: { isActive: true } } };
   if (start || end) where.occurredAt = { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) };
   const [i, o] = await Promise.all([
     prisma.financeTransaction.aggregate({ where: { ...where, direction: 'IN' }, _sum: { amount: true } }),
@@ -597,7 +613,7 @@ async function cashflow(opts = {}) {
   // Where the money actually came from and went, by kind — settlements vs
   // counter sales vs other income; stock vs commissions vs expenses. The four
   // headline figures say HOW MUCH moved; this says WHAT moved it.
-  const typeWhere = { type: { not: 'TRANSFER' }, account: { is: { isActive: true } } };
+  const typeWhere = { type: { notIn: NON_TRADE_TYPES }, account: { is: { isActive: true } } };
   if (start || (range && range.end)) {
     typeWhere.occurredAt = { ...(start ? { gte: start } : {}), ...(range ? { lte: range.end } : {}) };
   }
@@ -911,8 +927,8 @@ async function overview(period = 'month') {
     const r = periodRange(p);
     const base = epochWhere(r, epoch);
     const [inAgg, outAgg] = await Promise.all([
-      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'IN', type: { not: 'TRANSFER' } }, _sum: { amount: true } }),
-      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'OUT', type: { not: 'TRANSFER' } }, _sum: { amount: true } }),
+      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'IN', type: { notIn: NON_TRADE_TYPES } }, _sum: { amount: true } }),
+      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'OUT', type: { notIn: NON_TRADE_TYPES } }, _sum: { amount: true } }),
     ]);
     const moneyIn = round2(toNumber(inAgg._sum.amount));
     const moneyOut = round2(toNumber(outAgg._sum.amount));
@@ -997,15 +1013,59 @@ async function overview(period = 'month') {
 
   // What is waiting for the owner, so the Overview can lead with it — the
   // Target-style "needs you" strip: nothing here means genuinely nothing.
+  // Payments must be counted against the SAME population as the purchases.
+  // Summing every PO payment ever made — including payments against orders
+  // later cancelled, which drop out of the purchased side — understated the
+  // debt here while the Suppliers tab (which excludes them) showed more.
+  const livePos = await prisma.purchaseOrder.findMany({
+    where: { status: { not: 'CANCELLED' } },
+    select: { id: true },
+  });
+  const livePoIds = livePos.map((x) => x.id);
   const [poAgg, poPayAgg, wdAgg, pendingApprovals] = await Promise.all([
     prisma.purchaseOrder.aggregate({ where: { status: { not: 'CANCELLED' } }, _sum: { totalCost: true } }),
     prisma.financeTransaction.aggregate({
-      where: { direction: 'OUT', refType: { in: ['PurchaseOrder', 'Supplier'] } },
+      where: {
+        direction: 'OUT',
+        OR: [
+          { refType: 'PurchaseOrder', refId: { in: livePoIds } },
+          { refType: 'Supplier' },
+        ],
+      },
       _sum: { amount: true },
     }),
     prisma.commissionWithdrawal.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
     prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
   ]);
+  // ── Where the profit actually IS ────────────────────────────────────────
+  // The owner has taken nothing out: every shilling earned went back into
+  // stock or to the supplier. "Profit" and "cash" are therefore different
+  // numbers, and the page has to say so plainly rather than let the reader
+  // assume the profit is sitting in an account.
+  const [contribAgg, drawAgg] = await Promise.all([
+    prisma.financeTransaction.aggregate({ where: { type: 'OWNER_CONTRIBUTION' }, _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: { type: 'OWNER_DRAWING' }, _sum: { amount: true } }),
+  ]);
+  const ownerIn = round2(toNumber(contribAgg._sum.amount));
+  const ownerOut = round2(toNumber(drawAgg._sum.amount));
+  // All-time earnings, so "taken out" and "still working" compare like with
+  // like no matter which period is on screen.
+  const lifetime = period === 'all' ? prof : await reports.profitOverview('all');
+  const lifetimeExpAgg = await prisma.financeTransaction.aggregate({
+    where: { direction: 'OUT', type: 'EXPENSE', ...epochWhere(null, epoch) },
+    _sum: { amount: true },
+  });
+  const earnedAllTime = round2(lifetime.totals.profit - lifetime.totals.commission - round2(toNumber(lifetimeExpAgg._sum.amount)));
+  const ownerMoney = {
+    contributed: ownerIn,
+    drawn: ownerOut,
+    earnedAllTime,
+    stillWorking: round2(earnedAllTime - ownerOut),
+    // Where it is working, at cost — the stock the profit turned into.
+    stockAtCost: inv.totals.totalValue,
+    owedToSuppliers: 0, // filled in below, once supplier debt is known
+  };
+
   const needsYou = {
     supplierOutstanding: round2(Math.max(0, toNumber(poAgg._sum.totalCost) - toNumber(poPayAgg._sum.amount))),
     pendingWithdrawals: { count: wdAgg._count, amount: round2(toNumber(wdAgg._sum.amount)) },
@@ -1013,12 +1073,15 @@ async function overview(period = 'month') {
     negativeAccounts: accounts.filter((a) => a.balance < 0).map((a) => a.name),
   };
 
+  ownerMoney.owedToSuppliers = needsYou.supplierOutstanding;
+
   return {
     period,
     cashPosition,
     accounts,
     flow,
     needsYou,
+    ownerMoney,
     brandFinance,
     revenue: prof.totals.revenue,
     cogs: prof.totals.cost,
@@ -1065,6 +1128,7 @@ module.exports = {
   recordSaleIncome,
   transferBetweenAccounts,
   recordCommissionPayment,
+  recordOwnerMoney,
   listTransactions,
   updateTransaction,
   deleteTransaction,

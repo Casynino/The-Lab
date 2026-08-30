@@ -73,6 +73,21 @@ const recordIncome = asyncHandler(async (req, res) => {
   return created(res, txn);
 });
 
+// The owner's own money moving in or out of the business. Kept apart from
+// trade so profit stays honest: putting personal cash in is not income, and
+// taking profit out is not an expense.
+const recordOwnerMoney = asyncHandler(async (req, res) => {
+  const direction = req.body.direction === 'OUT' ? 'OUT' : 'IN';
+  const txn = await finance.recordOwnerMoney({ ...req.body, direction }, req.user);
+  await audit.record(req, {
+    action: 'CREATE',
+    entityType: 'FinanceTransaction',
+    entityId: txn.id,
+    newValues: { kind: direction === 'IN' ? 'OWNER_CONTRIBUTION' : 'OWNER_DRAWING', amount: txn.amount, accountId: txn.accountId },
+  });
+  return created(res, txn);
+});
+
 // Manual balance correction (admin): a signed ADJUSTMENT transaction. Not an
 // expense — it moves the account balance without touching net profit. Used for
 // go-live initialization and intentional corrections only.
@@ -195,7 +210,7 @@ const reportArchivePdf = asyncHandler(async (req, res) => {
 
 module.exports = {
   overview, sync, accounts, createAccount, updateAccount, categories, createCategory,
-  transactions, recordExpense, recordIncome, recordAdjustment, updateTransaction, deleteTransaction,
+  transactions, recordExpense, recordIncome, recordOwnerMoney, recordAdjustment, updateTransaction, deleteTransaction,
   cashflow, report, suppliers, supplierDetail, paySupplier, paySupplierBalance,
   reportArchive, reportArchivePdf, transferBetween,
 };
