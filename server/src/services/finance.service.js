@@ -352,12 +352,29 @@ async function recordSaleIncome({ saleId, saleNumber, amount, fromSettlement, wh
 }
 
 // Automatic money-out when a commission withdrawal is paid.
-async function recordCommissionPayment({ amount, who, reference, refId, occurredAt }, actor) {
+async function recordCommissionPayment({ amount, who, reference, refId, occurredAt, fromOwnPocket }, actor) {
   try {
     const amt = round2(toNumber(amount));
     if (!(amt > 0)) return null;
     const acc = await defaultAccount();
     if (!acc) return null;
+    // The owner funds rep commissions personally. Recording only the payment
+    // would drain a business account that never held the money; recording it
+    // as INCOME (what was happening by hand) inflates money-in and makes his
+    // own cash look like the business earning. A matching contribution says
+    // the truth: his money in, the rep paid, the business balance unmoved.
+    if (fromOwnPocket) {
+      await recordOwnerMoney({
+        direction: 'IN',
+        accountId: acc.id,
+        amount: amt,
+        description: `Own money in to pay ${who || 'a rep'}`,
+        reference: reference || null,
+        refType: 'CommissionWithdrawal',
+        refId: refId || null,
+        occurredAt,
+      }, actor).catch(() => null);
+    }
     return await recordTransaction(
       {
         accountId: acc.id,

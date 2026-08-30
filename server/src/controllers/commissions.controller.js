@@ -39,9 +39,17 @@ const requestWithdrawal = asyncHandler(async (req, res) => {
 
 const decideWithdrawal = asyncHandler(async (req, res) => {
   const w = await commission.decideWithdrawal(req.params.id, req.body.action, req.user);
-  // Paying a withdrawal is real money out of a business account.
+  // Paying a withdrawal moves real money. `fromOwnPocket` says the owner
+  // funded it personally, which also records his contribution so the
+  // business account is not drained for money it never held.
   if (w.status === 'PAID') {
-    finance.recordCommissionPayment({ amount: w.amount, who: w.salesRep?.user?.name, refId: w.id, occurredAt: w.paidAt || new Date() }, req.user).catch(() => {});
+    finance.recordCommissionPayment({
+      amount: w.amount,
+      who: w.salesRep?.user?.name,
+      refId: w.id,
+      occurredAt: w.paidAt || new Date(),
+      fromOwnPocket: req.body.fromOwnPocket === true,
+    }, req.user).catch(() => {});
   }
   await audit.record(req, { action: req.body.action, entityType: 'CommissionWithdrawal', entityId: req.params.id });
   return ok(res, w);

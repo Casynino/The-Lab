@@ -795,8 +795,12 @@ function AdminView() {
   });
 
   const decide = useMutation({
-    mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action }),
-    onSuccess: () => { toast.success('Updated'); qc.invalidateQueries({ queryKey: ['commissions'] }); },
+    mutationFn: ({ id, action, fromOwnPocket }) => api.post(`/commissions/withdrawals/${id}/decide`, { action, fromOwnPocket }),
+    onSuccess: (_r, v) => {
+      toast.success(v?.fromOwnPocket ? 'Paid from your own money — the business account is untouched' : 'Updated');
+      qc.invalidateQueries({ queryKey: ['commissions'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+    },
     onError: (e) => toast.error(apiError(e)),
   });
 
@@ -900,7 +904,20 @@ function AdminView() {
                       <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'APPROVE' })}>Approve</Button>
                       <Button variant="ghost" className="px-2 py-1 text-xs text-rose-600" onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
                     </>}
-                    {w.status === 'APPROVED' && <Button className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>Mark paid</Button>}
+                    {w.status === 'APPROVED' && (
+                      <>
+                        {/* The owner pays reps from his own pocket, so that is
+                            the first button. It records his money going in
+                            alongside the payout, leaving the business account
+                            where it was instead of draining it. */}
+                        <Button className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                          Paid from my pocket
+                        </Button>
+                        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
+                          Paid from business
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </TD>
               </TR>
