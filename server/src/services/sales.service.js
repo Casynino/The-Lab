@@ -288,7 +288,34 @@ async function listSales(filters, pagination) {
     prisma.sale.count({ where }),
   ]);
 
-  return { items, total };
+  // Totals over EVERY matching sale, not the page. A list of sales with no
+  // total is a receipt spike: you can read each line and still not know what
+  // the business sold. Cancelled sales are excluded from the money — they
+  // are still listed, but they earned nothing.
+  const moneyWhere = { ...where, status: { not: 'CANCELLED' } };
+  const [agg, boxAgg, cancelled, span] = await Promise.all([
+    prisma.sale.aggregate({ where: moneyWhere, _sum: { total: true, costTotal: true, balanceDue: true }, _count: true }),
+    prisma.saleItem.aggregate({ where: { sale: { is: moneyWhere } }, _sum: { baseQuantity: true } }),
+    prisma.sale.count({ where: { ...where, status: 'CANCELLED' } }),
+    prisma.sale.findMany({ where, orderBy: { soldAt: 'asc' }, take: 1, select: { soldAt: true } }),
+  ]);
+  const lastRow = await prisma.sale.findFirst({ where, orderBy: { soldAt: 'desc' }, select: { soldAt: true } });
+  const revenue = round2(toNumber(agg._sum.total));
+  const cost = round2(toNumber(agg._sum.costTotal));
+  const summary = {
+    sales: agg._count,
+    cancelled,
+    revenue,
+    cost,
+    profit: round2(revenue - cost),
+    margin: revenue > 0 ? round2(((revenue - cost) / revenue) * 100) : 0,
+    boxes: boxAgg._sum.baseQuantity || 0,
+    owed: round2(toNumber(agg._sum.balanceDue)),
+    firstAt: span[0]?.soldAt || null,
+    lastAt: lastRow?.soldAt || null,
+  };
+
+  return { items, total, summary };
 }
 
 async function getSale(id) {

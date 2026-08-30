@@ -20,8 +20,8 @@ const create = asyncHandler(async (req, res) => {
 const list = asyncHandler(async (req, res) => {
   const q = req.validatedQuery || req.query;
   const pagination = parsePagination(q, { defaultSortBy: 'dispatchedAt', defaultSortDir: 'desc', allowedSortFields: ['dispatchedAt', 'createdAt'] });
-  const { items, total } = await transfers.listTransfers(q, pagination);
-  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
+  const { items, total, summary } = await transfers.listTransfers(q, pagination);
+  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total, summary });
 });
 
 const get = asyncHandler(async (req, res) => {

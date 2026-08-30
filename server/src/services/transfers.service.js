@@ -168,7 +168,54 @@ async function listTransfers(filters, pagination) {
     }),
     prisma.stockTransfer.count({ where }),
   ]);
-  return { items, total };
+
+  // Boxes, not "2 items". A transfer is a movement of stock; the number of
+  // product lines on it says nothing about how much moved. Each row carries
+  // its box count, and the summary totals every matching transfer — not the
+  // page — with who received the most, since that is the question a list of
+  // movements provokes.
+  const withBoxes = items.map((t) => ({
+    ...t,
+    boxes: (t.items || []).reduce((n, i) => n + (i.baseQuantity || 0), 0),
+  }));
+
+  const all = await prisma.stockTransfer.findMany({
+    where,
+    select: {
+      status: true,
+      dispatchedAt: true,
+      toRep: { select: { user: { select: { name: true } } } },
+      toWarehouse: { select: { name: true } },
+      items: { select: { baseQuantity: true } },
+    },
+    orderBy: { dispatchedAt: 'asc' },
+  });
+  const byDestination = new Map();
+  let boxes = 0;
+  let completed = 0;
+  let cancelled = 0;
+  for (const t of all) {
+    const n = t.items.reduce((a, i) => a + (i.baseQuantity || 0), 0);
+    if (t.status === 'CANCELLED') { cancelled += 1; continue; }
+    completed += 1;
+    boxes += n;
+    const name = t.toRep?.user?.name || t.toWarehouse?.name || 'Unknown';
+    byDestination.set(name, (byDestination.get(name) || 0) + n);
+  }
+  const destinations = [...byDestination.entries()]
+    .map(([name, n]) => ({ name, boxes: n }))
+    .sort((a, b) => b.boxes - a.boxes);
+
+  const summary = {
+    boxes,
+    movements: completed,
+    cancelled,
+    destinations,
+    firstAt: all[0]?.dispatchedAt || null,
+    lastAt: all[all.length - 1]?.dispatchedAt || null,
+  };
+
+  return { items: withBoxes, total, summary };
 }
 
 async function getTransfer(id) {

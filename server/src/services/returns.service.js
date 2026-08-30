@@ -601,6 +601,28 @@ async function returnsSummary(filters = {}) {
     prisma.return.count({ where: { ...repWhere, status: { in: ['APPROVED', 'COMPLETED'] } } }),
     prisma.return.count({ where: { ...repWhere, status: 'REJECTED' } }),
   ]);
+  // The number this page is actually a record of: boxes that came back and
+  // went onto the shelf. A count of returns says how many times it happened;
+  // it never says how much stock moved.
+  const [acceptedBoxes, firstRow, lastRow, allCount] = await Promise.all([
+    prisma.returnItem.aggregate({
+      where: { return: { is: { ...repWhere, status: { in: ['APPROVED', 'COMPLETED'] } } } },
+      _sum: { quantity: true },
+    }),
+    prisma.return.findFirst({ where: repWhere, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }),
+    prisma.return.findFirst({ where: repWhere, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+    prisma.return.count({ where: repWhere }),
+  ]);
+  // `rejected` counts only the REJECTED status, but the page files rejected,
+  // cancelled and expired together — they share one outcome: no stock came
+  // back. `refused` is the number that matches that section. The two type
+  // counts feed the filter chips, so a chip states the whole history rather
+  // than the page of results underneath it.
+  const [refused, customerReturns, salesReturns] = await Promise.all([
+    prisma.return.count({ where: { ...repWhere, status: { in: ['REJECTED', 'CANCELLED', 'EXPIRED'] } } }),
+    prisma.return.count({ where: { ...repWhere, type: 'CUSTOMER_RETURN' } }),
+    prisma.return.count({ where: { ...repWhere, type: 'SALES_RETURN' } }),
+  ]);
   return {
     pending,
     pendingBoxes: pendingBoxes._sum.quantity || 0,
@@ -608,6 +630,13 @@ async function returnsSummary(filters = {}) {
     todayBoxes: todayBoxes._sum.quantity || 0,
     approved,
     rejected,
+    boxesBack: acceptedBoxes._sum.quantity || 0,
+    refused,
+    customerReturns,
+    salesReturns,
+    totalReturns: allCount,
+    firstAt: firstRow?.createdAt || null,
+    lastAt: lastRow?.createdAt || null,
   };
 }
 

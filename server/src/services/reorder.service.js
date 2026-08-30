@@ -6,6 +6,15 @@ const inventory = require('./inventory.service');
 const { toNumber, round2 } = require('../utils/money');
 const { dayjs } = require('../utils/dates');
 
+// Urgency bands, in days of cover. These are the numbers to argue about, and
+// they are deliberately about time, not about the minimum-stock levels: a
+// restock takes the better part of a week to land, two weeks is one ordering
+// cycle, and past the target cover we already hold there is nothing to rush.
+const CRITICAL_DAYS = 7;
+const HIGH_DAYS = 14;
+
+const groupDigits = (n) => Number(n || 0).toLocaleString('en-US');
+
 // Compute sales velocity and project days-of-cover for every active product,
 // then recommend reorder quantities. "Days remaining" = on-hand / avg daily
 // sales over the lookback window.
