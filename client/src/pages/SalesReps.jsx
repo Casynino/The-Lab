@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, UserCog, ChevronRight, Coins, TrendingUp, Boxes } from 'lucide-react';
+import { Plus, UserCog, ChevronRight, ChevronDown, AlertTriangle, Phone, Mail, Users } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
-import { formatCurrency, formatNumber, initials } from '@/lib/format';
+import { formatCurrency, formatNumber, initials, fromNow } from '@/lib/format';
 import { TZ_REGIONS } from '@/lib/regions';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, Pagination,
@@ -49,164 +49,178 @@ function RepModal({ onClose }) {
   );
 }
 
+// One colour per rep, fixed by their code so a face keeps its colour wherever
+// the list moves it.
+const HUES = [
+  { av: 'from-brand-400 to-brand-600', text: 'text-brand-300' },
+  { av: 'from-violet-400 to-violet-600', text: 'text-violet-300' },
+  { av: 'from-sky-400 to-sky-600', text: 'text-sky-300' },
+  { av: 'from-amber-400 to-amber-600', text: 'text-amber-300' },
+  { av: 'from-emerald-400 to-emerald-600', text: 'text-emerald-300' },
+  { av: 'from-rose-400 to-rose-600', text: 'text-rose-300' },
+];
+const hueFor = (code) => HUES[[...String(code || '')].reduce((n, c) => n + c.charCodeAt(0), 0) % HUES.length];
+
+// What the row says about a rep, in the order it matters. Late first: that is
+// the only line that needs a decision today.
+function standingOf(r) {
+  if (r.overdueOrders > 0) {
+    return {
+      key: 'late', rank: 0,
+      label: `${formatNumber(r.overdueOrders)} order${r.overdueOrders === 1 ? '' : 's'} late`,
+      detail: `since ${fromNow(r.oldestOverdueAt)}`,
+      cls: 'bg-rose-500/15 text-rose-300 ring-rose-500/25',
+      dot: 'bg-rose-400',
+    };
+  }
+  if (r.openOrders > 0) {
+    return {
+      key: 'out', rank: 1,
+      label: `${formatNumber(r.openOrders)} order${r.openOrders === 1 ? '' : 's'} running`,
+      detail: r.nextDeadlineAt ? `next due ${fromNow(r.nextDeadlineAt)}` : 'within the window',
+      cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/25',
+      dot: 'bg-amber-400',
+    };
+  }
+  if (!r.isActive) {
+    return { key: 'off', rank: 3, label: 'Not active', detail: 'no stock out', cls: 'bg-white/[0.06] text-faint ring-white/[0.08]', dot: 'bg-white/20' };
+  }
+  return { key: 'clear', rank: 2, label: 'All settled', detail: 'nothing outstanding', cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/25', dot: 'bg-emerald-400' };
+}
+
 export default function SalesReps() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(null);
+
   const { data, isLoading } = useQuery({
     queryKey: ['sales-reps', { page }],
     queryFn: async () => unwrap(await api.get('/sales-reps', { params: { page, limit: 15 } })),
   });
 
+  const reps = [...(data?.data || [])].sort((a, b) => {
+    const sa = standingOf(a); const sb = standingOf(b);
+    return sa.rank - sb.rank
+      || Number(b.heldUnits || 0) - Number(a.heldUnits || 0)
+      || String(a.user?.name || '').localeCompare(String(b.user?.name || ''));
+  });
+
+  const t = reps.reduce((a, r) => ({
+    boxes: a.boxes + Number(r.heldUnits || 0),
+    value: a.value + Number(r.heldStockValue || 0),
+    owed: a.owed + Math.max(0, Number(r.commissionOwed || 0)),
+    late: a.late + Number(r.overdueOrders || 0),
+    lateReps: a.lateReps + (r.overdueOrders > 0 ? 1 : 0),
+  }), { boxes: 0, value: 0, owed: 0, late: 0, lateReps: 0 });
+
   return (
     <div>
-      <PageHeader title="Sales Representatives" subtitle="Field reps, the stock they carry, and accountability.">
+      <PageHeader title="Sales Representatives" subtitle="Who is holding your stock, and who is late with it.">
         <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>
       </PageHeader>
+
+      {/* One joined strip, not four boxes. Four figures is all the top of this
+          page needs; everything else lives inside a rep. */}
+      {reps.length > 0 && (
+        <div className="mb-4 overflow-hidden rounded-2xl bg-surface ring-1 ring-white/[0.07]">
+          <div className="grid grid-cols-2 divide-x divide-white/[0.06] sm:grid-cols-4">
+            {[
+              { label: 'Boxes out with reps', value: formatNumber(t.boxes), sub: formatCurrency(t.value) + ' of stock', num: 'text-violet-300' },
+              { label: 'Running late', value: formatNumber(t.late), sub: t.late > 0 ? `${formatNumber(t.lateReps)} rep${t.lateReps === 1 ? '' : 's'} past deadline` : 'everyone inside the window', num: t.late > 0 ? 'text-rose-300' : 'text-foreground' },
+              { label: 'Commission owed', value: formatCurrency(t.owed), sub: 'earned, not yet withdrawn', num: t.owed > 0 ? 'text-amber-300' : 'text-foreground' },
+              { label: 'Reps active', value: formatNumber(reps.filter((r) => r.isActive).length), sub: `of ${formatNumber(reps.length)} on the books`, num: 'text-foreground' },
+            ].map((c) => (
+              <div key={c.label} className="p-4">
+                <p className="text-xs font-medium text-muted">{c.label}</p>
+                <p className={`mt-1.5 text-xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
+                <p className="mt-0.5 text-[11px] text-faint">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <Card><PageSpinner /></Card>
-      ) : !data?.data?.length ? (
+      ) : !reps.length ? (
         <Card><EmptyState title="No sales reps" icon={UserCog} action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>} /></Card>
       ) : (
         <>
-          {/* Ranked by what they have sold, best first. Ten identical cards in
-              catalogue order told you nothing about who is carrying the team;
-              a rank, a share bar and one colour per rep do. */}
-          {(() => {
-            const reps = [...data.data].sort((a, b) => Number(b.totalSales || 0) - Number(a.totalSales || 0));
-            const topSales = Number(reps[0]?.totalSales || 0);
-            const totals = reps.reduce((a, r) => ({
-              sales: a.sales + Number(r.totalSales || 0),
-              stock: a.stock + Number(r.heldStockValue || 0),
-              boxes: a.boxes + Number(r.heldUnits || 0),
-              owed: a.owed + Math.max(0, Number(r.commissionOwed || 0)),
-            }), { sales: 0, stock: 0, boxes: 0, owed: 0 });
+          <div className="overflow-hidden rounded-2xl bg-surface ring-1 ring-white/[0.07]">
+            {reps.map((r, i) => {
+              const hue = hueFor(r.code);
+              const st = standingOf(r);
+              const isOpen = expanded === r.id;
+              return (
+                <div key={r.id} className={i > 0 ? 'border-t border-white/[0.06]' : ''}>
+                  <button
+                    onClick={() => setExpanded(isOpen ? null : r.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-white/[0.02]"
+                  >
+                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${hue.av} text-xs font-bold text-slate-950`}>
+                      {initials(r.user?.name)}
+                    </span>
 
-            const cards = [
-              { label: 'Reps selling', value: formatNumber(reps.filter((r) => r.isActive).length), icon: UserCog,
-                sub: `of ${formatNumber(reps.length)} on the books`,
-                ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
-              { label: 'Sold between them', value: formatCurrency(totals.sales), icon: TrendingUp, sub: 'all time',
-                ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
-              { label: 'Stock they hold', value: formatCurrency(totals.stock), icon: Boxes,
-                sub: `${formatNumber(totals.boxes)} boxes out with reps`,
-                ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
-              { label: 'Commission owed', value: formatCurrency(totals.owed), icon: Coins, sub: 'earned, not yet withdrawn',
-                ring: totals.owed > 0 ? 'ring-amber-500/30' : 'ring-white/[0.07]',
-                glow: totals.owed > 0 ? 'from-amber-500/[0.14]' : 'from-white/[0.02]',
-                chip: 'bg-amber-500/15 text-amber-300', num: totals.owed > 0 ? 'text-amber-300' : 'text-foreground' },
-            ];
-
-            // One colour per rep, held steady by their code so a face keeps
-            // its colour as the ranking moves.
-            // Every class spelled out: Tailwind only ships what it can read in
-            // the source, so a name assembled at runtime compiles to nothing.
-            const HUES = [
-              { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.07]', av: 'from-brand-400 to-brand-600', bar: 'bg-brand-400', text: 'text-brand-300' },
-              { ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.07]', av: 'from-violet-400 to-violet-600', bar: 'bg-violet-400', text: 'text-violet-300' },
-              { ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.07]', av: 'from-sky-400 to-sky-600', bar: 'bg-sky-400', text: 'text-sky-300' },
-              { ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.07]', av: 'from-amber-400 to-amber-600', bar: 'bg-amber-400', text: 'text-amber-300' },
-              { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.07]', av: 'from-emerald-400 to-emerald-600', bar: 'bg-emerald-400', text: 'text-emerald-300' },
-              { ring: 'ring-rose-500/25', glow: 'from-rose-500/[0.07]', av: 'from-rose-400 to-rose-600', bar: 'bg-rose-400', text: 'text-rose-300' },
-            ];
-            const hueFor = (code) => HUES[[...String(code || '')].reduce((n, c) => n + c.charCodeAt(0), 0) % HUES.length];
-
-            return (
-              <>
-                <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
-                  {cards.map((c) => (
-                    <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
-                      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
-                      <div className="relative flex items-start justify-between gap-2">
-                        <p className="text-xs font-medium text-muted">{c.label}</p>
-                        <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
-                      </div>
-                      <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
-                      <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold text-foreground">{r.user?.name}</div>
+                      <div className="truncate text-xs text-faint">{r.code}{r.region ? ` · ${r.region}` : ''}</div>
                     </div>
-                  ))}
+
+                    {/* Stock in their hands right now — the owner's money, still out. */}
+                    <div className="hidden w-32 shrink-0 text-right sm:block">
+                      <div className="text-sm font-semibold tabular-nums text-foreground">
+                        {formatNumber(r.heldUnits || 0)} <span className="font-normal text-faint">boxes</span>
+                      </div>
+                      <div className="text-[11px] text-faint">carrying now</div>
+                    </div>
+
+                    {/* The one line that might need a decision today. */}
+                    <div className="w-44 shrink-0 text-right">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${st.cls}`}>
+                        {st.key === 'late' && <AlertTriangle className="h-3 w-3" />}
+                        {st.label}
+                      </span>
+                      <div className="mt-0.5 text-[11px] text-faint">{st.detail}</div>
+                    </div>
+
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-faint transition ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-white/[0.06] bg-elevated/40 px-4 py-4">
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+                        {[
+                          { k: 'Stock value out', v: formatCurrency(r.heldStockValue), s: `${formatNumber(r.heldUnits || 0)} boxes` },
+                          { k: 'Still to account for', v: formatCurrency(r.openBalance), s: r.openOrders > 0 ? `${formatNumber(r.openOrders)} live order${r.openOrders === 1 ? '' : 's'}` : 'nothing open', tone: r.openBalance > 0 ? 'text-amber-300' : '' },
+                          { k: 'Commission owed', v: formatCurrency(r.commissionOwed), s: 'not yet withdrawn', tone: r.commissionOwed > 0 ? 'text-amber-300' : r.commissionOwed < 0 ? 'text-rose-400' : '' },
+                          { k: 'Sold all time', v: formatCurrency(r.totalSales), s: `${formatNumber(r._count?.sales || 0)} sale${r._count?.sales === 1 ? '' : 's'}`, tone: 'text-emerald-400' },
+                        ].map((f) => (
+                          <div key={f.k}>
+                            <p className="text-[11px] text-muted">{f.k}</p>
+                            <p className={`mt-0.5 text-base font-semibold tabular-nums ${f.tone || 'text-foreground'}`}>{f.v}</p>
+                            <p className="text-[11px] text-faint">{f.s}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/[0.06] pt-3 text-xs text-faint">
+                        {r.user?.phone && <span className="inline-flex items-center gap-1.5"><Phone className="h-3 w-3" />{r.user.phone}</span>}
+                        {r.user?.email && <span className="inline-flex items-center gap-1.5"><Mail className="h-3 w-3" />{r.user.email}</span>}
+                        {(r._count?.customers ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-1.5"><Users className="h-3 w-3" />{formatNumber(r._count.customers)} customers</span>
+                        )}
+                        <button onClick={() => navigate(`/reps/${r.id}`)}
+                          className={`ml-auto inline-flex items-center gap-1 font-medium ${hue.text} hover:underline`}>
+                          Open full profile <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {reps.map((r, i) => {
-                    const hue = hueFor(r.code);
-                    const sales = Number(r.totalSales || 0);
-                    const share = totals.sales > 0 ? (sales / totals.sales) * 100 : 0;
-                    const bar = topSales > 0 ? (sales / topSales) * 100 : 0;
-                    const owed = Number(r.commissionOwed || 0);
-                    return (
-                      <button
-                        key={r.id}
-                        onClick={() => navigate(`/reps/${r.id}`)}
-                        className={`animate-rise group relative overflow-hidden rounded-2xl bg-surface p-5 text-left ring-1 transition duration-200 hover:ring-white/25 ${hue.ring}`}
-                        style={{ animationDelay: `${i * 40}ms` }}
-                      >
-                        <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${hue.glow} to-transparent`} aria-hidden="true" />
-
-                        <div className="relative flex items-center gap-3">
-                          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${hue.av} text-sm font-bold text-slate-950`}>
-                            {initials(r.user?.name)}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate font-semibold text-foreground">{r.user?.name}</span>
-                              {i < 3 && sales > 0 && (
-                                <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                                  i === 0 ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 text-muted'}`}>
-                                  #{i + 1}
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-faint">{r.code}{r.region ? ` · ${r.region}` : ''}</div>
-                          </div>
-                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${r.isActive ? 'bg-emerald-400' : 'bg-white/20'}`} title={r.isActive ? 'Active' : 'Inactive'} />
-                        </div>
-
-                        {/* What they have sold, with their share of the team. */}
-                        <div className="relative mt-4">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-2xl font-bold tabular-nums text-emerald-400">{formatCurrency(sales)}</span>
-                            <span className="text-[11px] tabular-nums text-faint">{Math.round(share)}% of the team</span>
-                          </div>
-                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-                            <div className={`h-full rounded-full ${hue.bar}`} style={{ width: `${Math.max(2, bar)}%` }} />
-                          </div>
-                        </div>
-
-                        {/* Rows, not boxes inside a box. */}
-                        <div className="relative mt-4 space-y-2 border-t border-white/[0.06] pt-3">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-xs text-muted">Carrying now</span>
-                            <span className="text-sm font-semibold tabular-nums text-foreground">
-                              {formatNumber(r.heldUnits || 0)} boxes
-                              <span className="ml-1.5 text-[11px] font-normal text-faint">{formatCurrency(r.heldStockValue)}</span>
-                            </span>
-                          </div>
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-xs text-muted">Commission owed</span>
-                            <span className={`text-sm font-semibold tabular-nums ${owed > 0 ? 'text-amber-300' : owed < 0 ? 'text-rose-400' : 'text-faint'}`}>
-                              {formatCurrency(owed)}
-                            </span>
-                          </div>
-                          {(r._count?.customers ?? 0) > 0 && (
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span className="text-xs text-muted">Customers</span>
-                              <span className="text-sm font-semibold tabular-nums text-foreground">{formatNumber(r._count.customers)}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className={`relative mt-3 flex items-center justify-end gap-1 text-xs font-medium ${hue.text}`}>
-                          View profile <ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
-
+              );
+            })}
+          </div>
           <div className="mt-4">
             <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
           </div>

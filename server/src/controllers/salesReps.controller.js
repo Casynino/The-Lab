@@ -89,13 +89,51 @@ const list = asyncHandler(async (req, res) => {
   const commMap = new Map((commissionSummary.items || []).map((c) => [c.salesRepId, toNumber(c.available)]));
   const salesMap = new Map(salesRows.map((s) => [s.salesRepId, toNumber(s._sum.total)]));
 
-  const enriched = items.map((r) => ({
-    ...r,
-    heldStockValue: round2(heldValue.get(r.id) || 0),
-    heldUnits: heldUnits.get(r.id) || 0,
-    commissionOwed: round2(commMap.get(r.id) || 0),
-    totalSales: round2(salesMap.get(r.id) || 0),
-  }));
+  // Where a rep stands on the 72-hour contract. Money sold is history; whether
+  // a rep is holding stock past its deadline is the thing that needs deciding
+  // today, so the list can lead with it and rank by it.
+  const live = await prisma.settlement.findMany({
+    where: { salesRepId: { in: ids }, status: { not: 'SETTLED' } },
+    select: {
+      salesRepId: true, deadlineAt: true,
+      assignedValue: true, settledValue: true, returnedValue: true,
+    },
+  });
+  const now = new Date();
+  const standing = new Map();
+  for (const st of live) {
+    const balance = Math.max(
+      0,
+      toNumber(st.assignedValue) - toNumber(st.settledValue) - toNumber(st.returnedValue),
+    );
+    const cur = standing.get(st.salesRepId)
+      || { openOrders: 0, overdueOrders: 0, openBalance: 0, nextDeadlineAt: null, oldestOverdueAt: null };
+    cur.openOrders += 1;
+    cur.openBalance += balance;
+    if (new Date(st.deadlineAt) < now) {
+      cur.overdueOrders += 1;
+      if (!cur.oldestOverdueAt || st.deadlineAt < cur.oldestOverdueAt) cur.oldestOverdueAt = st.deadlineAt;
+    } else if (!cur.nextDeadlineAt || st.deadlineAt < cur.nextDeadlineAt) {
+      cur.nextDeadlineAt = st.deadlineAt;
+    }
+    standing.set(st.salesRepId, cur);
+  }
+
+  const enriched = items.map((r) => {
+    const st = standing.get(r.id);
+    return {
+      ...r,
+      heldStockValue: round2(heldValue.get(r.id) || 0),
+      heldUnits: heldUnits.get(r.id) || 0,
+      commissionOwed: round2(commMap.get(r.id) || 0),
+      totalSales: round2(salesMap.get(r.id) || 0),
+      openOrders: st ? st.openOrders : 0,
+      overdueOrders: st ? st.overdueOrders : 0,
+      openBalance: st ? round2(st.openBalance) : 0,
+      nextDeadlineAt: st ? st.nextDeadlineAt : null,
+      oldestOverdueAt: st ? st.oldestOverdueAt : null,
+    };
+  });
 
   return paginated(res, enriched, { page: pagination.page, limit: pagination.limit, total });
 });
