@@ -292,27 +292,43 @@ async function listSales(filters, pagination) {
   // total is a receipt spike: you can read each line and still not know what
   // the business sold. Cancelled sales are excluded from the money — they
   // are still listed, but they earned nothing.
-  const moneyWhere = { ...where, status: { not: 'CANCELLED' } };
-  const [agg, boxAgg, cancelled, span] = await Promise.all([
+  // The exclusion is an AND rather than an overwrite: spreading it over `where`
+  // dropped a caller's own status filter, so asking for cancelled sales came
+  // back with the revenue of every sale that was not cancelled.
+  const moneyWhere = { AND: [where, { status: { not: 'CANCELLED' } }] };
+  // Chip counts stay put while you click through them, so each filter is
+  // counted over the others rather than over itself.
+  const whereAnyStatus = { ...where };
+  delete whereAnyStatus.status;
+  const whereAnyType = { ...where };
+  delete whereAnyType.type;
+
+  const [agg, boxAgg, cancelled, unpaid, byStatusRows, byTypeRows, first, last] = await Promise.all([
     prisma.sale.aggregate({ where: moneyWhere, _sum: { total: true, costTotal: true, balanceDue: true }, _count: true }),
     prisma.saleItem.aggregate({ where: { sale: { is: moneyWhere } }, _sum: { baseQuantity: true } }),
-    prisma.sale.count({ where: { ...where, status: 'CANCELLED' } }),
-    prisma.sale.findMany({ where, orderBy: { soldAt: 'asc' }, take: 1, select: { soldAt: true } }),
+    prisma.sale.count({ where: { AND: [where, { status: 'CANCELLED' }] } }),
+    prisma.sale.count({ where: { AND: [where, { status: { not: 'CANCELLED' }, balanceDue: { gt: 0 } }] } }),
+    prisma.sale.groupBy({ by: ['status'], where: whereAnyStatus, _count: { _all: true } }),
+    prisma.sale.groupBy({ by: ['type'], where: whereAnyType, _count: { _all: true } }),
+    prisma.sale.findFirst({ where, orderBy: { soldAt: 'asc' }, select: { soldAt: true } }),
+    prisma.sale.findFirst({ where, orderBy: { soldAt: 'desc' }, select: { soldAt: true } }),
   ]);
-  const lastRow = await prisma.sale.findFirst({ where, orderBy: { soldAt: 'desc' }, select: { soldAt: true } });
   const revenue = round2(toNumber(agg._sum.total));
   const cost = round2(toNumber(agg._sum.costTotal));
   const summary = {
     sales: agg._count,
     cancelled,
+    unpaid,
     revenue,
     cost,
     profit: round2(revenue - cost),
     margin: revenue > 0 ? round2(((revenue - cost) / revenue) * 100) : 0,
     boxes: boxAgg._sum.baseQuantity || 0,
     owed: round2(toNumber(agg._sum.balanceDue)),
-    firstAt: span[0]?.soldAt || null,
-    lastAt: lastRow?.soldAt || null,
+    byStatus: Object.fromEntries(byStatusRows.map((r) => [r.status, r._count._all])),
+    byType: Object.fromEntries(byTypeRows.map((r) => [r.type, r._count._all])),
+    firstAt: first?.soldAt || null,
+    lastAt: last?.soldAt || null,
   };
 
   return { items, total, summary };

@@ -69,12 +69,14 @@ export const NAV = [
   { to: '/settings', label: 'Settings', icon: 'Settings', roles: ['ADMIN'], group: 'admin' },
 ];
 
+// Dark ground: tinted fills with a light text, never the light-theme chips —
+// a bg-*-100 badge burns a hole in the page.
 export const SALE_STATUS_META = {
-  PAID: { label: 'Paid', cls: 'bg-emerald-100 text-emerald-700' },
-  PARTIAL: { label: 'Partial', cls: 'bg-amber-100 text-amber-700' },
-  UNPAID: { label: 'Unpaid', cls: 'bg-rose-100 text-rose-700' },
-  CANCELLED: { label: 'Cancelled', cls: 'bg-elevated text-muted' },
-  EXPIRED: { label: 'Expired (24h)', cls: 'bg-orange-100 text-orange-700' },
+  PAID: { label: 'Paid', cls: 'bg-emerald-500/15 text-emerald-300' },
+  PARTIAL: { label: 'Partial', cls: 'bg-amber-500/15 text-amber-300' },
+  UNPAID: { label: 'Unpaid', cls: 'bg-rose-500/15 text-rose-300' },
+  CANCELLED: { label: 'Cancelled', cls: 'bg-white/10 text-muted' },
+  EXPIRED: { label: 'Expired (24h)', cls: 'bg-orange-500/15 text-orange-300' },
 };
 
 export const CREDIT_STATUS_META = {
@@ -104,13 +106,6 @@ export const SEVERITY_META = {
   INFO: { cls: 'bg-sky-100 text-sky-700' },
   WARNING: { cls: 'bg-amber-100 text-amber-700' },
   CRITICAL: { cls: 'bg-rose-100 text-rose-700' },
-};
-
-export const URGENCY_META = {
-  CRITICAL: { label: 'Critical', cls: 'bg-rose-100 text-rose-700' },
-  HIGH: { label: 'High', cls: 'bg-amber-100 text-amber-700' },
-  MEDIUM: { label: 'Medium', cls: 'bg-yellow-100 text-yellow-700' },
-  OK: { label: 'OK', cls: 'bg-emerald-100 text-emerald-700' },
 };
 
 export const PO_STATUS_META = {
@@ -156,13 +151,5 @@ export const WITHDRAWAL_STATUS_META = {
   APPROVED: { label: 'Approved', cls: 'bg-sky-100 text-sky-700' },
   REJECTED: { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' },
   PAID: { label: 'Paid', cls: 'bg-emerald-100 text-emerald-700' },
-};
-
-export const RETURN_STATUS_META = {
-  PENDING: { label: 'Pending Approval', cls: 'bg-amber-100 text-amber-700' },
-  APPROVED: { label: 'Approved', cls: 'bg-emerald-100 text-emerald-700' },
-  REJECTED: { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' },
-  COMPLETED: { label: 'Approved', cls: 'bg-emerald-100 text-emerald-700' }, // legacy
-  CANCELLED: { label: 'Cancelled', cls: 'bg-elevated text-muted' },
 };
 

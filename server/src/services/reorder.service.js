@@ -45,21 +45,51 @@ async function reorderAnalysis(options = {}) {
     const daysRemaining = avgDaily > 0 ? Math.floor(onHand / avgDaily) : null;
 
     const target = Math.ceil(avgDaily * coverDays);
-    const belowMin = onHand <= p.minStockLevel;
-    const lowCover = daysRemaining !== null && daysRemaining <= coverDays / 2; // < half target cover
-    const needsReorder = belowMin || lowCover;
+    const belowMin = p.minStockLevel > 0 && onHand <= p.minStockLevel;
+    const shortCover = daysRemaining !== null && daysRemaining <= coverDays;
+
+    // Days of cover decides the rank, and nothing else does. The minimum-stock
+    // levels were set once and never checked against real selling pace, so
+    // letting belowMin force HIGH put four years of cover in the same band as
+    // stock that runs dry on Friday — and a list where everything shouts ranks
+    // nothing. Below the minimum is still worth topping up, so it earns LOW and
+    // says so in its reason; it no longer overrides the clock.
+    let urgency = 'OK';
+    if (shortCover && daysRemaining <= CRITICAL_DAYS) urgency = 'CRITICAL';
+    else if (shortCover && daysRemaining <= HIGH_DAYS) urgency = 'HIGH';
+    else if (shortCover) urgency = 'MEDIUM';
+    else if (onHand <= 0 && belowMin) urgency = 'MEDIUM'; // nothing on the shelf to sell at all
+    else if (belowMin) urgency = 'LOW';
+
+    const needsReorder = urgency !== 'OK';
+
+    // One line saying why this row is on the list, so long cover reads as long
+    // cover instead of hiding behind a colour.
+    let reason;
+    if (shortCover && daysRemaining <= 0) {
+      reason = `out of stock — was selling ${avgDaily}/day`;
+    } else if (shortCover) {
+      reason = `runs out in ${groupDigits(daysRemaining)} day${daysRemaining === 1 ? '' : 's'} at ${avgDaily}/day`;
+      if (belowMin) reason += `, and below your minimum of ${groupDigits(p.minStockLevel)}`;
+    } else if (onHand <= 0) {
+      reason = `out of stock, and nothing sold in the last ${lookbackDays} days`;
+    } else if (belowMin) {
+      reason = daysRemaining !== null
+        ? `below your minimum of ${groupDigits(p.minStockLevel)}, but ${groupDigits(daysRemaining)} days of cover`
+        : `below your minimum of ${groupDigits(p.minStockLevel)}, but nothing sold in the last ${lookbackDays} days`;
+    } else {
+      reason = daysRemaining !== null
+        ? `${groupDigits(daysRemaining)} days of cover left`
+        : `nothing sold in the last ${lookbackDays} days`;
+    }
 
     let recommendedQty = 0;
     if (needsReorder) {
       const gap = Math.max(target - onHand, p.minStockLevel - onHand, 0);
-      recommendedQty = Math.max(gap, p.reorderQuantity || 0);
-    }
-
-    let urgency = 'OK';
-    if (needsReorder) {
-      if (daysRemaining !== null && daysRemaining <= 3) urgency = 'CRITICAL';
-      else if (belowMin || (daysRemaining !== null && daysRemaining <= 7)) urgency = 'HIGH';
-      else urgency = 'MEDIUM';
+      // The supplier's pack size is a floor only where cover is genuinely
+      // short. Rounding a one-box top-up up to a 50-box pack is how a product
+      // with years of cover came to ask for millions of shillings of stock.
+      recommendedQty = urgency === 'LOW' ? gap : Math.max(gap, p.reorderQuantity || 0);
     }
 
     let message = `${p.name} has ${onHand} ${p.baseUnitName}(s) on hand`;
@@ -80,15 +110,17 @@ async function reorderAnalysis(options = {}) {
       minStockLevel: p.minStockLevel,
       avgDailySales: avgDaily,
       daysRemaining,
+      belowMin,
       needsReorder,
       urgency,
+      reason,
       recommendedQty,
       recommendedValue: round2(recommendedQty * toNumber(p.purchasePrice)),
       message,
     };
   });
 
-  const urgencyRank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, OK: 3 };
+  const urgencyRank = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, OK: 4 };
   items.sort((a, b) => {
     if (urgencyRank[a.urgency] !== urgencyRank[b.urgency]) {
       return urgencyRank[a.urgency] - urgencyRank[b.urgency];
@@ -99,15 +131,29 @@ async function reorderAnalysis(options = {}) {
   });
 
   const recommendations = items.filter((i) => i.needsReorder);
+  const countOf = (u) => recommendations.filter((i) => i.urgency === u).length;
+  // What it costs to fix only the rows that are actually running out — the
+  // whole-list total is inflated by top-ups nobody needs to buy this month.
+  const urgentValue = recommendations
+    .filter((i) => i.urgency === 'CRITICAL' || i.urgency === 'HIGH')
+    .reduce((s, i) => s + i.recommendedValue, 0);
 
   return {
     summary: {
       lookbackDays,
       coverDays,
+      criticalDays: CRITICAL_DAYS,
+      highDays: HIGH_DAYS,
       productsAnalyzed: items.length,
       reorderCount: recommendations.length,
-      criticalCount: recommendations.filter((i) => i.urgency === 'CRITICAL').length,
+      criticalCount: countOf('CRITICAL'),
+      highCount: countOf('HIGH'),
+      mediumCount: countOf('MEDIUM'),
+      lowCount: countOf('LOW'),
+      belowMinCount: items.filter((i) => i.belowMin).length,
+      noVelocityCount: items.filter((i) => i.avgDailySales === 0).length,
       estimatedReorderValue: round2(recommendations.reduce((s, i) => s + i.recommendedValue, 0)),
+      urgentValue: round2(urgentValue),
     },
     recommendations,
     items,

@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { Plus, ShoppingCart, Eye } from 'lucide-react';
+import { Plus, ShoppingCart, Eye, Wallet, TrendingUp, Boxes, Timer } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useWarehouses, useSalesReps } from '@/lib/hooks';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent } from '@/lib/format';
 import { ROLES, SALE_STATUS_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import {
@@ -249,12 +250,12 @@ function SaleDetail({ id, onClose }) {
               })}
             </TBody>
           </Table>
-          <div className="rounded-lg bg-elevated p-3">
-            <div className="flex justify-between"><span className="text-muted">Revenue</span><span className="font-semibold">{formatCurrency(data.total)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Cost of goods</span><span className="text-muted">−{formatCurrency(data.costTotal)}</span></div>
-            <div className="flex justify-between border-t border-border pt-1"><span className="font-semibold text-foreground">Profit on this sale</span><span className="font-bold text-emerald-500">{formatCurrency(data.total - data.costTotal)}</span></div>
-            <div className="mt-1 flex justify-between"><span className="text-muted">Paid</span><span>{formatCurrency(data.amountPaid)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Balance</span><span className={data.balanceDue > 0 ? 'text-rose-600' : ''}>{formatCurrency(data.balanceDue)}</span></div>
+          <div className="space-y-1.5 border-t border-white/[0.06] pt-3 text-sm">
+            <div className="flex justify-between"><span className="text-muted">Revenue</span><span className="font-semibold tabular-nums text-foreground">{formatCurrency(data.total)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Cost of goods</span><span className="tabular-nums text-muted">−{formatCurrency(data.costTotal)}</span></div>
+            <div className="flex justify-between border-t border-white/[0.06] pt-1.5"><span className="font-semibold text-foreground">Profit on this sale</span><span className="font-bold tabular-nums text-emerald-400">{formatCurrency(data.total - data.costTotal)}</span></div>
+            <div className="mt-1 flex justify-between"><span className="text-muted">Paid</span><span className="tabular-nums text-foreground">{formatCurrency(data.amountPaid)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Balance</span><span className={`tabular-nums ${data.balanceDue > 0 ? 'font-semibold text-amber-300' : 'text-faint'}`}>{formatCurrency(data.balanceDue)}</span></div>
           </div>
           {data.creditSale && (
             <div>
@@ -276,6 +277,36 @@ function SaleDetail({ id, onClose }) {
   );
 }
 
+// ── Filters ───────────────────────────────────────────────────────────────────
+
+const CHIP_TONE = {
+  slate: 'bg-white/10 text-foreground ring-white/20',
+  emerald: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30',
+  amber: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+  rose: 'bg-rose-500/15 text-rose-300 ring-rose-500/30',
+  sky: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
+};
+const STATUS_TONE = { PAID: 'emerald', PARTIAL: 'amber', UNPAID: 'rose', CANCELLED: 'slate' };
+// Only the statuses a sale can actually hold — the meta also carries EXPIRED,
+// which belongs to stock requests and would be refused by the sales filter.
+const STATUS_ORDER = ['PAID', 'PARTIAL', 'UNPAID', 'CANCELLED'];
+
+function Chip({ active, tone, label, count, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
+        active ? CHIP_TONE[tone] : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}
+    >
+      {label}
+      {count != null && <span className="ml-1.5 tabular-nums opacity-70">{formatNumber(count)}</span>}
+    </button>
+  );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+
 export default function Sales() {
   const [page, setPage] = useState(1);
   const [type, setType] = useState('');
@@ -288,54 +319,181 @@ export default function Sales() {
     queryFn: async () => unwrap(await api.get('/sales', { params: { page, limit: 15, type: type || undefined, status: status || undefined } })),
   });
 
+  // Every figure below covers all the sales the filter matches, not the fifteen
+  // rows on screen — the server adds them up over the whole set. Cancelled
+  // sales are listed but earn nothing, so the money leaves them out.
+  const sum = data?.meta?.summary;
+  const period = sum?.firstAt
+    ? (formatDate(sum.firstAt) === formatDate(sum.lastAt)
+        ? `on ${formatDate(sum.firstAt)}`
+        : `between ${formatDate(sum.firstAt)} and ${formatDate(sum.lastAt)}`)
+    : null;
+  const saleWord = (n) => `sale${n === 1 ? '' : 's'}`;
+  // An empty result under a filter is not an empty business — say which.
+  const filtered = !!(type || status);
+  const nothing = filtered ? 'nothing matches this filter' : 'nothing sold yet';
+
+  // Chip counts are taken over the OTHER filter, so they hold still as you
+  // click through them instead of collapsing onto whatever is selected.
+  const statusChips = [
+    { value: '', label: 'All statuses', tone: 'slate', count: Object.values(sum?.byStatus || {}).reduce((a, b) => a + b, 0) },
+    ...STATUS_ORDER.map((k) => ({ value: k, label: SALE_STATUS_META[k].label, tone: STATUS_TONE[k], count: sum?.byStatus?.[k] ?? 0 })),
+  ];
+  // The business sells for cash. A type row only appears once a second type
+  // actually exists — offering a choice of one is how the old page looked.
+  const typesPresent = ['CASH', 'CREDIT'].filter((k) => (sum?.byType?.[k] ?? 0) > 0 || type === k);
+  const typeChips = typesPresent.length > 1
+    ? [
+      { value: '', label: 'All types', tone: 'slate' },
+      ...typesPresent.map((k) => ({ value: k, label: k === 'CASH' ? 'Cash' : 'Credit', tone: k === 'CASH' ? 'emerald' : 'sky', count: sum?.byType?.[k] ?? 0 })),
+    ]
+    : [];
+
   return (
     <div>
       <PageHeader title="Sales" subtitle="Cash sales across the business.">
         <Button onClick={() => setModalOpen(true)}><Plus className="h-4 w-4" /> New sale</Button>
       </PageHeader>
 
-      <Card>
-        <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row">
-          <Select value={type} onChange={(e) => { setType(e.target.value); setPage(1); }} className="sm:w-44">
-            <option value="">All types</option><option value="CASH">Cash</option>
-          </Select>
-          <Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="sm:w-44">
-            <option value="">All statuses</option>
-            {Object.entries(SALE_STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </Select>
+      <div className="space-y-4">
+        {/* What the business actually sold — a list of sales without a total is a
+            receipt spike: readable line by line, silent about the whole. */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {[
+            {
+              label: 'Revenue taken', value: formatCurrency(sum?.revenue ?? 0), icon: Wallet,
+              sub: period ? `${formatNumber(sum.sales)} ${saleWord(sum.sales)} ${period}` : nothing,
+              ring: (sum?.revenue ?? 0) > 0 ? 'ring-brand-500/25' : 'ring-white/[0.08]',
+              glow: (sum?.revenue ?? 0) > 0 ? 'from-brand-500/[0.12]' : 'from-white/[0.03]',
+              chip: (sum?.revenue ?? 0) > 0 ? 'bg-brand-500/15 text-brand-300' : 'bg-white/10 text-muted',
+              num: (sum?.revenue ?? 0) > 0 ? 'text-brand-300' : 'text-foreground',
+            },
+            {
+              label: 'Profit kept', value: formatCurrency(sum?.profit ?? 0), icon: TrendingUp,
+              sub: (sum?.sales ?? 0) > 0
+                ? `${formatPercent(sum.margin)} margin on the same ${formatNumber(sum.sales)} ${saleWord(sum.sales)}`
+                : nothing,
+              ring: (sum?.profit ?? 0) > 0 ? 'ring-emerald-500/25' : (sum?.profit ?? 0) < 0 ? 'ring-rose-500/30' : 'ring-white/[0.08]',
+              glow: (sum?.profit ?? 0) > 0 ? 'from-emerald-500/[0.12]' : (sum?.profit ?? 0) < 0 ? 'from-rose-500/[0.14]' : 'from-white/[0.03]',
+              chip: (sum?.profit ?? 0) > 0 ? 'bg-emerald-500/15 text-emerald-300' : (sum?.profit ?? 0) < 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-white/10 text-muted',
+              num: (sum?.profit ?? 0) > 0 ? 'text-emerald-300' : (sum?.profit ?? 0) < 0 ? 'text-rose-300' : 'text-foreground',
+            },
+            {
+              label: 'Boxes sold', value: formatNumber(sum?.boxes ?? 0), icon: Boxes,
+              sub: period ? `left the shelves ${period}` : nothing,
+              ring: (sum?.boxes ?? 0) > 0 ? 'ring-violet-500/25' : 'ring-white/[0.08]',
+              glow: (sum?.boxes ?? 0) > 0 ? 'from-violet-500/[0.14]' : 'from-white/[0.03]',
+              chip: (sum?.boxes ?? 0) > 0 ? 'bg-violet-500/15 text-violet-300' : 'bg-white/10 text-muted',
+              num: (sum?.boxes ?? 0) > 0 ? 'text-violet-300' : 'text-foreground',
+            },
+            {
+              label: 'Money still owed', value: formatCurrency(sum?.owed ?? 0), icon: Timer,
+              sub: (sum?.owed ?? 0) > 0
+                ? `unpaid on ${formatNumber(sum.unpaid)} of those ${saleWord(sum.unpaid)}`
+                : period ? `every sale ${period} was paid in full` : nothing,
+              ring: (sum?.owed ?? 0) > 0 ? 'ring-amber-500/30' : 'ring-white/[0.08]',
+              glow: (sum?.owed ?? 0) > 0 ? 'from-amber-500/[0.14]' : 'from-white/[0.03]',
+              chip: (sum?.owed ?? 0) > 0 ? 'bg-amber-500/15 text-amber-300' : 'bg-white/10 text-muted',
+              num: (sum?.owed ?? 0) > 0 ? 'text-amber-300' : 'text-foreground',
+            },
+          ].map((c) => (
+            <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
+              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
+              <div className="relative flex items-start justify-between gap-2">
+                <p className="text-xs font-medium text-muted">{c.label}</p>
+                <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+              </div>
+              <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
+              <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
+            </div>
+          ))}
         </div>
 
-        {isLoading ? <PageSpinner /> : !data?.data?.length ? (
-          <EmptyState title="No sales yet" message="Record your first sale." icon={ShoppingCart} action={<Button onClick={() => setModalOpen(true)}><Plus className="h-4 w-4" /> New sale</Button>} />
-        ) : (
-          <>
-            <Table>
-              <THead><TR><TH>Sale</TH><TH>Customer</TH><TH>Rep</TH><TH>Type</TH><TH>Total</TH><TH>Profit</TH><TH>Balance</TH><TH>Status</TH><TH>Date</TH><TH /></TR></THead>
-              <TBody>
-                {data.data.map((s) => {
-                  const meta = SALE_STATUS_META[s.status] || {};
-                  const profit = s.total - (s.costTotal || 0);
-                  return (
-                    <TR key={s.id}>
-                      <TD className="font-medium text-foreground">{s.saleNumber}</TD>
-                      <TD>{s.customer?.name || 'Walk-in'}</TD>
-                      <TD>{s.salesRep?.user?.name || '—'}</TD>
-                      <TD>{s.type}</TD>
-                      <TD>{formatCurrency(s.total)}</TD>
-                      <TD className={s.status === 'CANCELLED' ? 'text-faint line-through' : 'font-semibold text-emerald-500'}>{formatCurrency(profit)}</TD>
-                      <TD className={s.balanceDue > 0 ? 'text-rose-600' : 'text-faint'}>{formatCurrency(s.balanceDue)}</TD>
-                      <TD><Badge className={meta.cls}>{meta.label}</Badge></TD>
-                      <TD className="text-faint">{formatDate(s.soldAt)}</TD>
-                      <TD><button className="btn-ghost px-2 py-1" onClick={() => setDetailId(s.id)}><Eye className="h-4 w-4" /></button></TD>
-                    </TR>
-                  );
-                })}
-              </TBody>
-            </Table>
-            <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
-          </>
+        {/* Said in a sentence, because four numbers still need a story. */}
+        {sum && (sum.sales > 0 || sum.cancelled > 0) && (
+          <p className="text-xs leading-relaxed text-muted">
+            {sum.sales > 0 ? (
+              <>
+                <b className="text-foreground">{formatNumber(sum.sales)}</b> {saleWord(sum.sales)} {period} brought in{' '}
+                <b className="text-foreground">{formatCurrency(sum.revenue)}</b> for{' '}
+                <b className="text-foreground">{formatNumber(sum.boxes)}</b> box{sum.boxes === 1 ? '' : 'es'}. The stock in them cost{' '}
+                <b className="text-foreground">{formatCurrency(sum.cost)}</b>, so the business kept{' '}
+                <b className={sum.profit > 0 ? 'text-emerald-400' : sum.profit < 0 ? 'text-rose-400' : 'text-foreground'}>{formatCurrency(sum.profit)}</b>
+                {' '}— {formatPercent(sum.margin)} of what it took.
+              </>
+            ) : (
+              <>Nothing was earned {period || 'yet'}.</>
+            )}
+            {sum.owed > 0 && (
+              <> <b className="text-amber-400">{formatCurrency(sum.owed)}</b> of that is still to be collected, on{' '}
+                <b className="text-foreground">{formatNumber(sum.unpaid)}</b> {saleWord(sum.unpaid)}.</>
+            )}
+            {sum.cancelled > 0 && (
+              <> <b className="text-foreground">{formatNumber(sum.cancelled)}</b> cancelled {saleWord(sum.cancelled)}{' '}
+                {sum.cancelled === 1 ? 'is' : 'are'} listed below, greyed out — the boxes went back and none of the money above is theirs.</>
+            )}
+          </p>
         )}
-      </Card>
+
+        <Card>
+          <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
+            {typeChips.map((c) => (
+              <Chip key={c.value || 'all-types'} {...c} active={type === c.value} onClick={() => { setType(c.value); setPage(1); }} />
+            ))}
+            {typeChips.length > 0 && <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />}
+            {statusChips.map((c) => (
+              <Chip key={c.value || 'all-statuses'} {...c} active={status === c.value} onClick={() => { setStatus(c.value); setPage(1); }} />
+            ))}
+          </div>
+
+          {isLoading ? <PageSpinner /> : !data?.data?.length ? (
+            <EmptyState
+              title={filtered ? 'No sales match these filters' : 'No sales yet'}
+              message={filtered ? 'Widen the filters above to see the rest.' : 'Record your first sale.'}
+              icon={ShoppingCart}
+              action={filtered ? null : <Button onClick={() => setModalOpen(true)}><Plus className="h-4 w-4" /> New sale</Button>}
+            />
+          ) : (
+            <>
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Sale</TH><TH>Customer</TH><TH>Rep</TH><TH>Type</TH>
+                    <TH className="text-right">Total</TH><TH className="text-right">Profit</TH><TH className="text-right">Balance</TH>
+                    <TH>Status</TH><TH>Date</TH><TH />
+                  </TR>
+                </THead>
+                <TBody>
+                  {data.data.map((s) => {
+                    const meta = SALE_STATUS_META[s.status] || {};
+                    const profit = s.total - (s.costTotal || 0);
+                    // A cancelled sale is struck through and dimmed: it is still
+                    // part of the record, but none of the totals above count it.
+                    const dead = s.status === 'CANCELLED';
+                    const money = (extra) => clsx('text-right tabular-nums', dead ? 'text-faint line-through' : extra);
+                    return (
+                      <TR key={s.id} className={dead ? 'opacity-60' : undefined}>
+                        <TD className={clsx('font-medium', dead ? 'text-muted line-through' : 'text-foreground')}>{s.saleNumber}</TD>
+                        <TD>{s.customer?.name || 'Walk-in'}</TD>
+                        <TD>{s.salesRep?.user?.name || '—'}</TD>
+                        <TD>{s.type}</TD>
+                        <TD className={money('text-foreground')}>{formatCurrency(s.total)}</TD>
+                        <TD className={money('font-semibold text-emerald-400')}>{formatCurrency(profit)}</TD>
+                        <TD className={money(s.balanceDue > 0 ? 'text-amber-300' : 'text-faint')}>{formatCurrency(s.balanceDue)}</TD>
+                        <TD><Badge className={meta.cls}>{meta.label}</Badge></TD>
+                        <TD className="text-faint">{formatDate(s.soldAt)}</TD>
+                        <TD><button className="btn-ghost px-2 py-1" onClick={() => setDetailId(s.id)}><Eye className="h-4 w-4" /></button></TD>
+                      </TR>
+                    );
+                  })}
+                </TBody>
+              </Table>
+              <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
+            </>
+          )}
+        </Card>
+
+      </div>
 
       {modalOpen && <NewSaleModal open={modalOpen} onClose={() => setModalOpen(false)} />}
       {detailId && <SaleDetail id={detailId} onClose={() => setDetailId(null)} />}

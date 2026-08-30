@@ -1,21 +1,38 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Undo2, Search, X, CheckCircle, XCircle, Eye, Clock, CheckCircle2, PackageOpen } from 'lucide-react';
+import { Plus, Search, X, CheckCircle, XCircle, Eye, Clock, CheckCircle2, PackageOpen, PackageCheck } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/hooks';
-import { ROLES, RETURN_STATUS_META } from '@/lib/constants';
+import { ROLES } from '@/lib/constants';
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from '@/lib/format';
 import {
-  PageHeader, Card, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
-  Pagination, Table, THead, TBody, TR, TH, TD,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
+  Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function defaultPkg(product) {
   if (!product?.packagings?.length) return null;
   return product.packagings.find((p) => p.isBaseUnit) || product.packagings[0];
 }
+
+// The shared RETURN_STATUS_META still carries light-theme chips (bg-amber-100)
+// from the old theme, and has no EXPIRED entry — an expired return therefore
+// fell back to the PENDING label and read "Pending Approval" long after it had
+// died. Both are fixed here, where the statuses are actually rendered.
+const STATUS_META = {
+  PENDING: { label: 'Waiting approval', cls: 'bg-amber-500/15 text-amber-300' },
+  APPROVED: { label: 'Approved', cls: 'bg-emerald-500/15 text-emerald-300' },
+  COMPLETED: { label: 'Approved', cls: 'bg-emerald-500/15 text-emerald-300' },
+  REJECTED: { label: 'Rejected', cls: 'bg-rose-500/15 text-rose-300' },
+  CANCELLED: { label: 'Cancelled', cls: 'bg-white/10 text-muted' },
+  EXPIRED: { label: 'Expired', cls: 'bg-rose-500/15 text-rose-300' },
+};
+const statusMeta = (status) => STATUS_META[status] || STATUS_META.PENDING;
+
+const boxesOf = (r) => (r.items || []).reduce((a, i) => a + i.quantity, 0);
+const plural = (n) => (n === 1 ? '' : 'es');
 
 // ── Reject modal ──────────────────────────────────────────────────────────────
 function RejectModal({ returnId, onClose, onRejected }) {
@@ -66,8 +83,8 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
   });
 
   const pending = ret?.status === 'PENDING';
-  const meta = ret ? (RETURN_STATUS_META[ret.status] || RETURN_STATUS_META.PENDING) : null;
-  const totalBoxes = ret?.items?.reduce((s, i) => s + i.quantity, 0) || 0;
+  const meta = ret ? statusMeta(ret.status) : null;
+  const totalBoxes = ret ? boxesOf(ret) : 0;
   const totalValue = ret?.items?.reduce((s, i) => s + i.quantity * Number(i.unitPrice || 0), 0) || 0;
 
   return (
@@ -316,7 +333,7 @@ function ReturnModal({ onClose }) {
 
 // ── Pending row — same compact shape as "Pending settlement approvals" ───────
 function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve }) {
-  const totalBoxes = r.items.reduce((a, i) => a + i.quantity, 0);
+  const totalBoxes = boxesOf(r);
   const totalValue = r.items.reduce((a, i) => a + i.quantity * Number(i.unitPrice || 0), 0);
   const busy = approve && approve.isPending && approve.variables === r.id;
   // 24-hour decision window: after that the return expires automatically and
@@ -326,17 +343,26 @@ function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve })
   return (
     <div className="flex flex-wrap items-center gap-3 px-4 py-3">
       <button onClick={() => onView(r.id)} className="min-w-0 flex-1 text-left">
-        <div className="text-sm font-semibold text-foreground">
-          {r.salesRep ? `${r.salesRep.user?.name} (${r.salesRep.code})` : r.customer?.name || 'Customer'} · {formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} · {formatCurrency(totalValue)}
+        {/* Who and which request first, then the number being decided. */}
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <span className="text-sm font-semibold text-foreground">{r.returnNumber}</span>
+          <span className="truncate text-sm text-muted">
+            {r.salesRep ? `${r.salesRep.user?.name} (${r.salesRep.code})` : r.customer?.name || 'Customer'}
+          </span>
         </div>
+        <div className="mt-1 flex items-baseline gap-2">
+          <span className="text-xl font-bold tabular-nums text-amber-300">{formatNumber(totalBoxes)}</span>
+          <span className="text-xs text-muted">box{plural(totalBoxes)} to verify · {formatCurrency(totalValue)}</span>
+        </div>
+        {/* Every line stays visible here — you are about to accept these goods. */}
         {r.items.map((i) => (
           <div key={i.id} className="mt-0.5 text-xs text-faint">
             <span className="font-semibold text-muted">{formatNumber(i.quantity)}×</span> {i.product?.name}
           </div>
         ))}
-        <div className="mt-0.5 text-xs text-faint">
-          {r.returnNumber}{r.settlementNumber ? ` · on ${r.settlementNumber}` : ''} · {formatDateTime(r.processedAt)}
-          <span className={expiring ? ' font-semibold text-rose-500' : ' text-amber-500'}> · expires in {Math.ceil(hoursLeft)}h</span>
+        <div className="mt-1 text-xs text-faint">
+          {r.settlementNumber ? `on ${r.settlementNumber} · ` : ''}{formatDateTime(r.processedAt)}
+          <span className={expiring ? ' font-semibold text-rose-400' : ' text-amber-400'}> · expires in {Math.ceil(hoursLeft)}h</span>
         </div>
       </button>
       <div className="flex shrink-0 gap-2">
@@ -354,8 +380,9 @@ function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve })
 
 // Compact row for decided returns — products still visible, no digging.
 function HistoryRow({ r, onView }) {
-  const meta = RETURN_STATUS_META[r.status] || RETURN_STATUS_META.PENDING;
-  const totalBoxes = r.items.reduce((a, i) => a + i.quantity, 0);
+  const meta = statusMeta(r.status);
+  const totalBoxes = boxesOf(r);
+  const accepted = r.status === 'APPROVED' || r.status === 'COMPLETED';
   // A processed return is history. Listing every line as its own chip meant one
   // return could fill a phone screen — product names run to ~35 characters, so
   // each chip took a full row and fourteen returns became an endless scroll.
@@ -363,27 +390,31 @@ function HistoryRow({ r, onView }) {
   const lines = r.items.map((i) => `${formatNumber(i.quantity)}x ${i.product?.name}`);
   const summary = lines.slice(0, 2).join(' · ') + (lines.length > 2 ? ` · +${lines.length - 2} more` : '');
   return (
-    <button onClick={() => onView(r.id)} className="w-full px-4 py-2.5 text-left transition hover:bg-elevated">
-      <div className="flex items-center gap-2">
-        {/* The identifier never shrinks — a truncated "RET-2026…" is useless. */}
-        <span className="shrink-0 text-sm font-semibold text-foreground">{r.returnNumber}</span>
-        <Badge className={meta.cls}>{meta.label}</Badge>
-        <span className="ml-auto shrink-0 text-sm font-bold tabular-nums text-foreground">
-          {formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''}
-        </span>
-        <span className="hidden shrink-0 text-xs text-faint sm:inline">{formatDate(r.processedAt)}</span>
-        <Eye className="h-3.5 w-3.5 shrink-0 text-faint" />
+    <button onClick={() => onView(r.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-elevated">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          {/* The identifier never shrinks — a truncated "RET-2026…" is useless. */}
+          <span className="shrink-0 text-sm font-semibold text-foreground">{r.returnNumber}</span>
+          <span className="truncate text-sm text-muted">
+            {r.salesRep ? `${r.salesRep.user?.name} (${r.salesRep.code})` : r.customer?.name || '—'}
+          </span>
+        </div>
+        {/* What came back is one truncated line, so a return with five products
+            is the same height as one with one. */}
+        <p className="mt-0.5 truncate text-xs text-faint">
+          {summary}
+          {r.settlementNumber ? ` · on ${r.settlementNumber}` : ''} · {formatDate(r.processedAt)}
+        </p>
       </div>
-      {/* Who and which order, then what came back — one truncated line, so a
-          return with five products is the same height as one with one. */}
-      <p className="mt-0.5 truncate text-xs text-muted">
-        {r.salesRep ? `${r.salesRep.user?.name} (${r.salesRep.code})` : r.customer?.name || '—'}
-        {r.settlementNumber ? ` · on ${r.settlementNumber}` : ''}
-      </p>
-      <p className="mt-0.5 truncate text-xs text-faint">
-        {summary}
-        <span className="sm:hidden"> · {formatDate(r.processedAt)}</span>
-      </p>
+      {/* The figure the row exists for, and whether it counted. */}
+      <div className="shrink-0 text-right">
+        <div className={`text-lg font-bold leading-none tabular-nums ${accepted ? 'text-emerald-300' : 'text-muted'}`}>
+          {formatNumber(totalBoxes)}
+        </div>
+        <div className="mt-0.5 text-[10px] uppercase tracking-wide text-faint">box{plural(totalBoxes)}</div>
+      </div>
+      <Badge className={`shrink-0 ${meta.cls}`}>{meta.label}</Badge>
+      <Eye className="hidden h-3.5 w-3.5 shrink-0 text-faint sm:block" />
     </button>
   );
 }
@@ -432,6 +463,67 @@ export default function Returns() {
   const pending = all.filter((r) => r.status === 'PENDING');
   const approved = all.filter((r) => r.status === 'APPROVED' || r.status === 'COMPLETED');
   const rejected = all.filter((r) => ['REJECTED', 'CANCELLED', 'EXPIRED'].includes(r.status));
+  const total = data?.meta?.total ?? all.length;
+  const pendingBoxesShown = pending.reduce((a, r) => a + boxesOf(r), 0);
+
+  // Every card figure is the server's count over the WHOLE history, not the
+  // hundred rows listed below — so each one says the dates it covers.
+  const span = summary?.firstAt
+    ? (formatDate(summary.firstAt) === formatDate(summary.lastAt)
+        ? formatDate(summary.firstAt)
+        : `${formatDate(summary.firstAt)} to ${formatDate(summary.lastAt)}`)
+    : null;
+  const period = span ? `everything ${span}` : 'nothing returned yet';
+  const quiet = { ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', chip: 'bg-white/10 text-muted', num: 'text-foreground' };
+  const cards = summary ? [
+    {
+      // The number this page is a record of. A count of returns says how many
+      // times it happened; it never says how much stock moved.
+      label: isRep ? 'Boxes The Lab took back' : 'Boxes back on the shelf',
+      value: formatNumber(summary.boxesBack), icon: PackageCheck, sub: period,
+      ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300',
+    },
+    {
+      label: isRep ? 'Waiting on The Lab' : 'Waiting your approval',
+      value: formatNumber(summary.pending), icon: Clock,
+      sub: summary.pending > 0
+        ? `${formatNumber(summary.pendingBoxes)} box${plural(summary.pendingBoxes)} held right now, not on a shelf yet`
+        : 'nothing waiting right now',
+      ...(summary.pending > 0
+        ? { ring: 'ring-amber-500/30', glow: 'from-amber-500/[0.14]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' }
+        : quiet),
+    },
+    {
+      label: 'Returns accepted', value: formatNumber(summary.approved), icon: CheckCircle2,
+      sub: summary.totalReturns > 0 ? `of ${formatNumber(summary.totalReturns)} ever submitted` : 'none submitted yet',
+      ...(summary.approved > 0
+        ? { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' }
+        : quiet),
+    },
+    {
+      label: 'Rejected or cancelled', value: formatNumber(summary.refused), icon: XCircle,
+      sub: summary.refused > 0 ? 'all time — no stock came back on these' : 'nothing turned away',
+      ...(summary.refused > 0
+        ? { ring: 'ring-rose-500/30', glow: 'from-rose-500/[0.14]', chip: 'bg-rose-500/15 text-rose-300', num: 'text-rose-300' }
+        : quiet),
+    },
+  ] : [];
+  // "Returned today" is dead weight on the many days nothing comes back.
+  if (summary && summary.todayBoxes > 0) {
+    cards.push({
+      label: 'Boxes logged today', value: formatNumber(summary.todayBoxes), icon: PackageOpen,
+      sub: `on ${formatNumber(summary.todayCount)} return${summary.todayCount === 1 ? '' : 's'} submitted today`,
+      ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.12]', chip: 'bg-sky-500/15 text-sky-300', num: 'text-sky-300',
+    });
+  }
+
+  // Type chips carry the server's whole-history count. A rep only ever files
+  // one kind of return, so the choice is not offered to them.
+  const chips = [
+    { key: '', label: 'All returns', count: summary?.totalReturns, tone: 'bg-white/10 text-foreground ring-white/20' },
+    { key: 'SALES_RETURN', label: 'Rep → The Lab', count: summary?.salesReturns, tone: 'bg-sky-500/15 text-sky-300 ring-sky-500/30' },
+    { key: 'CUSTOMER_RETURN', label: 'Customer returns', count: summary?.customerReturns, tone: 'bg-sky-500/15 text-sky-300 ring-sky-500/30' },
+  ];
 
   return (
     <div>
@@ -443,33 +535,86 @@ export default function Returns() {
       </PageHeader>
 
       {summary && (
-        <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
-          <StatCard label="Waiting approval" value={summary.pending} icon={Clock} tone="amber" hint={`${summary.pendingBoxes} box(es)`} />
-          <StatCard label="Returned today" value={summary.todayCount} icon={PackageOpen} tone="brand" hint={`${summary.todayBoxes} box(es)`} />
-          <StatCard label="Approved" value={summary.approved} icon={CheckCircle2} tone="emerald" />
-          <StatCard label="Rejected" value={summary.rejected} icon={XCircle} tone="rose" />
+        <div className={`grid grid-cols-2 gap-3 ${cards.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
+          {cards.map((c) => (
+            <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
+              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
+              <div className="relative flex items-start justify-between gap-2">
+                <p className="text-xs font-medium text-muted">{c.label}</p>
+                <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+              </div>
+              <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
+              <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="mb-4">
-        <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="sm:w-48">
-          <option value="">All types</option>
-          <option value="CUSTOMER_RETURN">Customer returns</option>
-          <option value="SALES_RETURN">Rep → The Lab</option>
-        </Select>
-      </div>
+      {/* Five numbers still need a story — the owner reads this line first. */}
+      {summary && (
+        <p className="mt-4 text-xs leading-relaxed text-muted">
+          {summary.totalReturns === 0 ? (
+            <>Nothing has been returned yet. When {isRep ? 'you send boxes back' : 'a rep or a customer sends boxes back'}, every one of them is listed here.</>
+          ) : (
+            <>
+              Stock has come back <b className="text-foreground">{formatNumber(summary.totalReturns)}</b> time{summary.totalReturns === 1 ? '' : 's'}
+              {span && <> ({span})</>}. <b className="text-emerald-400">{formatNumber(summary.approved)}</b> of those were accepted, putting
+              {' '}<b className="text-foreground">{formatNumber(summary.boxesBack)}</b> box{plural(summary.boxesBack)} back {isRep ? 'with The Lab' : 'on the shelf'}.
+              {summary.pending > 0 && (
+                <> <b className="text-amber-400">{formatNumber(summary.pending)}</b> return{summary.pending === 1 ? '' : 's'} holding
+                  {' '}<b className="text-amber-400">{formatNumber(summary.pendingBoxes)}</b> box{plural(summary.pendingBoxes)}
+                  {' '}{isRep ? 'are still waiting on The Lab' : 'still need your decision'}.</>
+              )}
+              {summary.refused > 0 && (
+                <> <b className="text-foreground">{formatNumber(summary.refused)}</b> {summary.refused === 1 ? 'was' : 'were'} rejected, cancelled or expired, so those boxes never moved.</>
+              )}
+            </>
+          )}
+        </p>
+      )}
 
+      {!isRep && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {chips.map((c) => (
+            <button key={c.key || 'all'} type="button" onClick={() => setTypeFilter(c.key)}
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
+                typeFilter === c.key ? c.tone : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
+              {c.label}
+              {c.count != null && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
+                  typeFilter === c.key ? 'bg-black/25' : 'bg-white/[0.07] text-faint'}`}>
+                  {formatNumber(c.count)}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* The list is one page of records; the cards above are the full history. */}
+      {total > all.length && (
+        <p className="mt-2 text-[11px] text-faint">Listing the {formatNumber(all.length)} most recent of {formatNumber(total)} returns.</p>
+      )}
       {isLoading ? (
-        <Card><PageSpinner /></Card>
+        <Card className="mt-4"><PageSpinner /></Card>
+      ) : all.length === 0 ? (
+        <Card className="mt-4">
+          <EmptyState icon={PackageOpen} title="No returns to show"
+            message={typeFilter ? 'No returns of this kind — try another chip above.' : isRep ? 'Nothing you sent back is on record yet.' : 'Nobody has sent stock back yet.'} />
+        </Card>
       ) : (
-        <div className="space-y-8">
+        <div className="mt-4 space-y-8">
           {/* ── Pending — compact approval strip, same as settlements ── */}
           {pending.length > 0 && (
             <Card className="border-amber-500/30">
-              <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
                 <Clock className="h-4 w-4 text-amber-500" />
-                <h2 className="text-sm font-bold text-foreground">Pending return approvals</h2>
-                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-500">{pending.length}</span>
+                <h2 className="text-sm font-bold text-foreground">
+                  {formatNumber(pendingBoxesShown)} box{plural(pendingBoxesShown)} waiting to be verified
+                </h2>
+                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-300">
+                  {pending.length} return{pending.length === 1 ? '' : 's'}
+                </span>
                 <span className="ml-auto hidden text-xs text-faint sm:block">Inspect the goods before approving</span>
               </div>
               <div className="divide-y divide-border">
@@ -484,9 +629,11 @@ export default function Returns() {
           {/* ── Approved ── */}
           {approved.length > 0 && (
             <div>
-              <div className="mb-2 flex items-center gap-2">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                <h2 className="text-sm font-semibold text-muted">Approved returns ({approved.length})</h2>
+                {/* The whole-history box total lives on the card above; repeating
+                    a page-scoped one here would just contradict it. */}
+                <h2 className="text-sm font-semibold text-muted">Accepted — {approved.length} return{approved.length === 1 ? '' : 's'} listed</h2>
               </div>
               <Card><div className="divide-y divide-border">{approved.map((r) => <HistoryRow key={r.id} r={r} onView={setViewingId} />)}</div></Card>
             </div>
@@ -495,9 +642,10 @@ export default function Returns() {
           {/* ── Rejected ── */}
           {rejected.length > 0 && (
             <div>
-              <div className="mb-2 flex items-center gap-2">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
                 <XCircle className="h-4 w-4 text-rose-500" />
-                <h2 className="text-sm font-semibold text-muted">Rejected / cancelled / expired ({rejected.length})</h2>
+                <h2 className="text-sm font-semibold text-muted">Rejected, cancelled or expired — {rejected.length} listed</h2>
+                <span className="text-xs text-faint">no stock moved on these</span>
               </div>
               <Card><div className="divide-y divide-border">{rejected.map((r) => <HistoryRow key={r.id} r={r} onView={setViewingId} />)}</div></Card>
             </div>

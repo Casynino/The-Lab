@@ -1094,7 +1094,7 @@ function Ledger({ expensesOnly }) {
       {sums && (
         expensesOnly ? (
           <SegmentStrip size="sm" segments={[
-            { label: 'Spent in this view', value: formatCurrency(sums.out), sub: `${formatNumber(count)} record${count === 1 ? '' : 's'}`, tone: 'rose' },
+            { label: 'Spent, all filters applied', value: formatCurrency(sums.out), sub: `across ${formatNumber(count)} record${count === 1 ? '' : 's'}`, tone: 'rose' },
             ...byCategory.slice(0, 3).map((c) => ({ label: c.category, value: formatCurrency(c.amount), sub: `${formatNumber(c.count)} record${c.count === 1 ? '' : 's'}`, tone: 'slate' })),
           ]} />
         ) : (

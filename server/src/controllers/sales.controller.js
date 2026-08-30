@@ -72,8 +72,11 @@ const list = asyncHandler(async (req, res) => {
   const pagination = parsePagination(q, { defaultSortBy: 'soldAt', defaultSortDir: 'desc', allowedSortFields: ['soldAt', 'total', 'createdAt'] });
   const filters = { ...q };
   if (req.user.role === ROLES.SALES_REP) filters.salesRepId = req.user.salesRepId;
-  const { items, total } = await salesService.listSales(filters, pagination);
-  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
+  const { items, total, summary } = await salesService.listSales(filters, pagination);
+  // The summary rides along in meta: it is computed over every sale the filter
+  // matches, so the page can show what the business sold without adding up the
+  // fifteen rows it happens to be holding.
+  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total, summary });
 });
 
 const get = asyncHandler(async (req, res) => {

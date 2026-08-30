@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, Package, X, TrendingDown, Boxes, Wallet } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useBrands, useCategories, usePackagingUnits, useDebounce } from '@/lib/hooks';
-import { formatCurrency, formatNumber } from '@/lib/format';
+import { formatCurrency, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Select, Textarea,
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
@@ -261,7 +261,7 @@ export default function Products() {
                     <TD>
                       <span className={`font-semibold tabular-nums ${p.onHandBase <= 0 ? 'text-rose-400' : p.lowStock ? 'text-amber-400' : 'text-foreground'}`}>
                         {formatNumber(p.onHandBase)}
-                      </span> <span className="text-muted">{p.baseUnitName}s</span>
+                      </span> <span className="text-muted">{pluralizeUnit(p.baseUnitName)}</span>
                       {p.onHandBase <= 0
                         ? <Badge className="ml-2 bg-rose-500/15 text-rose-300">Out</Badge>
                         : p.lowStock && <Badge className="ml-2 bg-amber-500/15 text-amber-300">Low</Badge>}
