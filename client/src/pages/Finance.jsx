@@ -439,6 +439,100 @@ function Overview({ onNavigate, onOwnerMoney }) {
         </div>
       </div>
 
+      {/* ── Whose money is this? ───────────────────────────────────────────
+             The owner's question, in his words: "I have 364,000 for Civlily
+             — what is mine and what is for Bonge?" Every other panel talked
+             about profit; this one talks about the cash he can touch. ── */}
+      {data.cashSplit && (
+        <div className="space-y-3">
+          <SectionHead label="Whose money is this?" sub="Your cash, split between what you owe and what you keep." />
+          <Card>
+            <div className="p-5">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-3xl font-bold leading-none tabular-nums text-foreground">{formatCurrency(data.cashSplit.totalCash)}</p>
+                  <p className="mt-1 text-xs text-muted">cash you have right now, across every account</p>
+                </div>
+                <div className="flex gap-6">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-rose-300">Set aside</p>
+                    <p className="mt-1 text-xl font-bold tabular-nums text-rose-400">{formatCurrency(data.cashSplit.setAside)}</p>
+                    <p className="text-[11px] text-faint">for your suppliers</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">Yours</p>
+                    <p className="mt-1 text-xl font-bold tabular-nums text-emerald-400">{formatCurrency(data.cashSplit.yours)}</p>
+                    <p className="text-[11px] text-faint">free to use</p>
+                  </div>
+                </div>
+              </div>
+
+              {data.cashSplit.totalCash > 0 && (
+                <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                  <div className="h-full bg-rose-500" style={{ width: `${(data.cashSplit.setAside / data.cashSplit.totalCash) * 100}%` }} />
+                  <div className="h-full bg-emerald-500" style={{ width: `${(data.cashSplit.yours / data.cashSplit.totalCash) * 100}%` }} />
+                </div>
+              )}
+
+              {/* One row per pot of money, so he can see it account by account. */}
+              <div className="mt-5 space-y-3 border-t border-white/[0.06] pt-4">
+                {data.cashSplit.buckets.map((b) => (
+                  <div key={b.key} className="rounded-xl bg-white/[0.02] p-3.5 ring-1 ring-white/[0.06]">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="text-sm font-semibold text-foreground">
+                        {b.brandName}
+                        <span className="ml-2 text-[11px] font-normal text-faint">
+                          {b.accounts.filter((a) => a.balance !== 0).map((a) => a.name).join(', ') || 'no account holds money'}
+                        </span>
+                      </span>
+                      <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(b.cash)}</span>
+                    </div>
+                    {b.cash > 0 && (
+                      <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="h-full bg-rose-500" style={{ width: `${(b.setAside / b.cash) * 100}%` }} />
+                        <div className="h-full bg-emerald-500" style={{ width: `${(b.yours / b.cash) * 100}%` }} />
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                      {b.owed > 0 ? (
+                        <>
+                          <b className="text-rose-400">{formatCurrency(b.setAside)}</b> of this belongs to {b.supplierName || 'your supplier'}
+                          {b.yours > 0
+                            ? <> and <b className="text-emerald-400">{formatCurrency(b.yours)}</b> is yours.</>
+                            : <> — all of it.</>}
+                          {b.shortfall > 0 && <> You still owe <b className="text-foreground">{formatCurrency(b.shortfall)}</b> beyond this.</>}
+                        </>
+                      ) : (
+                        <>Nothing is owed here — <b className="text-emerald-400">{formatCurrency(b.yours)}</b> is all yours.</>
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Your own money, kept apart from the business's. Paying rep
+                  commissions from your pocket is recorded here so it never
+                  looks like the business earned it. */}
+              <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-4">
+                <span className="text-xs text-muted">
+                  Your own money —
+                  {' '}put in <b className="tabular-nums text-sky-300">{formatCurrency(data.ownerMoney?.contributed || 0)}</b>,
+                  {' '}taken out <b className="tabular-nums text-foreground">{formatCurrency(data.ownerMoney?.drawn || 0)}</b>
+                </span>
+                <div className="ml-auto flex gap-2">
+                  <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')}>
+                    <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
+                  </Button>
+                  <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
+                    <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {/* ── One joined strip: the flow of the period ── */}
       <SegmentStrip segments={[
         { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `collected ${periodLabel}`, tone: 'emerald' },
@@ -447,14 +541,17 @@ function Overview({ onNavigate, onOwnerMoney }) {
         { label: 'Owed to suppliers', value: formatCurrency(ny.supplierOutstanding || 0), sub: ny.supplierOutstanding > 0 ? 'they are financing your stock' : 'all settled', tone: ny.supplierOutstanding > 0 ? 'amber' : 'slate' },
       ]} />
 
-      {/* ── The business, by brand ── */}
+      {/* ── The business, by brand ──────────────────────────────────────────
+             The owner said plainly he did not understand "TSh 2,112,500".
+             A profit figure alone is an abstraction; the three steps that
+             produced it are not. Money came in, money paid for it, what was
+             left — in that order, in words. ── */}
       {(data.brandFinance || []).length > 0 && (
         <div className="space-y-3">
-          <SectionHead label="The business, by brand" sub="What each brand has earned — not money withdrawn, and never mixed." />
+          <SectionHead label="How each brand did" sub="Money in, what it cost, what was left." />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {data.brandFinance.map((b) => {
-              const totalNet = data.brandFinance.reduce((a, x) => a + Math.max(0, x.netProfit), 0);
-              const share = totalNet > 0 ? (Math.max(0, b.netProfit) / totalNet) * 100 : 0;
+              const costs = b.cogs + (b.commission ?? 0) + b.expenses;
               const keptPct = b.revenue > 0 ? Math.round((b.netProfit / b.revenue) * 100) : 0;
               return (
                 <div key={b.brandId} className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-surface">
@@ -464,41 +561,28 @@ function Overview({ onNavigate, onOwnerMoney }) {
                       <span className="rounded-full bg-brand-500/15 px-3 py-1 text-sm font-bold text-brand-300">{b.name}</span>
                       <span className="text-xs text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'} sold · {periodLabel}</span>
                     </div>
-                    <p className={`mt-4 text-3xl font-bold leading-none tabular-nums ${b.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {formatCurrency(b.netProfit)}
-                    </p>
-                    <p className="mt-1 text-xs text-faint">
-                      earned{b.revenue > 0 ? ` — ${keptPct}% of what it sold` : ''}
-                    </p>
-                    <div className="mt-4 grid grid-cols-3 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
-                      <div className="bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Revenue</p>
-                        <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.revenue)}</p>
+
+                    {/* The three steps, top to bottom, in plain words. */}
+                    <div className="mt-4 space-y-2.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm text-muted">Customers paid you</span>
+                        <span className="text-base font-bold tabular-nums text-emerald-400">{formatCurrency(b.revenue)}</span>
                       </div>
-                      <div className="bg-gradient-to-br from-rose-500/[0.07] to-transparent p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Costs</p>
-                        <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.cogs + (b.commission ?? 0) + b.expenses)}</p>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-sm text-muted">The boxes and the reps cost</span>
+                        <span className="text-base font-bold tabular-nums text-rose-400">− {formatCurrency(costs)}</span>
                       </div>
-                      {/* NOT the gross margin: that lived here before and sat
-                          beside the headline's 18%, two look-alike percentages
-                          that never agreed. One card, one story — what stays. */}
-                      <div className="bg-gradient-to-br from-brand-500/[0.08] to-transparent p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">You keep</p>
-                        <p className="mt-1 text-sm font-bold tabular-nums text-brand-300">{keptPct}%</p>
+                      <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.08] pt-2.5">
+                        <span className="text-sm font-semibold text-foreground">Left in the business</span>
+                        <span className={`text-xl font-bold tabular-nums ${b.netProfit >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>
+                          {formatCurrency(b.netProfit)}
+                        </span>
                       </div>
                     </div>
-                    <div className="mt-4 flex items-center gap-3">
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${Math.max(2, share)}%` }} />
-                      </div>
-                      <span className="text-[11px] tabular-nums text-faint">{Math.round(share)}% of profit</span>
-                    </div>
-                    {/* No "net cash" here any more: that figure was the brand's
-                        tagged money-flow, which read as cash the brand HOLDS —
-                        and it does not. Cash lives in accounts, shown below. */}
-                    <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] text-faint">
-                      Earned on boxes sold — it is not cash. It bought the {formatNumber(b.inventoryUnits)} boxes
-                      still on the shelf, worth {formatCurrency(b.inventoryValue)} at cost.
+
+                    <p className="mt-3 rounded-lg bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-muted">
+                      Out of every 100 shillings of {b.name} sold, <b className="text-foreground">{keptPct}</b> stayed in the business.
+                      It is not cash — it bought the {formatNumber(b.inventoryUnits)} boxes on your shelf.
                     </p>
                   </div>
                 </div>
@@ -507,165 +591,6 @@ function Overview({ onNavigate, onOwnerMoney }) {
           </div>
         </div>
       )}
-
-      {/* ── What the business is really worth ─────────────────────────────
-             Profit says the boxes sold for more than they cost. It does not
-             say whether the owner is ahead, because the supplier financed
-             much of the stock. Owned against owed, in one place. ── */}
-      {data.position && (
-        <div className="space-y-3">
-          <SectionHead label="What the business is really worth" sub="Everything it owns, minus everything it owes." />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_1fr_260px]">
-            <Card>
-              <div className="p-5">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-lg bg-emerald-500/15 p-1.5 text-emerald-300"><TrendingUp className="h-3.5 w-3.5" /></span>
-                  <h3 className="text-sm font-semibold text-foreground">What you own</h3>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {data.position.owns.map((r) => (
-                    <div key={r.label}>
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm text-muted">{r.label}</span>
-                        <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(r.amount)}</span>
-                      </div>
-                      {r.hint && <p className="text-[11px] text-faint">{r.hint}</p>}
-                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-                        <div className="h-full rounded-full bg-emerald-500"
-                          style={{ width: `${data.position.totalOwns > 0 ? Math.max(2, (r.amount / data.position.totalOwns) * 100) : 0}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 flex items-baseline justify-between border-t border-white/[0.06] pt-3">
-                  <span className="text-xs font-semibold text-foreground">Total</span>
-                  <span className="text-lg font-bold tabular-nums text-emerald-400">{formatCurrency(data.position.totalOwns)}</span>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div className="p-5">
-                <div className="flex items-center gap-2">
-                  <span className="rounded-lg bg-rose-500/15 p-1.5 text-rose-300"><TrendingDown className="h-3.5 w-3.5" /></span>
-                  <h3 className="text-sm font-semibold text-foreground">What you owe</h3>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {data.position.owes.map((r) => (
-                    <div key={r.label}>
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-sm text-muted">{r.label}</span>
-                        <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(r.amount)}</span>
-                      </div>
-                      {r.hint && <p className="text-[11px] text-faint">{r.hint}</p>}
-                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-                        <div className="h-full rounded-full bg-rose-500"
-                          style={{ width: `${data.position.totalOwes > 0 ? Math.max(2, (r.amount / data.position.totalOwes) * 100) : 0}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-4 flex items-baseline justify-between border-t border-white/[0.06] pt-3">
-                  <span className="text-xs font-semibold text-foreground">Total</span>
-                  <span className="text-lg font-bold tabular-nums text-rose-400">{formatCurrency(data.position.totalOwes)}</span>
-                </div>
-              </div>
-            </Card>
-
-            <div className={`relative overflow-hidden rounded-2xl border p-5 ${data.position.worth >= 0 ? 'border-brand-500/25' : 'border-rose-500/30'}`}>
-              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${data.position.worth >= 0 ? 'from-brand-500/[0.14]' : 'from-rose-500/[0.14]'} to-transparent`} aria-hidden="true" />
-              <div className="relative flex h-full flex-col">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">The business is worth</p>
-                <p className={`mt-3 text-3xl font-bold leading-none tabular-nums ${data.position.worth >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>
-                  {formatCurrency(data.position.worth)}
-                </p>
-                <p className="mt-3 text-xs leading-relaxed text-muted">
-                  Own {formatCurrency(data.position.totalOwns)} − owe {formatCurrency(data.position.totalOwes)}.
-                  {data.position.owes[0]?.amount > 0 && ' Most of the stock on your shelf is financed by your supplier, so the profit is real but not yours to spend until those boxes sell and the debt is paid.'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Where the profit actually is ──────────────────────────────────
-             The question the page kept provoking: "I have 1,589,500 profit
-             but the account holds 364,000 — why?" Because none of it has
-             been taken out; it turned into stock. Said plainly, once. ── */}
-      {(() => {
-        const om = data.ownerMoney || {};
-        const earned = om.earnedAllTime ?? 0;
-        const taken = om.drawn ?? 0;
-        const working = om.stillWorking ?? 0;
-        return (
-          <div className="space-y-3">
-            <SectionHead label="Where your profit is" sub="What the business earned, what you have taken, and what is still working." />
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-              <Card>
-                <div className="p-5">
-                  <div className="grid grid-cols-1 divide-y divide-white/[0.06] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                    <div className="pb-4 sm:pb-0 sm:pr-5">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Profit earned</p>
-                      <p className={`mt-2 text-2xl font-bold tabular-nums ${earned >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(earned)}</p>
-                      <p className="mt-1 text-[11px] text-faint">all time, after goods, commissions and expenses</p>
-                    </div>
-                    <div className="py-4 sm:px-5 sm:py-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">You have taken out</p>
-                      <p className="mt-2 text-2xl font-bold tabular-nums text-foreground">{formatCurrency(taken)}</p>
-                      <p className="mt-1 text-[11px] text-faint">{taken > 0 ? 'drawn for yourself' : 'nothing yet — it is all still in the business'}</p>
-                    </div>
-                    <div className="pt-4 sm:pl-5 sm:pt-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Still working</p>
-                      <p className={`mt-2 text-2xl font-bold tabular-nums ${working >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>{formatCurrency(working)}</p>
-                      <p className="mt-1 text-[11px] text-faint">earned but never withdrawn</p>
-                    </div>
-                  </div>
-                  <div className="mt-5 border-t border-white/[0.06] pt-4">
-                    <p className="text-xs font-semibold text-foreground">Why it is not sitting in an account</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted">
-                      Money collected went straight back out — to Bonge and into more stock. Right now
-                      {' '}<b className="text-foreground">{formatCurrency(om.stockAtCost || 0)}</b> of it is boxes on your shelf
-                      {om.owedToSuppliers > 0 && <> and <b className="text-foreground">{formatCurrency(om.owedToSuppliers)}</b> of that stock is still financed by your supplier</>}.
-                      Cash in the accounts is only what has not been spent yet.
-                    </p>
-                    {om.contributed > 0 && (
-                      <p className="mt-2 text-xs text-muted">
-                        You have also put <b className="text-foreground">{formatCurrency(om.contributed)}</b> of your own money in — counted as yours, never as business income.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </Card>
-
-              <Card>
-                <div className="flex h-full flex-col p-5">
-                  <p className="text-sm font-semibold text-foreground">Your own money</p>
-                  <p className="mt-0.5 text-xs text-muted">Kept apart from the business's earnings, so profit stays honest.</p>
-                  <div className="mt-4 space-y-2.5">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-muted">You put in</span>
-                      <span className="text-sm font-bold tabular-nums text-sky-300">{formatCurrency(om.contributed || 0)}</span>
-                    </div>
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs text-muted">You took out</span>
-                      <span className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(taken)}</span>
-                    </div>
-                  </div>
-                  <div className="mt-auto space-y-2 pt-5">
-                    <Button variant="secondary" className="w-full justify-center" onClick={() => onOwnerMoney?.('in')}>
-                      <ArrowDownLeft className="h-4 w-4" /> Put my own money in
-                    </Button>
-                    <Button variant="secondary" className="w-full justify-center" onClick={() => onOwnerMoney?.('out')}>
-                      <ArrowUpRight className="h-4 w-4" /> Take profit out
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* ── Charts row: motion + where the cash sits ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

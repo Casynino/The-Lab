@@ -1075,6 +1075,58 @@ async function overview(period = 'month') {
 
   ownerMoney.owedToSuppliers = needsYou.supplierOutstanding;
 
+  // ── Whose money is this? ────────────────────────────────────────────────
+  // The owner pays Bonge monthly and wants the supplier's share held back,
+  // not spent. For each pot of cash he actually has: how much belongs to the
+  // supplier who financed the stock, and how much is genuinely his. Accounts
+  // and suppliers both carry a brandId, so Civlily cash meets Civlily debt.
+  const suppliersForSplit = await supplierSummaries();
+  const debtByBrand = new Map();
+  const supplierNameByBrand = new Map();
+  for (const sup of suppliersForSplit) {
+    if (!(sup.outstanding > 0)) continue;
+    const key = sup.brandId || 'general';
+    debtByBrand.set(key, round2((debtByBrand.get(key) || 0) + sup.outstanding));
+    if (!supplierNameByBrand.has(key)) supplierNameByBrand.set(key, sup.name);
+  }
+  const brandNameById = new Map(allBrands.map((b) => [b.id, b.name]));
+  // Group the cash by the brand its account belongs to.
+  const cashByBrand = new Map();
+  for (const a of accounts) {
+    const key = a.brandId || 'general';
+    const row = cashByBrand.get(key) || { key, cash: 0, accounts: [] };
+    row.cash = round2(row.cash + a.balance);
+    row.accounts.push({ name: a.name, balance: a.balance });
+    cashByBrand.set(key, row);
+  }
+  for (const key of debtByBrand.keys()) {
+    if (!cashByBrand.has(key)) cashByBrand.set(key, { key, cash: 0, accounts: [] });
+  }
+  const buckets = [...cashByBrand.values()].map((row) => {
+    const owed = debtByBrand.get(row.key) || 0;
+    // The supplier's share of the cash on hand — never more than there is.
+    const setAside = round2(Math.min(row.cash, owed));
+    return {
+      key: row.key,
+      brandName: row.key === 'general' ? 'General business' : (brandNameById.get(row.key) || 'Brand'),
+      supplierName: supplierNameByBrand.get(row.key) || null,
+      accounts: row.accounts,
+      cash: row.cash,
+      owed,
+      setAside,
+      yours: round2(row.cash - setAside),
+      // What would still be owed after handing over every shilling here.
+      shortfall: round2(Math.max(0, owed - row.cash)),
+    };
+  }).sort((a, b) => b.cash - a.cash);
+  const cashSplit = {
+    totalCash: cashPosition,
+    setAside: round2(buckets.reduce((a, b) => a + b.setAside, 0)),
+    yours: round2(buckets.reduce((a, b) => a + b.yours, 0)),
+    shortfall: round2(buckets.reduce((a, b) => a + b.shortfall, 0)),
+    buckets,
+  };
+
   // ── What the business is really worth ───────────────────────────────────
   // Profit alone answers "did the boxes sell for more than they cost". It
   // does NOT answer "am I ahead", because the stock those boxes came from is
@@ -1110,6 +1162,7 @@ async function overview(period = 'month') {
     needsYou,
     ownerMoney,
     position,
+    cashSplit,
     brandFinance,
     revenue: prof.totals.revenue,
     cogs: prof.totals.cost,
