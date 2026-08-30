@@ -86,6 +86,11 @@ export default function Dashboard() {
   if (isError || !data) return <EmptyState title="Couldn't load the dashboard" message="Please try again shortly." icon={AlertTriangle} />;
 
   const { accounts, totalFunds, today, month, brands, reps, attention, inventory, charts} = data;
+  // Only accounts actually holding money belong in "where it sits". The index
+  // is carried along so each keeps its own colour when another empties.
+  const withIndex = accounts.map((a, i) => ({ ...a, _i: i }));
+  const funded = withIndex.filter((a) => Number(a.balance) !== 0);
+  const heroAccounts = funded.length ? funded : withIndex;
   const firstName = user?.name?.split(' ')[0] || 'there';
   const attentionCount =
     attention.stockRequests + attention.settlements + attention.returns +
@@ -148,7 +153,10 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* Where that money sits — one bar, then the pockets. */}
+          {/* Where that money sits — one bar, then the pockets. An account
+              holding nothing is not an answer to "where does it sit", so it
+              is left out; its colour stays reserved by its original position
+              so the others do not shuffle when one empties. */}
           <div className="min-w-0">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Where it sits</p>
@@ -159,14 +167,15 @@ export default function Dashboard() {
             </div>
             {totalFunds > 0 && (
               <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-white/10">
-                {accounts.map((a, i) => (
-                  <div key={a.id} className={HERO_BAR[i % HERO_BAR.length]}
+                {heroAccounts.map((a) => (
+                  <div key={a.id} className={HERO_BAR[a._i % HERO_BAR.length]}
                     style={{ width: `${Math.max(0, (a.balance / totalFunds) * 100)}%` }} />
                 ))}
               </div>
             )}
-            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {accounts.map((a, i) => {
+            <div className={clsx('mt-3 grid grid-cols-1 gap-2', heroAccounts.length >= 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
+              {heroAccounts.map((a) => {
+                const i = a._i;
                 const Icon = ACCOUNT_ICON[a.type] || Wallet;
                 const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
                 return (
