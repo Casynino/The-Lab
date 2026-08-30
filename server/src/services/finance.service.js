@@ -381,7 +381,7 @@ async function listTransactions(filters, pagination) {
     if (filters.minAmount != null) where.amount.gte = filters.minAmount;
     if (filters.maxAmount != null) where.amount.lte = filters.maxAmount;
   }
-  const [items, total, brands] = await Promise.all([
+  const [items, total, brands, inAgg, outAgg, byCatRows] = await Promise.all([
     prisma.financeTransaction.findMany({
       where,
       include: { account: { select: { name: true, type: true } } },
@@ -391,9 +391,28 @@ async function listTransactions(filters, pagination) {
     }),
     prisma.financeTransaction.count({ where }),
     prisma.brand.findMany({ select: { id: true, name: true } }),
+    // Totals of the WHOLE filtered view, not the visible page — a strip that
+    // changes as you page through it is worse than none.
+    prisma.financeTransaction.aggregate({ where: { ...where, direction: 'IN' }, _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: { ...where, direction: 'OUT' }, _sum: { amount: true } }),
+    prisma.financeTransaction.groupBy({
+      by: ['category'],
+      where: { ...where, direction: 'OUT' },
+      _sum: { amount: true },
+      _count: true,
+    }),
   ]);
   const brandName = new Map(brands.map((b) => [b.id, b.name]));
-  return { items: items.map((t) => ({ ...t, brandName: t.brandId ? brandName.get(t.brandId) || null : null })), total };
+  const sumIn = round2(toNumber(inAgg._sum.amount));
+  const sumOut = round2(toNumber(outAgg._sum.amount));
+  return {
+    items: items.map((t) => ({ ...t, brandName: t.brandId ? brandName.get(t.brandId) || null : null })),
+    total,
+    sums: { in: sumIn, out: sumOut, net: round2(sumIn - sumOut) },
+    byCategory: byCatRows
+      .map((c) => ({ category: c.category || 'Uncategorised', amount: round2(toNumber(c._sum.amount)), count: c._count }))
+      .sort((a, b) => b.amount - a.amount),
+  };
 }
 
 async function updateTransaction(id, data) {
@@ -563,12 +582,46 @@ async function cashflow(opts = {}) {
   const openingBalance = round2(baseOpening + (range && (!epoch || range.start > epoch) ? before.net : 0));
   const start = range && epoch ? (range.start > epoch ? range.start : epoch) : range ? range.start : epoch;
   const inPeriod = await flowBetween(start || null, range ? range.end : null);
+
+  // Where the money actually came from and went, by kind — settlements vs
+  // counter sales vs other income; stock vs commissions vs expenses. The four
+  // headline figures say HOW MUCH moved; this says WHAT moved it.
+  const typeWhere = { type: { not: 'TRANSFER' }, account: { is: { isActive: true } } };
+  if (start || (range && range.end)) {
+    typeWhere.occurredAt = { ...(start ? { gte: start } : {}), ...(range ? { lte: range.end } : {}) };
+  }
+  const byTypeRows = await prisma.financeTransaction.groupBy({
+    by: ['type', 'direction'],
+    where: typeWhere,
+    _sum: { amount: true },
+    _count: true,
+  });
+  const byType = byTypeRows
+    .map((r) => ({ type: r.type, direction: r.direction, amount: round2(toNumber(r._sum.amount)), count: r._count }))
+    .sort((a, b) => b.amount - a.amount);
+
+  // Six EAT months of in/out/net, so the tab can show motion, not one frame.
+  // Anchored to the business's clock like every other window.
+  const { eatNow, eatToUtc } = require('../utils/dates');
+  const series = [];
+  for (let i = 5; i >= 0; i--) {
+    const m = eatNow().subtract(i, 'month');
+    const mStart = eatToUtc(m.startOf('month')).toDate();
+    const mEnd = eatToUtc(m.endOf('month')).toDate();
+    const from = epoch && mStart < epoch ? epoch : mStart;
+    if (epoch && mEnd < epoch) { series.push({ period: m.format('MMM'), moneyIn: 0, moneyOut: 0, net: 0 }); continue; }
+    const f = await flowBetween(from, mEnd);
+    series.push({ period: m.format('MMM'), moneyIn: f.moneyIn, moneyOut: f.moneyOut, net: f.net });
+  }
+
   return {
     period: opts.from || opts.to ? 'custom' : opts.period || 'all',
     range: range ? { start: range.start, end: range.end } : null,
     openingBalance,
     ...inPeriod,
     closingBalance: round2(openingBalance + inPeriod.net),
+    byType,
+    series,
   };
 }
 

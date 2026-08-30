@@ -56,8 +56,8 @@ const transactions = asyncHandler(async (req, res) => {
     minAmount: q.minAmount != null && q.minAmount !== '' ? Number(q.minAmount) : null,
     maxAmount: q.maxAmount != null && q.maxAmount !== '' ? Number(q.maxAmount) : null,
   };
-  const { items, total } = await finance.listTransactions(filters, pagination);
-  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
+  const { items, total, sums, byCategory } = await finance.listTransactions(filters, pagination);
+  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total, sums, byCategory });
 });
 
 const recordExpense = asyncHandler(async (req, res) => {

@@ -12,7 +12,7 @@ import { useProducts } from '@/lib/hooks';
 import ReportsPage from '@/pages/Reports';
 import CommissionsPage from '@/pages/Commissions';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
-import { DonutChart, BarChartCard } from '@/components/charts';
+import { DonutChart, BarChartCard, TrendChart } from '@/components/charts';
 import {
   PageHeader, Card, CardHeader, CardBody, StatCard, PageSpinner, EmptyState, Badge, Button,
   Modal, Field, Input, Select, Textarea, Table, THead, TBody, TR, TH, TD, Pagination,
@@ -20,11 +20,76 @@ import {
 
 const PERIODS = [['today', 'Today'], ['week', 'Week'], ['month', 'Month'], ['all', 'All time']];
 const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet };
+// Each account keeps one colour everywhere on the tab — bar, dot and card.
+const ACCOUNT_BAR = ['bg-emerald-500', 'bg-violet-500', 'bg-sky-500', 'bg-amber-500'];
+const ACCOUNT_DOT = ['bg-emerald-400', 'bg-violet-400', 'bg-sky-400', 'bg-amber-400'];
+const ACCOUNT_TINT = [
+  { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.10]', chip: 'bg-emerald-500/15 text-emerald-300' },
+  { ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.10]', chip: 'bg-violet-500/15 text-violet-300' },
+  { ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.10]', chip: 'bg-sky-500/15 text-sky-300' },
+  { ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.10]', chip: 'bg-amber-500/15 text-amber-300' },
+];
 const TXN_TYPE_LABEL = {
   SETTLEMENT: 'Settlement received', WAREHOUSE_SALE: 'Warehouse sale', INCOME: 'Income',
   EXPENSE: 'Expense', STOCK_PURCHASE: 'Stock purchase', COMMISSION_PAYMENT: 'Commission paid',
   TRANSFER: 'Transfer', ADJUSTMENT: 'Adjustment',
 };
+
+// One tinted stat card — the ring/glow/chip language the Inventory and
+// Settlements pages settled on. Finance was the last page still on the old
+// flat cards.
+const TINT = {
+  brand: { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
+  emerald: { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
+  rose: { ring: 'ring-rose-500/30', glow: 'from-rose-500/[0.14]', chip: 'bg-rose-500/15 text-rose-300', num: 'text-rose-300' },
+  amber: { ring: 'ring-amber-500/30', glow: 'from-amber-500/[0.14]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
+  violet: { ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
+  sky: { ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.12]', chip: 'bg-sky-500/15 text-sky-300', num: 'text-sky-300' },
+  slate: { ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', chip: 'bg-white/10 text-muted', num: 'text-foreground' },
+};
+function TintCard({ label, value, icon: Icon, sub, tone = 'brand' }) {
+  const t = TINT[tone] || TINT.brand;
+  return (
+    <div className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${t.ring}`}>
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${t.glow} to-transparent`} aria-hidden="true" />
+      <div className="relative flex items-start justify-between gap-2">
+        <p className="text-xs font-medium text-muted">{label}</p>
+        {Icon && <span className={`rounded-lg p-1.5 ${t.chip}`}><Icon className="h-3.5 w-3.5" /></span>}
+      </div>
+      <p className={`relative mt-2 text-2xl font-bold tabular-nums ${t.num}`}>{value}</p>
+      {sub && <p className="relative mt-0.5 text-[11px] text-faint">{sub}</p>}
+    </div>
+  );
+}
+
+// A named share of a total: label, amount, thin bar. The list pattern from
+// "Who is holding it" / "Who owes what", reused for money by kind.
+function ShareRows({ rows, total, colours }) {
+  return (
+    <div className="mt-4 space-y-2.5">
+      {rows.map((r, i) => {
+        const pct = total > 0 ? (r.value / total) * 100 : 0;
+        return (
+          <div key={r.label}>
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.label}</span>
+              {r.count != null && <span className="shrink-0 text-[11px] tabular-nums text-faint">{formatNumber(r.count)}×</span>}
+              <span className="w-28 shrink-0 text-right text-sm font-bold tabular-nums text-foreground">{formatCurrency(r.value)}</span>
+              <span className="w-10 shrink-0 text-right text-xs tabular-nums text-faint">{Math.round(pct)}%</span>
+            </div>
+            <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className={`h-full rounded-full ${colours[i % colours.length]}`} style={{ width: `${Math.max(2, pct)}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Dark-theme badge tints. The old bg-emerald-100/rose-100 were light-theme
+// chips glowing on a dark page.
+const DIR_BADGE = { IN: 'bg-emerald-500/15 text-emerald-300', OUT: 'bg-rose-500/15 text-rose-300' };
 
 // Default to All time so the dashboard opens showing the full business history.
 function usePeriod() { return useState('all'); }
@@ -213,11 +278,11 @@ function Overview() {
       </div>
 
       {/* Hero: cash position + flow */}
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Cash position" value={formatCurrency(data.cashPosition)} icon={PiggyBank} tone="brand" hint="across all accounts" />
-        <StatCard label="Money in" value={formatCurrency(flow.moneyIn)} icon={ArrowDownLeft} tone="emerald" hint={PERIODS.find((p) => p[0] === period)[1]} />
-        <StatCard label="Money out" value={formatCurrency(flow.moneyOut)} icon={ArrowUpRight} tone="rose" hint={PERIODS.find((p) => p[0] === period)[1]} />
-        <StatCard label="Net cash flow" value={formatCurrency(flow.net)} icon={flow.net >= 0 ? TrendingUp : TrendingDown} tone={flow.net >= 0 ? 'emerald' : 'rose'} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <TintCard label="Cash position" value={formatCurrency(data.cashPosition)} icon={PiggyBank} tone="brand" sub="across all accounts" />
+        <TintCard label="Money in" value={formatCurrency(flow.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub={PERIODS.find((p) => p[0] === period)[1].toLowerCase()} />
+        <TintCard label="Money out" value={formatCurrency(flow.moneyOut)} icon={ArrowUpRight} tone="rose" sub={PERIODS.find((p) => p[0] === period)[1].toLowerCase()} />
+        <TintCard label="Net cash flow" value={formatCurrency(flow.net)} icon={flow.net >= 0 ? TrendingUp : TrendingDown} tone={flow.net >= 0 ? 'emerald' : 'rose'} sub={flow.net >= 0 ? 'more came in than left' : 'more left than came in'} />
       </div>
 
       {/* Profit waterfall */}
@@ -343,26 +408,51 @@ function Accounts({ onQuick }) {
           <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Account</Button>
         </div>
       </div>
+      {/* Which pocket holds the money — the Inventory "where every box is"
+          pattern, applied to cash. One bar, one truth. */}
+      {total > 0 && accounts.length > 1 && (
+        <Card>
+          <div className="p-5">
+            <h3 className="text-sm font-semibold text-foreground">Where the money sits</h3>
+            <p className="mt-0.5 text-xs text-muted">Every account's share of the {formatCurrency(total)}.</p>
+            <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+              {accounts.map((a, i) => (
+                <div key={a.id} className={`h-full ${ACCOUNT_BAR[i % ACCOUNT_BAR.length]}`}
+                  style={{ width: `${Math.max(0, (a.balance / total) * 100)}%` }} />
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5">
+              {accounts.map((a, i) => (
+                <span key={a.id} className="inline-flex items-center gap-1.5 text-xs text-muted">
+                  <span className={`h-2 w-2 rounded-full ${ACCOUNT_DOT[i % ACCOUNT_DOT.length]}`} />
+                  {a.name} <b className="tabular-nums text-foreground">{formatCurrency(a.balance)}</b>
+                </span>
+              ))}
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {accounts.map((a) => {
+        {accounts.map((a, i) => {
           const Icon = ACCOUNT_ICON[a.type] || Wallet;
+          const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
           return (
-            <Card key={a.id}>
-              <CardBody>
-                <div className="flex items-center justify-between">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400"><Icon className="h-5 w-5" /></span>
-                  {a.isDefault && <Badge className="bg-brand-500/15 text-brand-400">Default</Badge>}
-                </div>
-                <div className="mt-3 text-sm font-semibold text-foreground">{a.name}</div>
-                {a.notes && <div className="text-[11px] text-faint">{a.notes}</div>}
-                <div className={`text-2xl font-black tabular-nums ${a.balance < 0 ? 'text-rose-500' : 'text-foreground'}`}>{formatCurrency(a.balance)}</div>
-                <div className="mt-2 flex justify-between border-t border-border pt-2 text-xs">
-                  <span className="text-emerald-500">In {formatCurrency(a.moneyIn)}</span>
-                  <span className="text-rose-400">Out {formatCurrency(a.moneyOut)}</span>
-                </div>
-                <div className="mt-1 text-[11px] text-faint">Opening {formatCurrency(a.openingBalance)}</div>
-              </CardBody>
-            </Card>
+            <div key={a.id} className={`relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ${tint.ring}`}>
+              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tint.glow} to-transparent`} aria-hidden="true" />
+              <div className="relative flex items-center justify-between">
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-5 w-5" /></span>
+                {a.isDefault && <Badge className="bg-brand-500/15 text-brand-400">Default</Badge>}
+              </div>
+              <div className="relative mt-3 text-sm font-semibold text-foreground">{a.name}</div>
+              {a.notes && <div className="relative text-[11px] text-faint">{a.notes}</div>}
+              <div className={`relative mt-1 text-2xl font-bold tabular-nums ${a.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(a.balance)}</div>
+              <div className="relative mt-3 flex justify-between border-t border-white/[0.07] pt-2 text-xs">
+                <span className="text-emerald-400">In {formatCurrency(a.moneyIn)}</span>
+                <span className="text-rose-400">Out {formatCurrency(a.moneyOut)}</span>
+              </div>
+              <div className="relative mt-1 text-[11px] text-faint">Opening {formatCurrency(a.openingBalance)}</div>
+            </div>
           );
         })}
       </div>
@@ -380,13 +470,14 @@ function Ledger({ expensesOnly }) {
   const [account, setAccount] = useState('');
   const [type, setType] = useState('');
   const [brand, setBrand] = useState('');
+  const [category, setCategory] = useState('');
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: brands = [] } = useQuery({ queryKey: ['brands', 'all'], queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data });
-  const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined };
+  const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined, category: category || undefined };
   if (expensesOnly) params.direction = 'OUT';
   else if (type) params.type = type;
   const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'transactions', { page, account, type, brand, expensesOnly }],
+    queryKey: ['finance', 'transactions', { page, account, type, brand, category, expensesOnly }],
     queryFn: async () => unwrap(await api.get('/finance/transactions', { params })),
   });
   const del = useMutation({
@@ -395,9 +486,32 @@ function Ledger({ expensesOnly }) {
     onError: (e) => toast.error(apiError(e)),
   });
   const rows = data?.data || [];
+  const sums = data?.meta?.sums;
+  const byCategory = data?.meta?.byCategory || [];
 
   return (
-    <Card>
+    <div className="space-y-4">
+      {/* What the CURRENT view adds up to — the whole filtered ledger, not
+          just the visible page. */}
+      {sums && (
+        expensesOnly ? (
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <TintCard label="Spent in this view" value={formatCurrency(sums.out)} icon={ArrowUpRight} tone="rose" sub={`${formatNumber(data?.meta?.total ?? 0)} record${(data?.meta?.total ?? 0) === 1 ? '' : 's'}`} />
+            {byCategory.slice(0, 3).map((c) => (
+              <TintCard key={c.category} label={c.category} value={formatCurrency(c.amount)} icon={Receipt} tone="slate"
+                sub={`${formatNumber(c.count)} record${c.count === 1 ? '' : 's'}`} />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-3">
+            <TintCard label="Money in" value={formatCurrency(sums.in)} icon={ArrowDownLeft} tone="emerald" sub="in this view" />
+            <TintCard label="Money out" value={formatCurrency(sums.out)} icon={ArrowUpRight} tone="rose" sub="in this view" />
+            <TintCard label="Net" value={formatCurrency(sums.net)} icon={sums.net >= 0 ? TrendingUp : TrendingDown} tone={sums.net >= 0 ? 'brand' : 'amber'} sub={`${formatNumber(data?.meta?.total ?? 0)} movement${(data?.meta?.total ?? 0) === 1 ? '' : 's'}`} />
+          </div>
+        )
+      )}
+
+      <Card>
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
         <Select className="sm:w-44" value={account} onChange={(e) => { setAccount(e.target.value); setPage(1); }}>
           <option value="">All accounts</option>
@@ -414,6 +528,20 @@ function Ledger({ expensesOnly }) {
           {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           <option value="none">General (no brand)</option>
         </Select>
+        {expensesOnly && byCategory.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button type="button" onClick={() => { setCategory(''); setPage(1); }}
+              className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition duration-200 ${!category ? 'bg-white/10 text-foreground ring-white/20' : 'text-muted ring-white/10 hover:bg-white/[0.05]'}`}>
+              All
+            </button>
+            {byCategory.slice(0, 6).map((c) => (
+              <button key={c.category} type="button" onClick={() => { setCategory(c.category === category ? '' : c.category); setPage(1); }}
+                className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition duration-200 ${category === c.category ? 'bg-rose-500/15 text-rose-300 ring-rose-500/30' : 'text-muted ring-white/10 hover:bg-white/[0.05]'}`}>
+                {c.category} <span className="ml-1 tabular-nums text-faint">{c.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {isLoading ? <PageSpinner /> : !rows.length ? (
         <EmptyState title={expensesOnly ? 'No expenses yet' : 'No transactions yet'} message="Record income or expenses, or approve a settlement." icon={Receipt} />
@@ -425,7 +553,7 @@ function Ledger({ expensesOnly }) {
               {rows.map((t) => (
                 <TR key={t.id}>
                   <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
-                  <TD><Badge className={t.direction === 'IN' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
+                  <TD><Badge className={DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                   <TD>{t.brandName ? <Badge className="bg-brand-500/15 text-brand-400">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
                   <TD className="max-w-[220px] truncate text-foreground">{t.category || t.description || t.reference || '—'}</TD>
                   <TD className="text-muted">{t.account?.name}</TD>
@@ -444,7 +572,8 @@ function Ledger({ expensesOnly }) {
         </>
       )}
       {editing && <EditTxnModal txn={editing} accounts={accounts} brands={brands} onClose={() => setEditing(null)} />}
-    </Card>
+      </Card>
+    </div>
   );
 }
 
@@ -697,23 +826,33 @@ function CashFlowTab() {
     queryFn: async () => unwrap(await api.get('/finance/cashflow', { params: { period } })).data,
   });
   if (isLoading || !data) return <PageSpinner />;
+
+  const inRows = (data.byType || []).filter((r) => r.direction === 'IN').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count }));
+  const outRows = (data.byType || []).filter((r) => r.direction === 'OUT').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count }));
+  const inTotal = inRows.reduce((a, r) => a + r.value, 0);
+  const outTotal = outRows.reduce((a, r) => a + r.value, 0);
+  const hasSeries = (data.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap gap-1.5">
         {CF_PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
             className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Opening balance" value={formatCurrency(data.openingBalance)} icon={PiggyBank} tone="slate" hint="at period start" />
-        <StatCard label="Money in" value={formatCurrency(data.moneyIn)} icon={ArrowDownLeft} tone="emerald" />
-        <StatCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" />
-        <StatCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'brand' : 'rose'} hint={`net ${formatCurrency(data.net)}`} />
+
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <TintCard label="Opening balance" value={formatCurrency(data.openingBalance)} icon={PiggyBank} tone="slate" sub="at period start" />
+        <TintCard label="Money in" value={formatCurrency(data.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub="collected this period" />
+        <TintCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" sub="paid this period" />
+        <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'brand' : 'rose'} sub={`net ${formatCurrency(data.net)}`} />
       </div>
+
+      {/* The story in one line: the four figures above, connected. */}
       <Card>
         <CardBody>
-          <div className="flex flex-wrap items-center justify-center gap-3 py-2 text-sm">
+          <div className="flex flex-wrap items-center justify-center gap-3 py-1 text-sm">
             <span className="text-muted">Opening <b className="text-foreground">{formatCurrency(data.openingBalance)}</b></span>
             <ChevronRight className="h-4 w-4 text-faint" />
             <span className="text-emerald-500">+ {formatCurrency(data.moneyIn)}</span>
@@ -724,6 +863,59 @@ function CashFlowTab() {
           </div>
         </CardBody>
       </Card>
+
+      {/* Motion, not one frame: six months of in vs out. */}
+      <Card>
+        <CardHeader title="The money, in motion" subtitle="Money in and out, month by month — the last six" />
+        <div className="px-2 pb-3">
+          {hasSeries ? (
+            <TrendChart
+              data={data.series}
+              series={[
+                { key: 'moneyIn', name: 'Money in', color: '#34d399' },
+                { key: 'moneyOut', name: 'Money out', color: '#fb7185' },
+              ]}
+              height={220}
+            />
+          ) : (
+            <div className="flex h-[160px] items-center justify-center text-sm text-faint">
+              The trend fills in as months of activity accumulate.
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* WHAT moved the money — the cards above only say how much. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Where it came from</h3>
+                <p className="mt-0.5 text-xs text-muted">Every shilling in, by kind.</p>
+              </div>
+              <span className="rounded-lg bg-emerald-500/15 p-1.5 text-emerald-300"><ArrowDownLeft className="h-3.5 w-3.5" /></span>
+            </div>
+            {inRows.length ? (
+              <ShareRows rows={inRows} total={inTotal} colours={['bg-emerald-500', 'bg-brand-500', 'bg-sky-500', 'bg-violet-500']} />
+            ) : <p className="mt-4 text-sm text-faint">No money came in during this period.</p>}
+          </div>
+        </Card>
+        <Card>
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Where it went</h3>
+                <p className="mt-0.5 text-xs text-muted">Every shilling out, by kind.</p>
+              </div>
+              <span className="rounded-lg bg-rose-500/15 p-1.5 text-rose-300"><ArrowUpRight className="h-3.5 w-3.5" /></span>
+            </div>
+            {outRows.length ? (
+              <ShareRows rows={outRows} total={outTotal} colours={['bg-rose-500', 'bg-amber-500', 'bg-violet-500', 'bg-sky-500']} />
+            ) : <p className="mt-4 text-sm text-faint">No money went out during this period.</p>}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -1035,11 +1227,13 @@ function SuppliersTab({ accounts }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Suppliers" value={formatNumber(suppliers.length)} icon={Factory} tone="slate" />
-        <StatCard label="Total purchased" value={formatCurrency(totals.purchased)} icon={Package} tone="brand" />
-        <StatCard label="Total paid" value={formatCurrency(totals.paid)} icon={Wallet} tone="emerald" />
-        <StatCard label="Outstanding (owed)" value={formatCurrency(totals.out)} icon={Scale} tone={totals.out > 0 ? 'rose' : 'emerald'} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <TintCard label="Suppliers" value={formatNumber(suppliers.length)} icon={Factory} tone="slate" sub="who you buy from" />
+        <TintCard label="Total purchased" value={formatCurrency(totals.purchased)} icon={Package} tone="brand" sub="all stock ever bought" />
+        <TintCard label="Total paid" value={formatCurrency(totals.paid)} icon={Wallet} tone="emerald"
+          sub={totals.purchased > 0 ? `${Math.round((totals.paid / totals.purchased) * 100)}% of purchases` : 'nothing yet'} />
+        <TintCard label="Still owed" value={formatCurrency(totals.out)} icon={Scale} tone={totals.out > 0 ? 'rose' : 'emerald'}
+          sub={totals.out > 0 ? 'they are financing your stock' : 'all settled'} />
       </div>
       <Card>
         <div className="flex items-center justify-between border-b border-border p-4">
@@ -1052,7 +1246,16 @@ function SuppliersTab({ accounts }) {
             <TBody>
               {suppliers.map((s) => (
                 <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
-                  <TD className="font-medium text-foreground">{s.name}{s.contactName ? <span className="ml-1.5 text-xs text-faint">· {s.contactName}</span> : null}</TD>
+                  <TD className="font-medium text-foreground">
+                    {s.name}{s.contactName ? <span className="ml-1.5 text-xs text-faint">· {s.contactName}</span> : null}
+                    {/* How much of this supplier's stock is actually paid for. */}
+                    {s.totalPurchased > 0 && (
+                      <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className={s.outstanding > 0 ? 'h-full bg-amber-500' : 'h-full bg-emerald-500'}
+                          style={{ width: `${Math.max(2, (s.totalPaid / s.totalPurchased) * 100)}%` }} />
+                      </div>
+                    )}
+                  </TD>
                   <TD>{s.brandName ? <Badge className="bg-brand-500/15 text-brand-400">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
                   <TD className="text-muted">{s.country}</TD>
                   <TD>{s.poCount}</TD>

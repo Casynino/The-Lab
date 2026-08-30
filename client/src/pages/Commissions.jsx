@@ -158,8 +158,8 @@ function FinesHistory({ admin }) {
                 <TD className={`text-right font-semibold ${waived ? 'text-faint line-through' : 'text-rose-400'}`}>−{formatCurrency(p.amount)}</TD>
                 <TD>
                   {waived
-                    ? <Badge className="bg-emerald-100 text-emerald-700" title={p.waiveReason || undefined}>Forgiven</Badge>
-                    : <Badge className="bg-rose-100 text-rose-700">Applied</Badge>}
+                    ? <Badge className="bg-emerald-500/15 text-emerald-300" title={p.waiveReason || undefined}>Forgiven</Badge>
+                    : <Badge className="bg-rose-500/15 text-rose-300">Applied</Badge>}
                 </TD>
                 <TD className="text-faint">{waived && p.waivedAt ? `${formatDateTime(p.appliedAt)} · forgiven ${formatDateTime(p.waivedAt)}` : formatDateTime(p.appliedAt)}</TD>
                 {admin && (
@@ -711,7 +711,7 @@ function BonusSettings() {
                   </TD>
                   <TD>
                     {i.claimable
-                      ? <Badge className="bg-emerald-100 text-emerald-700">{formatCurrency(i.claimable.bonusAmount)}</Badge>
+                      ? <Badge className="bg-emerald-500/15 text-emerald-300">{formatCurrency(i.claimable.bonusAmount)}</Badge>
                       : <span className="text-xs text-faint">{formatCurrency(i.remaining)} to go</span>}
                   </TD>
                   <TD>
@@ -748,7 +748,7 @@ function BonusSettings() {
                   <TD className="font-medium text-foreground">{a.salesRep?.user?.name || a.salesRep?.code}</TD>
                   <TD className="text-right font-semibold text-emerald-500">{formatCurrency(a.bonusAmount)}</TD>
                   <TD className="text-muted">{a.paidAt ? formatDateTime(a.paidAt) : formatDateTime(a.unlockedAt)}</TD>
-                  <TD><Badge className={a.status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>{a.status}</Badge></TD>
+                  <TD><Badge className={a.status === 'PAID' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}>{a.status}</Badge></TD>
                   <TD className="text-right text-xs text-faint">{formatCurrency(a.qualifyingSales)} sold</TD>
                 </TR>
               ))}
