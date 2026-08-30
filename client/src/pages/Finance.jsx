@@ -501,22 +501,29 @@ function Overview({ onNavigate, onOwnerMoney }) {
                       </>
                     )}
 
-                    {/* Two figures, not three. Rep pay comes out of the
-                        owner's own pocket and never passes through these
-                        wallets, so subtracting it here was wrong twice: the
-                        money did not leave, and the commission shown was what
-                        the boxes EARNED reps, not what he has paid. */}
-                    {b.revenue > 0 && (
-                      <div className="mt-4 grid grid-cols-2 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
-                        <div className="bg-gradient-to-br from-rose-500/[0.08] to-transparent p-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Cost of boxes sold</p>
-                          <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.costOfSold)}</p>
+                    {/* Figures that RECONCILE with the balance above: what
+                        went through this wallet. All-time sales totals sat
+                        here before and could never add up to the cash — cost
+                        1,984,000 plus profit 2,677,500 is 4,661,500 against a
+                        wallet holding 2,551,500, which is why it read as
+                        nonsense. Sales belong under a period heading, and
+                        that is where they now live. */}
+                    {(b.moneyIn > 0 || b.moneyOut > 0) && (
+                      <>
+                        <div className="mt-4 grid grid-cols-2 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
+                          <div className="bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Came in</p>
+                            <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.moneyIn)}</p>
+                          </div>
+                          <div className="bg-gradient-to-br from-rose-500/[0.08] to-transparent p-3">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Went out</p>
+                            <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.moneyOut)}</p>
+                          </div>
                         </div>
-                        <div className="bg-gradient-to-br from-emerald-500/[0.10] to-transparent p-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Your profit</p>
-                          <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.grossKept)}</p>
-                        </div>
-                      </div>
+                        <p className="mt-2 text-[11px] text-faint">
+                          {formatCurrency(b.moneyIn)} in − {formatCurrency(b.moneyOut)} out = the {formatCurrency(b.cash)} above. All time.
+                        </p>
+                      </>
                     )}
 
                     <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-faint">
@@ -568,7 +575,14 @@ function Overview({ onNavigate, onOwnerMoney }) {
              left — in that order, in words. ── */}
       {(data.brandFinance || []).length > 0 && (
         <div className="space-y-3">
-          <SectionHead label="How each brand did" sub="Money in, what the boxes cost, what was left." />
+          <SectionHead
+            label="How each brand did"
+            sub={`Money in, what the boxes cost, what was left — ${
+              period === 'all'
+                ? (data.epochAt ? `everything since ${formatDate(data.epochAt)}` : 'everything recorded so far')
+                : `${periodLabel} only`
+            }.`}
+          />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {data.brandFinance.map((b) => {
               const keptPct = b.revenue > 0 ? Math.round(((b.revenue - b.cogs) / b.revenue) * 100) : 0;
@@ -600,8 +614,9 @@ function Overview({ onNavigate, onOwnerMoney }) {
                     </div>
 
                     <p className="mt-3 rounded-lg bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-muted">
-                      Out of every 100 shillings of {b.name} sold, <b className="text-foreground">{keptPct}</b> stayed in the business
-                      after paying for the boxes. It is not cash — it bought the {formatNumber(b.inventoryUnits)} boxes on your shelf.
+                      These are <b className="text-foreground">sales over {period === 'all' ? 'the whole period' : periodLabel}</b>, not money sitting in an account —
+                      most of it has already gone back out to buy stock. Out of every 100 shillings of {b.name} sold,
+                      {' '}<b className="text-foreground">{keptPct}</b> stayed in the business after paying for the boxes.
                       {(b.commission ?? 0) > 0 && <> Reps earned {formatCurrency(b.commission)} on these sales, which you pay yourself.</>}
                     </p>
                   </div>

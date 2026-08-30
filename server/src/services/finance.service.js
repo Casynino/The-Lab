@@ -1113,13 +1113,18 @@ async function overview(period = 'month') {
   const cashByBrand = new Map();
   for (const a of accounts) {
     const key = a.brandId || 'general';
-    const row = cashByBrand.get(key) || { key, cash: 0, accounts: [] };
+    const row = cashByBrand.get(key) || { key, cash: 0, moneyIn: 0, moneyOut: 0, accounts: [] };
     row.cash = round2(row.cash + a.balance);
+    // What actually moved through this wallet. These DO reconcile to the
+    // balance above it; all-time sales figures never could, which is what
+    // made the card contradict itself.
+    row.moneyIn = round2(row.moneyIn + toNumber(a.moneyIn));
+    row.moneyOut = round2(row.moneyOut + toNumber(a.moneyOut));
     row.accounts.push({ name: a.name, balance: a.balance });
     cashByBrand.set(key, row);
   }
   for (const key of supplierByBrand.keys()) {
-    if (!cashByBrand.has(key)) cashByBrand.set(key, { key, cash: 0, accounts: [] });
+    if (!cashByBrand.has(key)) cashByBrand.set(key, { key, cash: 0, moneyIn: 0, moneyOut: 0, accounts: [] });
   }
 
   const buckets = [...cashByBrand.values()].map((row) => {
@@ -1140,6 +1145,8 @@ async function overview(period = 'month') {
       supplierName: sup.name,
       accounts: row.accounts,
       cash: row.cash,
+      moneyIn: row.moneyIn,
+      moneyOut: row.moneyOut,
       // What the brand's sales were made of, so "where is the cost and where
       // is the profit" is answered on the row itself.
       revenue: round2(p.revenue),
