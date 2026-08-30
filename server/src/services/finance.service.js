@@ -620,6 +620,23 @@ async function cashflow(opts = {}) {
   const start = range && epoch ? (range.start > epoch ? range.start : epoch) : range ? range.start : epoch;
   const inPeriod = await flowBetween(start || null, range ? range.end : null);
 
+  // The owner's own money is not trading, so it is kept out of money in/out —
+  // but it DOES move account balances, and leaving it out of the statement
+  // made the closing balance disagree with the cash actually held (2,439,500
+  // against a real 2,915,500). It gets its own line instead: excluded from
+  // trade, included in the balance, so the statement reconciles.
+  const ownerWhere = { type: { in: ['OWNER_CONTRIBUTION', 'OWNER_DRAWING'] }, account: { is: { isActive: true } } };
+  if (start || (range && range.end)) {
+    ownerWhere.occurredAt = { ...(start ? { gte: start } : {}), ...(range ? { lte: range.end } : {}) };
+  }
+  const [ownerInAgg, ownerOutAgg] = await Promise.all([
+    prisma.financeTransaction.aggregate({ where: { ...ownerWhere, direction: 'IN' }, _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: { ...ownerWhere, direction: 'OUT' }, _sum: { amount: true } }),
+  ]);
+  const ownerIn = round2(toNumber(ownerInAgg._sum.amount));
+  const ownerOut = round2(toNumber(ownerOutAgg._sum.amount));
+  const ownerNet = round2(ownerIn - ownerOut);
+
   // Where the money actually came from and went, by kind — settlements vs
   // counter sales vs other income; stock vs commissions vs expenses. The four
   // headline figures say HOW MUCH moved; this says WHAT moved it.
@@ -656,7 +673,12 @@ async function cashflow(opts = {}) {
     range: range ? { start: range.start, end: range.end } : null,
     openingBalance,
     ...inPeriod,
-    closingBalance: round2(openingBalance + inPeriod.net),
+    ownerIn,
+    ownerOut,
+    ownerNet,
+    // Opening + trade + the owner's own money = what the accounts actually
+    // hold. Every part is on screen, so the reader can add it up themselves.
+    closingBalance: round2(openingBalance + inPeriod.net + ownerNet),
     byType,
     series,
   };

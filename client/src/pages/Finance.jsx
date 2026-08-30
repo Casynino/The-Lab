@@ -1292,11 +1292,17 @@ function CashFlowTab() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-3 ${(data.ownerNet ?? 0) !== 0 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
         <TintCard label="Opening balance" value={formatCurrency(data.openingBalance)} icon={PiggyBank} tone="slate" sub="at period start" />
-        <TintCard label="Money in" value={formatCurrency(data.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub="collected this period" />
-        <TintCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" sub="paid this period" />
-        <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'brand' : 'rose'} sub={`net ${formatCurrency(data.net)}`} />
+        <TintCard label="Money in" value={formatCurrency(data.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub="the business collected" />
+        <TintCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" sub="the business paid" />
+        {/* The owner's own money moves balances without being trade. Shown on
+            its own so the closing balance still adds up to the real cash. */}
+        {(data.ownerNet ?? 0) !== 0 && (
+          <TintCard label="Your own money" value={formatCurrency(data.ownerNet)} icon={Coins} tone="sky"
+            sub={data.ownerNet >= 0 ? 'you put in' : 'you took out'} />
+        )}
+        <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'brand' : 'rose'} sub="what the accounts hold" />
       </div>
 
       {/* The story in one line: the four figures above, connected. */}
@@ -1308,6 +1314,12 @@ function CashFlowTab() {
             <span className="text-emerald-500">+ {formatCurrency(data.moneyIn)}</span>
             <ChevronRight className="h-4 w-4 text-faint" />
             <span className="text-rose-400">− {formatCurrency(data.moneyOut)}</span>
+            {(data.ownerNet ?? 0) !== 0 && (
+              <>
+                <ChevronRight className="h-4 w-4 text-faint" />
+                <span className="text-sky-300">{data.ownerNet >= 0 ? '+' : '−'} {formatCurrency(Math.abs(data.ownerNet))} yours</span>
+              </>
+            )}
             <ChevronRight className="h-4 w-4 text-faint" />
             <span className="text-muted">Closing <b className={data.closingBalance >= 0 ? 'text-brand-400' : 'text-rose-500'}>{formatCurrency(data.closingBalance)}</b></span>
           </div>
