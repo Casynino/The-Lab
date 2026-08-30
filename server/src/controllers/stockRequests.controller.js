@@ -20,8 +20,8 @@ const list = asyncHandler(async (req, res) => {
   const pagination = parsePagination(q, { defaultSortBy: 'requestedAt', defaultSortDir: 'desc', allowedSortFields: ['requestedAt', 'createdAt'] });
   const filters = { ...q };
   if (req.user.role === ROLES.SALES_REP) filters.salesRepId = req.user.salesRepId;
-  const { items, total } = await stockRequest.list(filters, pagination);
-  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
+  const { items, total, summary } = await stockRequest.list(filters, pagination);
+  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total, summary });
 });
 
 // In-stock product ids at the fulfilling warehouse — drives the rep's product

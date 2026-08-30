@@ -611,23 +611,16 @@ function StaffRequestTable({ onView }) {
   // What this page is really a record of: boxes leaving the warehouse. The
   // table said "2 line(s)", which counts products on a form and tells you
   // nothing about stock. These add up what is on screen.
-  // "In this view" named no period at all — it was whatever happened to be on
-  // the current page, and changed when you turned it. These figures cover the
-  // rows on screen, so the cards state the dates those rows actually span and
-  // say which page they are.
-  const dates = rows.map((r) => r.requestedAt).filter(Boolean).sort();
-  const spanLabel = dates.length
-    ? (formatDate(dates[0]) === formatDate(dates[dates.length - 1])
-        ? formatDate(dates[0])
-        : `${formatDate(dates[0])} – ${formatDate(dates[dates.length - 1])}`)
-    : 'no orders';
-  const totalPages = data?.meta?.totalPages || 1;
-  const pageNote = totalPages > 1 ? ` · page ${page} of ${totalPages}` : '';
-
-  const pageBoxes = rows.reduce((a, r) => a + (r.boxesApproved || boxCount(r)), 0);
-  const pageValue = rows.reduce((a, r) => a + orderDisplayValue(r), 0);
-  const settledCount = rows.filter((r) => r.settlement?.status === 'SETTLED').length;
-  const openCount = rows.filter((r) => r.status === 'FULFILLED' && r.settlement?.status !== 'SETTLED').length;
+  // Every figure below covers the WHOLE history (or whatever the filter
+  // selects), not the page on screen. Page-scoped totals changed when you
+  // turned the page, and their counts did not add up to the orders shown
+  // because a rejected order is neither open nor settled.
+  const sum = data?.meta?.summary;
+  const span = sum?.firstAt
+    ? (formatDate(sum.firstAt) === formatDate(sum.lastAt)
+        ? formatDate(sum.firstAt)
+        : `${formatDate(sum.firstAt)} to ${formatDate(sum.lastAt)}`)
+    : null;
 
   const chips = [
     { key: '', label: 'All decided', tone: 'slate' },
@@ -645,15 +638,28 @@ function StaffRequestTable({ onView }) {
       {/* What left the warehouse, in the view you are looking at. */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
-          { label: 'Boxes issued', value: formatNumber(pageBoxes), icon: Boxes, sub: `${spanLabel}${pageNote}`,
-            ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
-          { label: 'Value issued', value: formatCurrency(pageValue), icon: Wallet, sub: `${formatNumber(rows.length)} order${rows.length === 1 ? '' : 's'} shown`,
-            ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
-          { label: 'Still open', value: formatNumber(openCount), icon: Timer, sub: 'of these, not yet settled',
-            ring: openCount > 0 ? 'ring-amber-500/30' : 'ring-white/[0.07]', glow: openCount > 0 ? 'from-amber-500/[0.14]' : 'from-white/[0.02]',
-            chip: 'bg-amber-500/15 text-amber-300', num: openCount > 0 ? 'text-amber-300' : 'text-foreground' },
-          { label: 'Settled', value: formatNumber(settledCount), icon: CheckCircle2, sub: 'of these, closed and paid for',
-            ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
+          {
+            label: 'Boxes issued', value: formatNumber(sum?.boxes ?? 0), icon: Boxes,
+            sub: span ? `everything ${span}` : 'nothing issued yet',
+            ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300',
+          },
+          {
+            label: 'Worth', value: formatCurrency(sum?.value ?? 0), icon: Wallet,
+            sub: `${formatNumber(sum?.issued ?? 0)} order${(sum?.issued ?? 0) === 1 ? '' : 's'} actually issued`,
+            ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300',
+          },
+          {
+            label: 'Still owed by reps', value: formatNumber(sum?.stillOpen ?? 0), icon: Timer,
+            sub: 'issued, not yet settled',
+            ring: (sum?.stillOpen ?? 0) > 0 ? 'ring-amber-500/30' : 'ring-white/[0.07]',
+            glow: (sum?.stillOpen ?? 0) > 0 ? 'from-amber-500/[0.14]' : 'from-white/[0.02]',
+            chip: 'bg-amber-500/15 text-amber-300', num: (sum?.stillOpen ?? 0) > 0 ? 'text-amber-300' : 'text-foreground',
+          },
+          {
+            label: 'Settled', value: formatNumber(sum?.settled ?? 0), icon: CheckCircle2,
+            sub: 'paid for and closed',
+            ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300',
+          },
         ].map((c) => (
           <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
             <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
@@ -666,6 +672,19 @@ function StaffRequestTable({ onView }) {
           </div>
         ))}
       </div>
+
+      {/* Said in a sentence, because four numbers still need a story. */}
+      {sum && sum.totalRequests > 0 && (
+        <p className="text-xs leading-relaxed text-muted">
+          Reps have asked for stock <b className="text-foreground">{formatNumber(sum.totalRequests)}</b> time{sum.totalRequests === 1 ? '' : 's'}
+          {span && <> {span}</>}. You issued <b className="text-foreground">{formatNumber(sum.issued)}</b> of them
+          {' '}— <b className="text-foreground">{formatNumber(sum.boxes)}</b> boxes worth <b className="text-foreground">{formatCurrency(sum.value)}</b>.
+          {' '}<b className="text-emerald-400">{formatNumber(sum.settled)}</b> have been settled and
+          {' '}<b className={sum.stillOpen > 0 ? 'text-amber-400' : 'text-foreground'}>{formatNumber(sum.stillOpen)}</b> are still owed.
+          {sum.pending > 0 && <> <b className="text-foreground">{formatNumber(sum.pending)}</b> are waiting for your decision.</>}
+          {sum.refused > 0 && <> {formatNumber(sum.refused)} were rejected or cancelled, so no stock left the warehouse.</>}
+        </p>
+      )}
 
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">

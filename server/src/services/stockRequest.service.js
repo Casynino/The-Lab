@@ -156,7 +156,60 @@ async function list(filters, pagination) {
     prisma.stockRequest.findMany({ where, include: INCLUDE, skip: pagination.skip, take: pagination.take, orderBy: pagination.orderBy }),
     prisma.stockRequest.count({ where }),
   ]);
-  return { items: withBoxes(await attachSettlements(items)), total };
+  // Totals over EVERY matching request, not the page on screen. Page-scoped
+  // figures changed when you turned the page and their counts did not add up
+  // to the orders shown — a rejected order is neither open nor settled — so
+  // they read as broken arithmetic. These cover the whole filtered history
+  // and every request falls into exactly one bucket.
+  const allMatching = await prisma.stockRequest.findMany({
+    where,
+    select: {
+      id: true,
+      status: true,
+      requestedAt: true,
+      totalValue: true,
+      // Only fulfilled requests contribute boxes, and their items carry
+      // baseQuantity — written at approval, which is the moment stock moved.
+      items: { select: { baseQuantity: true } },
+    },
+    orderBy: { requestedAt: 'asc' },
+  });
+  const issuedStatuses = new Set(['FULFILLED']);
+  const settledIds = new Set(
+    (await prisma.settlement.findMany({
+      where: { status: 'SETTLED', stockRequestId: { in: allMatching.map((r) => r.id) } },
+      select: { stockRequestId: true },
+    })).map((x) => x.stockRequestId),
+  );
+  let boxes = 0;
+  let value = 0;
+  let issued = 0;
+  let settled = 0;
+  let pending = 0;
+  let refused = 0;
+  for (const r of allMatching) {
+    if (issuedStatuses.has(r.status)) {
+      issued += 1;
+      for (const it of r.items) boxes += it.baseQuantity || 0;
+      value += toNumber(r.totalValue);
+      if (settledIds.has(r.id)) settled += 1;
+    } else if (r.status === 'PENDING') pending += 1;
+    else refused += 1; // rejected or cancelled — never left the warehouse
+  }
+  const summary = {
+    boxes,
+    value: round2(value),
+    issued,
+    settled,
+    stillOpen: issued - settled,
+    pending,
+    refused,
+    totalRequests: allMatching.length,
+    firstAt: allMatching[0]?.requestedAt || null,
+    lastAt: allMatching[allMatching.length - 1]?.requestedAt || null,
+  };
+
+  return { items: withBoxes(await attachSettlements(items)), total, summary };
 }
 
 async function get(id) {
