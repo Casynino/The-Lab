@@ -1047,7 +1047,13 @@ async function overview(period = 'month') {
   // numbers, and the page has to say so plainly rather than let the reader
   // assume the profit is sitting in an account.
   const [contribAgg, drawAgg] = await Promise.all([
-    prisma.financeTransaction.aggregate({ where: { type: 'OWNER_CONTRIBUTION' }, _sum: { amount: true } }),
+    // Contributions made to fund a rep payout are excluded here: every payout
+    // is already counted as his money below, and counting both sides made the
+    // business look like it owed him the same cash twice.
+    prisma.financeTransaction.aggregate({
+      where: { type: 'OWNER_CONTRIBUTION', refType: { not: 'CommissionWithdrawal' } },
+      _sum: { amount: true },
+    }),
     prisma.financeTransaction.aggregate({ where: { type: 'OWNER_DRAWING' }, _sum: { amount: true } }),
   ]);
   const ownerIn = round2(toNumber(contribAgg._sum.amount));
