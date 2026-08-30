@@ -370,6 +370,17 @@ async function listTransactions(filters, pagination) {
   if (filters.direction) where.direction = filters.direction;
   if (filters.type) where.type = filters.type;
   if (filters.category) where.category = filters.category;
+  // Free-text search across everything a person might remember about a
+  // movement — what it was, its reference, its note.
+  if (filters.search && String(filters.search).trim()) {
+    const term = String(filters.search).trim();
+    where.OR = [
+      { description: { contains: term, mode: 'insensitive' } },
+      { category: { contains: term, mode: 'insensitive' } },
+      { reference: { contains: term, mode: 'insensitive' } },
+      { notes: { contains: term, mode: 'insensitive' } },
+    ];
+  }
   if (filters.brandId) where.brandId = filters.brandId === 'none' ? null : filters.brandId;
   if (filters.from || filters.to) {
     where.occurredAt = {};

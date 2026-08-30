@@ -48,6 +48,7 @@ const transactions = asyncHandler(async (req, res) => {
   const pagination = parsePagination(q, { defaultSortBy: 'occurredAt', defaultSortDir: 'desc', allowedSortFields: ['occurredAt', 'amount', 'createdAt'] });
   const filters = {
     accountId: q.accountId,
+    search: q.search,
     direction: q.direction,
     type: q.type,
     category: q.category,

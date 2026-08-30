@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import {
   Wallet, TrendingUp, TrendingDown, Banknote, Landmark, Smartphone, Coins,
   Plus, Trash2, Pencil, ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Boxes, Receipt, PiggyBank,
-  Factory, Package, Scale, FileBarChart, ChevronRight, ShieldCheck, AlertTriangle,
+  Factory, Package, Scale, FileBarChart, ChevronRight, ShieldCheck, AlertTriangle, Search as SearchIcon,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts } from '@/lib/hooks';
@@ -80,6 +80,36 @@ function ShareRows({ rows, total, colours }) {
             <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
               <div className={`h-full rounded-full ${colours[i % colours.length]}`} style={{ width: `${Math.max(2, pct)}%` }} />
             </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// One card, several segments — the joined money strip from the admin the
+// owner benchmarks against. Not separate boxes: one container, hairline
+// dividers, each segment washed in its own colour, numbers a size up.
+const SEG_WASH = {
+  emerald: { bg: 'bg-gradient-to-br from-emerald-500/[0.12] via-emerald-500/[0.04] to-transparent', num: 'text-emerald-400' },
+  rose: { bg: 'bg-gradient-to-br from-rose-500/[0.12] via-rose-500/[0.04] to-transparent', num: 'text-rose-400' },
+  sky: { bg: 'bg-gradient-to-br from-sky-500/[0.12] via-sky-500/[0.04] to-transparent', num: 'text-sky-300' },
+  brand: { bg: 'bg-gradient-to-br from-brand-500/[0.12] via-brand-500/[0.04] to-transparent', num: 'text-brand-300' },
+  amber: { bg: 'bg-gradient-to-br from-amber-500/[0.12] via-amber-500/[0.04] to-transparent', num: 'text-amber-300' },
+  violet: { bg: 'bg-gradient-to-br from-violet-500/[0.12] via-violet-500/[0.04] to-transparent', num: 'text-violet-300' },
+  slate: { bg: 'bg-gradient-to-br from-white/[0.04] to-transparent', num: 'text-foreground' },
+};
+function SegmentStrip({ segments, size = 'lg' }) {
+  const numCls = size === 'lg' ? 'text-2xl xl:text-3xl' : 'text-xl';
+  return (
+    <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-surface sm:flex sm:divide-x sm:divide-white/[0.06]">
+      {segments.map((seg) => {
+        const w = SEG_WASH[seg.tone] || SEG_WASH.slate;
+        return (
+          <div key={seg.label} className={`flex-1 p-5 ${w.bg}`}>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{seg.label}</p>
+            <p className={`mt-2 font-bold leading-none tabular-nums ${numCls} ${w.num}`}>{seg.value}</p>
+            {seg.sub && <p className="mt-1.5 text-xs text-faint">{seg.sub}</p>}
           </div>
         );
       })}
@@ -340,15 +370,72 @@ function Overview({ onNavigate }) {
         </div>
       </div>
 
+      {/* ── The business, by brand — the first thing after the briefing.
+             This IS the overview of the business: what each brand puts in
+             the owner's pocket, side by side. ── */}
+      {(data.brandFinance || []).length > 0 && (
+        <div className="space-y-3">
+          <SectionHead label="The business, by brand" sub="What each brand puts in your pocket — never mixed." />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {data.brandFinance.map((b) => {
+              const totalNet = data.brandFinance.reduce((a, x) => a + Math.max(0, x.netProfit), 0);
+              const share = totalNet > 0 ? (Math.max(0, b.netProfit) / totalNet) * 100 : 0;
+              const keptPct = b.revenue > 0 ? Math.round((b.netProfit / b.revenue) * 100) : 0;
+              return (
+                <div key={b.brandId} className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-surface">
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/[0.06] to-transparent" aria-hidden="true" />
+                  <div className="relative p-5">
+                    <div className="flex items-center justify-between">
+                      <span className="rounded-full bg-brand-500/15 px-3 py-1 text-sm font-bold text-brand-300">{b.name}</span>
+                      <span className="text-xs text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'} sold · {periodLabel}</span>
+                    </div>
+                    <p className={`mt-4 text-3xl font-bold leading-none tabular-nums ${b.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {formatCurrency(b.netProfit)}
+                    </p>
+                    <p className="mt-1 text-xs text-faint">
+                      in your pocket{b.revenue > 0 ? ` — ${keptPct}% of what it sold` : ''}
+                    </p>
+                    <div className="mt-4 grid grid-cols-3 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
+                      <div className="bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Revenue</p>
+                        <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.revenue)}</p>
+                      </div>
+                      <div className="bg-gradient-to-br from-rose-500/[0.07] to-transparent p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Costs</p>
+                        <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.cogs + (b.commission ?? 0) + b.expenses)}</p>
+                      </div>
+                      <div className="bg-gradient-to-br from-brand-500/[0.08] to-transparent p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Margin</p>
+                        <p className="mt-1 text-sm font-bold tabular-nums text-brand-300">{b.margin}%</p>
+                      </div>
+                    </div>
+                    {/* This brand's share of the profit both brands made. */}
+                    <div className="mt-4 flex items-center gap-3">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${Math.max(2, share)}%` }} />
+                      </div>
+                      <span className="text-[11px] tabular-nums text-faint">{Math.round(share)}% of profit</span>
+                    </div>
+                    <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] text-faint">
+                      Inventory {formatCurrency(b.inventoryValue)} ({formatNumber(b.inventoryUnits)} boxes) · net cash {formatCurrency(b.netCash)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── The money right now ── */}
       <div className="space-y-3">
         <SectionHead label="The money, right now" sub="Where cash stands and how it moved." />
-        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <TintCard label="Cash position" value={formatCurrency(data.cashPosition)} icon={PiggyBank} tone="brand" sub="across all accounts" />
-          <TintCard label="Money in" value={formatCurrency(flow.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub={periodLabel} />
-          <TintCard label="Money out" value={formatCurrency(flow.moneyOut)} icon={ArrowUpRight} tone="rose" sub={periodLabel} />
-          <TintCard label="Net cash flow" value={formatCurrency(flow.net)} icon={flow.net >= 0 ? TrendingUp : TrendingDown} tone={flow.net >= 0 ? 'emerald' : 'rose'} sub={flow.net >= 0 ? 'more came in than left' : 'more left than came in'} />
-        </div>
+        <SegmentStrip segments={[
+          { label: 'Cash position', value: formatCurrency(data.cashPosition), sub: 'across all accounts', tone: 'brand' },
+          { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `collected ${periodLabel}`, tone: 'emerald' },
+          { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `paid ${periodLabel}`, tone: 'rose' },
+          { label: 'Net cash flow', value: formatCurrency(flow.net), sub: flow.net >= 0 ? 'more came in than left' : 'more left than came in', tone: flow.net >= 0 ? 'sky' : 'amber' },
+        ]} />
       </div>
 
       {/* ── Needs you ── */}
@@ -409,37 +496,6 @@ function Overview({ onNavigate }) {
           </div>
         </Card>
       </div>
-
-      {/* ── Brands ── */}
-      {(data.brandFinance || []).length > 0 && (
-        <div className="space-y-3">
-          <SectionHead label="Brand finances" sub="Never mixed, always separated — each brand's own books." />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {data.brandFinance.map((b) => (
-              <Card key={b.brandId}>
-                <CardBody>
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-bold text-brand-400">{b.name}</span>
-                    <span className="text-xs text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'} sold</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <Money label="Revenue" value={b.revenue} tone="emerald" />
-                    <Money label="− COGS" value={b.cogs} tone="slate" />
-                    <Money label="Gross profit" value={b.grossProfit} tone="brand" />
-                    <Money label="− Commission" value={b.commission ?? 0} tone="amber" />
-                    <Money label="− Expenses" value={b.expenses} tone="rose" />
-                    <Money label="Net profit" value={b.netProfit} tone={b.netProfit >= 0 ? 'emerald' : 'rose'} big />
-                  </div>
-                  <div className="mt-2 flex flex-wrap justify-between gap-2 border-t border-border pt-2 text-xs text-faint">
-                    <span>Net cash {formatCurrency(b.netCash)}</span>
-                    <span>Inventory {formatCurrency(b.inventoryValue)} ({formatNumber(b.inventoryUnits)} boxes)</span>
-                  </div>
-                </CardBody>
-              </Card>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── The desk ── */}
       <div className="space-y-3">
@@ -584,13 +640,15 @@ function Ledger({ expensesOnly }) {
   const [type, setType] = useState('');
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState('');
+  const [search, setSearch] = useState('');      // what has been searched
+  const [searchDraft, setSearchDraft] = useState(''); // what is being typed
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: brands = [] } = useQuery({ queryKey: ['brands', 'all'], queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data });
-  const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined, category: category || undefined };
+  const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined, category: category || undefined, search: search || undefined };
   if (expensesOnly) params.direction = 'OUT';
   else if (type) params.type = type;
   const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'transactions', { page, account, type, brand, category, expensesOnly }],
+    queryKey: ['finance', 'transactions', { page, account, type, brand, category, search, expensesOnly }],
     queryFn: async () => unwrap(await api.get('/finance/transactions', { params })),
   });
   const del = useMutation({
@@ -602,25 +660,51 @@ function Ledger({ expensesOnly }) {
   const sums = data?.meta?.sums;
   const byCategory = data?.meta?.byCategory || [];
 
+  const count = data?.meta?.total ?? 0;
   return (
     <div className="space-y-4">
+      {!expensesOnly && (
+        <div>
+          <h2 className="text-xl font-bold text-foreground">The Ledger</h2>
+          <p className="mt-0.5 text-sm text-muted">
+            Every movement of money — settlements collected, stock paid for, transfers between accounts — with its account and what it was for.
+          </p>
+        </div>
+      )}
+
+      {/* Find a movement by anything a person remembers about it. */}
+      <form
+        onSubmit={(e) => { e.preventDefault(); setSearch(searchDraft.trim()); setPage(1); }}
+        className="flex items-center gap-2 rounded-2xl border border-white/[0.08] bg-surface px-4 py-1.5 focus-within:border-brand-500/40"
+      >
+        <SearchIcon className="h-4 w-4 shrink-0 text-faint" />
+        <input
+          value={searchDraft}
+          onChange={(e) => setSearchDraft(e.target.value)}
+          placeholder="What it was, a reference, a note, a category…"
+          className="h-9 min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-faint focus:outline-none"
+        />
+        {search && (
+          <button type="button" onClick={() => { setSearch(''); setSearchDraft(''); setPage(1); }}
+            className="cursor-pointer text-xs text-faint hover:text-foreground">Clear</button>
+        )}
+        <Button type="submit" variant="secondary" className="px-3 py-1.5 text-xs">Search</Button>
+      </form>
+
       {/* What the CURRENT view adds up to — the whole filtered ledger, not
-          just the visible page. */}
+          just the visible page. One joined strip, not separate boxes. */}
       {sums && (
         expensesOnly ? (
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <TintCard label="Spent in this view" value={formatCurrency(sums.out)} icon={ArrowUpRight} tone="rose" sub={`${formatNumber(data?.meta?.total ?? 0)} record${(data?.meta?.total ?? 0) === 1 ? '' : 's'}`} />
-            {byCategory.slice(0, 3).map((c) => (
-              <TintCard key={c.category} label={c.category} value={formatCurrency(c.amount)} icon={Receipt} tone="slate"
-                sub={`${formatNumber(c.count)} record${c.count === 1 ? '' : 's'}`} />
-            ))}
-          </div>
+          <SegmentStrip size="sm" segments={[
+            { label: 'Spent in this view', value: formatCurrency(sums.out), sub: `${formatNumber(count)} record${count === 1 ? '' : 's'}`, tone: 'rose' },
+            ...byCategory.slice(0, 3).map((c) => ({ label: c.category, value: formatCurrency(c.amount), sub: `${formatNumber(c.count)} record${c.count === 1 ? '' : 's'}`, tone: 'slate' })),
+          ]} />
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <TintCard label="Money in" value={formatCurrency(sums.in)} icon={ArrowDownLeft} tone="emerald" sub="in this view" />
-            <TintCard label="Money out" value={formatCurrency(sums.out)} icon={ArrowUpRight} tone="rose" sub="in this view" />
-            <TintCard label="Net" value={formatCurrency(sums.net)} icon={sums.net >= 0 ? TrendingUp : TrendingDown} tone={sums.net >= 0 ? 'brand' : 'amber'} sub={`${formatNumber(data?.meta?.total ?? 0)} movement${(data?.meta?.total ?? 0) === 1 ? '' : 's'}`} />
-          </div>
+          <SegmentStrip segments={[
+            { label: 'Money in', value: formatCurrency(sums.in), sub: 'settlements collected and money moved in', tone: 'emerald' },
+            { label: 'Money out', value: formatCurrency(sums.out), sub: 'costs paid and money moved out', tone: 'rose' },
+            { label: 'Net', value: formatCurrency(sums.net), sub: `${formatNumber(count)} movement${count === 1 ? '' : 's'}`, tone: sums.net >= 0 ? 'sky' : 'amber' },
+          ]} />
         )
       )}
 
@@ -1481,7 +1565,7 @@ function ArchiveTab() {
 const TABS = [
   ['overview', 'Overview'], ['profit', 'Profit'], ['cashflow', 'Cash Flow'],
   ['suppliers', 'Suppliers'], ['expenses', 'Expenses'], ['accounts', 'Accounts'],
-  ['ledger', 'Transactions'], ['commissions', 'Commissions'], ['reports', 'Reports'], ['archive', 'Statements'],
+  ['ledger', 'Ledger'], ['commissions', 'Commissions'], ['reports', 'Reports'], ['archive', 'Statements'],
 ];
 
 export default function Finance() {
