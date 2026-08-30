@@ -98,6 +98,17 @@ async function createSaleTx(tx, payload, actor) {
     throw ApiError.badRequest('Credit sales require a customer');
   }
 
+  // Rep stock leaves ONLY through the settlement contract or a return. A
+  // plain sale from a rep's stock would deplete their inventory and book the
+  // revenue while their open order still shows the boxes as owed — the same
+  // box counted as sold and unaccounted at once, and no commission earned on
+  // it. Nothing in production ever used this path; now nothing can.
+  if (salesRepId && !settlementId) {
+    throw ApiError.badRequest(
+      "A rep's boxes are settled through their order, not sold past it — open the order in Settlements and settle the boxes there, so the contract, the commission and the stock all move together.",
+    );
+  }
+
   const source = resolveSource({ salesRepId, warehouseId });
 
   // Load products referenced by the items.

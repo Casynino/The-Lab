@@ -110,16 +110,16 @@ function NewSaleModal({ open, onClose }) {
               {customers.map((c) => <option key={c.id} value={c.id}>{c.name}{c.region ? ` · ${c.region}` : ''}</option>)}
             </Select>
           </Field>
+          {/* Warehouses only. Selling from a rep's stock here bypassed their
+              order — boxes left the van, revenue landed, and the order still
+              showed them as owed. Rep boxes move through Settlements, where
+              the contract and commission move with them; the server refuses
+              the old path too. */}
           {!isRep && (
-            <Field label="Sell from" required hint="Warehouse or a rep's van stock">
+            <Field label="Sell from" required hint="Rep stock is settled through Orders & Settlements, not sold here">
               <Select value={source} onChange={(e) => setSource(e.target.value)}>
-                <option value="">Select source…</option>
-                <optgroup label="Warehouses">
-                  {warehouses.map((w) => <option key={w.id} value={`w:${w.id}`}>{w.name}</option>)}
-                </optgroup>
-                <optgroup label="Sales reps">
-                  {reps.map((r) => <option key={r.id} value={`r:${r.id}`}>{r.user?.name} ({r.code})</option>)}
-                </optgroup>
+                <option value="">Select warehouse…</option>
+                {warehouses.map((w) => <option key={w.id} value={`w:${w.id}`}>{w.name}</option>)}
               </Select>
             </Field>
           )}
