@@ -42,6 +42,12 @@ function resolveRange({ period, from, to, start, end } = {}) {
     case 'today': return win('day', 'today');
     case 'week': return win('week', 'week');
     case 'year': return win('year', 'year');
+    // "All time" was falling through to the month default, so every report
+    // that asked for all time silently answered with the current month —
+    // labelled 'month', which is why nobody noticed. It now spans everything;
+    // callers that clamp to the finance epoch narrow it to go-live.
+    case 'all':
+      return { start: new Date(0), end: eatToUtc(now.endOf('day')).toDate(), label: 'all' };
     case 'month':
     default: return win('month', 'month');
   }
