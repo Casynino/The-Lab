@@ -99,13 +99,15 @@ export default function SalesReps() {
 
             // One colour per rep, held steady by their code so a face keeps
             // its colour as the ranking moves.
+            // Every class spelled out: Tailwind only ships what it can read in
+            // the source, so a name assembled at runtime compiles to nothing.
             const HUES = [
-              { ring: 'ring-brand-500/25', av: 'from-brand-400 to-brand-600', bar: 'bg-brand-400', text: 'text-brand-300' },
-              { ring: 'ring-violet-500/25', av: 'from-violet-400 to-violet-600', bar: 'bg-violet-400', text: 'text-violet-300' },
-              { ring: 'ring-sky-500/25', av: 'from-sky-400 to-sky-600', bar: 'bg-sky-400', text: 'text-sky-300' },
-              { ring: 'ring-amber-500/25', av: 'from-amber-400 to-amber-600', bar: 'bg-amber-400', text: 'text-amber-300' },
-              { ring: 'ring-emerald-500/25', av: 'from-emerald-400 to-emerald-600', bar: 'bg-emerald-400', text: 'text-emerald-300' },
-              { ring: 'ring-rose-500/25', av: 'from-rose-400 to-rose-600', bar: 'bg-rose-400', text: 'text-rose-300' },
+              { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.07]', av: 'from-brand-400 to-brand-600', bar: 'bg-brand-400', text: 'text-brand-300' },
+              { ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.07]', av: 'from-violet-400 to-violet-600', bar: 'bg-violet-400', text: 'text-violet-300' },
+              { ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.07]', av: 'from-sky-400 to-sky-600', bar: 'bg-sky-400', text: 'text-sky-300' },
+              { ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.07]', av: 'from-amber-400 to-amber-600', bar: 'bg-amber-400', text: 'text-amber-300' },
+              { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.07]', av: 'from-emerald-400 to-emerald-600', bar: 'bg-emerald-400', text: 'text-emerald-300' },
+              { ring: 'ring-rose-500/25', glow: 'from-rose-500/[0.07]', av: 'from-rose-400 to-rose-600', bar: 'bg-rose-400', text: 'text-rose-300' },
             ];
             const hueFor = (code) => HUES[[...String(code || '')].reduce((n, c) => n + c.charCodeAt(0), 0) % HUES.length];
 
@@ -139,7 +141,7 @@ export default function SalesReps() {
                         className={`animate-rise group relative overflow-hidden rounded-2xl bg-surface p-5 text-left ring-1 transition duration-200 hover:ring-white/25 ${hue.ring}`}
                         style={{ animationDelay: `${i * 40}ms` }}
                       >
-                        <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${hue.bar.replace('bg-', 'from-').replace('-400', '-500/[0.07]')} to-transparent`} aria-hidden="true" />
+                        <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${hue.glow} to-transparent`} aria-hidden="true" />
 
                         <div className="relative flex items-center gap-3">
                           <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${hue.av} text-sm font-bold text-slate-950`}>
