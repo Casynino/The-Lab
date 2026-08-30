@@ -501,31 +501,22 @@ function Overview({ onNavigate, onOwnerMoney }) {
                       </>
                     )}
 
-                    {/* Where the cost is, and where the profit is. */}
+                    {/* Two figures, not three. Rep pay comes out of the
+                        owner's own pocket and never passes through these
+                        wallets, so subtracting it here was wrong twice: the
+                        money did not leave, and the commission shown was what
+                        the boxes EARNED reps, not what he has paid. */}
                     {b.revenue > 0 && (
-                      <div className="mt-4 grid grid-cols-3 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
+                      <div className="mt-4 grid grid-cols-2 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
                         <div className="bg-gradient-to-br from-rose-500/[0.08] to-transparent p-3">
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Cost of boxes sold</p>
                           <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.costOfSold)}</p>
                         </div>
-                        {/* The owner funds rep commissions personally, so this
-                            never left the wallet above. Labelled as his, not
-                            as business money going out. */}
-                        <div className="bg-gradient-to-br from-amber-500/[0.08] to-transparent p-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Reps · your pocket</p>
-                          <p className="mt-1 text-sm font-bold tabular-nums text-amber-300">{formatCurrency(b.commission)}</p>
-                        </div>
                         <div className="bg-gradient-to-br from-emerald-500/[0.10] to-transparent p-3">
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Your profit</p>
-                          <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.profitEarned)}</p>
+                          <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.grossKept)}</p>
                         </div>
                       </div>
-                    )}
-
-                    {b.commission > 0 && (
-                      <p className="mt-2.5 text-[11px] leading-relaxed text-faint">
-                        The {formatCurrency(b.commission)} for reps came from your own pocket, not from this wallet — so the cash above is untouched by it.
-                      </p>
                     )}
 
                     <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-faint">
@@ -540,12 +531,15 @@ function Overview({ onNavigate, onOwnerMoney }) {
             })}
           </div>
 
-          {/* Your own money — a slim bar, not a card of its own. */}
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/[0.08] bg-surface px-5 py-3.5">
+          {/* What the owner has laid out for the business — chiefly rep
+              commissions, which he pays himself. It is money the business
+              owes him back, not a balance it is holding. */}
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[0.04] px-5 py-3.5">
             <span className="rounded-lg bg-sky-500/15 p-1.5 text-sky-300"><PiggyBank className="h-3.5 w-3.5" /></span>
             <span className="text-xs text-muted">
-              Your own money — put in <b className="tabular-nums text-sky-300">{formatCurrency(data.ownerMoney?.contributed || 0)}</b>,
-              {' '}taken out <b className="tabular-nums text-foreground">{formatCurrency(data.ownerMoney?.drawn || 0)}</b>
+              You have put <b className="tabular-nums text-sky-300">{formatCurrency(data.ownerMoney?.owedBackToOwner || 0)}</b> of your own money into the business
+              {(data.ownerMoney?.paidRepsFromPocket || 0) > 0 && <> — <b className="tabular-nums text-foreground">{formatCurrency(data.ownerMoney.paidRepsFromPocket)}</b> of it paying reps</>}.
+              {' '}It is owed back to you when the business can afford it.
             </span>
             <div className="ml-auto flex gap-2">
               <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')}>
@@ -574,10 +568,10 @@ function Overview({ onNavigate, onOwnerMoney }) {
              left — in that order, in words. ── */}
       {(data.brandFinance || []).length > 0 && (
         <div className="space-y-3">
-          <SectionHead label="How each brand did" sub="Money in, what it cost, what was left." />
+          <SectionHead label="How each brand did" sub="Money in, what the boxes cost, what was left." />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {data.brandFinance.map((b) => {
-              const keptPct = b.revenue > 0 ? Math.round((b.netProfit / b.revenue) * 100) : 0;
+              const keptPct = b.revenue > 0 ? Math.round(((b.revenue - b.cogs) / b.revenue) * 100) : 0;
               return (
                 <div key={b.brandId} className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-surface">
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/[0.06] to-transparent" aria-hidden="true" />
@@ -597,21 +591,18 @@ function Overview({ onNavigate, onOwnerMoney }) {
                         <span className="text-sm text-muted">The boxes cost</span>
                         <span className="text-base font-bold tabular-nums text-rose-400">− {formatCurrency(b.cogs)}</span>
                       </div>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-sm text-muted">Reps, from your own pocket</span>
-                        <span className="text-base font-bold tabular-nums text-amber-300">− {formatCurrency(b.commission ?? 0)}</span>
-                      </div>
                       <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.08] pt-2.5">
                         <span className="text-sm font-semibold text-foreground">Left in the business</span>
-                        <span className={`text-xl font-bold tabular-nums ${b.netProfit >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>
-                          {formatCurrency(b.netProfit)}
+                        <span className={`text-xl font-bold tabular-nums ${(b.revenue - b.cogs) >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>
+                          {formatCurrency(b.revenue - b.cogs)}
                         </span>
                       </div>
                     </div>
 
                     <p className="mt-3 rounded-lg bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-muted">
-                      Out of every 100 shillings of {b.name} sold, <b className="text-foreground">{keptPct}</b> stayed in the business.
-                      It is not cash — it bought the {formatNumber(b.inventoryUnits)} boxes on your shelf.
+                      Out of every 100 shillings of {b.name} sold, <b className="text-foreground">{keptPct}</b> stayed in the business
+                      after paying for the boxes. It is not cash — it bought the {formatNumber(b.inventoryUnits)} boxes on your shelf.
+                      {(b.commission ?? 0) > 0 && <> Reps earned {formatCurrency(b.commission)} on these sales, which you pay yourself.</>}
                     </p>
                   </div>
                 </div>

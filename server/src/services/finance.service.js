@@ -358,23 +358,10 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
     if (!(amt > 0)) return null;
     const acc = await defaultAccount();
     if (!acc) return null;
-    // The owner funds rep commissions personally. Recording only the payment
-    // would drain a business account that never held the money; recording it
-    // as INCOME (what was happening by hand) inflates money-in and makes his
-    // own cash look like the business earning. A matching contribution says
-    // the truth: his money in, the rep paid, the business balance unmoved.
-    if (fromOwnPocket) {
-      await recordOwnerMoney({
-        direction: 'IN',
-        accountId: acc.id,
-        amount: amt,
-        description: `Own money in to pay ${who || 'a rep'}`,
-        reference: reference || null,
-        refType: 'CommissionWithdrawal',
-        refId: refId || null,
-        occurredAt,
-      }, actor).catch(() => null);
-    }
+    // The owner pays reps directly from his pocket — no business account is
+    // involved on either side. Posting a contribution INTO an account put
+    // money somewhere it never reached. What he lays out is an investment the
+    // business owes him, derived from these payouts, not held as a balance.
     return await recordTransaction(
       {
         accountId: acc.id,
@@ -1073,8 +1060,19 @@ async function overview(period = 'month') {
     _sum: { amount: true },
   });
   const earnedAllTime = round2(lifetime.totals.profit - lifetime.totals.commission - round2(toNumber(lifetimeExpAgg._sum.amount)));
+  // Every shilling of rep commission comes out of the owner's pocket, so the
+  // payouts themselves are the record of what he has put in. The business
+  // owes him this back when it can afford to.
+  const repPayAgg = await prisma.financeTransaction.aggregate({
+    where: { type: 'COMMISSION_PAYMENT', direction: 'OUT' },
+    _sum: { amount: true },
+  });
+  const paidRepsFromPocket = round2(toNumber(repPayAgg._sum.amount));
   const ownerMoney = {
     contributed: ownerIn,
+    paidRepsFromPocket,
+    // What the business owes him: money he has laid out, less anything taken.
+    owedBackToOwner: round2(Math.max(0, ownerIn + paidRepsFromPocket - ownerOut)),
     drawn: ownerOut,
     earnedAllTime,
     stillWorking: round2(earnedAllTime - ownerOut),
@@ -1148,6 +1146,10 @@ async function overview(period = 'month') {
       costOfSold,
       commission: round2(p.commission || 0),
       profitEarned: round2(p.contribution ?? p.profit),
+      // What this wallet's sales left after paying for the boxes. Rep
+      // commission is not taken out here: the owner pays that himself, so it
+      // never comes out of this money.
+      grossKept: round2(p.revenue - p.cost),
       supplierPaid: sup.paid,
       supplierOwedTotal: sup.outstanding,
       dueNow,
