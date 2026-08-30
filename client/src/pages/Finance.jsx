@@ -422,9 +422,12 @@ function Overview({ onNavigate }) {
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Costs</p>
                         <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.cogs + (b.commission ?? 0) + b.expenses)}</p>
                       </div>
+                      {/* NOT the gross margin: that lived here before and sat
+                          beside the headline's 18%, two look-alike percentages
+                          that never agreed. One card, one story — what stays. */}
                       <div className="bg-gradient-to-br from-brand-500/[0.08] to-transparent p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Margin</p>
-                        <p className="mt-1 text-sm font-bold tabular-nums text-brand-300">{b.margin}%</p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">You keep</p>
+                        <p className="mt-1 text-sm font-bold tabular-nums text-brand-300">{keptPct}%</p>
                       </div>
                     </div>
                     <div className="mt-4 flex items-center gap-3">
