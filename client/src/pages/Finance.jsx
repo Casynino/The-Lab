@@ -377,7 +377,16 @@ function Overview({ onNavigate, onOwnerMoney }) {
   const attention = [
     ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
     ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
-    ny.supplierOutstanding > 0 && { icon: Factory, tone: 'text-rose-300 bg-rose-500/15', text: `Suppliers are owed ${formatCurrency(ny.supplierOutstanding)}`, tab: 'suppliers' },
+    // Only what needs a DECISION. The whole invoice was listed here as if it
+    // were due, directly contradicting the cards that say nothing is due
+    // today — the supplier is paid as the stock sells. It appears only when
+    // money is genuinely payable now.
+    (data.cashSplit?.setAside || 0) > 0 && {
+      icon: Factory,
+      tone: 'text-rose-300 bg-rose-500/15',
+      text: `${formatCurrency(data.cashSplit.setAside)} is due to ${data.cashSplit.supplierLabel || 'your supplier'} for boxes already sold`,
+      tab: 'suppliers',
+    },
     ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
   ].filter(Boolean);
 

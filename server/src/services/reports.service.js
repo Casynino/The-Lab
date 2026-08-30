@@ -309,7 +309,17 @@ let _epochCache = { at: 0, value: undefined };
 async function financeEpoch() {
   if (Date.now() - _epochCache.at < 60_000 && _epochCache.value !== undefined) return _epochCache.value;
   const row = await prisma.setting.findUnique({ where: { key: 'finance.epochAt' } }).catch(() => null);
-  const value = row?.value ? new Date(row.value) : null;
+  // A bare date like "2026-07-05" is parsed as UTC midnight, which is 03:00
+  // in Dar es Salaam — so the first three hours of that business day fell
+  // outside the books, and the same setting meant a different instant on a
+  // developer's machine than on the server. A date-only value is read as the
+  // start of that day in Tanzania; a full timestamp is respected as given.
+  const raw = row?.value ? String(row.value).trim() : null;
+  const value = !raw
+    ? null
+    : /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? new Date(`${raw}T00:00:00+03:00`)
+      : new Date(raw);
   _epochCache = { at: Date.now(), value };
   return value;
 }

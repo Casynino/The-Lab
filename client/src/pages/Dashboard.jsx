@@ -65,6 +65,10 @@ function Mini({ label, value, sub }) {
 
 export default function Dashboard() {
   const [attentionFilter, setAttentionFilter] = useState('All');
+  // The actual month by name, so "this month" can never be mistaken for
+  // "everything". Tanzania is UTC+3 with no DST, so the shift is fixed.
+  const monthLabel = new Date(Date.now() + 3 * 3600_000)
+    .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data, isLoading, isError } = useQuery({
@@ -569,7 +573,19 @@ export default function Dashboard() {
       {/* ── Brand performance ── */}
       {brands.length > 0 && (
         <div className="mt-8">
-          <div className="mb-3"><h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2><p className="text-xs text-faint">How OHIS and Civlily are each doing this month.</p></div>
+          {/* The period was a whisper in the corner, so these figures got
+              compared against Finance's all-time view and looked wrong. They
+              are not wrong — they are THIS MONTH, and the heading now says so
+              loudly enough that the comparison is never made by accident. */}
+          <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2>
+            <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-300">
+              {monthLabel}
+            </span>
+            <p className="w-full text-xs text-faint">
+              Sales made this month only — not money in an account, and not the all-time figures on the Finance page.
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {brands.map((b) => {
               const t = BRAND_TONE[b.name?.toUpperCase()] || { ring: 'border-border', bg: 'bg-surface', badge: 'bg-elevated text-muted', dot: 'bg-border' };
@@ -578,7 +594,7 @@ export default function Dashboard() {
                   <div className="mb-3 flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${t.dot}`} />
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${t.badge}`}>{b.name}</span>
-                    <span className="ml-auto text-[11px] text-faint">this month</span>
+                    <span className="ml-auto text-[11px] font-medium text-faint">{monthLabel}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
                     <Mini label="Revenue" value={formatCurrency(b.revenueMonth)} sub={`${formatNumber(b.boxesSoldMonth)} boxes sold`} />
