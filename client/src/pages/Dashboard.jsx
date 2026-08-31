@@ -200,6 +200,42 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
+      {/* ── Quick actions ──
+          Above the attention list, not below it: these are what you DO about
+          what the list tells you, and burying them under it meant scrolling
+          past the whole thing to act on the first line of it.
+          Eight identical grey buttons make you read all eight. Tinting them by
+          what they touch — approvals, money, stock — lets the eye find the one
+          it wants without reading, and the colours match the rest of the page. */}
+      <div className="mb-5 flex flex-wrap gap-2">
+        {QUICK.map((q) => {
+          const TINT = {
+            approve: 'border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20',
+            money: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20',
+            stock: 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20',
+          };
+          const kind = q.label.startsWith('Approve') ? 'approve'
+            : /sale|expense/i.test(q.label) ? 'money' : 'stock';
+          return (
+            <button
+              key={q.label}
+              type="button"
+              onClick={() => navigate(q.to)}
+              className={clsx(
+                'relative inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition duration-200',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
+                TINT[kind],
+              )}
+            >
+              <q.icon className="h-4 w-4" /> {q.label}
+              {q.badge > 0 && (
+                <span className="ml-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{q.badge}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ── Needs your attention ──
           Seven tiles showing a number each told you how many of something there
           were, but not what any of it was or which mattered. A list says the
@@ -431,39 +467,6 @@ export default function Dashboard() {
             ));
           })()}
         </div>
-      </div>
-
-      {/* ── Quick actions ──
-          Eight identical grey buttons make you read all eight. Tinting them by
-          what they touch — approvals, money, stock — lets the eye find the one
-          it wants without reading, and the colours match the rest of the page. */}
-      <div className="mt-5 flex flex-wrap gap-2">
-        {QUICK.map((q) => {
-          const TINT = {
-            approve: 'border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20',
-            money: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20',
-            stock: 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20',
-          };
-          const kind = q.label.startsWith('Approve') ? 'approve'
-            : /sale|expense/i.test(q.label) ? 'money' : 'stock';
-          return (
-            <button
-              key={q.label}
-              type="button"
-              onClick={() => navigate(q.to)}
-              className={clsx(
-                'relative inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition duration-200',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
-                TINT[kind],
-              )}
-            >
-              <q.icon className="h-4 w-4" /> {q.label}
-              {q.badge > 0 && (
-                <span className="ml-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{q.badge}</span>
-              )}
-            </button>
-          );
-        })}
       </div>
 
       {/* ── Where every box is ──
