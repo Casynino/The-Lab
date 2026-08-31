@@ -44,8 +44,8 @@ function boxCount(r) {
 function requestDisplayStatus(r) {
   if (r.status === 'FULFILLED') {
     return r.settlement?.status === 'SETTLED'
-      ? { label: 'Settled', cls: 'bg-emerald-100 text-emerald-700' }
-      : { label: 'Approved', cls: 'bg-sky-100 text-sky-700' };
+      ? { label: 'Settled', cls: 'bg-emerald-500/15 text-emerald-300' }
+      : { label: 'Approved', cls: 'bg-sky-500/15 text-sky-300' };
   }
   const m = REQUEST_STATUS_META[r.status] || {};
   return { label: m.label || r.status, cls: m.cls || 'bg-elevated text-muted' };

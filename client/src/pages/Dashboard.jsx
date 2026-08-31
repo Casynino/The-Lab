@@ -683,10 +683,10 @@ export default function Dashboard() {
                   <TD>{r.activeOrders > 0 ? `${r.activeOrders} active` : '—'}</TD>
                   <TD>
                     {r.overdueOrders > 0
-                      ? <Badge className="bg-rose-100 text-rose-700">{r.overdueOrders} overdue</Badge>
+                      ? <Badge className="bg-rose-500/15 text-rose-300">{r.overdueOrders} overdue</Badge>
                       : r.activeOrders > 0
-                        ? <Badge className="bg-sky-100 text-sky-700">Settling</Badge>
-                        : <Badge className="bg-emerald-100 text-emerald-700">Clear</Badge>}
+                        ? <Badge className="bg-sky-500/15 text-sky-300">Settling</Badge>
+                        : <Badge className="bg-emerald-500/15 text-emerald-300">Clear</Badge>}
                   </TD>
                 </TR>
               ))}

@@ -117,8 +117,7 @@ function SegmentStrip({ segments, size = 'lg' }) {
   );
 }
 
-// Dark-theme badge tints. The old bg-emerald-100/rose-100 were light-theme
-// chips glowing on a dark page.
+// Dark-theme badge tints. These were light-theme chips glowing on a dark page.
 const DIR_BADGE = { IN: 'bg-emerald-500/15 text-emerald-300', OUT: 'bg-rose-500/15 text-rose-300' };
 const round2ui = (n) => Math.round((Number(n) || 0) * 100) / 100;
 

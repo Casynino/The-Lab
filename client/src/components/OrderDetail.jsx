@@ -461,7 +461,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   <span className="text-xs uppercase tracking-wide text-faint">Extension</span>
                   <Badge className={
                     order.extensionStatus === 'ACTIVE' ? 'bg-brand-500/20 text-brand-400'
-                    : order.extensionStatus === 'EXPIRED' ? 'bg-rose-100 text-rose-700'
+                    : order.extensionStatus === 'EXPIRED' ? 'bg-rose-500/15 text-rose-300'
                     : 'bg-elevated text-muted'}>
                     {order.extensionStatus === 'ACTIVE' ? 'Extension active'
                       : order.extensionStatus === 'EXPIRED' ? 'Extension expired'

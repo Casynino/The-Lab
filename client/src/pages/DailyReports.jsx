@@ -83,7 +83,7 @@ export default function DailyReports() {
                   <TR key={r.id}>
                     <TD>{formatDate(r.reportDate)}</TD>
                     {staff && <TD>{r.salesRep?.user?.name}</TD>}
-                    <TD><Badge className={r.type === 'OPENING' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}>{r.type}</Badge></TD>
+                    <TD><Badge className={r.type === 'OPENING' ? 'bg-amber-500/15 text-amber-300' : 'bg-indigo-500/15 text-indigo-300'}>{r.type}</Badge></TD>
                     <TD>{r.type === 'OPENING' ? formatCurrency(r.cashOnHand || 0) : formatCurrency(r.salesAmount || 0)}</TD>
                     <TD>{r.type === 'CLOSING' ? formatCurrency(r.cashCollected || 0) : '—'}</TD>
                     <TD className="max-w-[260px] truncate text-muted">{r.openingNote || r.closingNote || '—'}</TD>

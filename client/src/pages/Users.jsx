@@ -139,7 +139,7 @@ export default function Users() {
                     <TD><Badge className="bg-elevated text-muted">{ROLE_LABELS[u.role?.name] || u.role?.name}</Badge></TD>
                     <TD className="text-faint">{u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never'}</TD>
                     <TD>
-                      <Badge className={u.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-elevated text-muted'}>
+                      <Badge className={u.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-elevated text-muted'}>
                         {u.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TD>

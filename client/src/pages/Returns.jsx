@@ -17,10 +17,9 @@ function defaultPkg(product) {
   return product.packagings.find((p) => p.isBaseUnit) || product.packagings[0];
 }
 
-// The shared RETURN_STATUS_META still carries light-theme chips (bg-amber-100)
-// from the old theme, and has no EXPIRED entry — an expired return therefore
-// fell back to the PENDING label and read "Pending Approval" long after it had
-// died. Both are fixed here, where the statuses are actually rendered.
+// Statuses render from here rather than a shared map. The shared one carried
+// light-theme chips and had no EXPIRED entry, so an expired return fell back to
+// the PENDING label and read "Pending Approval" long after it had died.
 const STATUS_META = {
   PENDING: { label: 'Waiting approval', cls: 'bg-amber-500/15 text-amber-300' },
   APPROVED: { label: 'Approved', cls: 'bg-emerald-500/15 text-emerald-300' },

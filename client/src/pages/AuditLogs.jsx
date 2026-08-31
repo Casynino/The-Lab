@@ -9,11 +9,11 @@ import {
 } from '@/components/ui';
 
 const ACTION_CLS = {
-  CREATE: 'bg-emerald-100 text-emerald-700',
-  UPDATE: 'bg-amber-100 text-amber-700',
-  DELETE: 'bg-rose-100 text-rose-700',
-  DEACTIVATE: 'bg-rose-100 text-rose-700',
-  LOGIN: 'bg-sky-100 text-sky-700',
+  CREATE: 'bg-emerald-500/15 text-emerald-300',
+  UPDATE: 'bg-amber-500/15 text-amber-300',
+  DELETE: 'bg-rose-500/15 text-rose-300',
+  DEACTIVATE: 'bg-rose-500/15 text-rose-300',
+  LOGIN: 'bg-sky-500/15 text-sky-300',
   LOGOUT: 'bg-elevated text-muted',
 };
 

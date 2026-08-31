@@ -7,11 +7,11 @@ import { fromNow } from '@/lib/format';
 import { PageHeader, Card, PageSpinner, EmptyState } from '@/components/ui';
 
 const KIND = {
-  SALE: { icon: ShoppingCart, cls: 'bg-blue-100 text-blue-700' },
-  PAYMENT: { icon: HandCoins, cls: 'bg-emerald-100 text-emerald-700' },
-  STOCK_REQUEST: { icon: ClipboardList, cls: 'bg-amber-100 text-amber-700' },
-  WITHDRAWAL: { icon: Coins, cls: 'bg-violet-100 text-violet-700' },
-  SETTLEMENT: { icon: Timer, cls: 'bg-sky-100 text-sky-700' },
+  SALE: { icon: ShoppingCart, cls: 'bg-blue-500/15 text-blue-300' },
+  PAYMENT: { icon: HandCoins, cls: 'bg-emerald-500/15 text-emerald-300' },
+  STOCK_REQUEST: { icon: ClipboardList, cls: 'bg-amber-500/15 text-amber-300' },
+  WITHDRAWAL: { icon: Coins, cls: 'bg-violet-500/15 text-violet-300' },
+  SETTLEMENT: { icon: Timer, cls: 'bg-sky-500/15 text-sky-300' },
   MOVEMENT: { icon: Boxes, cls: 'bg-elevated text-muted' },
 };
 
