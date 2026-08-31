@@ -15,6 +15,27 @@ const { toNumber, round2 } = require('../utils/money');
 const audit = require('../services/audit.service');
 const { nextRepCode } = require('../utils/numbering');
 
+// Settlement-discipline grading, kept byte-for-byte in step with
+// settlement.service.analytics(). The contract is 72h, or 168h once the rep has
+// spent their one self-extension, and it is measured from ISSUE to CLOSE —
+// never to deadlineAt, which the extension rewrites in place, so a rep who
+// extended would otherwise grade as if they had always had the longer window.
+const SETTLEMENT_WINDOW_HOURS = settlement.SETTLEMENT_WINDOW_HOURS;
+const SELF_EXTENSION_HOURS = settlement.SELF_EXTENSION_HOURS;
+const windowHoursFor = (o) => (o.selfExtendedAt ? SETTLEMENT_WINDOW_HOURS + SELF_EXTENSION_HOURS : SETTLEMENT_WINDOW_HOURS);
+const issuedAtOf = (o) => o.issuedAt || o.createdAt;
+const hoursBetween = (a, b) => (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000;
+const isOnTime = (o) => hoursBetween(issuedAtOf(o), o.settledAt) <= windowHoursFor(o);
+// An order closed without a close time cannot be graded at all. It is dropped
+// from both sides of the fraction rather than counted as on time.
+const isGradeable = (o) => o.status === 'SETTLED' && Boolean(o.settledAt);
+const median = (xs) => {
+  if (!xs.length) return null;
+  const a = [...xs].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+};
+
 async function repStockList(salesRepId) {
   const balances = (await inventory.repBalances(prisma, salesRepId)).filter((b) => b.baseQuantity !== 0);
   const products = await prisma.product.findMany({
@@ -72,10 +93,21 @@ const list = asyncHandler(async (req, res) => {
   const ids = items.map((r) => r.id);
   // "Owed to rep" = available commission (earned - penalties - paid). The old
   // credit-sale debt figure is dead weight in a cash-only business.
-  const [heldRows, commissionSummary, salesRows] = await Promise.all([
+  const [heldRows, commissionSummary, salesRows, orders] = await Promise.all([
     inventory.repBalances(prisma).then((rows) => rows.filter((r) => ids.includes(r.salesRepId) && r.baseQuantity > 0)),
     require('../services/commission.service').summaryAllReps().catch(() => ({ items: [] })),
     prisma.sale.groupBy({ by: ['salesRepId'], where: { salesRepId: { in: ids }, status: { not: 'CANCELLED' } }, _sum: { total: true } }),
+    // Every order these reps have ever held — one query serving both the live
+    // standing (open, overdue, next deadline) and the closed-order track record.
+    // It replaces the old open-orders-only query rather than adding to it.
+    prisma.settlement.findMany({
+      where: { salesRepId: { in: ids } },
+      select: {
+        salesRepId: true, status: true, deadlineAt: true,
+        assignedValue: true, settledValue: true, returnedValue: true,
+        issuedAt: true, createdAt: true, settledAt: true, selfExtendedAt: true,
+      },
+    }),
   ]);
   const prodIds = [...new Set(heldRows.map((r) => r.productId))];
   const prods = await prisma.product.findMany({ where: { id: { in: prodIds } }, select: { id: true, purchasePrice: true } });
@@ -92,13 +124,7 @@ const list = asyncHandler(async (req, res) => {
   // Where a rep stands on the 72-hour contract. Money sold is history; whether
   // a rep is holding stock past its deadline is the thing that needs deciding
   // today, so the list can lead with it and rank by it.
-  const live = await prisma.settlement.findMany({
-    where: { salesRepId: { in: ids }, status: { not: 'SETTLED' } },
-    select: {
-      salesRepId: true, deadlineAt: true,
-      assignedValue: true, settledValue: true, returnedValue: true,
-    },
-  });
+  const live = orders.filter((o) => o.status !== 'SETTLED');
   const now = new Date();
   const standing = new Map();
   for (const st of live) {
@@ -119,14 +145,40 @@ const list = asyncHandler(async (req, res) => {
     standing.set(st.salesRepId, cur);
   }
 
+  // Track record on the contract: of the orders a rep has actually closed, what
+  // share came back inside their window. This is the one number that says
+  // whether a rep is reliable, and it is the same arithmetic the settlement
+  // analytics screen shows, so the two can never tell different stories.
+  const record = new Map();
+  for (const o of orders.filter(isGradeable)) {
+    const cur = record.get(o.salesRepId) || { settled: 0, onTime: 0, hours: [] };
+    cur.settled += 1;
+    if (isOnTime(o)) cur.onTime += 1;
+    cur.hours.push(hoursBetween(issuedAtOf(o), o.settledAt));
+    record.set(o.salesRepId, cur);
+  }
+
+  // Share of the team's selling, across the reps on this page. A share of
+  // nothing is nothing — not an even split.
+  const teamSales = items.reduce((acc, r) => acc + (salesMap.get(r.id) || 0), 0);
+
   const enriched = items.map((r) => {
     const st = standing.get(r.id);
+    const rec = record.get(r.id);
+    const repSales = salesMap.get(r.id) || 0;
     return {
       ...r,
+      // null, never 0 and never 100: a rep who has closed nothing has no record
+      // yet, and showing them as either perfect or hopeless would be a lie.
+      settledOrders: rec ? rec.settled : 0,
+      onTimeOrders: rec ? rec.onTime : 0,
+      onTimeRate: rec ? round2((rec.onTime / rec.settled) * 100) : null,
+      medianHoursToClose: rec ? round2(median(rec.hours)) : null,
+      salesShare: teamSales > 0 ? round2((repSales / teamSales) * 100) : 0,
       heldStockValue: round2(heldValue.get(r.id) || 0),
       heldUnits: heldUnits.get(r.id) || 0,
       commissionOwed: round2(commMap.get(r.id) || 0),
-      totalSales: round2(salesMap.get(r.id) || 0),
+      totalSales: round2(repSales),
       openOrders: st ? st.openOrders : 0,
       overdueOrders: st ? st.overdueOrders : 0,
       openBalance: st ? round2(st.openBalance) : 0,

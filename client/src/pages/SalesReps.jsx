@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, UserCog, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Plus, UserCog, AlertTriangle } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { formatCurrency, formatNumber, initials, fromNow } from '@/lib/format';
 import { TZ_REGIONS } from '@/lib/regions';
@@ -88,6 +88,31 @@ function standingOf(r) {
   return { key: 'clear', rank: 2, label: 'Settled', detail: 'nothing out',  cls: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/25', dot: 'bg-emerald-400' };
 }
 
+// How often this rep brings the boxes back inside their contract window. It is
+// the one number that says whether a rep can be trusted, and unlike a sales
+// total it is about the rep rather than about the money.
+function gradeOf(r) {
+  const settled = Number(r.settledOrders || 0);
+  const onTime = Number(r.onTimeOrders || 0);
+  if (r.onTimeRate == null || settled <= 0) {
+    return { known: false, text: 'text-muted', sub: 'none closed yet' };
+  }
+  // Rounding must neither flatter nor libel: a rep who was late once can never
+  // read 100, and a rep who was on time once can never read 0.
+  let pct = Math.round(Number(r.onTimeRate));
+  if (pct >= 100 && onTime < settled) pct = 99;
+  if (pct <= 0 && onTime > 0) pct = 1;
+  pct = Math.min(100, Math.max(0, pct));
+  return {
+    known: true,
+    pct,
+    text: pct >= 90 ? 'text-emerald-300' : pct >= 70 ? 'text-amber-300' : 'text-rose-300',
+    // Always the sample size, never the percentage twice. 100% of two orders
+    // and 100% of forty are not the same claim.
+    sub: `of ${formatNumber(settled)} closed`,
+  };
+}
+
 export default function SalesReps() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -112,7 +137,13 @@ export default function SalesReps() {
     owed: a.owed + Math.max(0, Number(r.commissionOwed || 0)),
     late: a.late + Number(r.overdueOrders || 0),
     lateReps: a.lateReps + (r.overdueOrders > 0 ? 1 : 0),
-  }), { boxes: 0, value: 0, owed: 0, late: 0, lateReps: 0 });
+    settled: a.settled + Number(r.settledOrders || 0),
+    onTime: a.onTime + Number(r.onTimeOrders || 0),
+  }), { boxes: 0, value: 0, owed: 0, late: 0, lateReps: 0, settled: 0, onTime: 0 });
+
+  // Every closed order belongs to exactly one rep, so summing the reps gives
+  // the team's true rate — no second query needed.
+  const teamRate = t.settled > 0 ? Math.round((t.onTime / t.settled) * 100) : null;
 
   return (
     <div>
@@ -127,7 +158,7 @@ export default function SalesReps() {
               { label: 'Boxes out with reps', value: formatNumber(t.boxes), sub: `${formatCurrency(t.value)} of stock`, num: 'text-violet-300' },
               { label: 'Running late', value: formatNumber(t.late), sub: t.late > 0 ? `${formatNumber(t.lateReps)} rep${t.lateReps === 1 ? '' : 's'} past deadline` : 'everyone inside the window', num: t.late > 0 ? 'text-rose-300' : 'text-foreground' },
               { label: 'Commission owed', value: formatCurrency(t.owed), sub: 'earned, not yet withdrawn', num: t.owed > 0 ? 'text-amber-300' : 'text-foreground' },
-              { label: 'Reps active', value: formatNumber(reps.filter((r) => r.isActive).length), sub: `of ${formatNumber(reps.length)} on the books`, num: 'text-foreground' },
+              { label: 'Settled on time', value: teamRate == null ? '—' : `${teamRate}%`, sub: teamRate == null ? 'no orders closed yet' : `of ${formatNumber(t.settled)} orders closed`, num: teamRate == null ? 'text-foreground' : teamRate >= 90 ? 'text-emerald-300' : teamRate >= 70 ? 'text-amber-300' : 'text-rose-300' },
             ].map((c) => (
               <div key={c.label} className="p-4">
                 <p className="text-xs font-medium text-muted">{c.label}</p>
@@ -152,6 +183,7 @@ export default function SalesReps() {
             {reps.map((r, i) => {
               const hue = hueFor(r.code);
               const st = standingOf(r);
+              const g = gradeOf(r);
               return (
                 <button
                   key={r.id}
@@ -159,34 +191,51 @@ export default function SalesReps() {
                   style={{ animationDelay: `${i * 35}ms` }}
                   className="animate-rise group rounded-2xl bg-surface p-4 text-left ring-1 ring-white/[0.07] transition duration-200 hover:bg-white/[0.02] hover:ring-white/20"
                 >
-                  <div className="flex items-center gap-3">
+                  {/* Who they are, where they stand, and how they grade. */}
+                  <div className="flex items-start gap-3">
                     <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${hue.av} text-sm font-bold text-slate-950`}>
                       {initials(r.user?.name)}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold text-foreground">{r.user?.name}</div>
-                      <div className="truncate text-xs text-faint">{r.code}{r.region ? ` · ${r.region}` : ''}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate font-semibold text-foreground">{r.user?.name}</span>
+                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ${st.cls}`}>
+                          {st.key === 'late'
+                            ? <AlertTriangle className="h-2.5 w-2.5" />
+                            : <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />}
+                          {st.label}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-faint">{r.code}{r.region ? ` · ${r.region}` : ''}</div>
                     </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-faint transition group-hover:translate-x-0.5" />
+                    <div className="shrink-0 text-right">
+                      {g.known ? (
+                        <div className={`text-2xl font-bold leading-none tabular-nums ${g.text}`}>
+                          {g.pct}<span className="text-sm font-semibold">%</span>
+                        </div>
+                      ) : (
+                        <div className="text-2xl font-bold leading-none text-muted">—</div>
+                      )}
+                      <div className="mt-1 whitespace-nowrap text-[11px] text-faint">{g.sub}</div>
+                    </div>
                   </div>
 
-                  <div className="mt-3 flex items-end justify-between gap-3 border-t border-white/[0.06] pt-3">
-                    <div>
-                      <div className="text-lg font-bold tabular-nums text-foreground">
-                        {formatNumber(r.heldUnits || 0)} <span className="text-sm font-normal text-faint">boxes</span>
+                  {/* What they are holding, and what they are owed — peers, not
+                      a figure and a whisper. */}
+                  <div className="mt-3 grid grid-cols-2 border-t border-white/[0.06] pt-3">
+                    <div className="min-w-0 pr-3">
+                      <div className={`truncate text-base font-bold tabular-nums ${r.heldUnits > 0 ? 'text-foreground' : 'text-muted'}`}>
+                        {formatNumber(r.heldUnits || 0)} <span className="text-xs font-normal text-faint">boxes</span>
                       </div>
-                      <div className="text-[11px] text-faint">
-                        {r.commissionOwed > 0
-                          ? `${formatCurrency(r.commissionOwed)} commission owed`
-                          : 'no commission owed'}
-                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-faint">{st.detail}</div>
                     </div>
-                    <div className="text-right">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${st.cls}`}>
-                        {st.key === 'late' && <AlertTriangle className="h-3 w-3" />}
-                        {st.label}
-                      </span>
-                      <div className="mt-0.5 text-[11px] text-faint">{st.detail}</div>
+                    <div className="min-w-0 border-l border-white/[0.06] pl-3">
+                      <div className={`truncate text-base font-bold tabular-nums ${r.commissionOwed > 0 ? 'text-amber-300' : 'text-muted'}`}>
+                        {formatCurrency(Math.max(0, Number(r.commissionOwed || 0)))}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11px] text-faint">
+                        {r.commissionOwed > 0 ? 'commission owed' : 'nothing owed'}
+                      </div>
                     </div>
                   </div>
                 </button>
