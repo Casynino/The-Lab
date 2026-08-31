@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, UserCog, AlertTriangle } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
-import { formatCurrency, formatNumber, initials, fromNow } from '@/lib/format';
+import { formatCurrency, formatNumber, fromNow } from '@/lib/format';
 import { TZ_REGIONS } from '@/lib/regions';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, Pagination,
@@ -52,12 +52,12 @@ function RepModal({ onClose }) {
 // One colour per rep, fixed by their code so a face keeps its colour wherever
 // the list moves it.
 const HUES = [
-  { av: 'from-brand-400 to-brand-600', text: 'text-brand-300' },
-  { av: 'from-violet-400 to-violet-600', text: 'text-violet-300' },
-  { av: 'from-sky-400 to-sky-600', text: 'text-sky-300' },
-  { av: 'from-amber-400 to-amber-600', text: 'text-amber-300' },
-  { av: 'from-emerald-400 to-emerald-600', text: 'text-emerald-300' },
-  { av: 'from-rose-400 to-rose-600', text: 'text-rose-300' },
+  { edge: 'bg-brand-400', text: 'text-brand-300' },
+  { edge: 'bg-violet-400', text: 'text-violet-300' },
+  { edge: 'bg-sky-400', text: 'text-sky-300' },
+  { edge: 'bg-amber-400', text: 'text-amber-300' },
+  { edge: 'bg-emerald-400', text: 'text-emerald-300' },
+  { edge: 'bg-rose-400', text: 'text-rose-300' },
 ];
 const hueFor = (code) => HUES[[...String(code || '')].reduce((n, c) => n + c.charCodeAt(0), 0) % HUES.length];
 
@@ -189,13 +189,12 @@ export default function SalesReps() {
                   key={r.id}
                   onClick={() => navigate(`/reps/${r.id}`)}
                   style={{ animationDelay: `${i * 35}ms` }}
-                  className="animate-rise group rounded-2xl bg-surface p-4 text-left ring-1 ring-white/[0.07] transition duration-200 hover:bg-white/[0.02] hover:ring-white/20"
+                  className="animate-rise group relative overflow-hidden rounded-2xl bg-surface p-4 pl-5 text-left ring-1 ring-white/[0.07] transition duration-200 hover:bg-white/[0.02] hover:ring-white/20"
                 >
+                  <span className={`absolute inset-y-0 left-0 w-1 ${hue.edge}`} aria-hidden="true" />
+
                   {/* Who they are, where they stand, and how they grade. */}
                   <div className="flex items-start gap-3">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${hue.av} text-sm font-bold text-slate-950`}>
-                      {initials(r.user?.name)}
-                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate font-semibold text-foreground">{r.user?.name}</span>
