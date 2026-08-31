@@ -6,7 +6,7 @@ import clsx from 'clsx';
 import {
   ArrowLeft, Package, Timer, Wallet, AlertTriangle, TrendingUp, History,
   ShieldCheck, ShieldAlert, Power, CheckCircle2, Clock, Undo2, ClipboardList,
-  Boxes, ChevronRight, Mail, Phone, MapPin, Calendar, Coins, PackagePlus, Pencil, MessageCircle,
+  Boxes, ChevronRight, Mail, Phone, MapPin, Calendar, Coins, PackagePlus, Pencil, MessageCircle, Gauge,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -47,6 +47,162 @@ function Money({ label, value, tone = 'default', sub }) {
       <div className={`mt-0.5 text-lg font-bold tabular-nums ${tones[tone]}`}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-faint">{sub}</div>}
     </div>
+  );
+}
+
+// The rep's on-time grade, worded and rounded exactly as the Sales Reps list
+// card words and rounds it (SalesReps.jsx gradeOf) — the same fraction from the
+// same server field, so the two screens can never print different verdicts on
+// the same rep.
+function gradeOf(d) {
+  const settled = Number(d?.settledOrders || 0);
+  const onTime = Number(d?.onTimeOrders || 0);
+  if (d?.onTimeRate == null || settled <= 0) {
+    // "none closed yet" is a lie when orders ARE closed but none can be timed.
+    return { known: false, sub: Number(d?.closed || 0) > 0 ? 'none timed yet' : 'none closed yet' };
+  }
+  // Rounding must neither flatter nor libel: a rep who was late once can never
+  // read 100, and a rep who was on time once can never read 0.
+  let pct = Math.round(Number(d.onTimeRate));
+  if (pct >= 100 && onTime < settled) pct = 99;
+  if (pct <= 0 && onTime > 0) pct = 1;
+  pct = Math.min(100, Math.max(0, pct));
+  return { known: true, pct, sub: `of ${formatNumber(settled)} closed` };
+}
+
+// ── Closing speed ────────────────────────────────────────────────────────────
+// The on-time rate says how OFTEN a rep makes the deadline. It cannot say by how
+// much, and those are different reps: one who clears at a third of his window
+// and one who lands at 97% of it both score "on time", and only one of them is
+// still fine the week the roads are bad. Every row here is one closed order
+// drawn against the window it actually had — 72h, or 168h once the rep has spent
+// his one extension — on a single shared scale, so the deadline sits at the same
+// point on every row and reads as one line down the list. Anything crossing it
+// was late, and by how far.
+//
+// The grading is the server's (`settlements.closings`), never recomputed here: a
+// row badge that disagreed with the percentage in the other column is precisely
+// the bug this section would otherwise introduce.
+function medianOf(xs) {
+  if (!xs.length) return null;
+  const a = [...xs].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+// Whole literal strings — a class assembled at runtime compiles to nothing.
+function barTone(row) {
+  if (!row.timed) return 'bg-white/20';
+  if (row.ratio > 1) return 'bg-rose-500';
+  if (row.ratio >= 0.8) return 'bg-amber-500';
+  return 'bg-emerald-500';
+}
+
+function ClosingSpeed({ closings, discipline, onOpen }) {
+  // Field not shipped by this server build: say nothing, rather than tell a rep
+  // with fifty closed orders that he has none.
+  if (!Array.isArray(closings)) return null;
+
+  const rows = closings.map((o) => {
+    const timed = o.hoursTaken != null && o.windowHours > 0;
+    return { ...o, timed, ratio: timed ? o.hoursTaken / o.windowHours : null };
+  });
+  const timed = rows.filter((r) => r.timed);
+  const untimed = rows.length - timed.length;
+
+  // One scale for every row, so a bar end means the same thing on all of them.
+  // It stretches to the worst order and stops at twice the window: without a
+  // ceiling, one order abandoned for three weeks squashes every other bar into
+  // the left edge and the section stops answering its own question.
+  const worst = timed.reduce((m, r) => Math.max(m, r.ratio), 0);
+  const axisMax = Math.min(2, Math.max(1.15, Math.ceil(worst * 4) / 4));
+  const deadlineX = 100 / axisMax;
+  // The share of the window, not raw hours: an order graded against 168h and one
+  // graded against 72h are not comparable in hours, and the hours are on the row.
+  const medRatio = medianOf(timed.map((r) => r.ratio));
+  // The rate is graded over every order the rep ever closed; this list is the
+  // most recent handful. Say so, or the reader reads the rate off six bars.
+  const deeper = discipline?.closed != null && discipline.closed > rows.length;
+
+  return (
+    <Section
+      icon={Gauge}
+      title="Closing speed"
+      action={<span className="text-xs text-faint">{rows.length ? `${formatNumber(rows.length)} most recent closures` : 'no closures yet'}</span>}
+    >
+      {!rows.length ? (
+        <p className="py-2 text-sm text-faint">
+          Nothing closed yet, so there is no closing record behind the on-time rate.
+          {discipline?.overdue > 0
+            ? ` ${formatNumber(discipline.overdue)} of the orders they are holding ${discipline.overdue === 1 ? 'is already past its deadline' : 'are already past their deadlines'}.`
+            : discipline?.open > 0 ? ' Every order they hold is still inside its window.' : ''}
+        </p>
+      ) : (
+        <>
+          {medRatio != null && timed.length >= 3 && (
+            <p className="text-xs text-muted">
+              Half of these closed inside{' '}
+              <span className="font-semibold tabular-nums text-foreground">{Math.round(medRatio * 100)}%</span>
+              {' '}of the window they had.
+            </p>
+          )}
+
+          <ul className="mt-2 divide-y divide-white/[0.06]">
+            {rows.map((r) => (
+              <li key={r.id || r.settlementNumber}>
+                <button
+                  type="button"
+                  onClick={() => onOpen?.(r.id)}
+                  className="w-full rounded-lg px-2 py-2 text-left transition hover:bg-elevated"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate text-xs font-semibold text-foreground">{r.settlementNumber}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                      {r.timed
+                        ? <>{Math.round(r.hoursTaken)}h <span className="font-normal text-faint">of {r.windowHours}</span></>
+                        : <span className="text-faint">no close time</span>}
+                    </span>
+                  </div>
+                  <div className="relative mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                    {r.timed && (
+                      <div
+                        className={`h-full rounded-full ${barTone(r)}`}
+                        style={{ width: `${Math.max(2, (Math.min(r.ratio, axisMax) / axisMax) * 100)}%` }}
+                      />
+                    )}
+                    <div className="absolute inset-y-0 w-px bg-white/40" style={{ left: `${deadlineX}%` }} />
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-faint">
+                    <span className="truncate">
+                      {r.settledAt ? `closed ${formatDate(r.settledAt)}` : 'close date not recorded'}
+                      {r.value ? ` · ${formatCurrency(r.value)} taken out` : ''}
+                    </span>
+                    {/* The extension appears nowhere else on this page. A rep who
+                        spends it every time grades clean while running 168h. */}
+                    {r.extended && <span className="shrink-0 text-amber-400">used the +96h</span>}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {timed.length > 0 && (
+            <p className="mt-2 text-[11px] text-faint">The line is each order&rsquo;s deadline — a bar past it came back late.</p>
+          )}
+          {untimed > 0 && (
+            <p className="mt-1 text-[11px] text-faint">
+              {formatNumber(untimed)} of these closed with no recorded close time, so {untimed === 1 ? 'it is' : 'they are'} not
+              timed here and {untimed === 1 ? 'is' : 'are'} left out of the on-time rate rather than counted as having met it.
+            </p>
+          )}
+          {deeper && (
+            <p className="mt-1 text-[11px] text-faint">
+              The on-time rate is graded over every order this rep has closed, not only these. Older ones are on the Settlements page.
+            </p>
+          )}
+        </>
+      )}
+    </Section>
   );
 }
 
@@ -359,8 +515,8 @@ export default function SalesRepProfile() {
               <h1 className="text-xl font-bold text-foreground">{rep.name}</h1>
               <Badge className="bg-brand-500/15 text-brand-400">{rep.code}</Badge>
               {rep.isActive
-                ? <Badge className="bg-emerald-100 text-emerald-700">Active</Badge>
-                : <Badge className="bg-rose-100 text-rose-700">Suspended</Badge>}
+                ? <Badge className="bg-emerald-500/15 text-emerald-300">Active</Badge>
+                : <Badge className="bg-rose-500/15 text-rose-300">Suspended</Badge>}
             </div>
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
               {rep.email && <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-faint" />{rep.email}</span>}
@@ -499,33 +655,59 @@ export default function SalesRepProfile() {
 
             {/* The 72-hour contract is what the whole model exists to enforce,
                 so how well a rep keeps it is the clearest read on reliability. */}
-            {data.discipline && (
-              <Section icon={Timer} title="Settlement discipline">
-                <div className="grid grid-cols-2 gap-3">
-                  <Money
-                    label="On time"
-                    value={data.discipline.onTimeRate == null ? '—' : `${data.discipline.onTimeRate}%`}
-                    tone={data.discipline.onTimeRate >= 80 ? 'emerald' : data.discipline.onTimeRate >= 50 ? 'amber' : 'rose'}
-                    sub={`${data.discipline.totalOrders} order(s)`}
-                  />
-                  <Money label="Closed" value={formatNumber(data.discipline.closed)} sub="fully settled" />
-                  <Money label="Still open" value={formatNumber(data.discipline.open)} sub="in progress" />
-                  <Money
-                    label="Overdue now"
-                    value={formatNumber(data.discipline.overdue)}
-                    tone={data.discipline.overdue > 0 ? 'rose' : 'default'}
-                    sub="past deadline"
-                  />
-                </div>
-                {data.discipline.lateOrders > 0 && (
-                  <p className="mt-3 text-xs text-muted">
-                    {formatNumber(data.discipline.lateOrders)} order(s) have missed the 72-hour deadline at some point.
-                  </p>
-                )}
-              </Section>
-            )}
+            {data.discipline && (() => {
+              // The rate and its sample size, worded exactly as the Sales Reps
+              // card words them, because they are now literally the same
+              // fraction: on-time closures over CLOSED orders. Open orders are
+              // not in it — an order still out has not succeeded yet.
+              const g = gradeOf(data.discipline);
+              return (
+                <Section icon={Timer} title="Settlement discipline">
+                  {/* "Still open" used to sit here too, but the Active
+                      settlements section already counts those — from a query
+                      bounded differently, so above 200 lifetime orders the two
+                      disagreed outright. One source, one figure. */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Money
+                      label="On time"
+                      value={g.known ? `${g.pct}%` : '—'}
+                      tone={!g.known ? 'default' : g.pct >= 90 ? 'emerald' : g.pct >= 70 ? 'amber' : 'rose'}
+                      sub={g.sub}
+                    />
+                    <Money
+                      label="Overdue now"
+                      value={formatNumber(data.discipline.overdue)}
+                      tone={data.discipline.overdue > 0 ? 'rose' : 'default'}
+                      sub="past deadline"
+                    />
+                  </div>
+                  {/* Closed orders that cannot be timed are dropped from the
+                      fraction, not counted as having met the deadline. Saying so
+                      is the difference between a rate and a guess. */}
+                  {data.discipline.ungradeable > 0 && (
+                    <p className="mt-3 text-xs text-muted">
+                      {formatNumber(data.discipline.ungradeable)} closed order
+                      {data.discipline.ungradeable === 1 ? ' has' : 's have'} no recorded close time, so
+                      {data.discipline.ungradeable === 1 ? ' it is' : ' they are'} left out of that rate rather than counted as
+                      having met the deadline.
+                    </p>
+                  )}
+                  {/* A late fine is a money fact, not the basis of the rate: the
+                      fines are written by the daily sweep, so an order that blew
+                      its deadline and closed before the sweep ran never drew one.
+                      This line counts fines; the rate reads the timestamps. */}
+                  {data.discipline.finedOrders > 0 && (
+                    <p className="mt-2 text-xs text-muted">
+                      {formatNumber(data.discipline.finedOrders)} order
+                      {data.discipline.finedOrders === 1 ? ' has' : 's have'} drawn a late fine — fewer than were actually late,
+                      because fines are only written by the daily sweep.
+                    </p>
+                  )}
+                </Section>
+              );
+            })()}
           </div>
-        </div>
+
           {/* Active settlements */}
           <Section icon={Timer} title="Active settlements" count={settlements.activeCount}>
             {settlements.active.length === 0 ? (
@@ -540,7 +722,7 @@ export default function SalesRepProfile() {
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-foreground">{s.settlementNumber}</span>
                         <div className="flex items-center gap-2">
-                          {s.pendingReturns > 0 && <Badge className="bg-amber-100 text-amber-700">Return review</Badge>}
+                          {s.pendingReturns > 0 && <Badge className="bg-amber-500/15 text-amber-300">Return review</Badge>}
                           <Badge className={meta.cls}>{meta.label || s.status}</Badge>
                         </div>
                       </div>
@@ -579,7 +761,7 @@ export default function SalesRepProfile() {
               </Table>
             )}
           </Section>
-
+        </div>
 
         {/* ── Right column ── */}
         <div className="space-y-6">
@@ -655,6 +837,11 @@ export default function SalesRepProfile() {
               </div>
             </Section>
           )}
+
+          {/* How much of the window each closure actually used. The rate above
+              says how often; this says by how much, which is the difference
+              between a rep who is safe and one who has simply been lucky. */}
+          <ClosingSpeed closings={settlements.closings} discipline={data.discipline} onOpen={setViewing} />
 
           {/* Activity */}
           <Section icon={History} title="Activity history" count={activity.length}>

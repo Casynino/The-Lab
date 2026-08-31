@@ -28,7 +28,18 @@ const hoursBetween = (a, b) => (new Date(b).getTime() - new Date(a).getTime()) /
 const isOnTime = (o) => hoursBetween(issuedAtOf(o), o.settledAt) <= windowHoursFor(o);
 // An order closed without a close time cannot be graded at all. It is dropped
 // from both sides of the fraction rather than counted as on time.
-const isGradeable = (o) => o.status === 'SETTLED' && Boolean(o.settledAt);
+// An order that cannot be timed cannot be graded. That means no close time —
+// and also a close time that lands BEFORE the issue time, which is clock skew
+// or a hand-corrected row, not a rep who beat the deadline by a negative
+// number of hours. Both are dropped from both sides of the fraction. This is
+// the ONLY definition of gradeable; anything that re-derives it can drift, and
+// once did: the closings list called a backwards row untimed while the rate
+// was quietly scoring it as met.
+const isGradeable = (o) => {
+  if (o.status !== 'SETTLED' || !o.settledAt) return false;
+  const h = hoursBetween(issuedAtOf(o), o.settledAt);
+  return Number.isFinite(h) && h >= 0;
+};
 const median = (xs) => {
   if (!xs.length) return null;
   const a = [...xs].sort((x, y) => x - y);
@@ -359,30 +370,95 @@ async function repTopProducts(salesRepId, range, limit = 6) {
 
 // How well this rep keeps the 72-hour contract — the thing the whole settlement
 // model exists to enforce, and the clearest read on whether they are reliable.
+//
+// Graded through the shared helpers at the top of this file, which is the same
+// code path as the Sales Reps list card and the same arithmetic as
+// settlement.service.analytics(), so the profile and the list cannot tell
+// different stories about the same rep. Two traps this avoids by construction:
+//   - an order still out has not succeeded yet, so it stays out of the
+//     denominator instead of being scored as a success the rep has not earned;
+//   - a late fine is not the same fact as being late. Fines are written by the
+//     daily 06:00 sweep, so an order that blew its deadline and then closed
+//     before the sweep next ran never draws one. Lateness is read off the
+//     timestamps, which are the record of what actually happened.
 async function repDiscipline(salesRepId) {
-  const [closed, open, overdue, lateOrders] = await Promise.all([
-    prisma.settlement.count({ where: { salesRepId, status: 'SETTLED' } }),
-    prisma.settlement.count({ where: { salesRepId, status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } } }),
-    prisma.settlement.count({ where: { salesRepId, status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] }, deadlineAt: { lt: new Date() } } }),
-    // An order that ever drew a daily late fine missed the deadline, whatever
-    // happened afterwards — including fines later forgiven, because forgiveness
-    // is a decision about money, not a change to what happened.
+  const live = { in: ['OPEN', 'PARTIAL', 'OVERDUE'] };
+  const [closedOrders, open, overdue, finedOrders] = await Promise.all([
+    prisma.settlement.findMany({
+      where: { salesRepId, status: 'SETTLED' },
+      select: { status: true, issuedAt: true, createdAt: true, settledAt: true, selfExtendedAt: true },
+    }),
+    prisma.settlement.count({ where: { salesRepId, status: live } }),
+    prisma.settlement.count({ where: { salesRepId, status: live, deadlineAt: { lt: new Date() } } }),
+    // Still a real fact, and still worth showing: an order that ever drew a
+    // daily late fine missed its deadline, including fines later forgiven,
+    // because forgiveness is a decision about money and not a change to what
+    // happened. It is NOT the basis of the rate — it undercounts lateness.
     prisma.settlementPenalty.findMany({
       where: { salesRepId, kind: 'LATE_FINE', settlementId: { not: null } },
       select: { settlementId: true },
       distinct: ['settlementId'],
     }),
   ]);
-  const total = closed + open;
-  const late = lateOrders.length;
+  // Closed WITHOUT a close time cannot be graded at all; isGradeable drops it
+  // from both sides of the fraction rather than flattering the rep with it.
+  const gradeable = closedOrders.filter(isGradeable);
+  const onTime = gradeable.filter(isOnTime).length;
   return {
-    totalOrders: total,
-    closed,
+    closed: closedOrders.length,
     open,
     overdue,
-    lateOrders: late,
-    onTimeRate: total > 0 ? round2(((total - late) / total) * 100) : null,
+    settledOrders: gradeable.length,
+    onTimeOrders: onTime,
+    ungradeable: closedOrders.length - gradeable.length,
+    finedOrders: finedOrders.length,
+    // null, never 0 and never 100: a rep who has closed nothing gradeable has
+    // no record yet, and reading them as perfect or hopeless would be a lie.
+    onTimeRate: gradeable.length > 0 ? round2((onTime / gradeable.length) * 100) : null,
   };
+}
+
+// The last few orders this rep actually closed, graded HERE rather than in the
+// browser. The client draws what the server decided, so a row can never
+// contradict the on-time rate standing beside it — the same helpers, the same
+// rows, one code path. Bounded and column-selected: it rides in the profile's
+// existing Promise.all rather than costing a round trip.
+async function repClosings(salesRepId, take = 6) {
+  const rows = await prisma.settlement.findMany({
+    where: { salesRepId, status: 'SETTLED' },
+    // Newest closure first, nulls last: an order closed with no close time has
+    // nothing to sort by and must not push real closures out of a bounded list.
+    orderBy: [{ settledAt: { sort: 'desc', nulls: 'last' } }, { issuedAt: 'desc' }],
+    take,
+    select: {
+      id: true,
+      settlementNumber: true,
+      status: true,
+      issuedAt: true,
+      createdAt: true,
+      settledAt: true,
+      selfExtendedAt: true,
+      assignedValue: true,
+    },
+  });
+  return rows.map((o) => {
+    const hours = isGradeable(o) ? hoursBetween(issuedAtOf(o), o.settledAt) : null;
+    // Negative or non-finite means the timestamps are wrong, not that the order
+    // was instant. Untimed is the honest answer; guessing would flatter the rep.
+    const timed = hours != null && Number.isFinite(hours) && hours >= 0;
+    return {
+      id: o.id,
+      settlementNumber: o.settlementNumber,
+      settledAt: o.settledAt,
+      value: toNumber(o.assignedValue),
+      extended: Boolean(o.selfExtendedAt),
+      // 72, or 168 once the rep has spent their one extension. Sent per order so
+      // the contract rule lives on the server only.
+      windowHours: windowHoursFor(o),
+      hoursTaken: timed ? round2(hours) : null,
+      onTime: timed ? isOnTime(o) : null,
+    };
+  });
 }
 
 // A merged, timestamped timeline from the rep's domain records — more meaningful
@@ -425,13 +501,14 @@ const getProfile = asyncHandler(async (req, res) => {
   // ?period=today|week|month, or nothing for all time.
   const periodKey = ['today', 'week', 'month'].includes(req.query.period) ? req.query.period : null;
   const range = periodKey ? eatRange(periodKey === 'today' ? 'day' : periodKey) : null;
-  const [performance, bonusProgress, activity, trend, topProducts, discipline] = await Promise.all([
+  const [performance, bonusProgress, activity, trend, topProducts, discipline, closings] = await Promise.all([
     repPerformance(rep.id, range),
     bonus.progressForRep(rep.id).catch(() => null),
     repActivity(rep.id),
     repTrend(rep.id, range).catch(() => []),
     repTopProducts(rep.id, range).catch(() => []),
     repDiscipline(rep.id).catch(() => null),
+    repClosings(rep.id).catch(() => []),
   ]);
 
   // Active (unsettled) settlements, with box breakdown + pending-return flags.
@@ -501,7 +578,7 @@ const getProfile = asyncHandler(async (req, res) => {
       adjustedAt: comm.adjustedAt,
       eligible: comm.available >= threshold,
     },
-    settlements: { active: activeSettlements, activeCount: active.length, total: settlementsRes.total },
+    settlements: { active: activeSettlements, activeCount: active.length, total: settlementsRes.total, closings },
     performance,
     period: periodKey || 'all',
     trend,

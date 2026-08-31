@@ -143,7 +143,15 @@ export default function SalesReps() {
 
   // Every closed order belongs to exactly one rep, so summing the reps gives
   // the team's true rate — no second query needed.
-  const teamRate = t.settled > 0 ? Math.round((t.onTime / t.settled) * 100) : null;
+  // The same guards gradeOf applies per rep: without them 199 on time of 200
+  // rounds to a clean 100% here while a card below it correctly reads 99%.
+  const teamRate = (() => {
+    if (t.settled <= 0) return null;
+    let pct = Math.round((t.onTime / t.settled) * 100);
+    if (pct >= 100 && t.onTime < t.settled) pct = 99;
+    if (pct <= 0 && t.onTime > 0) pct = 1;
+    return Math.min(100, Math.max(0, pct));
+  })();
 
   return (
     <div>
