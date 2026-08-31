@@ -80,76 +80,76 @@ export const SALE_STATUS_META = {
 };
 
 export const CREDIT_STATUS_META = {
-  OPEN: { label: 'Open', cls: 'bg-sky-100 text-sky-700' },
-  PARTIAL: { label: 'Partial', cls: 'bg-amber-100 text-amber-700' },
-  PAID: { label: 'Paid', cls: 'bg-emerald-100 text-emerald-700' },
-  OVERDUE: { label: 'Overdue', cls: 'bg-rose-100 text-rose-700' },
+  OPEN: { label: 'Open', cls: 'bg-sky-500/15 text-sky-300' },
+  PARTIAL: { label: 'Partial', cls: 'bg-amber-500/15 text-amber-300' },
+  PAID: { label: 'Paid', cls: 'bg-emerald-500/15 text-emerald-300' },
+  OVERDUE: { label: 'Overdue', cls: 'bg-rose-500/15 text-rose-300' },
   WRITTEN_OFF: { label: 'Written off', cls: 'bg-elevated text-muted' },
 };
 
 export const MOVEMENT_META = {
-  STOCK_IN: { label: 'Stock In', cls: 'bg-emerald-100 text-emerald-700' },
-  PURCHASE_RECEIPT: { label: 'Purchase', cls: 'bg-emerald-100 text-emerald-700' },
-  TRANSFER_IN: { label: 'Transfer In', cls: 'bg-sky-100 text-sky-700' },
-  TRANSFER_OUT: { label: 'Transfer Out', cls: 'bg-indigo-100 text-indigo-700' },
-  CASH_SALE: { label: 'Cash Sale', cls: 'bg-blue-100 text-blue-700' },
-  CREDIT_SALE: { label: 'Credit Sale', cls: 'bg-violet-100 text-violet-700' },
-  CUSTOMER_RETURN: { label: 'Customer Return', cls: 'bg-teal-100 text-teal-700' },
-  SALES_RETURN: { label: 'Sales Return', cls: 'bg-cyan-100 text-cyan-700' },
-  DAMAGE: { label: 'Damage', cls: 'bg-rose-100 text-rose-700' },
-  ADJUSTMENT: { label: 'Adjustment', cls: 'bg-amber-100 text-amber-700' },
-  CORRECTION: { label: 'Correction', cls: 'bg-orange-100 text-orange-700' },
-  STOCK_COUNT: { label: 'Stock Count', cls: 'bg-fuchsia-100 text-fuchsia-700' },
+  STOCK_IN: { label: 'Stock In', cls: 'bg-emerald-500/15 text-emerald-300' },
+  PURCHASE_RECEIPT: { label: 'Purchase', cls: 'bg-emerald-500/15 text-emerald-300' },
+  TRANSFER_IN: { label: 'Transfer In', cls: 'bg-sky-500/15 text-sky-300' },
+  TRANSFER_OUT: { label: 'Transfer Out', cls: 'bg-indigo-500/15 text-indigo-300' },
+  CASH_SALE: { label: 'Cash Sale', cls: 'bg-blue-500/15 text-blue-300' },
+  CREDIT_SALE: { label: 'Credit Sale', cls: 'bg-violet-500/15 text-violet-300' },
+  CUSTOMER_RETURN: { label: 'Customer Return', cls: 'bg-teal-500/15 text-teal-300' },
+  SALES_RETURN: { label: 'Sales Return', cls: 'bg-cyan-500/15 text-cyan-300' },
+  DAMAGE: { label: 'Damage', cls: 'bg-rose-500/15 text-rose-300' },
+  ADJUSTMENT: { label: 'Adjustment', cls: 'bg-amber-500/15 text-amber-300' },
+  CORRECTION: { label: 'Correction', cls: 'bg-orange-500/15 text-orange-300' },
+  STOCK_COUNT: { label: 'Stock Count', cls: 'bg-fuchsia-500/15 text-fuchsia-300' },
 };
 
 export const SEVERITY_META = {
-  INFO: { cls: 'bg-sky-100 text-sky-700' },
-  WARNING: { cls: 'bg-amber-100 text-amber-700' },
-  CRITICAL: { cls: 'bg-rose-100 text-rose-700' },
+  INFO: { cls: 'bg-sky-500/15 text-sky-300' },
+  WARNING: { cls: 'bg-amber-500/15 text-amber-300' },
+  CRITICAL: { cls: 'bg-rose-500/15 text-rose-300' },
 };
 
 export const PO_STATUS_META = {
   DRAFT: { label: 'Draft', cls: 'bg-elevated text-muted' },
-  ORDERED: { label: 'Ordered', cls: 'bg-sky-100 text-sky-700' },
-  IN_TRANSIT: { label: 'In transit', cls: 'bg-amber-100 text-amber-700' },
-  RECEIVED: { label: 'Received', cls: 'bg-emerald-100 text-emerald-700' },
+  ORDERED: { label: 'Ordered', cls: 'bg-sky-500/15 text-sky-300' },
+  IN_TRANSIT: { label: 'In transit', cls: 'bg-amber-500/15 text-amber-300' },
+  RECEIVED: { label: 'Received', cls: 'bg-emerald-500/15 text-emerald-300' },
   CANCELLED: { label: 'Cancelled', cls: 'bg-elevated text-muted' },
 };
 
 export const REQUEST_STATUS_META = {
-  PENDING: { label: 'Pending', cls: 'bg-amber-100 text-amber-700' },
-  APPROVED: { label: 'Approved', cls: 'bg-sky-100 text-sky-700' },
-  REJECTED: { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' },
-  FULFILLED: { label: 'Fulfilled', cls: 'bg-emerald-100 text-emerald-700' },
+  PENDING: { label: 'Pending', cls: 'bg-amber-500/15 text-amber-300' },
+  APPROVED: { label: 'Approved', cls: 'bg-sky-500/15 text-sky-300' },
+  REJECTED: { label: 'Rejected', cls: 'bg-rose-500/15 text-rose-300' },
+  FULFILLED: { label: 'Fulfilled', cls: 'bg-emerald-500/15 text-emerald-300' },
   CANCELLED: { label: 'Cancelled', cls: 'bg-elevated text-muted' },
 };
 
 export const SETTLEMENT_STATUS_META = {
-  OPEN: { label: 'Open', cls: 'bg-sky-100 text-sky-700' },
-  PARTIAL: { label: 'Partial', cls: 'bg-amber-100 text-amber-700' },
-  SETTLED: { label: 'Settled', cls: 'bg-emerald-100 text-emerald-700' },
-  OVERDUE: { label: 'Overdue', cls: 'bg-rose-100 text-rose-700' },
+  OPEN: { label: 'Open', cls: 'bg-sky-500/15 text-sky-300' },
+  PARTIAL: { label: 'Partial', cls: 'bg-amber-500/15 text-amber-300' },
+  SETTLED: { label: 'Settled', cls: 'bg-emerald-500/15 text-emerald-300' },
+  OVERDUE: { label: 'Overdue', cls: 'bg-rose-500/15 text-rose-300' },
 };
 
 export const ORDER_STATUS_META = {
   PENDING: { label: 'Pending', cls: 'bg-elevated text-muted' },
-  CONFIRMED: { label: 'Confirmed', cls: 'bg-sky-100 text-sky-700' },
-  PACKED: { label: 'Packed', cls: 'bg-indigo-100 text-indigo-700' },
-  SHIPPED: { label: 'Shipped', cls: 'bg-violet-100 text-violet-700' },
-  DELIVERED: { label: 'Delivered', cls: 'bg-emerald-100 text-emerald-700' },
+  CONFIRMED: { label: 'Confirmed', cls: 'bg-sky-500/15 text-sky-300' },
+  PACKED: { label: 'Packed', cls: 'bg-indigo-500/15 text-indigo-300' },
+  SHIPPED: { label: 'Shipped', cls: 'bg-violet-500/15 text-violet-300' },
+  DELIVERED: { label: 'Delivered', cls: 'bg-emerald-500/15 text-emerald-300' },
   CANCELLED: { label: 'Cancelled', cls: 'bg-elevated text-muted' },
 };
 
 export const ORDER_PAYMENT_META = {
-  UNPAID: { label: 'Unpaid', cls: 'bg-rose-100 text-rose-700' },
-  PARTIAL: { label: 'Partial', cls: 'bg-amber-100 text-amber-700' },
-  PAID: { label: 'Paid', cls: 'bg-emerald-100 text-emerald-700' },
+  UNPAID: { label: 'Unpaid', cls: 'bg-rose-500/15 text-rose-300' },
+  PARTIAL: { label: 'Partial', cls: 'bg-amber-500/15 text-amber-300' },
+  PAID: { label: 'Paid', cls: 'bg-emerald-500/15 text-emerald-300' },
 };
 
 export const WITHDRAWAL_STATUS_META = {
-  PENDING: { label: 'Pending', cls: 'bg-amber-100 text-amber-700' },
-  APPROVED: { label: 'Approved', cls: 'bg-sky-100 text-sky-700' },
-  REJECTED: { label: 'Rejected', cls: 'bg-rose-100 text-rose-700' },
-  PAID: { label: 'Paid', cls: 'bg-emerald-100 text-emerald-700' },
+  PENDING: { label: 'Pending', cls: 'bg-amber-500/15 text-amber-300' },
+  APPROVED: { label: 'Approved', cls: 'bg-sky-500/15 text-sky-300' },
+  REJECTED: { label: 'Rejected', cls: 'bg-rose-500/15 text-rose-300' },
+  PAID: { label: 'Paid', cls: 'bg-emerald-500/15 text-emerald-300' },
 };
 
