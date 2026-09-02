@@ -380,6 +380,15 @@ function Overview({ onNavigate, onOwnerMoney }) {
   const donut = data.expenseBreakdown.map((e) => ({ name: e.category, value: e.amount }));
   const accountsDonut = data.accounts.filter((a) => a.balance > 0).map((a) => ({ name: a.name, value: a.balance }));
   const periodLabel = PERIODS.find((p) => p[0] === period)[1].toLowerCase();
+  // Everything of his that went in, however it went: cash through an account,
+  // and commission handed to reps. Only the first can ever appear in cash flow.
+  const flowOwner = flow.owner || {};
+  const ownerPutIn = Number(flowOwner.putIn || 0) - Number(flowOwner.drawn || 0);
+  const ownerParts = (flowOwner.intoAccounts || 0) > 0 && (flowOwner.commissionFromPocket || 0) > 0
+    ? `${formatCurrency(flowOwner.intoAccounts)} through an account · ${formatCurrency(flowOwner.commissionFromPocket)} paid to reps by hand`
+    : (flowOwner.commissionFromPocket || 0) > 0
+      ? 'all of it commission you paid reps by hand'
+      : null;
   const ny = data.needsYou || {};
   const hasSeries = (cf?.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
 
@@ -673,12 +682,18 @@ function Overview({ onNavigate, onOwnerMoney }) {
         { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `the business collected ${periodLabel}`, tone: 'emerald' },
         { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `the business paid ${periodLabel}`, tone: 'rose' },
         ...((flow.ownerNet ?? 0) !== 0
-          ? [{ label: 'Your own money', value: formatCurrency(flow.ownerNet), sub: flow.ownerNet >= 0 ? 'you put in' : 'you took out', tone: 'sky' }]
+          ? [{
+              label: 'Your own money',
+              value: formatCurrency(ownerPutIn !== 0 ? ownerPutIn : flow.ownerNet),
+              sub: ownerParts || (flow.ownerNet >= 0 ? 'you put in' : 'you took out'),
+              tone: 'sky',
+            }]
           : []),
         {
           label: 'Net movement',
           value: formatCurrency(flow.netWithOwner ?? flow.net),
-          sub: (flow.netWithOwner ?? flow.net) >= 0 ? 'what the accounts gained' : 'what the accounts lost',
+          sub: `what the accounts ${(flow.netWithOwner ?? flow.net) >= 0 ? 'gained' : 'lost'}${
+            ownerParts ? ' — counting only money that moved through them' : ''}`,
           tone: (flow.netWithOwner ?? flow.net) >= 0 ? 'sky' : 'amber',
         },
       ]} />
@@ -1494,10 +1509,21 @@ function CashFlowTab() {
         <TintCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" sub="the business paid" />
         {/* The owner's own money moves balances without being trade. Shown on
             its own so the closing balance still adds up to the real cash. */}
-        {(data.ownerNet ?? 0) !== 0 && (
-          <TintCard label="Your own money" value={formatCurrency(data.ownerNet)} icon={Coins} tone="sky"
-            sub={data.ownerNet >= 0 ? 'you put in' : 'you took out'} />
-        )}
+        {((data.ownerNet ?? 0) !== 0 || (data.owner?.commissionFromPocket ?? 0) !== 0) && (() => {
+          // Same two parts as the Overview, so the two tabs cannot disagree
+          // about how much of his own money is in.
+          const o = data.owner || {};
+          const putIn = Number(o.putIn || 0) - Number(o.drawn || 0);
+          const parts = (o.intoAccounts || 0) > 0 && (o.commissionFromPocket || 0) > 0
+            ? `${formatCurrency(o.intoAccounts)} through an account · ${formatCurrency(o.commissionFromPocket)} by hand`
+            : (o.commissionFromPocket || 0) > 0
+              ? 'all of it commission paid by hand'
+              : (data.ownerNet >= 0 ? 'you put in' : 'you took out');
+          return (
+            <TintCard label="Your own money" value={formatCurrency(putIn !== 0 ? putIn : data.ownerNet)}
+              icon={Coins} tone="sky" sub={parts} />
+          );
+        })()}
         <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'brand' : 'rose'} sub="what the accounts hold" />
       </div>
 
@@ -1513,7 +1539,11 @@ function CashFlowTab() {
             {(data.ownerNet ?? 0) !== 0 && (
               <>
                 <ChevronRight className="h-4 w-4 text-faint" />
-                <span className="text-sky-300">{data.ownerNet >= 0 ? '+' : '−'} {formatCurrency(Math.abs(data.ownerNet))} yours</span>
+                {/* The card above leads with everything he has put in; this
+                    line can only use the part that moved a balance, or the
+                    closing figure stops reconciling. Named so the difference
+                    reads as deliberate rather than as a mistake. */}
+                <span className="text-sky-300">{data.ownerNet >= 0 ? '+' : '−'} {formatCurrency(Math.abs(data.ownerNet))} yours, through an account</span>
               </>
             )}
             <ChevronRight className="h-4 w-4 text-faint" />
