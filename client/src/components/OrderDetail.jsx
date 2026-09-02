@@ -723,70 +723,78 @@ export default function OrderDetailModal({ settlementId, onClose }) {
   return (
     <>
       <Modal open onClose={onClose} size="xl" title={order ? `Order ${order.settlementNumber}` : 'Order'}
-        footer={order && (
-          /* Same actions, given a hierarchy. Settling is what the screen is
-             for, so it takes the width and sits under the thumb; the rest are
-             occasional and step back to a quiet row above it. Four buttons of
-             equal weight on a phone is four decisions to make. */
-          <div className="w-full space-y-2.5">
-            {canAct && active && remaining > 0 && (
-              <Button className="w-full justify-center py-2.5" onClick={() => setSub('settle')}>
-                <Wallet className="h-4 w-4" /> Submit settlement
-              </Button>
-            )}
-            {staff && active && remaining <= 0 && (
-              <Button className="w-full justify-center py-2.5" loading={settle.isPending} onClick={() => settle.mutate()}>
-                <CheckCircle2 className="h-4 w-4" /> Close this order
-              </Button>
-            )}
-            {/* These are real actions, not afterthoughts — returning boxes and
-                asking for more time both change what a rep owes. As ghost text
-                they read as disabled. Each gets a solid tile and a colour that
-                says what it does: amber to send stock back, sky to buy time,
-                plain for stepping out. */}
-            <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={onClose}
-                className="flex items-center justify-center gap-1.5 rounded-lg bg-elevated px-2 py-2 text-xs font-semibold text-muted ring-1 ring-white/[0.08] transition active:scale-95 hover:text-foreground">
-                <X className="h-3.5 w-3.5" />
-                Close
-              </button>
+        footer={order && (() => {
+          /* Every one of these matters — settling money, sending stock back,
+             buying more time. So they are one set: same size, same shape, each
+             carrying a colour that says what it does. Settling keeps the filled
+             green because it is the one you came for, but it is no longer a
+             slab twice the height of the rest.
 
-              {canAct && active && remaining > 0 ? (
-                <button type="button" onClick={() => setSub('return')}
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-2 text-xs font-semibold text-amber-300 ring-1 ring-amber-500/25 transition active:scale-95">
-                  <Undo2 className="h-3.5 w-3.5" />
-                  Return
-                </button>
-              ) : <span />}
+             Built from whichever actions are actually available, so a rep who
+             cannot extend does not get a hole in the grid. */
+          const actions = [];
+          if (canAct && active && remaining > 0) {
+            actions.push({
+              key: 'settle', label: 'Submit settlement', Icon: Wallet, onClick: () => setSub('settle'),
+              cls: 'bg-brand-500 text-slate-950 ring-brand-400/40 font-bold',
+            });
+          }
+          if (staff && active && remaining <= 0) {
+            actions.push({
+              key: 'close-order', label: 'Close this order', Icon: CheckCircle2,
+              onClick: () => settle.mutate(), busy: settle.isPending,
+              cls: 'bg-emerald-500 text-slate-950 ring-emerald-400/40 font-bold',
+            });
+          }
+          if (canAct && active && remaining > 0) {
+            actions.push({
+              key: 'return', label: 'Return boxes', Icon: Undo2, onClick: () => setSub('return'),
+              cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+            });
+          }
+          if (canAct && active && order.canSelfExtend) {
+            actions.push({
+              key: 'more-time', label: 'More time', Icon: CalendarPlus, onClick: () => setSub('self-extend'),
+              cls: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
+            });
+          }
+          if (staff && active) {
+            actions.push({
+              key: 'extend', label: 'Extend deadline', Icon: Clock, onClick: () => setSub('extend'),
+              cls: 'bg-violet-500/15 text-violet-300 ring-violet-500/30',
+            });
+          }
+          actions.push({
+            key: 'close', label: 'Close', Icon: X, onClick: onClose,
+            cls: 'bg-elevated text-muted ring-white/[0.10]',
+          });
 
-              {canAct && active && order.canSelfExtend ? (
-                <button type="button" onClick={() => setSub('self-extend')}
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 px-2 py-2 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
-                  <CalendarPlus className="h-3.5 w-3.5" />
-                  More time
-                </button>
-              ) : staff && active ? (
-                <button type="button" onClick={() => setSub('extend')}
-                  className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 px-2 py-2 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
-                  <Clock className="h-3.5 w-3.5" />
-                  Extend
-                </button>
-              ) : <span />}
+          return (
+            <div className="w-full space-y-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                {actions.map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    onClick={a.onClick}
+                    disabled={a.busy}
+                    className={`flex h-12 items-center justify-center gap-2 rounded-xl px-3 text-[13px] font-semibold ring-1 transition active:scale-[0.97] disabled:opacity-60 ${a.cls}`}
+                  >
+                    <a.Icon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{a.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {staff && active && remaining > 0 && (
+                <p className="text-center text-xs text-faint">
+                  {formatNumber(remaining)} box{remaining === 1 ? '' : 'es'} left to account for
+                </p>
+              )}
             </div>
-
-            {staff && active && order.canSelfExtend && (
-              <Button variant="ghost" className="w-full justify-center text-xs" onClick={() => setSub('extend')}>
-                <Clock className="h-3.5 w-3.5" /> Extend the deadline for them
-              </Button>
-            )}
-
-            {staff && active && remaining > 0 && (
-              <p className="text-center text-xs text-faint">
-                {formatNumber(remaining)} box{remaining === 1 ? '' : 'es'} left to account for
-              </p>
-            )}
-          </div>
-        )}>
+          );
+        })()}
+      >
         {isLoading || !order ? <PageSpinner /> : (
           <div className="space-y-5">
             {/* Who and what state, on one line — then the two dates below it as a
