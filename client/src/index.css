@@ -96,4 +96,40 @@
   .animate-rise {
     animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
   }
+
+  /* For the moment a rep gets something right. The ring lands first, the tick
+     draws itself, then the words arrive — so it reads as a confirmation
+     happening rather than a screen that was always there. */
+  @keyframes pop-in {
+    0% { opacity: 0; transform: scale(0.6); }
+    60% { opacity: 1; transform: scale(1.06); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  .animate-pop {
+    animation: pop-in 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  }
+
+  @keyframes draw-tick {
+    to { stroke-dashoffset: 0; }
+  }
+  .animate-tick {
+    stroke-dasharray: 28;
+    stroke-dashoffset: 28;
+    animation: draw-tick 0.32s 0.24s cubic-bezier(0.6, 0, 0.4, 1) forwards;
+  }
+
+  /* A single soft pulse outward, once — not a loop. A confirmation that keeps
+     throbbing turns into an alarm. */
+  @keyframes halo {
+    0% { opacity: 0.5; transform: scale(0.8); }
+    100% { opacity: 0; transform: scale(1.9); }
+  }
+  .animate-halo {
+    animation: halo 0.9s 0.1s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise, .animate-pop, .animate-halo { animation: none; opacity: 1; transform: none; }
+    .animate-tick { animation: none; stroke-dashoffset: 0; }
+  }
 }

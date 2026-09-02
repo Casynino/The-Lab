@@ -20,13 +20,94 @@ function pendingBoxesByProduct(order) {
   return m;
 }
 
+// A small uppercase rule the eye can scan on a phone, instead of a stack of
+// identical form labels.
+function StepHead({ n, children, right }) {
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/15 text-[10px] font-bold text-brand-300">{n}</span>
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
+      {right && <span className="ml-auto text-[11px] text-faint">{right}</span>}
+    </div>
+  );
+}
+
+// Counting boxes on a phone should not open a keyboard. Two big targets and a
+// shortcut to the whole lot covers almost every settlement, and the value is
+// clamped here so the rep cannot ask for more than they hold.
+function BoxStepper({ value, max, onChange }) {
+  const n = Number(value) || 0;
+  const set = (next) => onChange(String(Math.max(0, Math.min(max, next))));
+  const btn = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-elevated text-xl font-bold text-foreground ring-1 ring-white/[0.08] transition active:scale-95 disabled:opacity-30';
+  return (
+    <div className="flex items-center gap-3">
+      <button type="button" className={btn} onClick={() => set(n - 1)} disabled={n <= 0} aria-label="One fewer box">−</button>
+      <input
+        type="number" inputMode="numeric" min="0" max={max} value={value}
+        onChange={(e) => set(Number(e.target.value))}
+        className="h-12 min-w-0 flex-1 rounded-xl bg-elevated text-center text-2xl font-bold tabular-nums text-foreground ring-1 ring-white/[0.08] focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+      />
+      <button type="button" className={btn} onClick={() => set(n + 1)} disabled={n >= max} aria-label="One more box">+</button>
+      {max > 1 && (
+        <button
+          type="button"
+          onClick={() => set(max)}
+          className="shrink-0 rounded-xl bg-brand-500/15 px-3 py-3 text-xs font-semibold text-brand-300 ring-1 ring-brand-500/25 transition active:scale-95"
+        >
+          All {formatNumber(max)}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// What a rep sees the moment it lands. A toast that vanishes in three seconds
+// is a poor answer to "did that work?" when the person has just handed over
+// real money — so the modal turns into the confirmation, says the amount back,
+// and tells them plainly what happens next and when the commission is theirs.
+function SettleDone({ amount, boxes, productName, onClose }) {
+  return (
+    <div className="flex flex-col items-center px-2 py-6 text-center">
+      <div className="relative mb-5">
+        <span className="animate-halo absolute inset-0 rounded-full bg-emerald-400/30" aria-hidden="true" />
+        <span className="animate-pop relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40">
+          <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" aria-hidden="true">
+            <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#34d399" strokeWidth="2.6"
+              strokeLinecap="round" strokeLinejoin="round" className="animate-tick" />
+          </svg>
+        </span>
+      </div>
+
+      <h3 className="animate-rise text-xl font-bold text-foreground" style={{ animationDelay: '0.28s' }}>
+        Nicely done — it is in
+      </h3>
+
+      <p className="animate-rise mt-4 text-3xl font-bold tabular-nums text-emerald-400" style={{ animationDelay: '0.36s' }}>
+        {formatCurrency(amount)}
+      </p>
+      <p className="animate-rise mt-1 text-xs text-faint" style={{ animationDelay: '0.42s' }}>
+        {formatNumber(boxes)} {Number(boxes) === 1 ? 'box' : 'boxes'}{productName ? ` · ${productName}` : ''}
+      </p>
+
+      <p className="animate-rise mt-5 max-w-xs text-[13px] leading-relaxed text-muted" style={{ animationDelay: '0.5s' }}>
+        The Lab checks the money against this. The moment it is approved the sale is recorded and
+        <b className="text-foreground"> your commission is yours</b> — you will be told either way.
+      </p>
+
+      <Button className="animate-rise mt-6 w-full" style={{ animationDelay: '0.58s' }} onClick={onClose}>
+        Done
+      </Button>
+    </div>
+  );
+}
+
 function SettleBoxesModal({ order, onClose, onDone }) {
   const pendingMap = pendingBoxesByProduct(order);
   // Locked boxes: pending settlement submissions AND pending returns.
   const availFor = (l) => Math.max(0, l.remaining - (pendingMap[l.productId] || 0) - (l.pendingReturn || 0));
   const lines = order.order.lines.filter((l) => availFor(l) > 0);
   const [productId, setProductId] = useState(lines[0]?.productId || '');
-  const [boxes, setBoxes] = useState('');
+  const [boxes, setBoxes] = useState('1');
 
   const line = lines.find((l) => l.productId === productId);
   const max = line ? availFor(line) : 0;
@@ -51,36 +132,87 @@ function SettleBoxesModal({ order, onClose, onDone }) {
   const accountId = only ? only.id : picked;
   const account = accountOptions.find((a) => a.id === accountId) || null;
 
+  // The confirmation quotes the submission back, so the numbers are captured
+  // before the form resets under it.
+  const [sent, setSent] = useState(null);
   const settle = useMutation({
     mutationFn: () => api.post(`/settlements/${order.id}/settle-boxes`, { productId, boxes: Number(boxes), accountId: accountId || undefined }),
-    onSuccess: () => { toast.success('Settlement submitted — awaiting The Lab approval'); onDone(); onClose(); },
+    onSuccess: () => {
+      setSent({ amount: value, boxes: Number(boxes), productName: line?.name });
+      onDone();
+    },
     onError: (e) => toast.error(apiError(e)),
   });
 
+  // Once it is sent the form is over: no footer buttons, nothing left to fill
+  // in, just the confirmation and a way out.
+  if (sent) {
+    return (
+      <Modal open onClose={onClose} title={`Settlement · ${order.settlementNumber}`}>
+        <SettleDone {...sent} onClose={onClose} />
+      </Modal>
+    );
+  }
+
+  const ready = productId && Number(boxes) > 0 && Number(boxes) <= max && accountId;
   return (
     <Modal open onClose={onClose} title={`Submit settlement · ${order.settlementNumber}`}
-      footer={<>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={settle.isPending} disabled={!productId || !boxes || Number(boxes) <= 0 || Number(boxes) > max || !accountId} onClick={() => settle.mutate()}>Submit for approval</Button>
-      </>}>
-      <div className="space-y-4">
-        <p className="text-sm text-muted">Submit the boxes you've sold and the cash collected. The Doctor verifies the money and approves — your sale and commission are recorded <b>only after approval</b>.</p>
+      footer={
+        /* On a phone the action wants the width and the thumb wants the right
+           hand side. Cancel stays quiet — it is the rarer choice, and it was
+           competing with the button that matters. */
+        <div className="flex w-full items-center gap-3">
+          <button type="button" onClick={onClose}
+            className="shrink-0 rounded-xl px-4 py-3 text-sm font-medium text-muted transition hover:text-foreground">
+            Cancel
+          </button>
+          <Button
+            className="flex-1 justify-center py-3 text-[15px]"
+            loading={settle.isPending}
+            disabled={!ready}
+            onClick={() => settle.mutate()}
+          >
+            {ready ? `Submit ${formatCurrency(value)}` : 'Submit for approval'}
+          </Button>
+        </div>
+      }>
+      <div className="space-y-5">
+        <p className="text-[13px] leading-snug text-muted">
+          Send the money, then submit. Your sale and commission are recorded <b className="text-foreground">once The Lab approves</b>.
+        </p>
         {lines.length === 0 ? (
           <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-faint">Every outstanding box is already submitted and awaiting approval.</p>
         ) : (<>
-          <Field label="Product">
-            <Select value={productId} onChange={(e) => { setProductId(e.target.value); setBoxes(''); setPicked(''); }}>
-              {lines.map((l) => <option key={l.productId} value={l.productId}>{l.name} — {formatNumber(availFor(l))} left</option>)}
-            </Select>
-          </Field>
-          <Field label="Boxes to settle" required hint={`Max ${formatNumber(max)} · ${formatCurrency(line?.sellingPrice || 0)} / box`}>
-            <Input type="number" min="1" max={max} value={boxes} onChange={(e) => setBoxes(e.target.value)} autoFocus />
-          </Field>
-          <SettleSummary boxes={boxes} unitPrice={line?.sellingPrice || 0} productName={line?.name} />
+          <div>
+            <StepHead n="1" right={lines.length > 1 ? `${formatNumber(lines.length)} to choose from` : undefined}>What you sold</StepHead>
+            {/* One product is not a choice, so it is stated rather than put in
+                a dropdown the rep cannot change. */}
+            {lines.length === 1 ? (
+              <div className="rounded-xl bg-elevated/60 px-4 py-3 ring-1 ring-white/[0.07]">
+                <p className="text-[15px] font-semibold leading-tight text-foreground">{line?.name}</p>
+                <p className="mt-1 text-xs text-faint">
+                  {formatNumber(max)} left to settle · {formatCurrency(line?.sellingPrice || 0)} a box
+                </p>
+              </div>
+            ) : (
+              <Select value={productId} onChange={(e) => { setProductId(e.target.value); setBoxes('1'); setPicked(''); }}>
+                {lines.map((l) => <option key={l.productId} value={l.productId}>{l.name} — {formatNumber(availFor(l))} left</option>)}
+              </Select>
+            )}
+          </div>
+
+          <div>
+            <StepHead n="2" right={`${formatNumber(max)} left · ${formatCurrency(line?.sellingPrice || 0)} a box`}>How many boxes</StepHead>
+            <BoxStepper value={boxes} max={max} onChange={setBoxes} />
+          </div>
+
+          <SettleSummary boxes={boxes} unitPrice={line?.sellingPrice || 0} productName={lines.length > 1 ? line?.name : null} />
+
           {only ? (
-            <Field label="Where to pay it">
+            <div>
+              <StepHead n="3">Where to pay it</StepHead>
               <PayTo account={only} brandName={line?.brandName} />
-            </Field>
+            </div>
           ) : accountOptions.length === 0 ? (
             /* A brand with no account of its own leaves the rep staring at an
                empty dropdown and a Submit button that never enables. Say why,
