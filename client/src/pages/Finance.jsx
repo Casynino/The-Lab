@@ -101,8 +101,13 @@ const SEG_WASH = {
 };
 function SegmentStrip({ segments, size = 'lg' }) {
   const numCls = size === 'lg' ? 'text-2xl xl:text-3xl' : 'text-xl';
+  // A lone segment must not sit in a two-column grid: on a phone that leaves
+  // half a row of empty surface below it, which reads as a figure that failed
+  // to load. Callers legitimately drop a segment (no capital to divide up, no
+  // owner money this period), so the strip handles it rather than the callers.
+  const cols = segments.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
   return (
-    <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-surface sm:flex sm:divide-x sm:divide-white/[0.06]">
+    <div className={`grid ${cols} overflow-hidden rounded-2xl border border-white/[0.08] bg-surface sm:flex sm:divide-x sm:divide-white/[0.06]`}>
       {segments.map((seg) => {
         const w = SEG_WASH[seg.tone] || SEG_WASH.slate;
         return (
@@ -354,6 +359,319 @@ function SectionHead({ label, sub }) {
   );
 }
 
+// ── What you have in this business ───────────────────────────────────────────
+// The balance sheet in plain words. Everything the business HOLDS faces
+// everything it OWES, both drawn on ONE shared scale so the two columns can be
+// compared by eye before a single number is read. Underneath sits the figure
+// the owner asked for by name — his capital — and, as a percentage rather than
+// a second big money headline, how much of it came out of his own pocket.
+//
+// Server fields, all from `overview.capital` (finance.service.js `buildCapital`):
+//   holds.cash · holds.stock.{atCost,units,atSellingPrice}
+//   owes.suppliers.{total,name} · owes.reps · owes.outside
+//   owes.owner.{intoAccounts,commissionFromPocket,drawn,total,shareOfCapitalPct}
+//   memo.customersOwe.{amount,count} · yourCapital · left
+//
+// Everything here is ALL TIME and as things stand RIGHT NOW. The period tabs
+// above the block do not touch it — a balance sheet that moved when you
+// clicked "Today" would not be a balance sheet — so the wording never says
+// "today", and the section subtitle says so out loud.
+//
+// Four rules this block keeps:
+//  * Stock is counted AT COST. Valuing the shelf at its selling price would
+//    book profit nobody has earned yet into his capital. The selling figure is
+//    a faint note on the row and never enters a total.
+//  * His own money is never merged into one figure. Cash he moved through an
+//    account and commission he handed a rep are different kinds of money —
+//    only the first can ever appear in cash flow, and saying so plainly is what
+//    stops the two readings looking like a contradiction.
+//  * Every figure is printed once. What the business owes him appears as ONE
+//    row in the owes column; the pocket panel below shows only its parts and
+//    says, in words, that they add up to that row. The holds total is dropped
+//    when nothing is owed outside, because it is then the same number as
+//    "Your capital" in the strip beneath it.
+//  * What customers owe is a MEMO, outside every total. Collecting a credit
+//    sale posts no money into an account yet, so counted in the total it would
+//    make his capital FALL each time a customer paid him. It is named, with
+//    the reason, instead of quietly folded in.
+const CAPITAL_BAR = {
+  cash: 'bg-brand-500', stock: 'bg-emerald-500', customers: 'bg-violet-500',
+  supplier: 'bg-amber-500', reps: 'bg-rose-500', owner: 'bg-sky-500',
+};
+const CAPITAL_CHIP = {
+  cash: 'bg-brand-500/15 text-brand-300', stock: 'bg-emerald-500/15 text-emerald-300',
+  customers: 'bg-violet-500/15 text-violet-300', supplier: 'bg-amber-500/15 text-amber-300',
+  reps: 'bg-rose-500/15 text-rose-300', owner: 'bg-sky-500/15 text-sky-300',
+};
+const CAPITAL_SIDE = {
+  holds: { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', num: 'text-emerald-300' },
+  owes: { ring: 'ring-amber-500/30', glow: 'from-amber-500/[0.14]', num: 'text-amber-300' },
+};
+// A real minus in front of a real amount — never an absolute value dressed up.
+const signedTsh = (n) => (n < 0 ? `− ${formatCurrency(Math.abs(n))}` : formatCurrency(n));
+
+function CapitalRow({ row, scale }) {
+  const negative = row.value < 0;
+  const pct = scale > 0 ? (Math.abs(row.value) / scale) * 100 : 0;
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <span className={`shrink-0 rounded-lg p-1.5 ${CAPITAL_CHIP[row.key]}`}><row.icon className="h-3.5 w-3.5" /></span>
+        <span className="min-w-0 flex-1 truncate text-sm text-foreground">{row.label}</span>
+        <span className={`shrink-0 text-sm font-bold tabular-nums ${negative ? 'text-rose-300' : 'text-foreground'}`}>{signedTsh(row.value)}</span>
+      </div>
+      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className={`h-full rounded-full ${negative ? 'bg-rose-500' : CAPITAL_BAR[row.key]}`}
+          style={{ width: `${Math.min(100, Math.max(pct > 0 ? 2 : 0, pct))}%` }} />
+      </div>
+      {row.note && <p className="mt-1 text-[11px] leading-relaxed text-faint">{row.note}</p>}
+    </div>
+  );
+}
+
+// One side of the sheet. Plain rows with a hairline bar — not cards, so
+// nothing is nested inside anything. The column total is printed only when it
+// says something the reader cannot already see: never with a single row (it
+// would be that row again), and never when the caller says it duplicates a
+// figure printed elsewhere on screen.
+function CapitalColumn({ side, title, blurb, empty, rows, total, scale, showTotal = true }) {
+  const t = CAPITAL_SIDE[side];
+  return (
+    <div className={`relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ${t.ring}`}>
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${t.glow} to-transparent`} aria-hidden="true" />
+      <div className="relative flex items-baseline justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{title}</p>
+        {showTotal && rows.length > 1 && <p className={`text-xl font-bold tabular-nums ${t.num}`}>{signedTsh(total)}</p>}
+      </div>
+      {/* The blurb describes the rows, so an empty column says the one thing
+          it can say instead — never both, which reads as the same fact twice. */}
+      <p className="relative mt-1 text-[11px] text-faint">{rows.length ? blurb : empty}</p>
+      {rows.length === 0 ? null : (
+        <div className="relative mt-4 space-y-3.5">
+          {rows.map((r) => <CapitalRow key={r.key} row={r} scale={scale} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// One line of his own money. The gutter sign is what makes the addition
+// visible: nothing, +, then − if he has ever taken any back out.
+function PocketLine({ sign, icon: Icon, chip, label, note, value, tone }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="mt-1.5 w-3 shrink-0 text-center text-sm font-bold text-faint">{sign}</span>
+      <span className={`mt-0.5 shrink-0 rounded-lg p-1.5 ${chip}`}><Icon className="h-3.5 w-3.5" /></span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-foreground">{label}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-faint">{note}</p>
+      </div>
+      <p className={`shrink-0 text-sm font-bold tabular-nums ${tone}`}>{value}</p>
+    </div>
+  );
+}
+
+function CapitalSection({ capital, onOwnerMoney }) {
+  const holds = capital.holds;
+  const owes = capital.owes;
+  const owner = owes.owner;
+  const supplier = owes.suppliers.name || 'your supplier';
+  const units = holds.stock.units || 0;
+  const receivable = capital.memo?.customersOwe || { amount: 0, count: 0 };
+  const debtors = receivable.count || 0;
+  // He has drawn more than he has put in, so the business does not owe him
+  // anything — the line still belongs on the sheet, but under its own words.
+  const ownerBehind = owner.total < 0;
+
+  const holdRows = [
+    {
+      key: 'cash', icon: Wallet, label: 'Cash in your accounts', value: holds.cash,
+      note: holds.cash < 0 ? 'an account is below zero — money left that never arrived' : 'every wallet added together',
+    },
+    {
+      key: 'stock', icon: Boxes, label: 'Stock you are holding', value: holds.stock.atCost,
+      note: `${formatNumber(units)} box${units === 1 ? '' : 'es'} in the warehouse and with your reps, at what they cost you${
+        holds.stock.atSellingPrice > holds.stock.atCost ? ` — they would sell for about ${formatCurrency(holds.stock.atSellingPrice)}` : ''}`,
+    },
+  ].filter((r) => r.value !== 0);
+
+  const oweRows = [
+    {
+      key: 'supplier', icon: Factory, label: `Owed to ${supplier}`, value: owes.suppliers.total,
+      note: 'the whole invoice — you pay it box by box, as the stock sells',
+    },
+    { key: 'reps', icon: Coins, label: 'Owed to your reps', value: owes.reps, note: 'commission they can still withdraw' },
+    {
+      key: 'owner', icon: PiggyBank,
+      label: ownerBehind ? 'You have taken out more than you put in' : 'Owed back to you',
+      value: owner.total,
+      note: ownerBehind
+        ? 'the business owes you nothing right now — you are ahead of your own money by this much'
+        : 'your own money — not a bill, it waits until the business can afford it',
+    },
+  ].filter((r) => r.value !== 0);
+
+  // One scale across both columns, so a longer right-hand column really does
+  // mean he owes more than he holds.
+  const scale = Math.max(
+    Math.abs(holds.total), Math.abs(owes.total), Math.abs(capital.yourCapital),
+    ...holdRows.map((r) => Math.abs(r.value)), ...oweRows.map((r) => Math.abs(r.value)), 1,
+  );
+
+  const pct = Math.round(owner.shareOfCapitalPct || 0);
+  // A share only means something when he is actually owed money. With nothing
+  // to divide, or with him already ahead of his own money, the second segment
+  // is dropped — SegmentStrip lays a lone segment out full width rather than
+  // leaving half a row empty on a phone.
+  const showShare = capital.yourCapital > 0 && owner.total > 0;
+  const nothingYet = holdRows.length === 0 && oweRows.length === 0;
+
+  const pocketLines = [
+    owner.intoAccounts !== 0 && {
+      key: 'account', sign: '', icon: Landmark, chip: 'bg-sky-500/15 text-sky-300',
+      label: 'Money you put into a business account',
+      note: 'it went through an account, so your cash flow can see it — the strip below shows the same figure for the period you have selected',
+      value: signedTsh(owner.intoAccounts), tone: 'text-sky-300',
+    },
+    owner.commissionFromPocket !== 0 && {
+      key: 'pocket', sign: '+', icon: Coins, chip: 'bg-violet-500/15 text-violet-300',
+      label: 'Commission you paid reps, hand to hand',
+      note: 'it never touched an account, so cash flow cannot show it — but it is still your money in the business',
+      value: signedTsh(owner.commissionFromPocket), tone: 'text-violet-300',
+    },
+    owner.drawn > 0 && {
+      key: 'drawn', sign: '−', icon: ArrowUpRight, chip: 'bg-white/10 text-muted',
+      label: 'Money you have taken back out', note: 'profit already returned to you',
+      value: signedTsh(owner.drawn), tone: 'text-muted',
+    },
+  ].filter(Boolean);
+
+  return (
+    <div className="space-y-4">
+      <SectionHead
+        label="What you have in this business"
+        sub="Everything it holds, everything it owes — and what is left over as yours. As things stand right now, whichever period is selected above."
+      />
+
+      {nothingYet ? (
+        <div className="rounded-2xl border border-white/[0.08] bg-surface px-5 py-4 text-sm text-muted">
+          Nothing to weigh yet — no cash, no stock and nothing owed. This fills in the moment you take stock in or put
+          money into an account.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {/* The holds total is the SAME number as "Your capital" below
+                whenever nothing is owed outside, and printing one figure twice
+                in one block reads as two facts. */}
+            <CapitalColumn side="holds" title="What the business holds" rows={holdRows} total={holds.total} scale={scale}
+              showTotal={owes.outside !== 0}
+              blurb="Everything it holds right now, counted at what it cost."
+              empty="No cash and no stock yet." />
+            <CapitalColumn side="owes" title="What the business owes" rows={oweRows} total={owes.total} scale={scale}
+              blurb={`${supplier} for the stock, your reps for their commission, and you for your own money.`}
+              empty="Nothing is owed to anyone right now — not to your supplier, not to your reps, not to you." />
+          </div>
+
+          <SegmentStrip segments={[
+            {
+              label: 'Your capital',
+              value: signedTsh(capital.yourCapital),
+              sub: `everything you hold once ${supplier} and your reps are paid`,
+              tone: capital.yourCapital >= 0 ? 'emerald' : 'rose',
+            },
+            ...(showShare
+              ? [{
+                  label: 'Came out of your own pocket',
+                  value: `${pct}%`,
+                  // Never `capital.left` when it would simply be `yourCapital`
+                  // again — with nothing of his own in it the two are the same
+                  // number, and it would print twice in one strip.
+                  sub: owner.total === 0
+                    ? 'you have not had to put any of your own money in'
+                    : capital.left >= 0
+                      ? `the other ${Math.max(0, 100 - pct)}% — ${formatCurrency(capital.left)} — the business built itself`
+                      : `the business is still ${formatCurrency(Math.abs(capital.left))} behind the money you have put in`,
+                  tone: 'sky',
+                }]
+              : []),
+          ]} />
+
+          <p className="text-xs leading-relaxed text-muted">
+            {capital.yourCapital <= 0
+              ? <>{supplier} and your reps are owed more than everything the business is holding right now.</>
+              : holds.stock.atCost > holds.cash
+                ? <>Most of your capital is not cash — it is the stock on your shelf, and it turns back into cash as the boxes sell.</>
+                : <>Your capital is mostly cash in hand rather than stock on the shelf.</>}
+            {' '}Stock is counted at what it cost you, so nothing here is profit you have not made yet.
+          </p>
+
+          {/* ── A real asset, deliberately outside every total above ──
+                 Collecting a credit sale does not yet post money into an
+                 account, so a collected shilling would leave this line and
+                 arrive nowhere: counted in the total, every payment the owner
+                 received would SHRINK his capital. It is named here instead,
+                 with the reason, rather than quietly folded in. */}
+          {receivable.amount > 0 && (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-2xl border border-dashed border-white/[0.14] bg-surface px-5 py-4">
+              <span className="rounded-lg bg-violet-500/15 p-1.5 text-violet-300"><Receipt className="h-3.5 w-3.5" /></span>
+              <span className="text-sm text-foreground">Customers still owe you</span>
+              <span className="text-sm font-bold tabular-nums text-violet-300">{formatCurrency(receivable.amount)}</span>
+              <span className="basis-full text-[11px] leading-relaxed text-faint">
+                {formatNumber(debtors)} credit sale{debtors === 1 ? '' : 's'} still to collect. It is kept OUT of the figures
+                above on purpose: paying off a credit sale does not yet record money arriving in an account, so counting it
+                here would make your capital fall every time a customer paid you.
+              </span>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* His pocket, kept visibly apart from the money the business itself holds. */}
+      <div className="relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ring-sky-500/25">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-sky-500/[0.12] to-transparent" aria-hidden="true" />
+        <div className="relative flex flex-wrap items-start gap-3">
+          <span className="shrink-0 rounded-lg bg-sky-500/15 p-1.5 text-sky-300"><PiggyBank className="h-3.5 w-3.5" /></span>
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">The money that came out of your pocket</p>
+            <p className="mt-0.5 text-[11px] text-faint">Everything you have put in, all time — it went in two different ways, and only one of them can ever show in cash flow.</p>
+          </div>
+          <div className="ml-auto flex gap-2">
+            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')}>
+              <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
+            </Button>
+            <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
+              <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
+            </Button>
+          </div>
+        </div>
+
+        {pocketLines.length === 0 ? (
+          <p className="relative mt-4 text-sm text-muted">You have not put any of your own money in yet.</p>
+        ) : (
+          <>
+            <div className="relative mt-4 space-y-3">
+              {pocketLines.map((l) => (
+                <PocketLine key={l.key} sign={l.sign} icon={l.icon} chip={l.chip}
+                  label={l.label} note={l.note} value={l.value} tone={l.tone} />
+              ))}
+            </div>
+            <p className="relative mt-3 border-t border-white/[0.08] pt-3 text-xs leading-relaxed text-muted">
+              {pocketLines.length > 1
+                ? <>Together these are what the business owes you — the blue line in the column above.</>
+                : <>That is what the business owes you — the blue line in the column above.</>}
+              {owner.commissionFromPocket > 0 && (
+                <> The commission never passed through an account, which is why your cash flow shows the smaller
+                  {' '}figure. It is still your money.</>
+              )}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
   const { data, isLoading } = useQuery({
@@ -412,12 +730,18 @@ function Overview({ onNavigate, onOwnerMoney }) {
              a thick split bar, and the three figures that made the money —
              cost of the boxes, what the reps took, what is left. The plain
              stacked rows this replaced read as a document, not a dashboard. */}
+      {/* ── What you have in this business ─────────────────────────────────
+             The whole picture first — everything it holds against everything
+             it owes, his capital, and the two kinds of his own money. The cash
+             section below is the drill-down into one line of it. */}
+      {data.capital && <CapitalSection capital={data.capital} onOwnerMoney={onOwnerMoney} />}
+
       {data.cashSplit && (() => {
         const supplierLabel = data.cashSplit.supplierLabel || 'your suppliers';
         const totalOwed = round2ui((data.cashSplit.setAside || 0) + (data.cashSplit.dueLater || 0));
         return (
         <div className="space-y-3">
-          <SectionHead label="Whose money is this?" sub={`Every wallet you hold — what ${supplierLabel} is owed, and what is yours.`} />
+          <SectionHead label="Whose money is this?" sub={`Which wallet holds the cash, and how much of it is already spoken for.`} />
 
           {/* The headline split, as one joined strip. */}
           {/* "Yours, free to use" only appears when it differs from the cash
@@ -427,43 +751,33 @@ function Overview({ onNavigate, onOwnerMoney }) {
               owner ask whether he owes anything at all. He does — the whole
               bill — but none of it is due until the stock sells. The labels
               now say TOTAL and DUE TODAY, which cannot be read as each other. */}
-          <SegmentStrip segments={[
-            {
-              label: 'Cash you hold',
-              value: formatCurrency(data.cashSplit.totalCash),
-              sub: data.cashSplit.setAside > 0 ? 'across every account' : 'across every account — all of it yours',
-              tone: 'brand',
-            },
-            {
-              label: `Total you owe ${supplierLabel}`,
-              value: formatCurrency(totalOwed),
-              sub: totalOwed > 0 ? 'the whole bill, paid as stock sells' : 'nothing outstanding',
-              tone: totalOwed > 0 ? 'amber' : 'slate',
-            },
-            // DUE TODAY only when something is. At zero it was a card reading
-            // "TSh 0 — you are 381,000 ahead" directly above a sentence saying
-            // none of it is due and you are 381,000 ahead: the same fact, and
-            // the same figure, twice. The sentence says it better, in words.
-            ...(data.cashSplit.setAside > 0
-              ? [
-                  {
-                    label: 'Of that, due today',
-                    value: formatCurrency(data.cashSplit.setAside),
-                    sub: 'cost of boxes already sold',
-                    tone: 'rose',
-                  },
-                  { label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' },
-                ]
-              : []),
-          ]} />
+          {/* Only what the capital block above cannot say: of the cash in
+              hand, how much is already the supplier's. The cash total and the
+              whole invoice live up there, once each. */}
+          {data.cashSplit.setAside > 0 && (
+            <SegmentStrip segments={[
+              {
+                label: 'Of your cash, due today',
+                value: formatCurrency(data.cashSplit.setAside),
+                sub: 'the cost of boxes already sold',
+                tone: 'rose',
+              },
+              {
+                label: 'Yours, free to use',
+                value: formatCurrency(data.cashSplit.yours),
+                sub: 'after the supplier is covered',
+                tone: 'emerald',
+              },
+            ]} />
+          )}
 
           <p className="text-xs leading-relaxed text-muted">
             {totalOwed > 0 ? (
               <>
-                You owe {supplierLabel} <b className="text-foreground">{formatCurrency(totalOwed)}</b> in total — but none of it is due yet.
-                {' '}{supplierLabel} is paid the cost of the boxes as they sell, and the boxes you have already sold are covered
-                {data.cashSplit.paidAhead > 0 && <> ({formatCurrency(data.cashSplit.paidAhead)} more than covered)</>}.
-                {' '}The rest falls due as the stock on your shelf sells.
+                {supplierLabel} is paid the cost of the boxes as they sell, so the whole bill above is a debt but none of it
+                {' '}is due yet. The boxes you have already sold are covered
+                {data.cashSplit.paidAhead > 0 && <> — {formatCurrency(data.cashSplit.paidAhead)} more than covered</>};
+                {' '}the rest falls due as the stock on your shelf sells.
               </>
             ) : (
               <>You owe {supplierLabel} nothing — every box you have taken is paid for.</>
@@ -594,46 +908,57 @@ function Overview({ onNavigate, onOwnerMoney }) {
               );
             })}
           </div>
-
-          {/* What the owner has laid out for the business — chiefly rep
-              commissions, which he pays himself. It is money the business
-              owes him back, not a balance it is holding. */}
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-sky-500/20 bg-sky-500/[0.04] px-5 py-3.5">
-            <span className="rounded-lg bg-sky-500/15 p-1.5 text-sky-300"><PiggyBank className="h-3.5 w-3.5" /></span>
-            <span className="text-xs text-muted">
-              You have put <b className="tabular-nums text-sky-300">{formatCurrency(data.ownerMoney?.owedBackToOwner || 0)}</b> of your own money into the business
-              {(data.ownerMoney?.paidRepsFromPocket || 0) > 0 && <> — <b className="tabular-nums text-foreground">{formatCurrency(data.ownerMoney.paidRepsFromPocket)}</b> of it paying reps</>}.
-              {' '}It is owed back to you when the business can afford it.
-            </span>
-            <div className="ml-auto flex gap-2">
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')}>
-                <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
-              </Button>
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
-                <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
-              </Button>
-            </div>
-          </div>
         </div>
         );
       })()}
 
-      {/* ── One joined strip: the flow of the period ── */}
-      {/* The net here must be the net that reaches the accounts, or it sits
-          near "cash you hold" disagreeing with it by the owner's own money. */}
-      <SegmentStrip segments={[
-        { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `the business collected ${periodLabel}`, tone: 'emerald' },
-        { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `the business paid ${periodLabel}`, tone: 'rose' },
-        ...((flow.ownerNet ?? 0) !== 0
-          ? [{ label: 'Your own money', value: formatCurrency(flow.ownerNet), sub: flow.ownerNet >= 0 ? 'you put in' : 'you took out', tone: 'sky' }]
-          : []),
-        {
-          label: 'Net movement',
-          value: formatCurrency(flow.netWithOwner ?? flow.net),
-          sub: (flow.netWithOwner ?? flow.net) >= 0 ? 'what the accounts gained' : 'what the accounts lost',
-          tone: (flow.netWithOwner ?? flow.net) >= 0 ? 'sky' : 'amber',
-        },
-      ]} />
+      {/* ── One joined strip: the flow of the period ──
+             The net must be the net that reaches the accounts, or it sits near
+             "cash you hold" disagreeing with it by the owner's own money. But
+             this strip can only ever see money that moved through an account,
+             so the owner segments say so.
+
+             "Into your accounts" is the SAME arithmetic as the capital block
+             above and the Cash Flow tab — `owner.intoAccounts`, contributions
+             only. What he has taken back out is its own segment, never netted
+             into the one beside it: netting made one label print two different
+             numbers on two screens. In + Out + Into − Taken out = Net movement,
+             which the reader can now verify across the strip by eye. */}
+      <div className="space-y-2">
+        <SegmentStrip segments={[
+          { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `the business collected ${periodLabel}`, tone: 'emerald' },
+          { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `the business paid ${periodLabel}`, tone: 'rose' },
+          ...((flow.owner?.intoAccounts ?? 0) !== 0
+            ? [{
+                label: 'Into your accounts',
+                value: formatCurrency(flow.owner.intoAccounts),
+                sub: `your own money, through an account · ${periodLabel}`,
+                tone: 'sky',
+              }]
+            : []),
+          ...((flow.owner?.drawn ?? 0) > 0
+            ? [{
+                label: 'Taken back out',
+                value: formatCurrency(flow.owner.drawn),
+                sub: `profit you drew ${periodLabel}`,
+                tone: 'amber',
+              }]
+            : []),
+          {
+            label: 'Net movement',
+            value: formatCurrency(flow.netWithOwner ?? flow.net),
+            sub: (flow.netWithOwner ?? flow.net) >= 0 ? 'what the accounts gained' : 'what the accounts lost',
+            tone: (flow.netWithOwner ?? flow.net) >= 0 ? 'sky' : 'amber',
+          },
+        ]} />
+        {(flow.owner?.commissionFromPocket || 0) > 0 && (
+          <p className="text-xs leading-relaxed text-muted">
+            You also paid reps <b className="tabular-nums text-violet-300">{formatCurrency(flow.owner.commissionFromPocket)}</b> out of your own
+            pocket {period === 'all' ? 'in total' : periodLabel}. That cash never went through an account, so it moves nothing
+            here — it is counted in your capital above, and only there.
+          </p>
+        )}
+      </div>
 
       {/* ── The business, by brand ──────────────────────────────────────────
              The owner said plainly he did not understand "TSh 2,112,500".
@@ -872,11 +1197,16 @@ function AccountStatementModal({ account, onClose }) {
   const rows = data?.data || [];
   const sums = data?.meta?.sums;
 
-  // Balance after each row, newest first.
+  // Balance after each row, newest first. An off-account row — commission the
+  // owner handed a rep from his own cash — is LISTED but never undone here: it
+  // moved no balance, so walking it back would make every earlier row disagree
+  // with the account by the amount of the payout.
   let running = account.balance;
   const withBalance = rows.map((t) => {
     const after = running;
-    running = Math.round((after - (t.direction === 'IN' ? Number(t.amount) : -Number(t.amount))) * 100) / 100;
+    if (!t.offAccount) {
+      running = Math.round((after - (t.direction === 'IN' ? Number(t.amount) : -Number(t.amount))) * 100) / 100;
+    }
     return { ...t, balanceAfter: after };
   });
 
@@ -920,16 +1250,22 @@ function AccountStatementModal({ account, onClose }) {
                 {withBalance.map((t) => (
                   <TR key={t.id}>
                     <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
-                    <TD><Badge className={DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
+                    <TD>
+                    <Badge className={t.offAccount ? 'bg-violet-500/15 text-violet-300' : DIR_BADGE[t.direction]}>
+                      {TXN_TYPE_LABEL[t.type] || t.type}
+                    </Badge>
+                  </TD>
                     <TD className="max-w-[260px] truncate text-foreground">
                       {t.description || t.category || t.reference || '—'}
                       {t.brandName && <span className="ml-1.5 text-[11px] text-faint">{t.brandName}</span>}
                     </TD>
                     <TD className="text-right font-semibold tabular-nums text-emerald-400">
-                      {t.direction === 'IN' ? formatCurrency(t.amount) : ''}
+                      {!t.offAccount && t.direction === 'IN' ? formatCurrency(t.amount) : ''}
                     </TD>
                     <TD className="text-right font-semibold tabular-nums text-rose-400">
-                      {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
+                      {t.offAccount
+                        ? <span className="text-violet-300" title="Your own cash, hand to hand — this account was not touched">({formatCurrency(t.amount)})</span>
+                        : t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
                     </TD>
                     <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>
                   </TR>
@@ -1102,6 +1438,12 @@ function Ledger({ expensesOnly }) {
           <SegmentStrip segments={[
             { label: 'Money in', value: formatCurrency(sums.in), sub: 'settlements collected and money moved in', tone: 'emerald' },
             { label: 'Money out', value: formatCurrency(sums.out), sub: 'costs paid and money moved out', tone: 'rose' },
+            // Rep commission is listed below but never added in: it is the
+            // owner's cash, hand to hand, and it moved no account balance. On
+            // its own segment the strip still agrees with the accounts.
+            ...((sums.fromPocket || 0) > 0
+              ? [{ label: 'From your pocket', value: formatCurrency(sums.fromPocket), sub: 'commission you paid reps yourself', tone: 'violet' }]
+              : []),
             { label: 'Net', value: formatCurrency(sums.net), sub: `${formatNumber(count)} movement${count === 1 ? '' : 's'}`, tone: sums.net >= 0 ? 'sky' : 'amber' },
           ]} />
         )
@@ -1149,11 +1491,20 @@ function Ledger({ expensesOnly }) {
               {rows.map((t) => (
                 <TR key={t.id}>
                   <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
-                  <TD><Badge className={DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
+                  {/* A violet badge, not the red OUT badge: the row is the
+                      record of cash the OWNER handed a rep, not the business
+                      spending. It is listed, and it is in no total above. */}
+                  <TD>
+                    <Badge className={t.offAccount ? 'bg-violet-500/15 text-violet-300' : DIR_BADGE[t.direction]}>
+                      {TXN_TYPE_LABEL[t.type] || t.type}
+                    </Badge>
+                  </TD>
                   <TD>{t.brandName ? <Badge className="bg-brand-500/15 text-brand-400">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
                   <TD className="max-w-[220px] truncate text-foreground">{t.category || t.description || t.reference || '—'}</TD>
-                  <TD className="text-muted">{t.account?.name}</TD>
-                  <TD className={`text-right font-semibold tabular-nums ${t.direction === 'IN' ? 'text-emerald-500' : 'text-rose-500'}`}>{t.direction === 'IN' ? '+' : '−'}{formatCurrency(t.amount)}</TD>
+                  <TD className="text-muted">{t.offAccount ? <span className="text-faint" title="Your own cash, hand to hand — no account was involved">your pocket</span> : t.account?.name}</TD>
+                  <TD className={`text-right font-semibold tabular-nums ${t.offAccount ? 'text-violet-300' : t.direction === 'IN' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {t.offAccount ? '' : t.direction === 'IN' ? '+' : '−'}{formatCurrency(t.amount)}
+                  </TD>
                   <TD>
                     <div className="flex items-center justify-end gap-2">
                       <button title="Correct this transaction" onClick={() => setEditing(t)} className="text-faint hover:text-brand-400"><Pencil className="h-4 w-4" /></button>
@@ -1430,6 +1781,20 @@ function CashFlowTab() {
   const inTotal = inRows.reduce((a, r) => a + r.value, 0);
   const outTotal = outRows.reduce((a, r) => a + r.value, 0);
   const hasSeries = (data.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
+  // The SAME two figures the Overview prints, from the same server shape —
+  // `owner.intoAccounts` and `owner.drawn`, never a net of the two. One label,
+  // one arithmetic, on every screen that shows it.
+  const owner = data.owner || {};
+  const ownerCards = [
+    (owner.intoAccounts ?? 0) !== 0 && {
+      label: 'Into your accounts', value: owner.intoAccounts, tone: 'sky',
+      sub: 'your own money, through an account · this period',
+    },
+    (owner.drawn ?? 0) > 0 && {
+      label: 'Taken back out', value: owner.drawn, tone: 'amber',
+      sub: 'profit you drew · this period',
+    },
+  ].filter(Boolean);
 
   return (
     <div className="space-y-5">
@@ -1440,16 +1805,17 @@ function CashFlowTab() {
         ))}
       </div>
 
-      <div className={`grid grid-cols-2 gap-3 ${(data.ownerNet ?? 0) !== 0 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
+      <div className={`grid grid-cols-2 gap-3 ${ownerCards.length ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
         <TintCard label="Opening balance" value={formatCurrency(data.openingBalance)} icon={PiggyBank} tone="slate" sub="at period start" />
         <TintCard label="Money in" value={formatCurrency(data.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub="the business collected" />
         <TintCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" sub="the business paid" />
         {/* The owner's own money moves balances without being trade. Shown on
-            its own so the closing balance still adds up to the real cash. */}
-        {(data.ownerNet ?? 0) !== 0 && (
-          <TintCard label="Your own money" value={formatCurrency(data.ownerNet)} icon={Coins} tone="sky"
-            sub={data.ownerNet >= 0 ? 'you put in' : 'you took out'} />
-        )}
+            its own so the closing balance still adds up to the real cash — and
+            money in is never netted against money taken back out, because the
+            Overview prints the same two figures under the same two labels. */}
+        {ownerCards.map((c) => (
+          <TintCard key={c.label} label={c.label} value={formatCurrency(c.value)} icon={Coins} tone={c.tone} sub={c.sub} />
+        ))}
         <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'brand' : 'rose'} sub="what the accounts hold" />
       </div>
 
@@ -1462,15 +1828,28 @@ function CashFlowTab() {
             <span className="text-emerald-500">+ {formatCurrency(data.moneyIn)}</span>
             <ChevronRight className="h-4 w-4 text-faint" />
             <span className="text-rose-400">− {formatCurrency(data.moneyOut)}</span>
-            {(data.ownerNet ?? 0) !== 0 && (
+            {(owner.intoAccounts ?? 0) !== 0 && (
               <>
                 <ChevronRight className="h-4 w-4 text-faint" />
-                <span className="text-sky-300">{data.ownerNet >= 0 ? '+' : '−'} {formatCurrency(Math.abs(data.ownerNet))} yours</span>
+                <span className="text-sky-300">{owner.intoAccounts >= 0 ? '+' : '−'} {formatCurrency(Math.abs(owner.intoAccounts))} yours, through an account</span>
+              </>
+            )}
+            {(owner.drawn ?? 0) > 0 && (
+              <>
+                <ChevronRight className="h-4 w-4 text-faint" />
+                <span className="text-amber-300">− {formatCurrency(owner.drawn)} you took out</span>
               </>
             )}
             <ChevronRight className="h-4 w-4 text-faint" />
             <span className="text-muted">Closing <b className={data.closingBalance >= 0 ? 'text-brand-400' : 'text-rose-500'}>{formatCurrency(data.closingBalance)}</b></span>
           </div>
+          {(owner.commissionFromPocket || 0) > 0 && (
+            <p className="mt-3 border-t border-white/[0.06] pt-3 text-center text-xs leading-relaxed text-muted">
+              You also paid reps <b className="tabular-nums text-violet-300">{formatCurrency(owner.commissionFromPocket)}</b> out of your own
+              pocket. That cash never passed through an account, so it moves no balance here and counts as nothing the business
+              spent — the Overview counts it once, in your capital.
+            </p>
+          )}
         </CardBody>
       </Card>
 

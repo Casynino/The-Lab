@@ -18,9 +18,37 @@ const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2 } = require('../utils/money');
 const { dayjs, resolveRange } = require('../utils/dates');
 
-// Movements that are NOT the business trading: internal transfers, and the
-// owner's own money going in or coming out. Excluded from money in/out.
-const NON_TRADE_TYPES = ['TRANSFER', 'OWNER_CONTRIBUTION', 'OWNER_DRAWING'];
+// ── Money that never touches a business account ─────────────────────────────
+// The owner pays every rep in physical cash out of his own hand: "no business
+// account is involved at any point". The ledger still carries a
+// COMMISSION_PAYMENT row for each payout, because the record of what each rep
+// was paid is exactly what he asked to keep — but that row is a RECORD, not a
+// movement. It may not change an account balance and it may not count as the
+// business spending money.
+//
+// Both legs of such a payout are off-account:
+//   • the COMMISSION_PAYMENT OUT — the cash he handed the rep;
+//   • an OWNER_CONTRIBUTION IN carrying refType 'CommissionWithdrawal' — a
+//     legacy row posted to "fund" a payout. Nothing creates these any more,
+//     but migration 20260830000007 stamped surviving ones and production may
+//     still hold them. Excluding the OUT while leaving the IN would inflate
+//     cash by exactly the amount this fix removes.
+//
+// Written as positive equalities only. A compound `NOT`/`{ not: … }` over a
+// nullable column (refType is NULL on every ordinary contribution) leans on
+// Prisma's NULL handling, and this figure is too important to rest on that.
+const OFF_ACCOUNT_WHERE = {
+  OR: [
+    { type: 'COMMISSION_PAYMENT' },
+    { AND: [{ type: 'OWNER_CONTRIBUTION' }, { refType: 'CommissionWithdrawal' }] },
+  ],
+};
+
+// Movements that are NOT the business trading: internal transfers, the owner's
+// own money going in or coming out, and rep commission paid from his pocket.
+// Excluded from money in/out. COMMISSION_PAYMENT belongs here for the same
+// reason OWNER_DRAWING does — it is the owner's money, not the business's.
+const NON_TRADE_TYPES = ['TRANSFER', 'OWNER_CONTRIBUTION', 'OWNER_DRAWING', 'COMMISSION_PAYMENT'];
 
 // Generic payment accounts — WHERE money sits. The brand a transaction belongs
 // to is a separate dimension (FinanceTransaction.brandId), so any brand can be
@@ -67,20 +95,33 @@ async function accountBalances() {
   // Balances = opening + post-epoch movements. Pre-epoch ledger rows are audit
   // history only; the accounts' openingBalance IS the truth at the epoch.
   const epoch = await reports.financeEpoch();
-  const [accounts, grouped] = await Promise.all([
+  const window = epoch ? { occurredAt: { gte: epoch } } : {};
+  const [accounts, grouped, offAccount] = await Promise.all([
     prisma.businessAccount.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
     prisma.financeTransaction.groupBy({
       by: ['accountId', 'direction'],
-      where: epoch ? { occurredAt: { gte: epoch } } : {},
+      where: window,
+      _sum: { amount: true },
+    }),
+    // The same rows again, narrowed to the ones that never touched an account
+    // (see OFF_ACCOUNT_WHERE). Taken back off below, so a rep payout leaves the
+    // record in the ledger and the balance where it was. Subtracting a second
+    // whole population beats filtering the first: no NULL semantics involved.
+    prisma.financeTransaction.groupBy({
+      by: ['accountId', 'direction'],
+      where: { ...window, ...OFF_ACCOUNT_WHERE },
       _sum: { amount: true },
     }),
   ]);
   const inMap = new Map();
   const outMap = new Map();
   grouped.forEach((g) => (g.direction === 'IN' ? inMap : outMap).set(g.accountId, toNumber(g._sum.amount)));
+  const offInMap = new Map();
+  const offOutMap = new Map();
+  offAccount.forEach((g) => (g.direction === 'IN' ? offInMap : offOutMap).set(g.accountId, toNumber(g._sum.amount)));
   return accounts.map((a) => {
-    const moneyIn = round2(inMap.get(a.id) || 0);
-    const moneyOut = round2(outMap.get(a.id) || 0);
+    const moneyIn = round2((inMap.get(a.id) || 0) - (offInMap.get(a.id) || 0));
+    const moneyOut = round2((outMap.get(a.id) || 0) - (offOutMap.get(a.id) || 0));
     const opening = toNumber(a.openingBalance);
     return {
       id: a.id, name: a.name, type: a.type, currency: a.currency, isDefault: a.isDefault, notes: a.notes,
@@ -365,9 +406,12 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
     })) || (await defaultAccount());
     if (!acc) return null;
     // The owner pays reps directly from his pocket — no business account is
-    // involved on either side. Posting a contribution INTO an account put
-    // money somewhere it never reached. What he lays out is an investment the
-    // business owes him, derived from these payouts, not held as a balance.
+    // involved on either side. This row exists ONLY as the record of what the
+    // rep was paid (rule: "i only want the record of rep to be there"). It
+    // carries an accountId because the column is required, but no aggregate
+    // treats it as account movement: OFF_ACCOUNT_WHERE takes it back out of
+    // every balance, and NON_TRADE_TYPES keeps it out of money in/out. What he
+    // lays out is an investment the business owes him — see ownerFigures().
     return await recordTransaction(
       {
         accountId: acc.id,
@@ -416,7 +460,10 @@ async function listTransactions(filters, pagination) {
     if (filters.minAmount != null) where.amount.gte = filters.minAmount;
     if (filters.maxAmount != null) where.amount.lte = filters.maxAmount;
   }
-  const [items, total, brands, inAgg, outAgg, byCatRows] = await Promise.all([
+  // Composed with AND, never by spreading: `where` may already carry an `OR`
+  // from the free-text search, and a second `OR` key would silently replace it.
+  const and = (...parts) => ({ AND: [where, ...parts] });
+  const [items, total, brands, inAgg, outAgg, offInAgg, offOutAgg, byCatRows] = await Promise.all([
     prisma.financeTransaction.findMany({
       where,
       include: { account: { select: { name: true, type: true } } },
@@ -428,22 +475,37 @@ async function listTransactions(filters, pagination) {
     prisma.brand.findMany({ select: { id: true, name: true } }),
     // Totals of the WHOLE filtered view, not the visible page — a strip that
     // changes as you page through it is worse than none.
-    prisma.financeTransaction.aggregate({ where: { ...where, direction: 'IN' }, _sum: { amount: true } }),
-    prisma.financeTransaction.aggregate({ where: { ...where, direction: 'OUT' }, _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: and({ direction: 'IN' }), _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: and({ direction: 'OUT' }), _sum: { amount: true } }),
+    // Rows that moved no account balance — rep commission out of the owner's
+    // pocket. The ROWS stay in the list (they are the record of what each rep
+    // was paid); they come off the money in/out strip so the Ledger agrees with
+    // the account balances and with every other screen.
+    prisma.financeTransaction.aggregate({ where: and(OFF_ACCOUNT_WHERE, { direction: 'IN' }), _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: and(OFF_ACCOUNT_WHERE, { direction: 'OUT' }), _sum: { amount: true } }),
     prisma.financeTransaction.groupBy({
       by: ['category'],
-      where: { ...where, direction: 'OUT' },
+      // Spending by category, so rep commission has no place in it.
+      where: and({ direction: 'OUT' }, { type: { notIn: ['COMMISSION_PAYMENT'] } }),
       _sum: { amount: true },
       _count: true,
     }),
   ]);
   const brandName = new Map(brands.map((b) => [b.id, b.name]));
-  const sumIn = round2(toNumber(inAgg._sum.amount));
-  const sumOut = round2(toNumber(outAgg._sum.amount));
+  const fromPocket = round2(toNumber(offOutAgg._sum.amount));
+  const sumIn = round2(toNumber(inAgg._sum.amount) - toNumber(offInAgg._sum.amount));
+  const sumOut = round2(toNumber(outAgg._sum.amount) - fromPocket);
   return {
-    items: items.map((t) => ({ ...t, brandName: t.brandId ? brandName.get(t.brandId) || null : null })),
+    items: items.map((t) => ({
+      ...t,
+      brandName: t.brandId ? brandName.get(t.brandId) || null : null,
+      // Flagged for the row itself, so a reader can see why a listed amount is
+      // absent from the totals above it.
+      offAccount: isOffAccount(t),
+    })),
     total,
-    sums: { in: sumIn, out: sumOut, net: round2(sumIn - sumOut) },
+    // `fromPocket` is reported beside in/out, never inside them.
+    sums: { in: sumIn, out: sumOut, net: round2(sumIn - sumOut), fromPocket },
     byCategory: byCatRows
       .map((c) => ({ category: c.category || 'Uncategorised', amount: round2(toNumber(c._sum.amount)), count: c._count }))
       .sort((a, b) => b.amount - a.amount),
@@ -582,6 +644,58 @@ function epochWhere(range, epoch) {
   return { occurredAt: { ...(start ? { gte: start } : {}), ...(end ? { lte: end } : {}) } };
 }
 
+// ── The owner's own money, in ONE shape ───────────────────────────────────────
+// Every screen that says "your money" reads from here. Three places used to
+// compute it three ways — the balance sheet unclamped and unfiltered, the
+// period strip epoch-clamped, the cash-flow tab clamped AND active-only — so
+// one drawing made the same label print two different numbers. The population
+// is fixed here and cannot be varied by a caller:
+//
+//   • ACTIVE accounts only, from the finance epoch on — exactly the population
+//     `accountBalances()` builds the cash figure from, so his money and the
+//     cash it moved are always measured against the same books.
+//   • The only thing a caller may narrow is the TIME WINDOW, and any screen
+//     that narrows it has to say so in its label.
+//
+// The four parts, and what each one is allowed to be used for:
+//   intoAccounts         cash he moved INTO a business account. Contributions
+//                        only — drawings are their own line, never netted in.
+//   commissionFromPocket cash he handed reps directly. Never touched an
+//                        account, so it can never appear in cash flow.
+//   drawn                profit he has taken back out.
+//   accountMovement      intoAccounts − drawn. The ONLY part that moved a
+//                        balance, so this is what a closing balance uses.
+//   total                putIn − drawn. What the business owes him.
+async function ownerFigures({ start = null, end = null } = {}) {
+  const epoch = await reports.financeEpoch();
+  const from = start && epoch ? (start > epoch ? start : epoch) : (start || epoch);
+  const scope = { account: { is: { isActive: true } } };
+  if (from || end) scope.occurredAt = { ...(from ? { gte: from } : {}), ...(end ? { lte: end } : {}) };
+  const [contribAgg, fundingAgg, drawAgg, pocketAgg] = await Promise.all([
+    prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'IN', type: 'OWNER_CONTRIBUTION' }, _sum: { amount: true } }),
+    // Legacy rows that "funded" a payout — the same shilling recorded on both
+    // sides. Queried as its own whole population and subtracted, never as a
+    // `refType: { not: … }` filter: refType is NULL on every ordinary
+    // contribution and that filter's NULL handling is a Prisma detail.
+    prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'IN', type: 'OWNER_CONTRIBUTION', refType: 'CommissionWithdrawal' }, _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'OUT', type: 'OWNER_DRAWING' }, _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'OUT', type: 'COMMISSION_PAYMENT' }, _sum: { amount: true } }),
+  ]);
+  const repFundingExcluded = round2(toNumber(fundingAgg._sum.amount));
+  const intoAccounts = round2(round2(toNumber(contribAgg._sum.amount)) - repFundingExcluded);
+  const commissionFromPocket = round2(toNumber(pocketAgg._sum.amount));
+  const drawn = round2(toNumber(drawAgg._sum.amount));
+  return {
+    intoAccounts,
+    commissionFromPocket,
+    drawn,
+    repFundingExcluded,
+    putIn: round2(intoAccounts + commissionFromPocket),
+    accountMovement: round2(intoAccounts - drawn),
+    total: round2(intoAccounts + commissionFromPocket - drawn),
+  };
+}
+
 async function flowBetween(start, end) {
   // Internal account-to-account transfers move balances but are not business
   // cash flow (they would inflate money-in AND money-out by the same amount).
@@ -621,21 +735,20 @@ async function cashflow(opts = {}) {
   const inPeriod = await flowBetween(start || null, range ? range.end : null);
 
   // The owner's own money is not trading, so it is kept out of money in/out —
-  // but it DOES move account balances, and leaving it out of the statement
-  // made the closing balance disagree with the cash actually held (2,439,500
-  // against a real 2,915,500). It gets its own line instead: excluded from
-  // trade, included in the balance, so the statement reconciles.
-  const ownerWhere = { type: { in: ['OWNER_CONTRIBUTION', 'OWNER_DRAWING'] }, account: { is: { isActive: true } } };
-  if (start || (range && range.end)) {
-    ownerWhere.occurredAt = { ...(start ? { gte: start } : {}), ...(range ? { lte: range.end } : {}) };
-  }
-  const [ownerInAgg, ownerOutAgg] = await Promise.all([
-    prisma.financeTransaction.aggregate({ where: { ...ownerWhere, direction: 'IN' }, _sum: { amount: true } }),
-    prisma.financeTransaction.aggregate({ where: { ...ownerWhere, direction: 'OUT' }, _sum: { amount: true } }),
-  ]);
-  const ownerIn = round2(toNumber(ownerInAgg._sum.amount));
-  const ownerOut = round2(toNumber(ownerOutAgg._sum.amount));
-  const ownerNet = round2(ownerIn - ownerOut);
+  // but the part of it that went through an account DOES move balances, and
+  // leaving it out of the statement made the closing balance disagree with the
+  // cash actually held (2,439,500 against a real 2,915,500). It gets its own
+  // lines instead: excluded from trade, included in the balance.
+  //
+  // One shape, shared with the Overview and the balance sheet, so no two
+  // screens can print different numbers under the same label.
+  const owner = await ownerFigures({ start: start || null, end: range ? range.end : null });
+  const ownerIn = owner.intoAccounts;
+  const ownerOut = owner.drawn;
+  // ACCOUNT MOVEMENT ONLY, and the closing balance is built from it. Commission
+  // he pays reps from his own hand never lands in an account, so it is not
+  // here; `owner.commissionFromPocket` carries that half.
+  const ownerNet = owner.accountMovement;
 
   // Where the money actually came from and went, by kind — settlements vs
   // counter sales vs other income; stock vs commissions vs expenses. The four
@@ -673,9 +786,15 @@ async function cashflow(opts = {}) {
     range: range ? { start: range.start, end: range.end } : null,
     openingBalance,
     ...inPeriod,
+    // Contributions in, drawings out, and the net of the two — the part of his
+    // money that actually moved a balance in this window.
     ownerIn,
     ownerOut,
     ownerNet,
+    // The whole of his money in this window, in the shared shape: intoAccounts,
+    // commissionFromPocket, drawn, putIn, accountMovement, total. Nothing on
+    // screen may label account movement as everything he has put in.
+    owner,
     // Opening + trade + the owner's own money = what the accounts actually
     // hold. Every part is on screen, so the reader can add it up themselves.
     closingBalance: round2(openingBalance + inPeriod.net + ownerNet),
@@ -701,6 +820,9 @@ async function report(opts = {}) {
   const [expenses, supplierPayments, commissionPaid, otherIncome] = await Promise.all([
     sumOf({ direction: 'OUT', type: 'EXPENSE' }),
     sumOf({ direction: 'OUT', type: 'STOCK_PURCHASE' }),
+    // A RECORD of what reps were paid, reported on its own line. It is the
+    // owner's money, not the business's, so it is absent from cash flow above
+    // and from netProfit below — by design, not by omission.
     sumOf({ direction: 'OUT', type: 'COMMISSION_PAYMENT' }),
     sumOf({ direction: 'IN', type: 'INCOME' }),
   ]);
@@ -936,6 +1058,188 @@ async function paySupplier({ purchaseOrderId, accountId, amount, notes, occurred
   );
 }
 
+// --- Capital ---------------------------------------------------------------
+// "What do I have in this business?" — the balance sheet, in the owner's own
+// terms. Deliberately PURE: every input is a figure another screen already
+// shows, so this can never invent a number, can be tested without a database,
+// and cannot drift from the pages it summarises.
+//
+// WHAT IT HOLDS   cash in the accounts + stock at what it cost.
+// WHAT IT OWES    the supplier's outstanding bill + commission reps can still
+//                 withdraw + what the business owes the OWNER.
+// YOUR CAPITAL    holds − the outside debts (supplier + reps). Sole owner, so
+//                 everything left after outsiders are squared is his.
+// WHAT IS LEFT    holds − everything owed, the owner included: the worth the
+//                 business has built beyond the money he put in.
+//
+// Everything here is ALL TIME and as-things-stand-right-now. It never narrows
+// to the selected period: a balance sheet that moved when you clicked "Today"
+// would not be a balance sheet.
+//
+// Three double-counts are avoided here on purpose, and each has a test:
+//  1. Stock a rep is holding is counted ONCE, as stock at cost. The
+//     settlement "outstanding" for those same boxes is their SELLING value —
+//     adding it would count the same boxes twice and book unearned profit as
+//     an asset. It is reported as `stock.withReps` instead, at cost.
+//  2. Commission the owner paid reps is counted ONCE, as money the business
+//     owes him. It moves no account balance and is no business spending, so
+//     it appears in `owner.commissionFromPocket` and nowhere else.
+//  3. An OWNER_CONTRIBUTION posted to fund a rep payout is left out of
+//     `intoAccounts` (and out of the cash balance), because the payout it
+//     funded is already counted in `commissionFromPocket`.
+//
+// WHAT CUSTOMERS OWE IS A MEMO, NOT AN ASSET — deliberately.
+// Credit collections do not post a finance transaction (credit.service.js
+// reduces CreditSale.balance and stops there), so a collected shilling leaves
+// the receivable and never arrives in cash. Counted inside the total, that
+// makes collecting 50,000 SHRINK the owner's capital by 50,000 — a total that
+// moves the wrong way on good news is worse than a total that is missing a
+// real asset. So it is carried as `memo.customersOwe`: named, on screen, and
+// outside every total until the credit ledger posts cash. Production carries
+// roughly 7.18M of it across 73 overdue accounts, so this is not a rounding
+// choice — it is the difference between a figure the owner can trust and one
+// that argues with him.
+// What one supplier is owed RIGHT NOW: the cost of what has already SOLD, less
+// what he has been paid — never more than he is actually invoiced for.
+// Over-payment shows as zero due, not as a negative.
+function supplierDueNow({ outstanding, costOfSold, alreadyPaid }) {
+  const bill = round2(toNumber(outstanding));
+  const earned = round2(toNumber(costOfSold) - toNumber(alreadyPaid));
+  return round2(Math.min(bill, Math.max(0, earned)));
+}
+
+// The same split across every supplier, driven by ONE map of cost-of-sales.
+// The balance sheet must hand it the ALL-TIME map: fed a period's cost of sales
+// it answers "what would be due if the business had only ever traded today",
+// which is not a thing anybody wants to know and moved when a tab was clicked.
+function supplierDueNowAcross(supplierByKey, costByKey) {
+  let total = 0;
+  for (const [key, sup] of supplierByKey) {
+    total += supplierDueNow({
+      outstanding: sup.outstanding,
+      costOfSold: (costByKey.get(key) || {}).cost || 0,
+      alreadyPaid: sup.paid,
+    });
+  }
+  return round2(total);
+}
+
+// True for a ledger row that is a RECORD rather than a movement of money: the
+// owner's cash, hand to hand, with no business account on either side. Used to
+// flag the row for the Ledger; the aggregates use OFF_ACCOUNT_WHERE, which is
+// the same rule expressed as a query.
+function isOffAccount(txn = {}) {
+  return txn.type === 'COMMISSION_PAYMENT'
+    || (txn.type === 'OWNER_CONTRIBUTION' && txn.refType === 'CommissionWithdrawal');
+}
+
+function buildCapital(input = {}) {
+  const v = (x) => round2(toNumber(x));
+  const int = (x) => Math.round(toNumber(x));
+
+  // ── What the business holds ────────────────────────────────────────────
+  const cash = v(input.cash);
+  const stock = {
+    // At cost — what the boxes were actually paid for. The basis every other
+    // asset here uses, and the only one that is not a guess about the future.
+    atCost: v(input.stockAtCost),
+    inWarehouse: v(input.stockInWarehouse),
+    withReps: v(input.stockWithReps),
+    // What the same boxes would bring in at today's selling price. Context,
+    // never an asset: nothing has been sold yet.
+    atSellingPrice: v(input.stockAtSellingPrice),
+    units: int(input.stockUnits),
+  };
+  const holdsTotal = round2(cash + stock.atCost);
+
+  // ── Owed to the business, but not yet countable ────────────────────────
+  const customersOwe = {
+    // The UNPAID balance of live credit sales, never the invoice total. A
+    // written-off debt is zeroed at source, so it drops out on its own.
+    amount: v(input.customersOwe),
+    count: int(input.customersOweCount),
+  };
+
+  // ── What it owes ───────────────────────────────────────────────────────
+  const supplierTotal = v(input.supplierOutstanding);
+  // Bonge is paid box by box: only the cost of what has SOLD is due today.
+  // The rest of the invoice is still a debt — it simply falls due later.
+  const dueNow = round2(Math.min(supplierTotal, Math.max(0, v(input.supplierDueNow))));
+  const suppliers = {
+    total: supplierTotal,
+    dueNow,
+    dueLater: round2(supplierTotal - dueNow),
+    name: input.supplierLabel || null,
+  };
+  const reps = v(input.repCommissionPayable);
+
+  // His own money, straight from `ownerFigures()` — one shape for every screen.
+  const src = input.owner || {};
+  const owner = {
+    // (i) Cash he moved INTO a business account. Contributions only; what he
+    //     has taken back out is its own line and is never netted in here.
+    intoAccounts: v(src.intoAccounts),
+    // (ii) Commission he handed reps himself. It never touched an account,
+    //      which is exactly why it is a separate line and not merged above.
+    commissionFromPocket: v(src.commissionFromPocket),
+    drawn: v(src.drawn),
+    // Diagnostic only — legacy rows deliberately left out of (i) AND out of the
+    // cash balance. Not for display; it exists so the exclusion is testable.
+    repFundingExcluded: v(src.repFundingExcluded),
+  };
+  owner.putIn = round2(owner.intoAccounts + owner.commissionFromPocket);
+  owner.total = round2(owner.putIn - owner.drawn);
+
+  const outside = round2(suppliers.total + reps);
+  const owesTotal = round2(outside + owner.total);
+
+  // ── What is left ───────────────────────────────────────────────────────
+  const yourCapital = round2(holdsTotal - outside);
+  const left = round2(holdsTotal - owesTotal); // === yourCapital − owner.total
+  // A share only means something when he is actually owed money. When he has
+  // drawn more than he put in, `owner.total` is negative and a percentage of
+  // his capital "out of his own pocket" would be a negative share of a thing
+  // he is not owed — nonsense on screen, so it is zero and the page says why.
+  owner.shareOfCapitalPct = yourCapital > 0 && owner.total > 0
+    ? round2((owner.total / yourCapital) * 100)
+    : 0;
+
+  return {
+    holds: {
+      cash,
+      stock,
+      total: holdsTotal,
+      lines: [
+        { key: 'cash', label: 'Cash in your accounts', amount: cash, hint: 'across every account' },
+        { key: 'stock', label: 'Stock you are holding', amount: stock.atCost, hint: 'at what it cost you' },
+      ],
+    },
+    owes: {
+      suppliers,
+      reps,
+      owner,
+      outside,
+      total: owesTotal,
+      lines: [
+        { key: 'suppliers', label: `Owed to ${suppliers.name || 'your supplier'}`, amount: suppliers.total, hint: 'stock they financed' },
+        { key: 'reps', label: 'Owed to your reps', amount: reps, hint: 'commission they can withdraw' },
+        { key: 'owner', label: 'Owed back to you', amount: owner.total, hint: 'money out of your own pocket' },
+      ],
+    },
+    // Real, owed to the business, and deliberately outside every total above —
+    // see the note on this function. The page must say so in words.
+    memo: {
+      customersOwe,
+      note: 'Collecting a credit sale does not yet post money into an account, so this is kept out of the totals — counting it would make your capital fall every time a customer pays you.',
+    },
+    // What the business is worth to YOU once the outside debts are settled.
+    yourCapital,
+    // What it has built on top of your own money. Negative means the business
+    // is still behind what you have put in.
+    left,
+  };
+}
+
 // --- Finance dashboard -----------------------------------------------------
 
 async function overview(period = 'month') {
@@ -964,22 +1268,26 @@ async function overview(period = 'month') {
     ]);
     const moneyIn = round2(toNumber(inAgg._sum.amount));
     const moneyOut = round2(toNumber(outAgg._sum.amount));
-    // The owner's own money is not trade, but it does move the balances. The
-    // overview showed only the trading net (2,439,500) directly under the cash
-    // held (2,915,500) — the same 476,000 gap that made the cash-flow
-    // statement disagree with reality. Carried here so the two reconcile.
-    const [oIn, oOut] = await Promise.all([
-      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'IN', type: 'OWNER_CONTRIBUTION' }, _sum: { amount: true } }),
-      prisma.financeTransaction.aggregate({ where: { ...base, direction: 'OUT', type: 'OWNER_DRAWING' }, _sum: { amount: true } }),
-    ]);
-    const ownerNet = round2(toNumber(oIn._sum.amount) - toNumber(oOut._sum.amount));
+    // The owner's own money is not trade, but the part that went through an
+    // account does move the balances. The overview showed only the trading net
+    // (2,439,500) directly under the cash held (2,915,500) — the same 476,000
+    // gap that made the cash-flow statement disagree with reality. Carried
+    // here, in the SHARED shape, so the strip, the cash-flow tab and the
+    // balance sheet cannot print three different numbers for the same thing.
+    const owner = await ownerFigures({ start: r ? r.start : null, end: r ? r.end : null });
     flow[p] = {
       moneyIn,
       moneyOut,
-      ownerNet,
+      // Account movement only (contributions − drawings). `owner` below is the
+      // honest whole; anything labelled "your own money" comes from there.
+      ownerNet: owner.accountMovement,
       net: round2(moneyIn - moneyOut),
       // What the accounts actually moved by: trade plus the owner's money.
-      netWithOwner: round2(moneyIn - moneyOut + ownerNet),
+      netWithOwner: round2(moneyIn - moneyOut + owner.accountMovement),
+      // His money in this window, in parts that add up: cash he moved into an
+      // account, cash he handed reps, and anything he has taken back out.
+      // Never one merged figure — they are different kinds of money.
+      owner,
     };
   }
 
@@ -1008,7 +1316,9 @@ async function overview(period = 'month') {
     prisma.brand.findMany({ where: { isActive: true }, select: { id: true, name: true } }),
     prisma.financeTransaction.groupBy({
       by: ['brandId', 'direction', 'type'],
-      where: epochWhere(range, epoch),
+      // A brand's money in/out has to reconcile to the wallets it moved. Rep
+      // commission moved none of them, so it cannot appear in either figure.
+      where: { ...epochWhere(range, epoch), type: { notIn: ['COMMISSION_PAYMENT'] } },
       _sum: { amount: true },
     }),
     prisma.product.findMany({ select: { id: true, brandId: true } }),
@@ -1085,23 +1395,28 @@ async function overview(period = 'month') {
     prisma.commissionWithdrawal.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
     prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
   ]);
+  // Approved but not yet paid. The rep's available balance already treats it
+  // as gone, and no payout has been recorded against it, so without this line
+  // the money the owner has promised a rep sits in no figure at all.
+  const approvedWdAgg = await prisma.commissionWithdrawal.aggregate({
+    where: { status: 'APPROVED' },
+    _sum: { amount: true },
+  });
+  const approvedUnpaidCommission = round2(toNumber(approvedWdAgg._sum.amount));
   // ── Where the profit actually IS ────────────────────────────────────────
   // The owner has taken nothing out: every shilling earned went back into
   // stock or to the supplier. "Profit" and "cash" are therefore different
   // numbers, and the page has to say so plainly rather than let the reader
   // assume the profit is sitting in an account.
-  const [contribAgg, drawAgg] = await Promise.all([
-    // Contributions made to fund a rep payout are excluded here: every payout
-    // is already counted as his money below, and counting both sides made the
-    // business look like it owed him the same cash twice.
-    prisma.financeTransaction.aggregate({
-      where: { type: 'OWNER_CONTRIBUTION', refType: { not: 'CommissionWithdrawal' } },
-      _sum: { amount: true },
-    }),
-    prisma.financeTransaction.aggregate({ where: { type: 'OWNER_DRAWING' }, _sum: { amount: true } }),
-  ]);
-  const ownerIn = round2(toNumber(contribAgg._sum.amount));
-  const ownerOut = round2(toNumber(drawAgg._sum.amount));
+  //
+  // ALL TIME and epoch-clamped, from the same shared shape the period strip and
+  // the cash-flow tab use. The balance sheet is "as things stand right now", so
+  // it never narrows the window — but it must not use a different POPULATION
+  // either, which is what let the same label print 476,000 in one place and
+  // 426,000 in another.
+  const ownerAllTime = await ownerFigures();
+  const ownerIn = ownerAllTime.intoAccounts;
+  const ownerOut = ownerAllTime.drawn;
   // All-time earnings, so "taken out" and "still working" compare like with
   // like no matter which period is on screen.
   const lifetime = period === 'all' ? prof : await reports.profitOverview('all');
@@ -1111,25 +1426,20 @@ async function overview(period = 'month') {
   });
   const earnedAllTime = round2(lifetime.totals.profit - round2(toNumber(lifetimeExpAgg._sum.amount)));
   // Every shilling of rep commission comes out of the owner's pocket, so the
-  // payouts themselves are the record of what he has put in. The business
-  // owes him this back when it can afford to.
-  const repPayAgg = await prisma.financeTransaction.aggregate({
-    where: { type: 'COMMISSION_PAYMENT', direction: 'OUT' },
-    _sum: { amount: true },
+  // payouts themselves are the record of what he has put in. The business owes
+  // him this back when it can afford to. Counted HERE and nowhere else: no
+  // balance moves by it and no money-out aggregate includes it.
+  const paidRepsFromPocket = ownerAllTime.commissionFromPocket;
+
+  // What customers still owe on credit sales. The UNPAID balance only, and
+  // `balance > 0` is the same test the Debts page uses, so the two screens can
+  // never quote different debt. A written-off debt is zeroed at source.
+  const debtAgg = await prisma.creditSale.aggregate({
+    where: { balance: { gt: 0 } },
+    _sum: { balance: true },
+    _count: true,
   });
-  const paidRepsFromPocket = round2(toNumber(repPayAgg._sum.amount));
-  const ownerMoney = {
-    contributed: ownerIn,
-    paidRepsFromPocket,
-    // What the business owes him: money he has laid out, less anything taken.
-    owedBackToOwner: round2(Math.max(0, ownerIn + paidRepsFromPocket - ownerOut)),
-    drawn: ownerOut,
-    earnedAllTime,
-    stillWorking: round2(earnedAllTime - ownerOut),
-    // Where it is working, at cost — the stock the profit turned into.
-    stockAtCost: inv.totals.totalValue,
-    owedToSuppliers: 0, // filled in below, once supplier debt is known
-  };
+  const customersOwe = round2(toNumber(debtAgg._sum.balance));
 
   const needsYou = {
     supplierOutstanding: round2(Math.max(0, toNumber(poAgg._sum.totalCost) - toNumber(poPayAgg._sum.amount))),
@@ -1137,8 +1447,6 @@ async function overview(period = 'month') {
     pendingApprovals,
     negativeAccounts: accounts.filter((a) => a.balance < 0).map((a) => a.name),
   };
-
-  ownerMoney.owedToSuppliers = needsYou.supplierOutstanding;
 
   // ── Whose money is this? ────────────────────────────────────────────────
   // The supplier is paid the COST of the boxes that actually SOLD — not the
@@ -1195,10 +1503,10 @@ async function overview(period = 'month') {
     const stockSpend = stockSpendByBrand.get(row.key) || 0;
     const costStillToCover = round2(Math.max(0, costOfSold - stockSpend));
     const costPart = round2(Math.min(row.cash, costStillToCover));
-    // What the supplier is owed RIGHT NOW: the cost of what has sold, less
-    // what he has already been paid — and never more than he is actually
-    // invoiced for. Overpayment shows as zero due, not as a negative.
-    const dueNow = round2(Math.min(sup.outstanding, Math.max(0, costOfSold - sup.paid)));
+    // What the supplier is owed RIGHT NOW, for THIS period's sales — the card
+    // this bucket feeds sits beside period-scoped figures. The balance sheet
+    // uses the same arithmetic over all-time sales; see supplierDueNowAllTime.
+    const dueNow = supplierDueNow({ outstanding: sup.outstanding, costOfSold, alreadyPaid: sup.paid });
     // His remaining invoice, which falls due only as shelf stock sells.
     const dueLater = round2(Math.max(0, sup.outstanding - dueNow));
     const paidAhead = round2(Math.max(0, sup.paid - costOfSold));
@@ -1265,28 +1573,72 @@ async function overview(period = 'month') {
   // ── What the business is really worth ───────────────────────────────────
   // Profit alone answers "did the boxes sell for more than they cost". It
   // does NOT answer "am I ahead", because the stock those boxes came from is
-  // partly the supplier's money. Everything the business OWNS against
+  // partly the supplier's money. Everything the business HOLDS against
   // everything it OWES — the only figure that settles the question.
-  const settlement = require('./settlement.service');
-  const stl = await settlement.summary().catch(() => null);
-  const repsOwe = round2(stl?.outstandingValue || 0);
-  const owns = [
-    { label: 'Cash in accounts', amount: cashPosition },
-    { label: 'Stock on the shelf', amount: round2(inv.totals.totalValue), hint: 'at what it cost you' },
-    { label: 'Owed to you by reps', amount: repsOwe, hint: 'boxes issued, not yet settled' },
-  ];
-  const owes = [
-    { label: 'Owed to suppliers', amount: needsYou.supplierOutstanding, hint: 'stock they financed' },
-    { label: 'Owed to reps', amount: round2(commSummary.totals.available + commSummary.totals.requested), hint: 'commission they can withdraw' },
-  ];
-  const totalOwns = round2(owns.reduce((a, x) => a + x.amount, 0));
-  const totalOwes = round2(owes.reduce((a, x) => a + x.amount, 0));
+  // What the reps can actually take: withdrawable balances, requests in
+  // flight, and requests already approved but not yet handed over. One figure,
+  // used by the capital block and by `outstandingCommission` alike, so no two
+  // places on the page can quote a different debt to the same reps.
+  const repCommissionPayable = round2(
+    commSummary.totals.available + commSummary.totals.requested + approvedUnpaidCommission,
+  );
+  // ── The supplier split, ALL TIME ────────────────────────────────────────
+  // A balance sheet answers "right now", so what the supplier is owed today
+  // must not move when the reader clicks Today or Week. The buckets above are
+  // period-scoped on purpose — they sit beside period-scoped sales — so the
+  // capital block recomputes the same split from ALL-TIME cost of sales
+  // instead. The identity `dueNow + dueLater === total` held throughout and
+  // hid this: both halves moved together while the bill stayed all-time.
+  const lifetimeByBrand = new Map((lifetime.byBrand || []).map((b) => [b.brandId, b]));
+  const supplierDueNowAllTime = supplierDueNowAcross(supplierByBrand, lifetimeByBrand);
+
+  const capital = buildCapital({
+    cash: cashPosition,
+    stockAtCost: inv.totals.totalValue,
+    stockInWarehouse: inv.totals.warehouseValue,
+    // Boxes a rep is holding are still the business's stock, counted here at
+    // COST — once, on this line. The settlement balance for the same boxes is
+    // their selling value and is deliberately NOT added anywhere.
+    stockWithReps: inv.totals.repValue,
+    stockAtSellingPrice: inv.totals.retailValue,
+    stockUnits: inv.totals.totalBaseUnits,
+    customersOwe,
+    customersOweCount: debtAgg._count,
+    supplierOutstanding: needsYou.supplierOutstanding,
+    // Only the cost of what has already SOLD is due today; the rest of the
+    // invoice falls due as the shelf empties. ALL-TIME, never the selected
+    // period — see supplierDueNowAllTime above.
+    supplierDueNow: supplierDueNowAllTime,
+    supplierLabel: cashSplit.supplierLabel,
+    repCommissionPayable,
+    // One shape, one query, all time — the same `ownerFigures()` the period
+    // strip and the cash-flow tab read from.
+    owner: ownerAllTime,
+  });
+
+  // The banner's figures ARE the capital block's, so the two can never read as
+  // a contradiction: one arithmetic, quoted in two places.
+  const ownerMoney = {
+    contributed: capital.owes.owner.intoAccounts,
+    paidRepsFromPocket: capital.owes.owner.commissionFromPocket,
+    // What the business owes him: money he has laid out, less anything taken.
+    owedBackToOwner: capital.owes.owner.total,
+    drawn: capital.owes.owner.drawn,
+    earnedAllTime,
+    stillWorking: round2(earnedAllTime - ownerOut),
+    // Where it is working, at cost — the stock the profit turned into.
+    stockAtCost: capital.holds.stock.atCost,
+    owedToSuppliers: capital.owes.suppliers.total,
+  };
+
+  // Kept as the older name for the same balance sheet, derived from `capital`
+  // so it cannot drift. It no longer counts rep-held boxes twice.
   const position = {
-    owns,
-    owes,
-    totalOwns,
-    totalOwes,
-    worth: round2(totalOwns - totalOwes),
+    owns: capital.holds.lines,
+    owes: capital.owes.lines,
+    totalOwns: capital.holds.total,
+    totalOwes: capital.owes.total,
+    worth: capital.left,
   };
 
   return {
@@ -1296,6 +1648,7 @@ async function overview(period = 'month') {
     flow,
     needsYou,
     ownerMoney,
+    capital,
     position,
     cashSplit,
     brandFinance,
@@ -1321,8 +1674,8 @@ async function overview(period = 'month') {
     })),
     // What the business actually owes reps right now: withdrawable balances
     // plus requests in flight. The old figure (earned − paid) included fines
-    // the reps will never receive.
-    outstandingCommission: round2(commSummary.totals.available + commSummary.totals.requested),
+    // the reps will never receive. Same figure the capital block owes.
+    outstandingCommission: repCommissionPayable,
     inventoryValue: {
       cost: inv.totals.totalValue,
       selling: inv.totals.retailValue,
@@ -1351,6 +1704,11 @@ module.exports = {
   deleteTransaction,
   listCategories,
   createCategory,
+  buildCapital,
+  ownerFigures,
+  supplierDueNow,
+  supplierDueNowAcross,
+  isOffAccount,
   overview,
   cashflow,
   report,
