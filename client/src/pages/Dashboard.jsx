@@ -19,6 +19,13 @@ import {
   Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
+// How many attention rows are visible before the list scrolls, and the height
+// of one row: py-2.5 top and bottom (20px) over two leading-tight lines at
+// 13px and 11px (30px). 56 leaves a sliver of the next row showing, which is
+// what tells you the list scrolls at all.
+const ATTENTION_ROWS = 3;
+const ATTENTION_ROW_PX = 56;
+
 const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet };
 
 const BRAND_TONE = {
@@ -241,6 +248,9 @@ export default function Dashboard() {
           were, but not what any of it was or which mattered. A list says the
           thing itself: what it is, why it is here, what it is worth, and where
           it goes when you tap it — ordered so the costly ones are first. */}
+      {/* The well shows three rows and scrolls; the footer says how many are
+          below the fold. Both come from ONE number — set the height and the
+          count separately and a padding change silently makes the footer lie. */}
       {(() => {
         const items = [
           attention.overdueSettlements > 0 && {
@@ -335,7 +345,7 @@ export default function Dashboard() {
                 {/* Frosted rows over the page, per the glass style: a 1px light
                     border and a blur, so the list reads as raised rather than drawn. */}
                 <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
-                  <div className="max-h-[168px] overflow-y-auto">
+                  <div className="overflow-y-auto" style={{ maxHeight: ATTENTION_ROWS * ATTENTION_ROW_PX }}>
                   {shown.map((i, idx) => (
                     <button key={i.key} type="button" onClick={() => navigate(i.to)}
                       className={clsx(
@@ -356,9 +366,9 @@ export default function Dashboard() {
                   </div>
                   {/* Say how many are below the fold, so a capped list never
                       hides the fact that there is more. */}
-                  {shown.length > 3 && (
+                  {shown.length > ATTENTION_ROWS && (
                     <div className="border-t border-white/[0.06] py-1.5 text-center text-[11px] text-faint">
-                      scroll for {shown.length - 3} more
+                      scroll for {shown.length - ATTENTION_ROWS} more
                     </div>
                   )}
                 </div>
