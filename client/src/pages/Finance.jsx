@@ -440,18 +440,20 @@ function Overview({ onNavigate, onOwnerMoney }) {
               sub: totalOwed > 0 ? 'the whole bill, paid as stock sells' : 'nothing outstanding',
               tone: totalOwed > 0 ? 'amber' : 'slate',
             },
-            {
-              label: 'Of that, due today',
-              value: formatCurrency(data.cashSplit.setAside),
-              sub: data.cashSplit.setAside > 0
-                ? 'cost of boxes already sold'
-                : (data.cashSplit.paidAhead > 0
-                    ? `nothing — you are ${formatCurrency(data.cashSplit.paidAhead)} ahead`
-                    : 'nothing due right now'),
-              tone: data.cashSplit.setAside > 0 ? 'rose' : 'emerald',
-            },
+            // DUE TODAY only when something is. At zero it was a card reading
+            // "TSh 0 — you are 381,000 ahead" directly above a sentence saying
+            // none of it is due and you are 381,000 ahead: the same fact, and
+            // the same figure, twice. The sentence says it better, in words.
             ...(data.cashSplit.setAside > 0
-              ? [{ label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' }]
+              ? [
+                  {
+                    label: 'Of that, due today',
+                    value: formatCurrency(data.cashSplit.setAside),
+                    sub: 'cost of boxes already sold',
+                    tone: 'rose',
+                  },
+                  { label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' },
+                ]
               : []),
           ]} />
 
