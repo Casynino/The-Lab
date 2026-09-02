@@ -25,12 +25,23 @@ function WithdrawModal({ commission, firstName, onClose }) {
   // Prefilled with the whole balance: that is what nearly every request is, and
   // an empty box asks the rep to do arithmetic to arrive at their own number.
   const [amount, setAmount] = useState(String(Math.floor(available)));
-  const [notes, setNotes] = useState('');
-  const [done, setDone] = useState(null); // the amount that went through
+  // Where the money should go. A free-text note asked the rep to think of
+  // something to say; what The Lab actually needs is an address to send to, and
+  // what the rep needs is to be asked for it rather than to remember.
+  const [via, setVia] = useState('mobile');
+  const [payNumber, setPayNumber] = useState('');
+  const [bank, setBank] = useState('');
+  const [done, setDone] = useState(null); // { amount, to }
+  // The payout address, written as one line so it reads back plainly wherever
+  // the notes are shown — the Payouts list, the ledger, the WhatsApp message.
+  const payTo = via === 'mobile'
+    ? `Mobile money · ${payNumber.trim()}`
+    : `Bank · ${bank.trim()} · ${payNumber.trim()}`;
+
   const req = useMutation({
-    mutationFn: () => api.post('/commissions/withdrawals', { amount: Number(amount), notes: notes || undefined }),
+    mutationFn: () => api.post('/commissions/withdrawals', { amount: Number(amount), notes: payTo }),
     onSuccess: () => {
-      setDone(Number(amount));
+      setDone({ amount: Number(amount), to: payTo });
       ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),
@@ -38,30 +49,54 @@ function WithdrawModal({ commission, firstName, onClose }) {
   const amt = Number(amount);
   // The same rule the server applies: the BALANCE must clear the minimum, the
   // amount need only be some of it. Mirrored here so the button never offers
-  // something the API is about to refuse.
-  const valid = amt > 0 && amt <= available;
+  // something the API is about to refuse. And there is no point requesting
+  // money without saying where it goes.
+  const addressed = payNumber.trim().length >= 6 && (via === 'mobile' || bank.trim());
+  const valid = amt > 0 && amt <= available && addressed;
 
   if (done != null) {
     return (
-      <Modal open onClose={onClose} title="Withdrawal requested" footer={<Button onClick={onClose}>Done</Button>}>
-        <div className="relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ring-emerald-500/25">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.12] to-transparent" aria-hidden="true" />
-          <div className="relative">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
-              <PartyPopper className="h-5 w-5" />
+      <Modal open onClose={onClose} title="Withdrawal requested">
+        <div className="flex flex-col items-center px-2 py-6 text-center">
+          <div className="relative mb-5">
+            <span className="animate-halo absolute inset-0 rounded-full bg-emerald-400/30" aria-hidden="true" />
+            <span className="animate-pop relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40">
+              <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" aria-hidden="true">
+                <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#34d399" strokeWidth="2.6"
+                  strokeLinecap="round" strokeLinejoin="round" className="animate-tick" />
+              </svg>
             </span>
-            <p className="mt-3 text-xs font-semibold text-foreground">Nicely done{firstName ? `, ${firstName}` : ''}</p>
-            <p className="mt-0.5 text-2xl font-bold leading-none tabular-nums text-emerald-300">{formatCurrency(done)}</p>
-            <p className="mt-1.5 text-[11px] leading-snug text-faint">
-              Earned on {earnedOn(commission)}. It is with The Lab now — you will be notified when it is approved,
-              and again when it is paid.
-            </p>
           </div>
+
+          <h3 className="animate-rise text-2xl font-bold tracking-tight text-foreground" style={{ animationDelay: '0.28s' }}>
+            On its way{firstName ? `, ${firstName}` : ''}
+          </h3>
+          <span
+            className="animate-rise mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300 ring-1 ring-amber-500/25"
+            style={{ animationDelay: '0.33s' }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            Waiting on approval
+          </span>
+
+          <p className="animate-rise mt-4 text-3xl font-bold tabular-nums text-emerald-400" style={{ animationDelay: '0.36s' }}>
+            {formatCurrency(done.amount)}
+          </p>
+          <p className="animate-rise mt-1 max-w-xs truncate text-xs text-faint" style={{ animationDelay: '0.42s' }}>
+            to {done.to}
+          </p>
+
+          <p className="animate-rise mt-5 max-w-xs text-[13px] leading-relaxed text-muted" style={{ animationDelay: '0.5s' }}>
+            Once approved the money reaches you in <b className="text-foreground">1–2 hours</b>, during working hours.
+          </p>
+          <p className="animate-rise mt-2 max-w-xs text-[11px] leading-snug text-faint" style={{ animationDelay: '0.56s' }}>
+            It is held aside from now, so the same money cannot be requested twice.
+          </p>
+
+          <Button className="animate-rise mt-6 w-full justify-center py-3 text-[15px]" style={{ animationDelay: '0.62s' }} onClick={onClose}>
+            Done
+          </Button>
         </div>
-        <p className="mt-3 text-xs text-muted">
-          This amount is held aside until the request is decided, so your available balance drops by it now and the
-          same money cannot be requested twice.
-        </p>
       </Modal>
     );
   }
@@ -87,9 +122,46 @@ function WithdrawModal({ commission, firstName, onClose }) {
             Take the whole {formatCurrency(available)}
           </button>
         )}
-        <Field label="Notes" hint="Optional — anything The Lab should know">
-          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </Field>
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">How should we send it?</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { key: 'mobile', label: 'Mobile money' },
+              { key: 'bank', label: 'Bank' },
+            ].map((o) => (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => setVia(o.key)}
+                className={`rounded-xl px-3 py-2.5 text-sm font-semibold ring-1 transition active:scale-[0.98] ${
+                  via === o.key
+                    ? 'bg-brand-500/15 text-brand-300 ring-brand-500/30'
+                    : 'bg-elevated text-muted ring-white/[0.08] hover:text-foreground'
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 space-y-3">
+            {via === 'bank' && (
+              <Field label="Which bank" required>
+                <Input value={bank} onChange={(e) => setBank(e.target.value)} placeholder="e.g. CRDB, NMB" />
+              </Field>
+            )}
+            <Field label={via === 'mobile' ? 'Phone number' : 'Account number'} required>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                value={payNumber}
+                onChange={(e) => setPayNumber(e.target.value)}
+                placeholder={via === 'mobile' ? '0766 790 794' : '0150 1234 5678'}
+              />
+            </Field>
+          </div>
+        </div>
+
         <p className="text-xs text-faint">
           The Lab reviews every request. The minimum balance to request one is {formatCurrency(minWithdrawal)}.
         </p>
@@ -973,7 +1045,12 @@ function AdminView() {
             <TBody>{wd.data.map((w) => (
               <TR key={w.id}>
                 <TD className="font-medium">{w.salesRep?.user?.name}</TD>
-                <TD>{formatCurrency(w.amount)}</TD>
+                <TD>
+                  <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
+                  {/* Where to send it. This is the whole point of the request,
+                      and it was only visible by hovering a different column. */}
+                  {w.notes && <div className="mt-0.5 text-[11px] text-brand-300">{w.notes}</div>}
+                </TD>
                 <TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>
                 <TD className="text-faint">{formatDateTime(w.requestedAt)}</TD>
                 <TD>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert } from 'lucide-react';
+import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, X } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
@@ -739,32 +739,52 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 <CheckCircle2 className="h-4 w-4" /> Close this order
               </Button>
             )}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* These are real actions, not afterthoughts — returning boxes and
+                asking for more time both change what a rep owes. As ghost text
+                they read as disabled. Each gets a solid tile and a colour that
+                says what it does: amber to send stock back, sky to buy time,
+                plain for stepping out. */}
+            <div className="grid grid-cols-3 gap-2">
               <button type="button" onClick={onClose}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-foreground">
+                className="flex flex-col items-center gap-1 rounded-xl bg-elevated px-2 py-2.5 text-xs font-semibold text-muted ring-1 ring-white/[0.08] transition active:scale-95 hover:text-foreground">
+                <X className="h-4 w-4" />
                 Close
               </button>
-              {canAct && active && remaining > 0 && (
-                <Button variant="ghost" className="text-xs" onClick={() => setSub('return')}>
-                  <Undo2 className="h-3.5 w-3.5" /> Return boxes
-                </Button>
-              )}
-              {canAct && active && order.canSelfExtend && (
-                <Button variant="ghost" className="text-xs" onClick={() => setSub('self-extend')}>
-                  <CalendarPlus className="h-3.5 w-3.5" /> More time
-                </Button>
-              )}
-              {staff && active && (
-                <Button variant="ghost" className="text-xs" onClick={() => setSub('extend')}>
-                  <Clock className="h-3.5 w-3.5" /> Extend deadline
-                </Button>
-              )}
-              {staff && active && remaining > 0 && (
-                <span className="ml-auto text-xs text-faint">
-                  {formatNumber(remaining)} box{remaining === 1 ? '' : 'es'} left to account for
-                </span>
-              )}
+
+              {canAct && active && remaining > 0 ? (
+                <button type="button" onClick={() => setSub('return')}
+                  className="flex flex-col items-center gap-1 rounded-xl bg-amber-500/10 px-2 py-2.5 text-xs font-semibold text-amber-300 ring-1 ring-amber-500/25 transition active:scale-95">
+                  <Undo2 className="h-4 w-4" />
+                  Return boxes
+                </button>
+              ) : <span />}
+
+              {canAct && active && order.canSelfExtend ? (
+                <button type="button" onClick={() => setSub('self-extend')}
+                  className="flex flex-col items-center gap-1 rounded-xl bg-sky-500/10 px-2 py-2.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
+                  <CalendarPlus className="h-4 w-4" />
+                  More time
+                </button>
+              ) : staff && active ? (
+                <button type="button" onClick={() => setSub('extend')}
+                  className="flex flex-col items-center gap-1 rounded-xl bg-sky-500/10 px-2 py-2.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
+                  <Clock className="h-4 w-4" />
+                  Extend deadline
+                </button>
+              ) : <span />}
             </div>
+
+            {staff && active && order.canSelfExtend && (
+              <Button variant="ghost" className="w-full justify-center text-xs" onClick={() => setSub('extend')}>
+                <Clock className="h-3.5 w-3.5" /> Extend the deadline for them
+              </Button>
+            )}
+
+            {staff && active && remaining > 0 && (
+              <p className="text-center text-xs text-faint">
+                {formatNumber(remaining)} box{remaining === 1 ? '' : 'es'} left to account for
+              </p>
+            )}
           </div>
         )}>
         {isLoading || !order ? <PageSpinner /> : (
