@@ -35,6 +35,14 @@ function matches(row, where) {
     if (key === 'AND') { if (!cond.every((c) => matches(row, c))) return false; continue; }
     if (key === 'OR') { if (!cond.some((c) => matches(row, c))) return false; continue; }
     if (key === 'NOT') { if (matches(row, cond)) return false; continue; }
+    // A to-one relation filter, `{ account: { is: {...} } }`. The service uses
+    // it to say "anything filed on the commission account", so the stub has to
+    // follow the link the way Prisma would rather than compare an object.
+    if (key === 'account' && cond && typeof cond === 'object' && cond.is) {
+      const acct = accounts.find((a) => a.id === row.accountId);
+      if (!acct || !matches(acct, cond.is)) return false;
+      continue;
+    }
     const value = row[key];
     if (cond && typeof cond === 'object' && !(cond instanceof Date)) {
       for (const [op, operand] of Object.entries(cond)) {

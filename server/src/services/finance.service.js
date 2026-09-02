@@ -37,10 +37,18 @@ const { dayjs, resolveRange } = require('../utils/dates');
 // Written as positive equalities only. A compound `NOT`/`{ not: … }` over a
 // nullable column (refType is NULL on every ordinary contribution) leans on
 // Prisma's NULL handling, and this figure is too important to rest on that.
+const COMMISSION_TYPE = 'COMMISSION';
+
 const OFF_ACCOUNT_WHERE = {
   OR: [
     { type: 'COMMISSION_PAYMENT' },
     { AND: [{ type: 'OWNER_CONTRIBUTION' }, { refType: 'CommissionWithdrawal' }] },
+    // Anything at all filed on the commission account. That account is a
+    // record, not a wallet — "no money is held here" has to be true of every
+    // row on it, not just the payouts. It also holds the cash receipts that
+    // were handed straight back out as commission: real income, but income no
+    // wallet ever kept, so counting it as a balance invents money.
+    { account: { is: { type: COMMISSION_TYPE } } },
   ],
 };
 
@@ -60,7 +68,6 @@ const NON_TRADE_TYPES = ['TRANSFER', 'OWNER_CONTRIBUTION', 'OWNER_DRAWING', 'COM
 // change, and a rule that breaks when someone renames a card is not a rule.
 // Because every row filed against it is off-account (OFF_ACCOUNT_WHERE), its
 // BALANCE is zero by design; what it reports instead is the TOTAL RECORDED.
-const COMMISSION_TYPE = 'COMMISSION';
 const COMMISSION_ACCOUNT_NAME = 'Commission';
 const COMMISSION_ACCOUNT_NOTES =
   "Rep commission, paid by the owner in cash from his own pocket. A record only — no money is held here, so the balance is always zero.";
