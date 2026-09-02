@@ -671,7 +671,7 @@ async function ownerFigures({ start = null, end = null } = {}) {
   const from = start && epoch ? (start > epoch ? start : epoch) : (start || epoch);
   const scope = { account: { is: { isActive: true } } };
   if (from || end) scope.occurredAt = { ...(from ? { gte: from } : {}), ...(end ? { lte: end } : {}) };
-  const [contribAgg, fundingAgg, drawAgg, pocketAgg] = await Promise.all([
+  const [contribAgg, fundingAgg, drawAgg, pocketAgg, byBrandRows] = await Promise.all([
     prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'IN', type: 'OWNER_CONTRIBUTION' }, _sum: { amount: true } }),
     // Legacy rows that "funded" a payout — the same shilling recorded on both
     // sides. Queried as its own whole population and subtracted, never as a
@@ -680,6 +680,13 @@ async function ownerFigures({ start = null, end = null } = {}) {
     prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'IN', type: 'OWNER_CONTRIBUTION', refType: 'CommissionWithdrawal' }, _sum: { amount: true } }),
     prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'OUT', type: 'OWNER_DRAWING' }, _sum: { amount: true } }),
     prisma.financeTransaction.aggregate({ where: { ...scope, direction: 'OUT', type: 'COMMISSION_PAYMENT' }, _sum: { amount: true } }),
+    // Which brand each contribution was put behind. Older rows carry no brand
+    // and group under null — named "not tagged" rather than guessed at.
+    prisma.financeTransaction.groupBy({
+      by: ['brandId'],
+      where: { ...scope, direction: 'IN', type: 'OWNER_CONTRIBUTION' },
+      _sum: { amount: true },
+    }),
   ]);
   const repFundingExcluded = round2(toNumber(fundingAgg._sum.amount));
   const intoAccounts = round2(round2(toNumber(contribAgg._sum.amount)) - repFundingExcluded);
@@ -690,6 +697,10 @@ async function ownerFigures({ start = null, end = null } = {}) {
     commissionFromPocket,
     drawn,
     repFundingExcluded,
+    byBrand: byBrandRows
+      .map((r) => ({ brandId: r.brandId, amount: round2(toNumber(r._sum.amount)) }))
+      .filter((r) => r.amount !== 0)
+      .sort((a, b) => b.amount - a.amount),
     putIn: round2(intoAccounts + commissionFromPocket),
     accountMovement: round2(intoAccounts - drawn),
     total: round2(intoAccounts + commissionFromPocket - drawn),
@@ -1629,6 +1640,12 @@ async function overview(period = 'month') {
     // Where it is working, at cost — the stock the profit turned into.
     stockAtCost: capital.holds.stock.atCost,
     owedToSuppliers: capital.owes.suppliers.total,
+    // Which brand he put his cash behind, named for display.
+    byBrand: (ownerAllTime.byBrand || []).map((r) => ({
+      brandId: r.brandId,
+      name: r.brandId ? (brandNameById.get(r.brandId) || 'Unknown brand') : 'Not tagged to a brand',
+      amount: r.amount,
+    })),
   };
 
   // Kept as the older name for the same balance sheet, derived from `capital`
