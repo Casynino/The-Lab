@@ -60,7 +60,6 @@ function SettleBoxesModal({ order, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} title={`Submit settlement · ${order.settlementNumber}`}
       footer={<>
-        <div className="mr-auto text-sm"><span className="text-muted">Amount</span> <b>{formatCurrency(value)}</b></div>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button loading={settle.isPending} disabled={!productId || !boxes || Number(boxes) <= 0 || Number(boxes) > max || !accountId} onClick={() => settle.mutate()}>Submit for approval</Button>
       </>}>
@@ -77,6 +76,7 @@ function SettleBoxesModal({ order, onClose, onDone }) {
           <Field label="Boxes to settle" required hint={`Max ${formatNumber(max)} · ${formatCurrency(line?.sellingPrice || 0)} / box`}>
             <Input type="number" min="1" max={max} value={boxes} onChange={(e) => setBoxes(e.target.value)} autoFocus />
           </Field>
+          <SettleSummary boxes={boxes} unitPrice={line?.sellingPrice || 0} productName={line?.name} />
           {only ? (
             <Field label="Where to pay it">
               <PayTo account={only} brandName={line?.brandName} />
@@ -408,20 +408,51 @@ function payDetails(account) {
   return { number, holder };
 }
 
-// Brand-coloured marks, drawn here rather than copied from Vodacom or Airtel.
-// A rep recognises the colour and the wordmark instantly, which is the point;
-// shipping someone else's logo file into the bundle is not something to do
-// casually with a trademark.
+// The wallet logos, drawn as SVG in the official brand colours — Vodacom red
+// #E60000 with the m-pesa leaf in green, Airtel red #E40000 with "money" in
+// its amber. Drawn rather than downloaded: a bundled logo file is someone
+// else's trademarked artwork, and an SVG stays sharp at any size on a phone.
+// Kept small on purpose. A rep needs to recognise the wallet in a glance, not
+// look at a billboard — the number underneath is the thing they came for.
+function MpesaLogo({ className = 'h-5' }) {
+  return (
+    <svg viewBox="0 0 92 24" className={className} role="img" aria-label="M-Pesa">
+      {/* handset */}
+      <rect x="1.6" y="2.2" width="14" height="19.6" rx="2.6" fill="none" stroke="#E60000" strokeWidth="2.2" />
+      <rect x="6.2" y="18.4" width="4.8" height="1.6" rx="0.8" fill="#E60000" />
+      {/* the leaf that sits across the handset */}
+      <path d="M4.4 14.6c1.4-4.4 5.4-7 9.6-7.2-1.2 4.4-4.6 7.4-9.6 7.2z" fill="#63B22B" />
+      <text x="20.5" y="18.2" fill="#E60000" fontSize="16" fontWeight="700" letterSpacing="-0.4"
+        fontFamily="Inter, system-ui, -apple-system, sans-serif">m-pesa</text>
+    </svg>
+  );
+}
+
+function AirtelMoneyLogo({ className = 'h-5' }) {
+  return (
+    <svg viewBox="0 0 104 24" className={className} role="img" aria-label="Airtel Money">
+      {/* the airtel swirl */}
+      <path d="M14.6 19.8c-4.6 0-8.2-2.8-8.2-7.2 0-4.8 4.2-8.6 9.2-8.6 3.6 0 6.2 1.9 6.2 4.5 0 1.9-1.2 3.1-2.7 3.4"
+        fill="none" stroke="#E40000" strokeWidth="3.6" strokeLinecap="round" />
+      <text x="25" y="18.2" fill="#E40000" fontSize="16" fontWeight="700" letterSpacing="-0.4"
+        fontFamily="Inter, system-ui, -apple-system, sans-serif">airtel</text>
+      <text x="64.5" y="18.2" fill="#F6A800" fontSize="14" fontWeight="600" letterSpacing="-0.2"
+        fontFamily="Inter, system-ui, -apple-system, sans-serif">money</text>
+    </svg>
+  );
+}
+
 const PAY_BRAND = {
-  'M-Pesa': { wordmark: 'M-PESA', bg: 'bg-[#E60000]', fg: 'text-white', ring: 'ring-[#E60000]/30', glow: 'from-[#E60000]/[0.10]' },
-  'Airtel Money': { wordmark: 'airtel', bg: 'bg-[#E40000]', fg: 'text-white', ring: 'ring-[#E40000]/30', glow: 'from-[#E40000]/[0.10]' },
+  'M-Pesa': { Logo: MpesaLogo, ring: 'ring-[#E60000]/25', glow: 'from-[#E60000]/[0.08]' },
+  'Airtel Money': { Logo: AirtelMoneyLogo, ring: 'ring-[#E40000]/25', glow: 'from-[#E40000]/[0.08]' },
 };
-const PAY_FALLBACK = { wordmark: null, bg: 'bg-brand-500', fg: 'text-slate-950', ring: 'ring-white/[0.10]', glow: 'from-white/[0.04]' };
+const PAY_FALLBACK = { Logo: null, ring: 'ring-white/[0.10]', glow: 'from-white/[0.03]' };
 
 function PayTo({ account, brandName }) {
   const [copied, setCopied] = useState(false);
   const { number, holder } = payDetails(account);
   const b = PAY_BRAND[account?.name] || PAY_FALLBACK;
+  const Logo = b.Logo;
 
   const copy = async () => {
     try {
@@ -437,18 +468,23 @@ function PayTo({ account, brandName }) {
     <div className={`relative overflow-hidden rounded-xl bg-surface p-4 ring-1 ${b.ring}`}>
       <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${b.glow} to-transparent`} aria-hidden="true" />
 
-      <div className="relative flex items-center gap-2.5">
-        <span className={`inline-flex items-center rounded-md px-2 py-1 text-[11px] font-extrabold tracking-tight ${b.bg} ${b.fg}`}>
-          {b.wordmark || account?.name}
-        </span>
-        {b.wordmark === 'airtel' && <span className="text-xs font-semibold text-foreground">money</span>}
+      <div className="relative flex items-center gap-2">
+        {/* White plate behind it: both logos are drawn for light backgrounds
+            and red on near-black is hard to read. */}
+        {Logo ? (
+          <span className="inline-flex items-center rounded-md bg-white px-2 py-1">
+            <Logo className="h-4" />
+          </span>
+        ) : (
+          <span className="text-sm font-semibold text-foreground">{account?.name}</span>
+        )}
         <span className="ml-auto text-[11px] text-faint">{brandName || 'This brand'} settles here</span>
       </div>
 
       {number ? (
         <>
           <div className="relative mt-3 flex items-center gap-3">
-            <span className="select-all font-mono text-2xl font-bold tracking-wide text-foreground">{number}</span>
+            <span className="select-all font-mono text-[26px] font-bold leading-none tracking-wide text-foreground">{number}</span>
             <button
               type="button"
               onClick={copy}
@@ -457,11 +493,32 @@ function PayTo({ account, brandName }) {
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          {holder && <p className="relative mt-1 text-sm font-medium text-muted">{holder}</p>}
+          {holder && <p className="relative mt-1.5 text-sm font-medium text-muted">{holder}</p>}
         </>
       ) : (
         <p className="relative mt-2 text-sm font-semibold text-foreground">{account?.name}</p>
       )}
+    </div>
+  );
+}
+
+// What the rep is about to hand over, read like a receipt: the boxes, the price
+// each, and the line they actually have to collect. It was a faint "Amount TSh
+// 30,000" wedged next to the buttons, which is where a total goes to be missed.
+function SettleSummary({ boxes, unitPrice, productName }) {
+  const n = Number(boxes) || 0;
+  const total = n * (Number(unitPrice) || 0);
+  if (n <= 0) return null;
+  return (
+    <div className="rounded-xl bg-elevated/60 p-4 ring-1 ring-white/[0.07]">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">To collect</p>
+      <div className="mt-2 flex items-baseline justify-between gap-3">
+        <span className="min-w-0 truncate text-sm text-muted">
+          {formatNumber(n)} {n === 1 ? 'box' : 'boxes'} &times; {formatCurrency(unitPrice)}
+        </span>
+        <span className="shrink-0 text-2xl font-bold tabular-nums text-brand-400">{formatCurrency(total)}</span>
+      </div>
+      {productName && <p className="mt-1 truncate text-[11px] text-faint">{productName}</p>}
     </div>
   );
 }
