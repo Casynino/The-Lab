@@ -154,6 +154,71 @@ const invalidateFinance = (qc) => ['finance'].forEach((k) => qc.invalidateQuerie
 // Move money between two business accounts (banked cash, corrections). Posts
 // a linked OUT+IN pair that shifts balances without touching profit or the
 // income/expense reports.
+// Correcting a wallet to what it really holds. The endpoint has existed since
+// go-live but had no way in, so the only way to fix a balance was to edit rows
+// one at a time — or for someone to write a figure into a migration, which is
+// how a correction ends up invisible. You say what the account really holds;
+// it records the difference as one adjustment, in the ledger, with your reason
+// on it. It never touches profit.
+function CorrectBalanceModal({ accounts, onClose }) {
+  const qc = useQueryClient();
+  const usable = accounts.filter((a) => !a.isCommissionRecord);
+  const [accountId, setAccountId] = useState(usable[0]?.id || '');
+  const [actual, setActual] = useState('');
+  const [reason, setReason] = useState('');
+  const account = usable.find((a) => a.id === accountId);
+  const shown = Number(account?.balance || 0);
+  const truth = actual === '' ? null : Number(actual);
+  const delta = truth == null ? 0 : round2ui(truth - shown);
+
+  const save = useMutation({
+    mutationFn: () => api.post('/finance/adjustments', {
+      accountId,
+      direction: delta >= 0 ? 'IN' : 'OUT',
+      amount: Math.abs(delta),
+      description: reason.trim() || 'Balance corrected to what the account really holds',
+      notes: `Corrected from ${formatCurrency(shown)} to ${formatCurrency(truth)}.`,
+    }),
+    onSuccess: () => { toast.success('Balance corrected'); invalidateFinance(qc); onClose(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const valid = accountId && truth != null && Number.isFinite(truth) && delta !== 0;
+  return (
+    <Modal open onClose={onClose} title="Correct a balance"
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>Record the correction</Button></>}>
+      <div className="space-y-4">
+        <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
+          For when the app disagrees with the real account. Say what it actually holds and the difference is written
+          into the ledger as one adjustment you can see and undo. It does not touch your profit.
+        </p>
+        <Field label="Which account" required>
+          <Select value={accountId} onChange={(e) => { setAccountId(e.target.value); setActual(''); }}>
+            {usable.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
+          </Select>
+        </Field>
+        <Field label="What it really holds now (TZS)" required hint={`The app currently shows ${formatCurrency(shown)}.`}>
+          <Input type="number" value={actual} onChange={(e) => setActual(e.target.value)} autoFocus placeholder="0" />
+        </Field>
+        {valid && (
+          <p className="text-xs text-muted">
+            This records{' '}
+            <b className={delta >= 0 ? 'text-emerald-300' : 'text-rose-300'}>
+              {delta >= 0 ? '+' : '−'} {formatCurrency(Math.abs(delta))}
+            </b>{' '}
+            against {account?.name}, bringing it to <b className="text-foreground">{formatCurrency(truth)}</b>.
+          </p>
+        )}
+        <Field label="Why" hint="Worth a sentence — this is the record of why the figure moved.">
+          <Input value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. cash drawn out and paid to reps as commission" />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
 function TransferModal({ accounts: all, onClose }) {
   const accounts = wallets(all);
   const qc = useQueryClient();
@@ -1065,6 +1130,7 @@ function AccountStatementModal({ account, onClose }) {
 function Accounts({ onQuick }) {
   const [addOpen, setAddOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
+  const [correctOpen, setCorrectOpen] = useState(false);
   const [viewing, setViewing] = useState(null); // account whose statement is open
   const { data: accounts = [], isLoading } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   if (isLoading) return <PageSpinner />;
@@ -1084,6 +1150,7 @@ function Accounts({ onQuick }) {
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-4 w-4" /> Transfer</Button>
+          <Button variant="secondary" onClick={() => setCorrectOpen(true)}><Scale className="h-4 w-4" /> Correct balance</Button>
           <Button variant="secondary" onClick={() => onQuick('income')}><ArrowDownLeft className="h-4 w-4" /> Income</Button>
           <Button variant="secondary" onClick={() => onQuick('expense')}><ArrowUpRight className="h-4 w-4" /> Expense</Button>
           <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Account</Button>
@@ -1179,6 +1246,7 @@ function Accounts({ onQuick }) {
       </div>
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
+      {correctOpen && <CorrectBalanceModal accounts={accounts} onClose={() => setCorrectOpen(false)} />}
       {viewing && <AccountStatementModal account={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
