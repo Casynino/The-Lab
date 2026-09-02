@@ -227,7 +227,7 @@ async function orderBreakdown(s, client = prisma) {
     remainingValue += remaining * toNumber(p.sellingPrice);
     const perBox = rateByBrand.get(brandKey(p.brand?.name)) ?? 0;
     commissionEarned += settled * perBox;
-    return { productId: pid, name: p.name, sku: p.sku, brandId: p.brandId || null, commissionPerBox: perBox, sellingPrice: toNumber(p.sellingPrice), assigned, settled, returned, pendingReturn, remaining };
+    return { productId: pid, name: p.name, sku: p.sku, brandId: p.brandId || null, brandName: p.brand?.name || null, commissionPerBox: perBox, sellingPrice: toNumber(p.sellingPrice), assigned, settled, returned, pendingReturn, remaining };
   });
 
   const orderValue = toNumber(s.assignedValue);

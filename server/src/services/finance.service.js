@@ -50,13 +50,36 @@ const OFF_ACCOUNT_WHERE = {
 // reason OWNER_DRAWING does — it is the owner's money, not the business's.
 const NON_TRADE_TYPES = ['TRANSFER', 'OWNER_CONTRIBUTION', 'OWNER_DRAWING', 'COMMISSION_PAYMENT'];
 
+// ── The commission account ──────────────────────────────────────────────────
+// Rep commission comes out of the owner's own pocket, in cash, for both brands.
+// It may not add to or subtract from M-Pesa or Airtel Money — but the RECORD of
+// what each rep was paid is exactly what he asked to keep, "held in one place,
+// clearly labelled". That place is an account of type COMMISSION.
+//
+// It is recognised by TYPE, never by name: a name is something a user can
+// change, and a rule that breaks when someone renames a card is not a rule.
+// Because every row filed against it is off-account (OFF_ACCOUNT_WHERE), its
+// BALANCE is zero by design; what it reports instead is the TOTAL RECORDED.
+const COMMISSION_TYPE = 'COMMISSION';
+const COMMISSION_ACCOUNT_NAME = 'Commission';
+const COMMISSION_ACCOUNT_NOTES =
+  "Rep commission, paid by the owner in cash from his own pocket. A record only — no money is held here, so the balance is always zero.";
+// Not a wallet the business trades through. Nothing may target one of these by
+// default, offer one to a rep, or move money in or out of one.
+const MONEY_ACCOUNT_WHERE = { type: { notIn: [COMMISSION_TYPE, 'CASH'] } };
+
 // Generic payment accounts — WHERE money sits. The brand a transaction belongs
-// to is a separate dimension (FinanceTransaction.brandId), so any brand can be
-// paid through any account and new accounts/brands never need a redesign.
+// to is a separate dimension (FinanceTransaction.brandId), but a WALLET is now
+// bound to its brand: OHIS settles to M-Pesa, Civlily to Airtel Money, so a rep
+// settling sees exactly one option instead of a choice they can get wrong.
+//
+// There is no Cash account. The business does not accept cash payments and
+// holds no money in cash; the only cash in the story is the commission the
+// owner hands reps himself, and that is a record, not a wallet.
 const DEFAULT_ACCOUNTS = [
-  { name: 'Cash', type: 'CASH', isDefault: true, sortOrder: 0, notes: 'Physical cash collected' },
-  { name: 'M-Pesa', type: 'MOBILE_MONEY', sortOrder: 1, notes: '0766 790 794 · CASMIRY CHUWA · OHIS payments' },
-  { name: 'Airtel Money', type: 'MOBILE_MONEY', sortOrder: 2, notes: '0788 734 003 · CASMIRY CHUWA · Civlily payments' },
+  { name: 'M-Pesa', type: 'MOBILE_MONEY', sortOrder: 1, brand: /^ohis/i, notes: '0766 790 794 · CASMIRY CHUWA · OHIS payments' },
+  { name: 'Airtel Money', type: 'MOBILE_MONEY', sortOrder: 2, brand: /^civ/i, notes: '0788 734 003 · CASMIRY CHUWA · Civlily payments' },
+  { name: COMMISSION_ACCOUNT_NAME, type: COMMISSION_TYPE, sortOrder: 90, notes: COMMISSION_ACCOUNT_NOTES },
 ];
 const DEFAULT_CATEGORIES = [
   'Stock Purchase', 'Shipping', 'Freight', 'Customs', 'Warehouse', 'Transport',
@@ -69,8 +92,15 @@ let ensured = false;
 async function ensureDefaults() {
   if (ensured) return;
   if ((await prisma.businessAccount.count()) === 0) {
+    const brands = await prisma.brand.findMany({ select: { id: true, name: true } });
     for (const a of DEFAULT_ACCOUNTS) {
-      await prisma.businessAccount.create({ data: { name: a.name, type: a.type, isDefault: !!a.isDefault, sortOrder: a.sortOrder, notes: a.notes || null } });
+      const brand = a.brand ? brands.find((b) => a.brand.test(b.name)) : null;
+      await prisma.businessAccount.create({
+        data: {
+          name: a.name, type: a.type, brandId: brand ? brand.id : null,
+          isDefault: false, sortOrder: a.sortOrder, notes: a.notes || null,
+        },
+      });
     }
   }
   if ((await prisma.expenseCategory.count()) === 0) {
@@ -127,21 +157,103 @@ async function accountBalances() {
       id: a.id, name: a.name, type: a.type, currency: a.currency, isDefault: a.isDefault, notes: a.notes,
       brandId: a.brandId || null,
       openingBalance: opening, moneyIn, moneyOut, balance: round2(opening + moneyIn - moneyOut),
+      // A commission account holds nothing — every row filed against it is one
+      // the owner paid out of his own hand, and those are subtracted back out
+      // above. The number that matters on it is what has been RECORDED there,
+      // which is the same population, taken from the other side. Reported as
+      // its own field so no screen can print it under the word "balance".
+      isCommissionRecord: a.type === COMMISSION_TYPE,
+      recorded: round2(offOutMap.get(a.id) || 0),
     };
   });
 }
 
+// The last-resort wallet for money that arrives with no brand on it. It can
+// never be the commission account (that would put a payout back into a figure
+// the owner wants kept apart) and it can never be a cash account (there is no
+// cash) — retiring Cash without this guard would have silently re-targeted
+// every commission payout at M-Pesa or Airtel.
 async function defaultAccount() {
   await ensureDefaults();
   return (
-    (await prisma.businessAccount.findFirst({ where: { isDefault: true, isActive: true }, orderBy: { createdAt: 'asc' } })) ||
-    (await prisma.businessAccount.findFirst({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }))
+    (await prisma.businessAccount.findFirst({ where: { ...MONEY_ACCOUNT_WHERE, isDefault: true, isActive: true }, orderBy: { createdAt: 'asc' } })) ||
+    (await prisma.businessAccount.findFirst({ where: { ...MONEY_ACCOUNT_WHERE, isActive: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }))
   );
+}
+
+// The one place the record of commission is held. Self-healing: if the account
+// is missing it is created, and if someone deactivated it, it comes back —
+// because the alternative is a payout falling back onto a wallet, which is the
+// one outcome the owner asked to make impossible.
+async function commissionAccount() {
+  const existing = await prisma.businessAccount.findFirst({
+    where: { type: COMMISSION_TYPE },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (existing) {
+    if (existing.isActive) return existing;
+    return prisma.businessAccount.update({ where: { id: existing.id }, data: { isActive: true } });
+  }
+  // `name` is unique, so an unrelated account already called "Commission"
+  // would collide. Suffix rather than fail: the type is what identifies it.
+  for (const name of [COMMISSION_ACCOUNT_NAME, 'Commission record', 'Commission (record)']) {
+    const clash = await prisma.businessAccount.findUnique({ where: { name } });
+    if (clash) continue;
+    return prisma.businessAccount.create({
+      data: { name, type: COMMISSION_TYPE, isDefault: false, sortOrder: 90, notes: COMMISSION_ACCOUNT_NOTES },
+    });
+  }
+  return null;
+}
+
+// The accounts a rep may settle into for a given brand — and the accounts the
+// owner picks from when money moves. One brand, one wallet: an account bound to
+// a brand serves only that brand, and an unbound wallet is offered only when
+// the brand has none of its own. Cash and the commission account are never in
+// the list. This is THE filter behind GET /settlements/payment-accounts; the
+// client renders what it returns rather than re-deciding it on its own.
+async function paymentAccountsForBrand(brandId) {
+  await ensureDefaults();
+  const accounts = await prisma.businessAccount.findMany({
+    where: { ...MONEY_ACCOUNT_WHERE, isActive: true },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, name: true, type: true, notes: true, isDefault: true, brandId: true },
+  });
+  // No brand named (a mixed-brand counter sale, or a product with no brand):
+  // every wallet, because the money has to go somewhere and there is no
+  // general wallet any more. Never an empty list — that would leave the till
+  // with nowhere to bank.
+  if (!brandId) return accounts;
+  const own = accounts.filter((a) => a.brandId === brandId);
+  return own.length ? own : accounts.filter((a) => !a.brandId);
+}
+
+// Where a brand's money lands when nobody chose an account.
+// Where a brand's money goes. Falling through to the default for a KNOWN brand
+// is how a third brand's takings would quietly land in OHIS's wallet: the
+// default is a real money account, so nothing would look wrong until the
+// figures were read. A brand with no account of its own returns null, and the
+// caller has to say so out loud instead.
+async function settlementAccountFor(brandId) {
+  const [first] = await paymentAccountsForBrand(brandId);
+  if (first) return first;
+  return brandId ? null : defaultAccount();
 }
 
 async function createAccount(data) {
   const name = (data.name || '').trim();
   if (!name) throw ApiError.badRequest('Account name is required');
+  // One commission account, or the record stops being "held in one place".
+  if (data.type === COMMISSION_TYPE) {
+    throw ApiError.badRequest('There is already one Commission account, and the record of every payout is held there.');
+  }
+  if (data.type === 'CASH') {
+    throw ApiError.badRequest('The business does not hold money in cash. Add the bank or mobile-money account the money actually sits in.');
+  }
+  if (data.brandId) {
+    const taken = await prisma.businessAccount.findFirst({ where: { brandId: data.brandId, isActive: true } });
+    if (taken) throw ApiError.badRequest(`${taken.name} is already this brand's settlement account. A brand settles to one account, so reps see one option.`);
+  }
   const max = await prisma.businessAccount.aggregate({ _max: { sortOrder: true } });
   return prisma.businessAccount.create({
     data: {
@@ -158,6 +270,16 @@ async function createAccount(data) {
 async function updateAccount(id, data) {
   const existing = await prisma.businessAccount.findUnique({ where: { id } });
   if (!existing) throw ApiError.notFound('Account not found');
+  if (existing.type === COMMISSION_TYPE) {
+    if (data.type !== undefined && data.type !== COMMISSION_TYPE) {
+      throw ApiError.badRequest('This is the Commission account. Changing its type would put rep payouts back onto a wallet.');
+    }
+    if (data.isActive === false) {
+      throw ApiError.badRequest('The Commission account cannot be closed — it is where the record of every payout is kept.');
+    }
+  } else if (data.type === COMMISSION_TYPE) {
+    throw ApiError.badRequest('Only the Commission account can be of that type.');
+  }
   const patch = {};
   ['name', 'type', 'notes'].forEach((k) => { if (data[k] !== undefined) patch[k] = data[k]; });
   if (data.brandId !== undefined) patch.brandId = data.brandId || null;
@@ -176,6 +298,15 @@ async function backfillFromHistory() {
   await ensureDefaults();
   const acc = await defaultAccount();
   if (!acc) return { incomeCreated: 0, paymentsCreated: 0 };
+  // Sale money goes to the wallet its brand settles to; only a sale whose brand
+  // cannot be determined falls back. Rebuilding every row into "the default"
+  // is how 501,000 of settlement money ended up filed under Cash.
+  const accountForBrand = new Map();
+  const walletFor = async (brandId) => {
+    if (!brandId) return acc;
+    if (!accountForBrand.has(brandId)) accountForBrand.set(brandId, (await settlementAccountFor(brandId)) || acc);
+    return accountForBrand.get(brandId);
+  };
   // Only sales from the finance epoch onward create ledger money — pre-epoch
   // activity is history, already represented by the accounts' opening balances.
   const epoch = await reports.financeEpoch();
@@ -224,10 +355,11 @@ async function backfillFromHistory() {
     if (have.has(s.id)) continue;
     const fromSettlement = !!s.settlementId;
     const txnNumber = await nextDocNumber(prisma.financeTransaction, 'txnNumber', 'FTX');
+    const wallet = await walletFor(saleBrand(s.id));
     await prisma.financeTransaction.create({
       data: {
         txnNumber,
-        accountId: acc.id,
+        accountId: wallet.id,
         direction: 'IN',
         type: fromSettlement ? 'SETTLEMENT' : 'WAREHOUSE_SALE',
         amount: round2(toNumber(s.total)),
@@ -269,13 +401,17 @@ async function backfillFromHistory() {
   ]);
   const haveW = new Set(existingWTxns.map((t) => t.refId));
   let paymentsCreated = 0;
+  // The record of every payout is held in one place — never rebuilt onto a
+  // wallet, which is what the owner asked to make impossible.
+  const commAcc = paidWithdrawals.length ? await commissionAccount() : null;
   for (const w of paidWithdrawals) {
     if (haveW.has(w.id)) continue;
+    if (!commAcc) break;
     const txnNumber = await nextDocNumber(prisma.financeTransaction, 'txnNumber', 'FTX');
     await prisma.financeTransaction.create({
       data: {
         txnNumber,
-        accountId: acc.id,
+        accountId: commAcc.id,
         direction: 'OUT',
         type: 'COMMISSION_PAYMENT',
         amount: round2(toNumber(w.amount)),
@@ -314,6 +450,12 @@ async function recordTransaction(data, actor) {
   if (!(amount > 0)) throw ApiError.badRequest('Amount must be greater than zero');
   const account = await prisma.businessAccount.findUnique({ where: { id: data.accountId } });
   if (!account || !account.isActive) throw ApiError.badRequest('Select a valid account');
+  // The commission account holds the record of rep payouts and nothing else.
+  // An expense, an income or the owner's own money filed there would print a
+  // figure under "recorded" that was never commission.
+  if (account.type === COMMISSION_TYPE && data.type !== 'COMMISSION_PAYMENT') {
+    throw ApiError.badRequest('The Commission account only holds the record of rep commission. Choose the account the money actually moved through.');
+  }
   const txnNumber = await nextDocNumber(prisma.financeTransaction, 'txnNumber', 'FTX');
   return prisma.financeTransaction.create({
     data: {
@@ -367,9 +509,16 @@ async function recordSaleIncome({ saleId, saleNumber, amount, fromSettlement, wh
   try {
     const amt = round2(toNumber(amount));
     if (!(amt > 0)) return null;
+    // The rep's chosen account, then the wallet this brand settles to, then
+    // the last-resort default. A commission account is never a landing place
+    // for sale money, whoever named it.
     let account = null;
-    if (accountId) account = await prisma.businessAccount.findFirst({ where: { id: accountId, isActive: true } });
-    if (!account) account = await defaultAccount();
+    if (accountId) {
+      account = await prisma.businessAccount.findFirst({
+        where: { id: accountId, isActive: true, ...MONEY_ACCOUNT_WHERE },
+      });
+    }
+    if (!account) account = await settlementAccountFor(brandId || null);
     if (!account) return null;
     return await recordTransaction(
       {
@@ -397,13 +546,15 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
   try {
     const amt = round2(toNumber(amount));
     if (!(amt > 0)) return null;
-    // Reps are paid in physical cash, never from M-Pesa or Airtel. Those are
-    // the brands' income accounts and commission has no business touching
-    // them; pinning it to a CASH account keeps the two apart for good.
-    const acc = (await prisma.businessAccount.findFirst({
-      where: { type: 'CASH', isActive: true },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
-    })) || (await defaultAccount());
+    // Reps are paid from the owner's own pocket, never from M-Pesa or Airtel.
+    // Those are the brands' income accounts and commission has no business
+    // touching them. This used to pin the payout to a CASH account and fall
+    // back to the DEFAULT one — so retiring Cash would have quietly sent every
+    // payout into a brand's wallet. It now targets the commission account and
+    // nothing else: if that account cannot be had, no row is written at all,
+    // because a payout on the wrong account is worse than a missing record we
+    // can rebuild from the withdrawal itself.
+    const acc = await commissionAccount();
     if (!acc) return null;
     // The owner pays reps directly from his pocket — no business account is
     // involved on either side. This row exists ONLY as the record of what the
@@ -532,6 +683,15 @@ async function updateTransaction(id, data) {
   const targetBrandId = patch.brandId !== undefined ? patch.brandId : existing.brandId;
   const account = await prisma.businessAccount.findUnique({ where: { id: targetAccountId } });
   if (!account) throw ApiError.badRequest('Account not found');
+  // Correcting a row may not move ordinary money onto the commission record,
+  // nor move a payout off it — the record is held in one place or it is not a
+  // record at all.
+  if (account.type === COMMISSION_TYPE && existing.type !== 'COMMISSION_PAYMENT') {
+    throw ApiError.badRequest('The Commission account only holds the record of rep commission. Choose the account the money actually moved through.');
+  }
+  if (existing.type === 'COMMISSION_PAYMENT' && account.type !== COMMISSION_TYPE) {
+    throw ApiError.badRequest('Commission you paid from your own pocket is recorded in one place and cannot be filed against a wallet.');
+  }
   if (account.brandId && targetBrandId && targetBrandId !== account.brandId) {
     throw ApiError.badRequest(`${account.name} is reserved for another brand's payments`);
   }
@@ -554,6 +714,12 @@ async function transferBetweenAccounts({ fromAccountId, toAccountId, amount, not
   const from = balances.find((a) => a.id === fromAccountId);
   const to = balances.find((a) => a.id === toAccountId);
   if (!from || !to) throw ApiError.badRequest('Account not found');
+  // No money is held in the commission account, so none can be moved in or out
+  // of it. Its figure is a record of what the owner paid, not a balance.
+  const commission = [from, to].find((a) => a.type === COMMISSION_TYPE);
+  if (commission) {
+    throw ApiError.badRequest(`${commission.name} is a record of what you paid reps, not a wallet — there is no money in it to move.`);
+  }
   if (from.balance < amt) {
     throw ApiError.badRequest(`${from.name} only holds ${from.balance.toLocaleString('en-US')} — cannot transfer ${amt.toLocaleString('en-US')}`);
   }
@@ -1707,6 +1873,10 @@ module.exports = {
   backfillFromHistory,
   accountBalances,
   defaultAccount,
+  commissionAccount,
+  paymentAccountsForBrand,
+  settlementAccountFor,
+  COMMISSION_TYPE,
   createAccount,
   updateAccount,
   recordTransaction,

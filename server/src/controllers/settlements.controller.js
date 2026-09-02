@@ -1,12 +1,12 @@
 'use strict';
 
-const prisma = require('../config/prisma');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { ok, created, paginated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
 const settlement = require('../services/settlement.service');
 const submission = require('../services/settlementSubmission.service');
+const finance = require('../services/finance.service');
 const penalty = require('../services/penalty.service');
 const audit = require('../services/audit.service');
 const { ROLES } = require('../middleware/authorize');
@@ -58,15 +58,20 @@ const submitSettlement = asyncHandler(async (req, res) => {
   return created(res, sub);
 });
 
-// Payment accounts a rep can choose when submitting a settlement — names and
-// payment details only, never balances (those are The Doctor's business).
-const paymentAccounts = asyncHandler(async (_req, res) => {
-  const accounts = await prisma.businessAccount.findMany({
-    where: { isActive: true },
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-    select: { id: true, name: true, type: true, notes: true, isDefault: true, brandId: true },
-  });
-  return ok(res, accounts);
+// Where a rep's settlement money goes — names and payment details only, never
+// balances (those are The Doctor's business).
+//
+// The rep passes the brand of the product they are settling and gets back the
+// ONE account that brand settles to: OHIS → M-Pesa, Civlily → Airtel Money.
+// The rule lives in finance.paymentAccountsForBrand and nowhere else — this
+// endpoint used to return every active account and leave the client to filter,
+// which is how a rep came to be offered Cash alongside their brand's wallet.
+const paymentAccounts = asyncHandler(async (req, res) => {
+  const q = req.validatedQuery || req.query;
+  // One value, or none. A repeated ?brandId= arrives as an array and would
+  // match no brand at all, leaving the rep with an empty picker.
+  const brandId = Array.isArray(q.brandId) ? q.brandId[0] : q.brandId;
+  return ok(res, await finance.paymentAccountsForBrand(typeof brandId === 'string' && brandId ? brandId : null));
 });
 
 // Admin approval center: all settlements awaiting verification.

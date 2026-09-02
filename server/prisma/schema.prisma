@@ -1348,6 +1348,11 @@ enum FinanceAccountType {
   BANK
   MOBILE_MONEY
   OTHER
+  // Not a wallet. The one place the record of rep commission is held: the
+  // owner pays every shilling of it from his own pocket, so an account of
+  // this type never holds money and its balance is always zero by design.
+  // Recognised by TYPE, never by name, so renaming it cannot break the rule.
+  COMMISSION
 }
 
 enum FinanceTxnType {

@@ -37,16 +37,20 @@ async function submit(settlementId, payload, actor) {
     const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, name: true, sellingPrice: true, brandId: true } });
     if (!product) throw ApiError.badRequest('Product not found');
 
-    // Where the rep says the money went (Cash / M-Pesa / Airtel...). Stored on
-    // the submission; on approval the income lands in THIS account. A brand-
-    // reserved account only accepts payments for its own brand — an OHIS
-    // settlement can never go into the Civlily account.
+    // Where the rep says the money went. Stored on the submission; on approval
+    // the income lands in THIS account. A brand settles to ONE account — OHIS
+    // to M-Pesa, Civlily to Airtel Money — so what may be ACCEPTED here is
+    // exactly what the rep was OFFERED, read from the same function rather
+    // than re-derived: a second copy of the rule is a second rule.
     let account = null;
     if (payload.accountId) {
-      account = await tx.businessAccount.findFirst({ where: { id: payload.accountId, isActive: true } });
-      if (!account) throw ApiError.badRequest('Select a valid payment account');
-      if (account.brandId && product.brandId && account.brandId !== product.brandId) {
-        throw ApiError.badRequest(`${account.name} is not a payment account for this product's brand`);
+      const allowed = await finance.paymentAccountsForBrand(product.brandId || null);
+      account = allowed.find((a) => a.id === payload.accountId) || null;
+      if (!account) {
+        const one = allowed[0];
+        throw ApiError.badRequest(one
+          ? `${product.name} settles to ${one.name}. Submit the money there.`
+          : 'Select a valid payment account');
       }
     }
     const pkg = await tx.productPackaging.findFirst({ where: { productId, isBaseUnit: true } });

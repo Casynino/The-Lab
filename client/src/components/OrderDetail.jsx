@@ -27,23 +27,29 @@ function SettleBoxesModal({ order, onClose, onDone }) {
   const lines = order.order.lines.filter((l) => availFor(l) > 0);
   const [productId, setProductId] = useState(lines[0]?.productId || '');
   const [boxes, setBoxes] = useState('');
-  const [accountId, setAccountId] = useState('');
-
-  // Where was the money paid? (Cash / M-Pesa / Airtel Money — names & numbers
-  // only, no balances.) Brand-reserved accounts only show for their own brand:
-  // an OHIS product offers Cash + the OHIS account, never the Civlily one.
-  const { data: payAccounts = [] } = useQuery({
-    queryKey: ['settlements', 'payment-accounts'],
-    queryFn: async () => unwrap(await api.get('/settlements/payment-accounts')).data,
-  });
 
   const line = lines.find((l) => l.productId === productId);
   const max = line ? availFor(line) : 0;
   const value = (Number(boxes) || 0) * (line?.sellingPrice || 0);
 
-  const accountOptions = payAccounts.filter((a) => !a.brandId || a.brandId === line?.brandId);
+  // Where the money goes — decided by the brand, not by the rep. OHIS settles
+  // to M-Pesa and Civlily to Airtel Money, so the server answers with the ONE
+  // account for this product's brand. There is no filtering to do here and no
+  // second copy of the rule: whatever comes back is what may be used.
+  const { data: accountOptions = [] } = useQuery({
+    queryKey: ['settlements', 'payment-accounts', line?.brandId || ''],
+    queryFn: async () => unwrap(await api.get('/settlements/payment-accounts', {
+      params: line?.brandId ? { brandId: line.brandId } : undefined,
+    })).data,
+    enabled: !!line,
+  });
+
+  // One option is not a choice. It is selected for the rep and shown as a
+  // statement of where to pay — a dropdown you cannot change is a small lie.
+  const only = accountOptions.length === 1 ? accountOptions[0] : null;
+  const [picked, setPicked] = useState('');
+  const accountId = only ? only.id : picked;
   const account = accountOptions.find((a) => a.id === accountId) || null;
-  if (accountId && !account && accountOptions.length) setAccountId(''); // product changed brand — reset choice
 
   const settle = useMutation({
     mutationFn: () => api.post(`/settlements/${order.id}/settle-boxes`, { productId, boxes: Number(boxes), accountId: accountId || undefined }),
@@ -64,19 +70,37 @@ function SettleBoxesModal({ order, onClose, onDone }) {
           <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-faint">Every outstanding box is already submitted and awaiting approval.</p>
         ) : (<>
           <Field label="Product">
-            <Select value={productId} onChange={(e) => { setProductId(e.target.value); setBoxes(''); }}>
+            <Select value={productId} onChange={(e) => { setProductId(e.target.value); setBoxes(''); setPicked(''); }}>
               {lines.map((l) => <option key={l.productId} value={l.productId}>{l.name} — {formatNumber(availFor(l))} left</option>)}
             </Select>
           </Field>
           <Field label="Boxes to settle" required hint={`Max ${formatNumber(max)} · ${formatCurrency(line?.sellingPrice || 0)} / box`}>
             <Input type="number" min="1" max={max} value={boxes} onChange={(e) => setBoxes(e.target.value)} autoFocus />
           </Field>
-          <Field label="Where was it paid?" required hint={account?.notes || 'Select the account the money went to'}>
-            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">Select payment account…</option>
-              {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </Select>
-          </Field>
+          {only ? (
+            <Field label="Where to pay it" hint={only.notes || undefined}>
+              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-elevated px-3 py-2.5">
+                <Wallet className="h-4 w-4 shrink-0 text-brand-400" />
+                <span className="text-sm font-semibold text-foreground">{only.name}</span>
+                <span className="ml-auto text-[11px] text-faint">{line?.brandName || 'This brand'} settles here</span>
+              </div>
+            </Field>
+          ) : accountOptions.length === 0 ? (
+            /* A brand with no account of its own leaves the rep staring at an
+               empty dropdown and a Submit button that never enables. Say why,
+               and say who can fix it. */
+            <p className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2.5 text-sm text-amber-200">
+              There is no account set up for {line?.brandName || 'this brand'} to settle into yet, so this cannot be
+              submitted. Ask The Lab to add one.
+            </p>
+          ) : (
+            <Field label="Where was it paid?" required hint={account?.notes || 'Select the account the money went to'}>
+              <Select value={accountId} onChange={(e) => setPicked(e.target.value)}>
+                <option value="">Select payment account…</option>
+                {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </Select>
+            </Field>
+          )}
         </>)}
       </div>
     </Modal>

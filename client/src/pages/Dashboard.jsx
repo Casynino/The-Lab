@@ -5,7 +5,7 @@ import {
   Wallet, TrendingUp, TrendingDown, Boxes, Warehouse, Truck, AlertTriangle,
   ArrowRight, Timer, CheckCircle2, Banknote, Landmark, Smartphone, PiggyBank,
   ClipboardList, Undo2, Factory, PackageX, Receipt, ShoppingCart, SlidersHorizontal,
-  ArrowDownLeft, ArrowUpRight, Scale, ChevronRight,
+  ArrowDownLeft, ArrowUpRight, Scale, ChevronRight, Coins,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import clsx from 'clsx';
@@ -26,7 +26,7 @@ import {
 const ATTENTION_ROWS = 3;
 const ATTENTION_ROW_PX = 56;
 
-const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet };
+const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet, COMMISSION: Coins };
 
 const BRAND_TONE = {
   OHIS: { ring: 'border-emerald-500/30', bg: 'bg-emerald-500/5', badge: 'bg-emerald-500/15 text-emerald-400', dot: 'bg-emerald-400' },
@@ -94,8 +94,10 @@ export default function Dashboard() {
 
   const { accounts, totalFunds, today, month, brands, reps, attention, inventory, charts} = data;
   // Only accounts actually holding money belong in "where it sits". The index
-  // is carried along so each keeps its own colour when another empties.
-  const withIndex = accounts.map((a, i) => ({ ...a, _i: i }));
+  // is carried along so each keeps its own colour when another empties. The
+  // Commission account is not one of them: it is the record of what the owner
+  // paid reps from his own pocket, and no money sits in it at all.
+  const withIndex = accounts.filter((a) => !a.isCommissionRecord).map((a, i) => ({ ...a, _i: i }));
   const funded = withIndex.filter((a) => Number(a.balance) !== 0);
   const heroAccounts = funded.length ? funded : withIndex;
   const firstName = user?.name?.split(' ')[0] || 'there';

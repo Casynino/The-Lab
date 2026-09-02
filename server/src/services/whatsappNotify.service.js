@@ -317,7 +317,7 @@ async function settlementSubmitted({ sub, settlement, product, repName }) {
       `*Order:* ${settlement.settlementNumber}`,
       `*Product:* ${product.name}`,
       `*Boxes sold:* ${sub.boxes}`,
-      `*Payment:* ${fmt(sub.amount)} via ${sub.method || 'Cash'}`,
+      `*Payment:* ${fmt(sub.amount)} via ${sub.method || 'the brand account'}`,
       perBox > 0 ? `*Commission if approved:* ${fmt(round2(sub.boxes * perBox))}` : null,
     ].filter(Boolean),
     status: 'Pending approval — no business impact yet',

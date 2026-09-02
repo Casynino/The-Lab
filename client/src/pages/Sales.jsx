@@ -32,19 +32,22 @@ function NewSaleModal({ open, onClose }) {
   const [amountPaid, setAmountPaid] = useState('');
   const [accountId, setAccountId] = useState('');
 
-  // Payment accounts — a brand-reserved account (Civlily Airtel / OHIS M-Pesa)
-  // is only offered when every item in the sale belongs to that brand.
-  const { data: payAccounts = [] } = useQuery({
-    queryKey: ['payment-accounts'],
-    queryFn: async () => unwrap(await api.get('/settlements/payment-accounts')).data,
-    enabled: !isRep,
-  });
+  // A single-brand sale banks into that brand's account — OHIS to M-Pesa,
+  // Civlily to Airtel Money — and a mixed one may go to either. The server
+  // decides which, from the same rule that answers the reps: the brand goes
+  // up with the request instead of the whole list coming down to be filtered.
   const productBrand = useMemo(() => {
     const map = new Map(products.map((p) => [p.id, p.brandId]));
     const set = new Set(items.filter((l) => l.productId).map((l) => map.get(l.productId)).filter(Boolean));
     return set.size === 1 ? [...set][0] : null;
   }, [items, products]);
-  const accountOptions = payAccounts.filter((a) => !a.brandId || a.brandId === productBrand);
+  const { data: accountOptions = [] } = useQuery({
+    queryKey: ['payment-accounts', productBrand || ''],
+    queryFn: async () => unwrap(await api.get('/settlements/payment-accounts', {
+      params: productBrand ? { brandId: productBrand } : undefined,
+    })).data,
+    enabled: !isRep,
+  });
 
   const subtotal = useMemo(
     () => items.reduce((s, l) => s + (Number(l.unitPrice) || 0) * (Number(l.quantity) || 0), 0),

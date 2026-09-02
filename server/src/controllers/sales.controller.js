@@ -37,12 +37,26 @@ const create = asyncHandler(async (req, res) => {
         throw ApiError.badRequest(`${account.name} is not a payment account for this sale's brand`);
       }
     }
+    // A brand with no settlement account of its own has nowhere for this money
+    // to land. Refusing here is the only honest option: the money used to fall
+    // through to the default wallet, which filed one brand's takings under
+    // another, and recordSaleIncome is best-effort so it would otherwise record
+    // nothing at all and the sale would simply be missing from the books.
+    if (!payload.accountId && saleBrandId) {
+      const target = await finance.settlementAccountFor(saleBrandId);
+      if (!target) {
+        const brand = await prisma.brand.findUnique({ where: { id: saleBrandId }, select: { name: true } });
+        throw ApiError.badRequest(
+          `${brand ? brand.name : 'This brand'} has no account to settle into yet. Add one under Finance → Accounts before selling it.`,
+        );
+      }
+    }
   }
 
   const sale = await salesService.createSale(payload, req.user);
   // A direct warehouse cash sale (no rep) is money into the business —
-  // recorded against the chosen account (falls back to Cash) and kept alive
-  // past the response by background().
+  // recorded against the chosen account, or the wallet this brand settles to,
+  // and kept alive past the response by background().
   if (sale.type === 'CASH' && !sale.salesRepId) {
     const wa = require('../services/whatsappNotify.service');
     wa.background(finance.recordSaleIncome({

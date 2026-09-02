@@ -19,7 +19,12 @@ import {
 } from '@/components/ui';
 
 const PERIODS = [['today', 'Today'], ['week', 'Week'], ['month', 'Month'], ['all', 'All time']];
-const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet };
+const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet, COMMISSION: Coins };
+// The Commission account is a RECORD of what the owner paid reps from his own
+// pocket, not a wallet: no money is in it, so it is never somewhere you can pay
+// from, deposit to, or transfer through. Everywhere money is picked, pick from
+// wallets. The server flags it — the client never matches on a name.
+const wallets = (list) => list.filter((a) => !a.isCommissionRecord);
 // Each account keeps one colour everywhere on the tab — bar, dot and card.
 const ACCOUNT_BAR = ['bg-emerald-500', 'bg-violet-500', 'bg-sky-500', 'bg-amber-500'];
 const ACCOUNT_DOT = ['bg-emerald-400', 'bg-violet-400', 'bg-sky-400', 'bg-amber-400'];
@@ -130,7 +135,8 @@ const invalidateFinance = (qc) => ['finance'].forEach((k) => qc.invalidateQuerie
 // Move money between two business accounts (banked cash, corrections). Posts
 // a linked OUT+IN pair that shifts balances without touching profit or the
 // income/expense reports.
-function TransferModal({ accounts, onClose }) {
+function TransferModal({ accounts: all, onClose }) {
+  const accounts = wallets(all);
   const qc = useQueryClient();
   const [fromId, setFromId] = useState('');
   const [toId, setToId] = useState('');
@@ -204,7 +210,9 @@ function AddAccountModal({ onClose }) {
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!form.name.trim()} onClick={() => save.mutate()}>Create account</Button></>}>
       <div className="space-y-4">
         <Field label="Account name" required><Input value={form.name} onChange={set('name')} placeholder="e.g. Equity Bank" /></Field>
-        <Field label="Type"><Select value={form.type} onChange={set('type')}><option value="CASH">Cash</option><option value="BANK">Bank</option><option value="MOBILE_MONEY">Mobile money</option><option value="OTHER">Other</option></Select></Field>
+        <Field label="Type" hint="The business does not hold money in cash, so there is no cash account to add.">
+          <Select value={form.type} onChange={set('type')}><option value="BANK">Bank</option><option value="MOBILE_MONEY">Mobile money</option><option value="OTHER">Other</option></Select>
+        </Field>
         <Field label="Reserved for brand" hint="Reps only see this account when settling that brand's products">
           <Select value={form.brandId} onChange={set('brandId')}>
             <option value="">Any brand (general)</option>
@@ -218,7 +226,8 @@ function AddAccountModal({ onClose }) {
   );
 }
 
-function MoneyModal({ mode, accounts, categories, onClose }) {
+function MoneyModal({ mode, accounts: all, categories, onClose }) {
+  const accounts = wallets(all);
   const qc = useQueryClient();
   const isExpense = mode === 'expense';
   const { data: brands = [] } = useQuery({
@@ -271,13 +280,7 @@ function MoneyModal({ mode, accounts, categories, onClose }) {
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
           </Select>
         </Field>
-        <Field label="Brand" hint="Which brand's books this belongs to (optional)">
-          <Select value={form.brandId} onChange={set('brandId')}>
-            <option value="">General business</option>
-            {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </Select>
-        </Field>
-        <Field label={isIn ? 'Which brand is this money behind' : 'Which brand is this coming out of'}
+        <Field label={isExpense ? 'Which brand is this coming out of' : 'Which brand is this money behind'}
           hint="Leave blank if it is not for one brand in particular.">
           <Select value={form.brandId} onChange={set('brandId')}>
             <option value="">Not tied to a brand</option>
@@ -295,7 +298,8 @@ function MoneyModal({ mode, accounts, categories, onClose }) {
 // The owner's own money. Kept apart from trade on purpose: cash he puts in
 // is not the business earning, and profit he takes out is not a cost of
 // earning it. Both move an account balance and nothing else.
-function OwnerMoneyModal({ mode, accounts, onClose }) {
+function OwnerMoneyModal({ mode, accounts: all, onClose }) {
+  const accounts = wallets(all);
   const qc = useQueryClient();
   const { data: brands = [] } = useBrands();
   const isIn = mode === 'in';
@@ -934,8 +938,11 @@ function AccountStatementModal({ account, onClose }) {
   });
   const rows = data?.data || [];
   const sums = data?.meta?.sums;
+  const isRecord = !!account.isCommissionRecord;
 
-  // Balance after each row, newest first.
+  // Balance after each row, newest first. A record has no running balance to
+  // walk — every row on it was paid from the owner's own hand and moved no
+  // account — so the column is dropped rather than filled with zeroes.
   let running = account.balance;
   const withBalance = rows.map((t) => {
     const after = running;
@@ -950,24 +957,38 @@ function AccountStatementModal({ account, onClose }) {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/[0.08] bg-surface p-4">
           <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400"><Icon className="h-5 w-5" /></span>
-          <div>
-            <p className="text-xs text-muted">Balance now</p>
-            <p className={`text-2xl font-bold tabular-nums ${account.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(account.balance)}</p>
-          </div>
-          <div className="ml-auto flex gap-6 text-right">
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-muted">Came in</p>
-              <p className="text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(sums?.in ?? account.moneyIn)}</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-muted">Went out</p>
-              <p className="text-sm font-bold tabular-nums text-rose-400">{formatCurrency(sums?.out ?? account.moneyOut)}</p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-muted">Opening</p>
-              <p className="text-sm font-bold tabular-nums text-muted">{formatCurrency(account.openingBalance)}</p>
-            </div>
-          </div>
+          {isRecord ? (
+            <>
+              <div>
+                <p className="text-xs text-muted">Commission recorded</p>
+                <p className="text-2xl font-bold tabular-nums text-violet-300">{formatCurrency(account.recorded)}</p>
+              </div>
+              <p className="ml-auto max-w-xs text-right text-[11px] text-faint">
+                Every payout you have made from your own pocket. No money is held here, so there is no balance to show.
+              </p>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-xs text-muted">Balance now</p>
+                <p className={`text-2xl font-bold tabular-nums ${account.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(account.balance)}</p>
+              </div>
+              <div className="ml-auto flex gap-6 text-right">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-muted">Came in</p>
+                  <p className="text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(sums?.in ?? account.moneyIn)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-muted">Went out</p>
+                  <p className="text-sm font-bold tabular-nums text-rose-400">{formatCurrency(sums?.out ?? account.moneyOut)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-muted">Opening</p>
+                  <p className="text-sm font-bold tabular-nums text-muted">{formatCurrency(account.openingBalance)}</p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
         {account.notes && <p className="text-xs text-faint">{account.notes}</p>}
 
@@ -977,7 +998,7 @@ function AccountStatementModal({ account, onClose }) {
           <>
             <Table>
               <THead>
-                <TR><TH>Date</TH><TH>Type</TH><TH>What it was</TH><TH className="text-right">In</TH><TH className="text-right">Out</TH><TH className="text-right">Balance</TH></TR>
+                <TR><TH>Date</TH><TH>Type</TH><TH>What it was</TH><TH className="text-right">In</TH><TH className="text-right">Out</TH>{!isRecord && <TH className="text-right">Balance</TH>}</TR>
               </THead>
               <TBody>
                 {withBalance.map((t) => (
@@ -994,7 +1015,7 @@ function AccountStatementModal({ account, onClose }) {
                     <TD className="text-right font-semibold tabular-nums text-rose-400">
                       {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
                     </TD>
-                    <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>
+                    {!isRecord && <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>}
                   </TR>
                 ))}
               </TBody>
@@ -1013,11 +1034,20 @@ function Accounts({ onQuick }) {
   const [viewing, setViewing] = useState(null); // account whose statement is open
   const { data: accounts = [], isLoading } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   if (isLoading) return <PageSpinner />;
-  const total = accounts.reduce((s, a) => s + a.balance, 0);
+  // Wallets hold the money; the Commission account holds a record of money the
+  // owner paid out of his own hand. Adding a record into a cash total would
+  // claim the business is holding cash it has never held.
+  const held = wallets(accounts);
+  const records = accounts.filter((a) => a.isCommissionRecord);
+  const total = held.reduce((s, a) => s + a.balance, 0);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div><div className="text-xs uppercase tracking-wide text-faint">Total cash position</div><div className="text-2xl font-black text-brand-400 tabular-nums">{formatCurrency(total)}</div></div>
+        <div>
+          <div className="text-xs uppercase tracking-wide text-faint">Total cash position</div>
+          <div className="text-2xl font-black text-brand-400 tabular-nums">{formatCurrency(total)}</div>
+          <div className="text-[11px] text-faint">What your accounts are holding right now.</div>
+        </div>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-4 w-4" /> Transfer</Button>
           <Button variant="secondary" onClick={() => onQuick('income')}><ArrowDownLeft className="h-4 w-4" /> Income</Button>
@@ -1027,19 +1057,19 @@ function Accounts({ onQuick }) {
       </div>
       {/* Which pocket holds the money — the Inventory "where every box is"
           pattern, applied to cash. One bar, one truth. */}
-      {total > 0 && accounts.length > 1 && (
+      {total > 0 && held.length > 1 && (
         <Card>
           <div className="p-5">
             <h3 className="text-sm font-semibold text-foreground">Where the money sits</h3>
             <p className="mt-0.5 text-xs text-muted">Every account's share of the {formatCurrency(total)}.</p>
             <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
-              {accounts.map((a, i) => (
+              {held.map((a, i) => (
                 <div key={a.id} className={`h-full ${ACCOUNT_BAR[i % ACCOUNT_BAR.length]}`}
                   style={{ width: `${Math.max(0, (a.balance / total) * 100)}%` }} />
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5">
-              {accounts.map((a, i) => (
+              {held.map((a, i) => (
                 <span key={a.id} className="inline-flex items-center gap-1.5 text-xs text-muted">
                   <span className={`h-2 w-2 rounded-full ${ACCOUNT_DOT[i % ACCOUNT_DOT.length]}`} />
                   {a.name} <b className="tabular-nums text-foreground">{formatCurrency(a.balance)}</b>
@@ -1051,7 +1081,7 @@ function Accounts({ onQuick }) {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {accounts.map((a, i) => {
+        {held.map((a, i) => {
           const Icon = ACCOUNT_ICON[a.type] || Wallet;
           const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
           return (
@@ -1082,6 +1112,36 @@ function Accounts({ onQuick }) {
             </button>
           );
         })}
+
+        {/* Not a wallet, so it does not read like one: what it shows is the
+            total you have PAID, and the card says outright that no money sits
+            here. A zero balance printed beside a large total would only invite
+            the question of which figure is real. */}
+        {records.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            onClick={() => setViewing(a)}
+            className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface p-5 text-left ring-1 ring-violet-500/25 transition duration-200 hover:ring-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/[0.10] to-transparent" aria-hidden="true" />
+            <div className="relative flex items-center justify-between">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Coins className="h-5 w-5" /></span>
+              <Badge className="bg-violet-500/15 text-violet-300">Record only</Badge>
+            </div>
+            <div className="relative mt-3 text-sm font-semibold text-foreground">{a.name}</div>
+            <div className="relative mt-1 text-2xl font-bold tabular-nums text-violet-300">{formatCurrency(a.recorded)}</div>
+            <p className="relative mt-1.5 text-xs text-muted">
+              Commission you have paid reps from your own pocket. Kept here so you have the record — it never moves M-Pesa or Airtel Money, and it never comes off your profit.
+            </p>
+            <div className="relative mt-3 flex items-center justify-between border-t border-white/[0.07] pt-2 text-[11px] text-faint">
+              <span>No money is held here</span>
+              <span className="inline-flex items-center gap-1 font-medium text-brand-400">
+                See every payout <ChevronRight className="h-3 w-3" />
+              </span>
+            </div>
+          </button>
+        ))}
       </div>
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
@@ -1250,7 +1310,11 @@ function EditTxnModal({ txn, accounts, brands, onClose }) {
   const [reason, setReason] = useState('');
 
   // Brand-reserved accounts only accept their own brand's money.
-  const accountOptions = accounts.filter((a) => !a.brandId || !brandId || a.brandId === brandId);
+  // Wallets only — plus the row's own account, so a commission row still shows
+  // where it is filed instead of an empty box.
+  const accountOptions = accounts
+    .filter((a) => !a.isCommissionRecord || a.id === txn.accountId)
+    .filter((a) => !a.brandId || !brandId || a.brandId === brandId);
 
   const save = useMutation({
     mutationFn: () => api.put(`/finance/transactions/${txn.id}`, {
@@ -1276,6 +1340,15 @@ function EditTxnModal({ txn, accounts, brands, onClose }) {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Account" required hint="Where the money actually is">
             <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              {/* A row filed against a retired account has no option of its own:
+                  the select would show the FIRST option's name while state
+                  still held the old id, so Save looked like it worked and moved
+                  nothing. Show where it actually sits, and make it unpickable. */}
+              {txn.accountId && !accountOptions.some((a) => a.id === txn.accountId) && (
+                <option value={txn.accountId} disabled>
+                  {(accounts.find((a) => a.id === txn.accountId) || {}).name || 'Retired account'} — closed, pick a new one
+                </option>
+              )}
               {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </Select>
           </Field>
@@ -1646,7 +1719,8 @@ function AddSupplierModal({ onClose }) {
   );
 }
 
-function PaySupplierModal({ order, accounts, onClose, onDone }) {
+function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
+  const accounts = wallets(all);
   const [accountId, setAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
   const [amount, setAmount] = useState(String(order.outstanding || ''));
   const [notes, setNotes] = useState('');
@@ -1681,7 +1755,8 @@ function PaySupplierModal({ order, accounts, onClose, onDone }) {
 }
 
 // Pay down the supplier's overall balance (installments) from any account.
-function PayBalanceModal({ supplier, outstanding, accounts, onClose, onDone }) {
+function PayBalanceModal({ supplier, outstanding, accounts: all, onClose, onDone }) {
+  const accounts = wallets(all);
   const [accountId, setAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
   const [amount, setAmount] = useState(String(outstanding || ''));
   const [occurredAt, setOccurredAt] = useState(new Date().toISOString().slice(0, 10));

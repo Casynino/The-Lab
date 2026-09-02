@@ -1,0 +1,11 @@
+-- A home for the record of rep commission.
+--
+-- The owner pays every rep from his own pocket, so a commission payout may not
+-- add to or subtract from M-Pesa or Airtel Money. It still has to be RECORDED
+-- somewhere, in one place, clearly labelled. That place is an account of its
+-- own type: not a wallet, never a settlement option, balance zero by design.
+--
+-- The type is added on its own, in its own migration, because PostgreSQL will
+-- not let a new enum value be USED in the transaction that creates it. The
+-- account itself, and the data move, follow in 20260902000003.
+ALTER TYPE "FinanceAccountType" ADD VALUE IF NOT EXISTS 'COMMISSION';
