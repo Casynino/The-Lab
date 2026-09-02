@@ -1,0 +1,24 @@
+-- Withdraw the automatic correction.
+--
+-- ...0010 tried to correct the Airtel wallet to 574,000 by inserting one
+-- adjustment. It has not fired, and the reason matters: its guard measured the
+-- account balance over every row ever written, while the balance the owner
+-- actually sees is clamped to the finance epoch. Those are two different
+-- numbers, so the guard was testing something other than the figure on screen.
+--
+-- Worse than not firing, it is now a trap. If the owner corrects the balance
+-- himself with the Correct balance button — which is the right way to do this,
+-- since it is his figure, entered by him, visible in the ledger — and ...0010
+-- has not yet run on that database, it would fire afterwards and take the same
+-- 501,000 out a second time, leaving 73,000.
+--
+-- So it is withdrawn. This removes the adjustment if ...0010 managed to write
+-- it, and does nothing otherwise. Both migrations run in the same deploy, so
+-- the pair is a no-op no matter which order a given database is in.
+--
+-- The correction itself is not abandoned — it moves to where it should have
+-- been all along: the owner states the figure, the app records the difference.
+-- Inferring where this money went has been wrong twice, and a number written
+-- into a migration is a correction nobody can see.
+DELETE FROM finance_transactions
+ WHERE "txnNumber" = 'FTX-ADJ-AIRTEL-CORRECTION';
