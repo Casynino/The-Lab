@@ -522,12 +522,26 @@ function RejectSubmissionModal({ submission, onClose, onDone }) {
   );
 }
 
-function MoneyCard({ label, value, tone }) {
-  const tones = { brand: 'text-brand-600', emerald: 'text-emerald-500', rose: 'text-rose-500', default: 'text-foreground' };
+// The same four figures, in the house card the rest of the app uses — a ring
+// and a wash of the tone rather than four identical grey boxes. `brand-600`
+// was a light-theme leftover and read muddy on a dark page.
+const MONEY_TONE = {
+  brand: { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', num: 'text-brand-400' },
+  emerald: { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', num: 'text-emerald-400' },
+  rose: { ring: 'ring-rose-500/25', glow: 'from-rose-500/[0.12]', num: 'text-rose-400' },
+  default: { ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', num: 'text-foreground' },
+};
+
+function MoneyCard({ label, value, tone, sub, quiet }) {
+  // A zero is not worth a colour. It keeps the loud tones for figures that
+  // actually say something.
+  const t = MONEY_TONE[quiet ? 'default' : tone] || MONEY_TONE.default;
   return (
-    <div className="rounded-xl border border-border bg-elevated p-3">
-      <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
-      <div className={`mt-0.5 text-lg font-bold ${tones[tone] || tones.default}`}>{value}</div>
+    <div className={`relative overflow-hidden rounded-xl bg-surface p-3.5 ring-1 ${t.ring}`}>
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${t.glow} to-transparent`} aria-hidden="true" />
+      <div className="relative text-[10px] font-semibold uppercase tracking-wider text-faint">{label}</div>
+      <div className={`relative mt-1 text-lg font-bold tabular-nums ${t.num}`}>{value}</div>
+      {sub && <div className="relative mt-0.5 text-[11px] text-faint">{sub}</div>}
     </div>
   );
 }
@@ -710,32 +724,82 @@ export default function OrderDetailModal({ settlementId, onClose }) {
     <>
       <Modal open onClose={onClose} size="xl" title={order ? `Order ${order.settlementNumber}` : 'Order'}
         footer={order && (
-          <>
-            <Button variant="secondary" onClick={onClose}>Close</Button>
-            {staff && active && <Button variant="ghost" onClick={() => setSub('extend')}><Clock className="h-4 w-4" /> Extend deadline</Button>}
-            {canAct && active && order.canSelfExtend && (
-              <Button variant="secondary" onClick={() => setSub('self-extend')}>
-                <CalendarPlus className="h-4 w-4" /> Extend settlement time
+          /* Same actions, given a hierarchy. Settling is what the screen is
+             for, so it takes the width and sits under the thumb; the rest are
+             occasional and step back to a quiet row above it. Four buttons of
+             equal weight on a phone is four decisions to make. */
+          <div className="w-full space-y-2.5">
+            {canAct && active && remaining > 0 && (
+              <Button className="w-full justify-center py-3 text-[15px]" onClick={() => setSub('settle')}>
+                <Wallet className="h-4 w-4" /> Submit settlement
               </Button>
             )}
-            {canAct && active && remaining > 0 && <Button variant="secondary" onClick={() => setSub('return')}><Undo2 className="h-4 w-4" /> Return</Button>}
-            {canAct && active && remaining > 0 && <Button onClick={() => setSub('settle')}><Wallet className="h-4 w-4" /> Submit settlement</Button>}
-            {staff && active && (remaining <= 0
-              ? <Button variant="ghost" className="text-emerald-500" loading={settle.isPending} onClick={() => settle.mutate()}><CheckCircle2 className="h-4 w-4" /> Close order</Button>
-              : <span className="self-center text-xs text-faint">{formatNumber(remaining)} box(es) left to account for</span>)}
-          </>
+            {staff && active && remaining <= 0 && (
+              <Button className="w-full justify-center py-3 text-[15px]" loading={settle.isPending} onClick={() => settle.mutate()}>
+                <CheckCircle2 className="h-4 w-4" /> Close this order
+              </Button>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={onClose}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted transition hover:text-foreground">
+                Close
+              </button>
+              {canAct && active && remaining > 0 && (
+                <Button variant="ghost" className="text-xs" onClick={() => setSub('return')}>
+                  <Undo2 className="h-3.5 w-3.5" /> Return boxes
+                </Button>
+              )}
+              {canAct && active && order.canSelfExtend && (
+                <Button variant="ghost" className="text-xs" onClick={() => setSub('self-extend')}>
+                  <CalendarPlus className="h-3.5 w-3.5" /> More time
+                </Button>
+              )}
+              {staff && active && (
+                <Button variant="ghost" className="text-xs" onClick={() => setSub('extend')}>
+                  <Clock className="h-3.5 w-3.5" /> Extend deadline
+                </Button>
+              )}
+              {staff && active && remaining > 0 && (
+                <span className="ml-auto text-xs text-faint">
+                  {formatNumber(remaining)} box{remaining === 1 ? '' : 'es'} left to account for
+                </span>
+              )}
+            </div>
+          </div>
         )}>
         {isLoading || !order ? <PageSpinner /> : (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-              <div><div className="text-xs text-faint">Rep</div><div className="font-medium">{order.salesRep?.user?.name}</div></div>
-              <div><div className="text-xs text-faint">Status</div><Badge className={SETTLEMENT_STATUS_META[order.status]?.cls}>{SETTLEMENT_STATUS_META[order.status]?.label}</Badge></div>
-              {order.status === 'SETTLED' ? (
-                <div><div className="text-xs text-faint">Settled</div><div className="font-medium text-emerald-500">{order.settledAt ? formatDateTime(order.settledAt) : '—'}</div></div>
-              ) : (
-                <div><div className="text-xs text-faint">Deadline</div><div className="font-medium">{formatDateTime(order.deadlineAt)}</div></div>
-              )}
-              <div><div className="text-xs text-faint">Issued</div><div className="font-medium">{formatDateTime(order.issuedAt)}</div></div>
+            {/* Who and what state, on one line — then the two dates below it as a
+                pair, since they are read together. Same four facts, arranged so
+                the eye is not hopping across a 2x2 of look-alike blocks. */}
+            <div className="rounded-xl bg-elevated/50 px-4 py-3 ring-1 ring-white/[0.06]">
+              <div className="flex items-center gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Rep</div>
+                  <div className="truncate text-[15px] font-semibold text-foreground">{order.salesRep?.user?.name}</div>
+                </div>
+                <Badge className={`ml-auto shrink-0 ${SETTLEMENT_STATUS_META[order.status]?.cls}`}>
+                  {SETTLEMENT_STATUS_META[order.status]?.label}
+                </Badge>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-3">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Issued</div>
+                  <div className="mt-0.5 text-[13px] font-medium text-muted">{formatDateTime(order.issuedAt)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">
+                    {order.status === 'SETTLED' ? 'Settled' : 'Deadline'}
+                  </div>
+                  <div className={`mt-0.5 text-[13px] font-medium ${
+                    order.status === 'SETTLED' ? 'text-emerald-400'
+                      : overdue ? 'text-rose-400' : 'text-foreground'}`}>
+                    {order.status === 'SETTLED'
+                      ? (order.settledAt ? formatDateTime(order.settledAt) : '—')
+                      : formatDateTime(order.deadlineAt)}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Extension status + the penalty rule currently in force */}
@@ -838,9 +902,11 @@ export default function OrderDetailModal({ settlementId, onClose }) {
             {/* Money picture — all derived from settled/returned boxes */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <MoneyCard label="Order value" value={formatCurrency(order.order.totals.orderValue)} tone="brand" />
-              <MoneyCard label="Settled" value={formatCurrency(order.order.totals.settledValue)} tone="emerald" />
+              <MoneyCard label="Settled" value={formatCurrency(order.order.totals.settledValue)} tone="emerald"
+                quiet={!(order.order.totals.settledValue > 0)} />
               <MoneyCard label="Returned value" value={formatCurrency(order.order.totals.returnedValue)} />
-              <MoneyCard label="Outstanding" value={formatCurrency(order.order.totals.outstanding)} tone="rose" />
+              <MoneyCard label="Outstanding" value={formatCurrency(order.order.totals.outstanding)} tone="rose"
+                quiet={!(order.order.totals.outstanding > 0)} />
             </div>
 
             {/* Box-by-box breakdown: issued vs settled vs returned vs remaining */}
