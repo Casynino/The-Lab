@@ -78,9 +78,16 @@ function SettleDone({ amount, boxes, productName, onClose }) {
         </span>
       </div>
 
-      <h3 className="animate-rise text-xl font-bold text-foreground" style={{ animationDelay: '0.28s' }}>
-        Nicely done — it is in
+      <h3 className="animate-rise text-2xl font-bold tracking-tight text-foreground" style={{ animationDelay: '0.28s' }}>
+        Deposited
       </h3>
+      <span
+        className="animate-rise mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300 ring-1 ring-amber-500/25"
+        style={{ animationDelay: '0.33s' }}
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+        Waiting on approval
+      </span>
 
       <p className="animate-rise mt-4 text-3xl font-bold tabular-nums text-emerald-400" style={{ animationDelay: '0.36s' }}>
         {formatCurrency(amount)}
@@ -89,9 +96,8 @@ function SettleDone({ amount, boxes, productName, onClose }) {
         {formatNumber(boxes)} {Number(boxes) === 1 ? 'box' : 'boxes'}{productName ? ` · ${productName}` : ''}
       </p>
 
-      <p className="animate-rise mt-5 max-w-xs text-[13px] leading-relaxed text-muted" style={{ animationDelay: '0.5s' }}>
-        The Lab checks the money against this. The moment it is approved the sale is recorded and
-        <b className="text-foreground"> your commission is yours</b> — you will be told either way.
+      <p className="animate-rise mt-5 text-[13px] text-muted" style={{ animationDelay: '0.5s' }}>
+        Approved, and <b className="text-foreground">the commission is yours</b>.
       </p>
 
       <Button className="animate-rise mt-6 w-full" style={{ animationDelay: '0.58s' }} onClick={onClose}>
