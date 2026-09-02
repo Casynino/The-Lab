@@ -16,6 +16,7 @@ import { sortByCanonical } from '@/lib/productOrder';
 import { TZ_REGIONS } from '@/lib/regions';
 import OrderDetailModal from '@/components/OrderDetail';
 import ProgressRows from '@/components/ProgressRows';
+import WithdrawalNote, { PayoutHistory, withdrawalState } from '@/components/WithdrawalNote';
 import { TrendChart } from '@/components/charts';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
@@ -465,6 +466,13 @@ export default function SalesRepProfile() {
     refetchInterval: 60_000,
     keepPreviousData: true,
   });
+  // This rep's payouts, so the admin and the rep are looking at one list. Not
+  // folded into the profile payload: it is a small, separate question, and it
+  // has to invalidate on the Commissions screen's own mutations.
+  const { data: wd } = useQuery({
+    queryKey: ['commissions', 'withdrawals', 'rep', id],
+    queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { salesRepId: id, limit: 6 } })),
+  });
 
   const toggleActive = useMutation({
     mutationFn: (isActive) => api.put(`/sales-reps/${id}`, { isActive }),
@@ -497,6 +505,11 @@ export default function SalesRepProfile() {
   const { rep, stock, commission: c, settlements, performance: perf, activity } = data;
   const outstanding = settlements.active.reduce((s, x) => s + (x.balance || 0), 0);
   const hasPenalties = c.penalties > 0 || (c.penaltyBreakdown?.length > 0);
+  // The profile calls the minimum `threshold`; withdrawalState reads either.
+  const withdrawals = wd?.data || [];
+  const latestPayout = withdrawals[0] || null;
+  const payoutState = withdrawalState({ commission: c, latest: latestPayout, firstName: rep.name?.split(' ')[0] || '' });
+  const showPayoutNote = ['pending', 'approved', 'paid', 'rejected'].includes(payoutState.key);
 
   return (
     <div>
@@ -809,6 +822,24 @@ export default function SalesRepProfile() {
               </div>
             )}
             {c.pendingRequests > 0 && <p className="mt-2 text-xs text-amber-400">{formatCurrency(c.pendingRequests)} in pending withdrawal requests.</p>}
+          </Section>
+
+          {/* ── Payouts ──
+              What this rep has actually been handed, and where the latest
+              request has got to. The same note and the same list the rep sees
+              on their own screen, so a conversation about a payout is had over
+              one set of words. Every payout here was paid from the owner's own
+              pocket and is recorded on the Commission account — it has never
+              moved M-Pesa or Airtel Money. */}
+          <Section icon={Coins} title="Payouts" count={withdrawals.length || null}>
+            {showPayoutNote && (
+              <WithdrawalNote className="mb-3" audience="owner" commission={c} latest={latestPayout} firstName={rep.name?.split(' ')[0] || ''} />
+            )}
+            <PayoutHistory items={withdrawals} empty="No withdrawal has been requested yet." />
+            <p className="mt-3 text-[11px] leading-snug text-faint">
+              Paid from your own pocket and kept on the Commission account. It never comes out of a wallet and never
+              off your profit — it is money the business owes you back.
+            </p>
           </Section>
 
           {/* Overdue / penalties */}

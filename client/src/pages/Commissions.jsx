@@ -3,38 +3,96 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
-import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake } from 'lucide-react';
+import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
+import WithdrawalNote, { PayoutHistory, earnedOn, withdrawalState } from '@/components/WithdrawalNote';
 import {
   PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea,
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
-function WithdrawModal({ available, minWithdrawal, onClose }) {
+// Requesting a payout used to be a bare number field over a green strip, and it
+// ended in a four-word toast. It is the one moment in this app that is purely
+// good news for the rep, so it now says what the money was earned on before it
+// is asked for, and says well done afterwards — quietly, once, by name.
+function WithdrawModal({ commission, firstName, onClose }) {
   const qc = useQueryClient();
-  const [amount, setAmount] = useState('');
+  const available = Number(commission.available) || 0;
+  const minWithdrawal = Number(commission.minWithdrawal) || 0;
+  // Prefilled with the whole balance: that is what nearly every request is, and
+  // an empty box asks the rep to do arithmetic to arrive at their own number.
+  const [amount, setAmount] = useState(String(Math.floor(available)));
   const [notes, setNotes] = useState('');
+  const [done, setDone] = useState(null); // the amount that went through
   const req = useMutation({
     mutationFn: () => api.post('/commissions/withdrawals', { amount: Number(amount), notes: notes || undefined }),
-    onSuccess: () => { toast.success('Withdrawal requested'); qc.invalidateQueries({ queryKey: ['commissions'] }); onClose(); },
+    onSuccess: () => {
+      setDone(Number(amount));
+      ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    },
     onError: (e) => toast.error(apiError(e)),
   });
   const amt = Number(amount);
+  // The same rule the server applies: the BALANCE must clear the minimum, the
+  // amount need only be some of it. Mirrored here so the button never offers
+  // something the API is about to refuse.
   const valid = amt > 0 && amt <= available;
+
+  if (done != null) {
+    return (
+      <Modal open onClose={onClose} title="Withdrawal requested" footer={<Button onClick={onClose}>Done</Button>}>
+        <div className="relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ring-emerald-500/25">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.12] to-transparent" aria-hidden="true" />
+          <div className="relative">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
+              <PartyPopper className="h-5 w-5" />
+            </span>
+            <p className="mt-3 text-xs font-semibold text-foreground">Nicely done{firstName ? `, ${firstName}` : ''}</p>
+            <p className="mt-0.5 text-2xl font-bold leading-none tabular-nums text-emerald-300">{formatCurrency(done)}</p>
+            <p className="mt-1.5 text-[11px] leading-snug text-faint">
+              Earned on {earnedOn(commission)}. It is with The Lab now — you will be notified when it is approved,
+              and again when it is paid.
+            </p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-muted">
+          This amount is held aside until the request is decided, so your available balance drops by it now and the
+          same money cannot be requested twice.
+        </p>
+      </Modal>
+    );
+  }
+
   return (
     <Modal open onClose={onClose} title="Request commission withdrawal"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={req.isPending} disabled={!valid} onClick={() => req.mutate()}>Request withdrawal</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={req.isPending} disabled={!valid} onClick={() => req.mutate()}>Request {valid ? formatCurrency(amt) : 'withdrawal'}</Button></>}>
       <div className="space-y-4">
-        <div className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-300">
-          Available balance: <b>{formatCurrency(available)}</b>
+        <div className="relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ring-emerald-500/25">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.12] to-transparent" aria-hidden="true" />
+          <div className="relative">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Yours to withdraw</p>
+            <p className="mt-1 text-2xl font-bold leading-none tabular-nums text-emerald-300">{formatCurrency(available)}</p>
+            <p className="mt-1.5 text-[11px] text-faint">Earned on {earnedOn(commission)}.</p>
+          </div>
         </div>
-        <Field label="Amount" required hint={`Max ${formatCurrency(available)}`}>
+        <Field label="Amount" required hint={`Up to ${formatCurrency(available)} — take all of it, or leave some to build up`}>
           <Input type="number" min="0" max={available} value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
-        <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+        {amt > 0 && amt < available && (
+          <button type="button" onClick={() => setAmount(String(Math.floor(available)))}
+            className="cursor-pointer text-xs font-medium text-brand-400 hover:text-brand-300">
+            Take the whole {formatCurrency(available)}
+          </button>
+        )}
+        <Field label="Notes" hint="Optional — anything The Lab should know">
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        <p className="text-xs text-faint">
+          The Lab reviews every request. The minimum balance to request one is {formatCurrency(minWithdrawal)}.
+        </p>
       </div>
     </Modal>
   );
@@ -277,6 +335,7 @@ function MiniStat({ label, value, tone }) {
 }
 
 function RepView() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('bonus');
   const { data: c, isLoading } = useQuery({ queryKey: ['commissions', 'me'], queryFn: async () => unwrap(await api.get('/commissions/me')).data });
@@ -293,6 +352,14 @@ function RepView() {
     : 0;
   const withdrawals = wd?.data || [];
   const pendingCount = withdrawals.filter((w) => w.status === 'PENDING').length;
+  const firstName = user?.name?.split(' ')[0] || '';
+  // The headline above answers "what is my balance". The note answers "where
+  // has my request got to" — a different number and a different question, so it
+  // only appears once there IS a request. Printing the balance twice on one
+  // screen is exactly what the owner threw out last time.
+  const latest = withdrawals[0] || null;
+  const state = withdrawalState({ commission: c, latest, firstName });
+  const showNote = ['pending', 'approved', 'paid', 'rejected'].includes(state.key);
 
   return (
     <>
@@ -335,23 +402,38 @@ function RepView() {
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <p className="mt-1.5 text-[11px] leading-none text-muted">
+            <p className="mt-1.5 text-[11px] leading-snug text-muted">
               {canWithdraw
-                ? <span className="font-semibold text-emerald-400">Ready to withdraw</span>
-                : `${formatCurrency(c.available)} of ${formatCurrency(c.minWithdrawal)} minimum`}
+                ? <span className="font-semibold text-emerald-400">Ready to withdraw — earned on {earnedOn(c)}</span>
+                : c.earned > 0
+                  ? `${formatCurrency(c.available)} of ${formatCurrency(c.minWithdrawal)} minimum · ${formatCurrency(c.minWithdrawal - c.available)} to go`
+                  : `Every box you settle earns commission. The first ${formatCurrency(c.minWithdrawal)} unlocks a withdrawal.`}
             </p>
           </>
         )}
       </div>
 
+      {/* Where a request that is already in flight has got to. */}
+      {showNote && <WithdrawalNote className="mt-3" commission={c} latest={latest} firstName={firstName} />}
+
+      {/* The note above already prints the live request's amount, and with one
+          request outstanding "Pending" repeats it a few pixels below. Same for
+          "Paid out" after a single payout. Drop whichever tile the note has
+          just said, rather than printing the figure twice. */}
       <div className="mt-3 grid grid-cols-3 gap-2">
         <MiniStat label="Earned" value={c.earned} />
-        <MiniStat label="Paid out" value={c.paid} />
-        <MiniStat
-          label={hasPenalties ? 'Fines' : 'Pending'}
-          value={hasPenalties ? c.penalties : c.pendingRequests}
-          tone={hasPenalties ? 'rose' : undefined}
-        />
+        {!(showNote && state.key === 'paid' && Number(c.paid) === Number(latest?.amount)) ? (
+          <MiniStat label="Paid out" value={c.paid} />
+        ) : (
+          <MiniStat label="Still to come" value={c.available} />
+        )}
+        {hasPenalties ? (
+          <MiniStat label="Fines" value={c.penalties} tone="rose" />
+        ) : !(showNote && state.key === 'pending' && Number(c.pendingRequests) === Number(latest?.amount)) ? (
+          <MiniStat label="Pending" value={c.pendingRequests} />
+        ) : (
+          <MiniStat label="Withdrawn so far" value={c.paid} />
+        )}
       </div>
 
       {/* Four stacked sections became four tabs. The page was a single scroll
@@ -376,17 +458,13 @@ function RepView() {
       {tab === 'withdrawals' && (
         <Card className="mt-4">
           <CardHeader title="My withdrawal requests" subtitle={`Minimum ${formatCurrency(c.minWithdrawal)}`} />
-          {!withdrawals.length ? <EmptyState title="No withdrawals yet" /> : (
-            <Table>
-              <THead><TR><TH>Amount</TH><TH>Status</TH><TH>Requested</TH></TR></THead>
-              <TBody>{withdrawals.map((w) => (
-                <TR key={w.id}>
-                  <TD className="font-medium">{formatCurrency(w.amount)}</TD>
-                  <TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>
-                  <TD className="text-faint">{formatDateTime(w.requestedAt)}</TD>
-                </TR>
-              ))}</TBody>
-            </Table>
+          {!withdrawals.length ? (
+            <EmptyState title="No withdrawals yet" description="Settle boxes and the first request will appear here." />
+          ) : (
+            // A table of three columns for what is really a list of one fact
+            // each: how much, what happened to it, when. The date now says PAID
+            // when it was paid — the one thing a rep opens this list to check.
+            <div className="p-4"><PayoutHistory items={withdrawals} /></div>
           )}
         </Card>
       )}
@@ -409,7 +487,7 @@ function RepView() {
         </>
       )}
 
-      {open && <WithdrawModal available={c.available} minWithdrawal={c.minWithdrawal} onClose={() => setOpen(false)} />}
+      {open && <WithdrawModal commission={c} firstName={firstName} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -905,18 +983,16 @@ function AdminView() {
                       <Button variant="ghost" className="px-2 py-1 text-xs text-rose-600" onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
                     </>}
                     {w.status === 'APPROVED' && (
-                      <>
-                        {/* The owner pays reps from his own pocket, so that is
-                            the first button. It records his money going in
-                            alongside the payout, leaving the business account
-                            where it was instead of draining it. */}
-                        <Button className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
-                          Paid from my pocket
-                        </Button>
-                        <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
-                          Paid from business
-                        </Button>
-                      </>
+                      // One button, because there is only one truth: rep
+                      // commission comes out of the owner's own pocket, for
+                      // both brands. The pair that stood here offered "paid
+                      // from business" as though a wallet could fund it — the
+                      // two called the same endpoint with the same result, and
+                      // the choice only invited the confusion the Commission
+                      // account exists to end.
+                      <Button className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                        Mark paid — from my pocket
+                      </Button>
                     )}
                   </div>
                 </TD>

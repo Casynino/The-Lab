@@ -126,6 +126,25 @@ function SegmentStrip({ segments, size = 'lg' }) {
 const DIR_BADGE = { IN: 'bg-emerald-500/15 text-emerald-300', OUT: 'bg-rose-500/15 text-rose-300' };
 const round2ui = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// ── A commission payout in the Ledger ────────────────────────────────────────
+// "when i pay commission show it on its account name and etc so i can know
+// just like other transactions." So it is a full row: the Commission account by
+// name, the amount, the rep it went to, the date — nothing blanked, nothing
+// hidden. What it must NOT do is read as money leaving a wallet, because none
+// did: the owner paid it from his own hand. Rose with a minus sign is the
+// house's "gone out of an account"; a payout gets violet, no sign, and a line
+// that says whose money it was — the same violet the Commission card uses, so
+// the row and the account it sits on are visibly the same story.
+const isPayoutRow = (t) => t?.type === 'COMMISSION_PAYMENT';
+const PAYOUT_BADGE = 'bg-violet-500/15 text-violet-300';
+// What a row says it was. A payout names the rep, because "Commission Payments"
+// is a category, not an answer to "who did I pay?".
+const ledgerLabel = (t) => (
+  isPayoutRow(t) && t.payee
+    ? `Commission paid — ${t.payee}`
+    : t.category || t.description || t.reference || '—'
+);
+
 // Default to All time so the dashboard opens showing the full business history.
 function usePeriod() { return useState('all'); }
 
@@ -998,24 +1017,39 @@ function AccountStatementModal({ account, onClose }) {
           <>
             <Table>
               <THead>
-                <TR><TH>Date</TH><TH>Type</TH><TH>What it was</TH><TH className="text-right">In</TH><TH className="text-right">Out</TH>{!isRecord && <TH className="text-right">Balance</TH>}</TR>
+                {/* On the record, In/Out is the wrong question — nothing came
+                    in and nothing went out of any account. Every row is one
+                    payout, so it gets one column: who, and how much. */}
+                <TR>
+                  <TH>Date</TH><TH>Type</TH><TH>{isRecord ? 'Paid to' : 'What it was'}</TH>
+                  {isRecord ? <TH className="text-right">Amount</TH> : (
+                    <><TH className="text-right">In</TH><TH className="text-right">Out</TH><TH className="text-right">Balance</TH></>
+                  )}
+                </TR>
               </THead>
               <TBody>
                 {withBalance.map((t) => (
                   <TR key={t.id}>
                     <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
-                    <TD><Badge className={DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
+                    <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                     <TD className="max-w-[260px] truncate text-foreground">
-                      {t.description || t.category || t.reference || '—'}
+                      {isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || '—')}
+                      {isRecord && t.payeeCode && <span className="ml-1.5 text-[11px] text-faint">{t.payeeCode}</span>}
                       {t.brandName && <span className="ml-1.5 text-[11px] text-faint">{t.brandName}</span>}
                     </TD>
-                    <TD className="text-right font-semibold tabular-nums text-emerald-400">
-                      {t.direction === 'IN' ? formatCurrency(t.amount) : ''}
-                    </TD>
-                    <TD className="text-right font-semibold tabular-nums text-rose-400">
-                      {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
-                    </TD>
-                    {!isRecord && <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>}
+                    {isRecord ? (
+                      <TD className="text-right font-semibold tabular-nums text-violet-300">{formatCurrency(t.amount)}</TD>
+                    ) : (
+                      <>
+                        <TD className="text-right font-semibold tabular-nums text-emerald-400">
+                          {t.direction === 'IN' ? formatCurrency(t.amount) : ''}
+                        </TD>
+                        <TD className="text-right font-semibold tabular-nums text-rose-400">
+                          {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
+                        </TD>
+                        <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>
+                      </>
+                    )}
                   </TR>
                 ))}
               </TBody>
@@ -1226,6 +1260,12 @@ function Ledger({ expensesOnly }) {
             { label: 'Money in', value: formatCurrency(sums.in), sub: 'settlements collected and money moved in', tone: 'emerald' },
             { label: 'Money out', value: formatCurrency(sums.out), sub: 'costs paid and money moved out', tone: 'rose' },
             { label: 'Net', value: formatCurrency(sums.net), sub: `${formatNumber(count)} movement${count === 1 ? '' : 's'}`, tone: sums.net >= 0 ? 'sky' : 'amber' },
+            // Listed beside in/out, never inside them. Without it a reader sees
+            // payout rows in the list that are in neither total and has no way
+            // to tell whether they were counted.
+            ...(sums.fromPocket > 0
+              ? [{ label: 'Commission you paid', value: formatCurrency(sums.fromPocket), sub: 'your own money — in neither total above', tone: 'violet' }]
+              : []),
           ]} />
         )
       )}
@@ -1272,11 +1312,18 @@ function Ledger({ expensesOnly }) {
               {rows.map((t) => (
                 <TR key={t.id}>
                   <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
-                  <TD><Badge className={DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
+                  <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                   <TD>{t.brandName ? <Badge className="bg-brand-500/15 text-brand-400">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
-                  <TD className="max-w-[220px] truncate text-foreground">{t.category || t.description || t.reference || '—'}</TD>
+                  <TD className="max-w-[220px] truncate text-foreground">{ledgerLabel(t)}</TD>
                   <TD className="text-muted">{t.account?.name}</TD>
-                  <TD className={`text-right font-semibold tabular-nums ${t.direction === 'IN' ? 'text-emerald-500' : 'text-rose-500'}`}>{t.direction === 'IN' ? '+' : '−'}{formatCurrency(t.amount)}</TD>
+                  {isPayoutRow(t) ? (
+                    <TD className="text-right tabular-nums">
+                      <div className="font-semibold text-violet-300">{formatCurrency(t.amount)}</div>
+                      <div className="text-[10px] font-normal text-faint">from your pocket</div>
+                    </TD>
+                  ) : (
+                    <TD className={`text-right font-semibold tabular-nums ${t.direction === 'IN' ? 'text-emerald-500' : 'text-rose-500'}`}>{t.direction === 'IN' ? '+' : '−'}{formatCurrency(t.amount)}</TD>
+                  )}
                   <TD>
                     <div className="flex items-center justify-end gap-2">
                       <button title="Correct this transaction" onClick={() => setEditing(t)} className="text-faint hover:text-brand-400"><Pencil className="h-4 w-4" /></button>

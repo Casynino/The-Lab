@@ -646,14 +646,43 @@ async function listTransactions(filters, pagination) {
   const fromPocket = round2(toNumber(offOutAgg._sum.amount));
   const sumIn = round2(toNumber(inAgg._sum.amount) - toNumber(offInAgg._sum.amount));
   const sumOut = round2(toNumber(outAgg._sum.amount) - fromPocket);
+
+  // WHO A PAYOUT WENT TO. "when i pay commission show it on its account name
+  // and etc so i can know just like other transactions" — a transaction anyone
+  // can read names the other party, and for a commission payout that is the
+  // rep. The withdrawal it mirrors is the record of that, so the name is read
+  // from there rather than from the row's own description text: a rep renamed
+  // since the payout should read by the name they have now.
+  const payoutRefs = [...new Set(items.filter((t) => t.refType === 'CommissionWithdrawal' && t.refId).map((t) => t.refId))];
+  const payouts = new Map();
+  if (payoutRefs.length) {
+    const found = await prisma.commissionWithdrawal.findMany({
+      where: { id: { in: payoutRefs } },
+      select: { id: true, status: true, paidAt: true, requestedAt: true, salesRep: { select: { code: true, user: { select: { name: true } } } } },
+    }).catch(() => []);
+    found.forEach((w) => payouts.set(w.id, w));
+  }
+
   return {
-    items: items.map((t) => ({
-      ...t,
-      brandName: t.brandId ? brandName.get(t.brandId) || null : null,
-      // Flagged for the row itself, so a reader can see why a listed amount is
-      // absent from the totals above it.
-      offAccount: isOffAccount(t),
-    })),
+    items: items.map((t) => {
+      const isPayout = t.type === 'COMMISSION_PAYMENT';
+      const w = isPayout && t.refType === 'CommissionWithdrawal' ? payouts.get(t.refId) : null;
+      return {
+        ...t,
+        brandName: t.brandId ? brandName.get(t.brandId) || null : null,
+        // Flagged for the row itself, so a reader can see why a listed amount is
+        // absent from the totals above it.
+        offAccount: isOffAccount(t),
+        // Named on the row, so a payout reads like every other transaction:
+        // account, amount, who, when. Null on every row that is not a payout —
+        // a settlement's description carries a rep's name too, and that rep is
+        // the person who HANDED money over, not someone who was paid.
+        payee: isPayout ? (w?.salesRep?.user?.name || payeeFromDescription(t.description)) : null,
+        payeeCode: w?.salesRep?.code || null,
+        payoutStatus: w?.status || null,
+        paidAt: w?.paidAt || null,
+      };
+    }),
     total,
     // `fromPocket` is reported beside in/out, never inside them.
     sums: { in: sumIn, out: sumOut, net: round2(sumIn - sumOut), fromPocket },
@@ -1310,6 +1339,15 @@ function isOffAccount(txn = {}) {
     || (txn.type === 'OWNER_CONTRIBUTION' && txn.refType === 'CommissionWithdrawal');
 }
 
+// Who a commission payout went to, read off the description as a last resort.
+// recordCommissionPayment writes `Commission paid — Juma`, so the name is the
+// tail. A row written before the name was carried has no tail and this returns
+// null rather than inventing one.
+function payeeFromDescription(description) {
+  const tail = String(description || '').split(/\s+—\s+/)[1];
+  return tail ? tail.trim() : null;
+}
+
 function buildCapital(input = {}) {
   const v = (x) => round2(toNumber(x));
   const int = (x) => Math.round(toNumber(x));
@@ -1896,6 +1934,7 @@ module.exports = {
   supplierDueNow,
   supplierDueNowAcross,
   isOffAccount,
+  payeeFromDescription,
   overview,
   cashflow,
   report,
