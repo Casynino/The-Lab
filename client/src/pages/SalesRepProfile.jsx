@@ -228,6 +228,54 @@ function hoursLabel(h) {
 // showing as an undefined location.
 // Take an amount off this rep's commission balance. Money and future accrual are
 // untouched; the rep is told, and the record can be reversed with Forgive.
+// Put commission ON a rep's balance. Deducting has always been possible through
+// a penalty; crediting was not, even though the commission maths has read a
+// `commissionAdjustment` since go-live. Use it to correct a rep who was short,
+// or to put a figure on an account to walk through a withdrawal. It accumulates
+// and takes a negative, so it is undone by its opposite.
+function AddCommissionModal({ rep, earned, onClose }) {
+  const qc = useQueryClient();
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+
+  const add = useMutation({
+    mutationFn: () => api.post('/commissions/adjust', { salesRepId: rep.id, amount: Number(amount), note }),
+    onSuccess: () => {
+      const n = Number(amount);
+      toast.success(`${formatCurrency(Math.abs(n))} ${n >= 0 ? 'added to' : 'taken off'} ${rep.name || 'the rep'}'s commission`);
+      ['salesRep', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      onClose();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const amt = Number(amount);
+  const valid = Number.isFinite(amt) && amt !== 0 && note.trim();
+  return (
+    <Modal open onClose={onClose} title={`Adjust commission — ${rep.name || rep.code}`} footer={
+      <>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>
+          {amt < 0 ? 'Take off ' : 'Add '}{amt ? formatCurrency(Math.abs(amt)) : ''}
+        </Button>
+      </>
+    }>
+      <div className="space-y-4">
+        <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
+          This changes what the business owes this rep. It does not move any wallet and it does not touch profit —
+          commission comes out of your own pocket. A negative amount takes it back off.
+        </p>
+        <Field label="Amount" required hint={`Earned so far: ${formatCurrency(earned)}`}>
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus placeholder="0" />
+        </Field>
+        <Field label="Why" required hint="This is the only record of why the balance moved.">
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. testing the withdrawal flow" />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
 function DeductCommissionModal({ rep, available, onClose }) {
   const qc = useQueryClient();
   const [amount, setAmount] = useState('');
@@ -454,6 +502,7 @@ export default function SalesRepProfile() {
   const [addOpen, setAddOpen] = useState(false); // "Add stock" modal
   const [editOpen, setEditOpen] = useState(false); // "Edit details" modal
   const [deducting, setDeducting] = useState(false); // "Deduct commission" modal
+  const [adding, setAdding] = useState(false);       // "Adjust commission" modal
 
   // Which window the performance figures cover. Kept in the query key so
   // switching period refetches rather than showing last period's numbers.
@@ -788,6 +837,7 @@ export default function SalesRepProfile() {
           <Section icon={Wallet} title="Commission overview"
             action={isAdmin && (
               <div className="flex items-center gap-1">
+                <Button variant="ghost" className="text-xs" onClick={() => setAdding(true)}>Adjust</Button>
                 <Button variant="ghost" className="text-xs" onClick={() => setDeducting(true)}>Deduct</Button>
                 <Button variant="ghost" className="text-xs" onClick={() => navigate('/commissions')}>Payouts</Button>
               </div>
@@ -916,6 +966,13 @@ export default function SalesRepProfile() {
           rep={{ id: rep.id, name: rep.name, code: rep.code }}
           available={c.available}
           onClose={() => setDeducting(false)}
+        />
+      )}
+      {adding && (
+        <AddCommissionModal
+          rep={{ id: rep.id, name: rep.name, code: rep.code }}
+          earned={c.earned}
+          onClose={() => setAdding(false)}
         />
       )}
     </div>

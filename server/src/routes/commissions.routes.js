@@ -21,6 +21,9 @@ router.get('/rep/:salesRepId', staff, ctrl.getForRep);
 router.get('/withdrawals', validate(withdrawalQuery), ctrl.listWithdrawals);
 router.post('/withdrawals', reps, validate(withdrawRequest), ctrl.requestWithdrawal);
 router.post('/withdrawals/:id/decide', staff, validate({ ...idParam, ...withdrawDecide }), ctrl.decideWithdrawal);
+// Correcting a rep's commission up or down. Admin only — it changes what the
+// business owes someone.
+router.post('/adjust', requireRoles(ROLES.ADMIN), ctrl.adjustEarned);
 
 // Commission rates — reading is open to any signed-in user (a rep should be
 // able to see what a box earns); only an admin may add or remove one.

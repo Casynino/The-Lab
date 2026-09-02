@@ -478,7 +478,35 @@ async function decideWithdrawal(id, action, actor) {
   return updated;
 }
 
+// Credit or claw back commission by hand. The `commissionAdjustment` column has
+// been read by summaryForRep since go-live — `earned = grossEarned +
+// adjustment` — but nothing has ever been able to write it, so the only manual
+// lever was the penalty, which can only ever subtract. That left no way to
+// correct a rep upwards, or to put a figure on the account for a dry run.
+//
+// It accumulates rather than replaces: two corrections of 100,000 leave 200,000,
+// which is what "add" means to the person clicking it. Pass a negative amount
+// to take it back off, so a correction is always reversible by its opposite.
+async function adjustEarned({ salesRepId, amount, note }, actor) {
+  const amt = round2(toNumber(amount));
+  if (!salesRepId) throw ApiError.badRequest('Which rep is this for?');
+  if (!Number.isFinite(amt) || amt === 0) throw ApiError.badRequest('Enter an amount to add or take off');
+  const rep = await prisma.salesRepresentative.findUnique({ where: { id: salesRepId } });
+  if (!rep) throw ApiError.notFound('Sales rep not found');
+  const next = round2(toNumber(rep.commissionAdjustment) + amt);
+  return prisma.salesRepresentative.update({
+    where: { id: salesRepId },
+    data: {
+      commissionAdjustment: next,
+      commissionAdjustmentNote: note ? String(note).trim().slice(0, 500) : rep.commissionAdjustmentNote,
+      commissionAdjustedAt: new Date(),
+    },
+    select: { id: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true },
+  });
+}
+
 module.exports = {
+  adjustEarned,
   getRule,
   ratesOn,
   listRates,

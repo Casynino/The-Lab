@@ -106,7 +106,27 @@ const payBonusAward = asyncHandler(async (req, res) => {
   return created(res, row);
 });
 
+// Credit or claw back a rep's commission by hand. Deducting has always been
+// possible through a penalty; this is the other direction, which nothing could
+// do — and it is the same lever, so a correction can be undone by its opposite.
+const adjustEarned = asyncHandler(async (req, res) => {
+  const row = await commission.adjustEarned(req.body || {}, req.user);
+  await audit.record(req, {
+    action: 'UPDATE',
+    entityType: 'SalesRepresentative',
+    entityId: row.id,
+    newValues: {
+      kind: 'COMMISSION_ADJUSTMENT',
+      amount: req.body?.amount,
+      adjustmentNow: row.commissionAdjustment,
+      note: req.body?.note || null,
+    },
+  });
+  return ok(res, row);
+});
+
 module.exports = {
+  adjustEarned,
   listRates, createRate, deleteRate,
   bonusMe, bonusSummary, bonusRules, createBonusRule, updateBonusRule, setBonusRuleActive, bonusAwards, payBonusAward,
   me, getForRep, summary, rule, listWithdrawals, requestWithdrawal, decideWithdrawal };

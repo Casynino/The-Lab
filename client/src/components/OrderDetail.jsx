@@ -78,12 +78,8 @@ function SettleBoxesModal({ order, onClose, onDone }) {
             <Input type="number" min="1" max={max} value={boxes} onChange={(e) => setBoxes(e.target.value)} autoFocus />
           </Field>
           {only ? (
-            <Field label="Where to pay it" hint={only.notes || undefined}>
-              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-elevated px-3 py-2.5">
-                <Wallet className="h-4 w-4 shrink-0 text-brand-400" />
-                <span className="text-sm font-semibold text-foreground">{only.name}</span>
-                <span className="ml-auto text-[11px] text-faint">{line?.brandName || 'This brand'} settles here</span>
-              </div>
+            <Field label="Where to pay it">
+              <PayTo account={only} brandName={line?.brandName} />
             </Field>
           ) : accountOptions.length === 0 ? (
             /* A brand with no account of its own leaves the rep staring at an
@@ -394,6 +390,78 @@ function MoneyCard({ label, value, tone }) {
     <div className="rounded-xl border border-border bg-elevated p-3">
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
       <div className={`mt-0.5 text-lg font-bold ${tones[tone] || tones.default}`}>{value}</div>
+    </div>
+  );
+}
+
+// The number a rep has to send money to, made the biggest thing on the card.
+// It used to sit in an 11px grey line under the account name, which is where
+// you put something nobody needs to read — and this is the one thing they do
+// need, standing in front of a customer, on a phone.
+//
+// The account's notes carry it as "0766 790 794 · CASMIRY CHUWA · OHIS
+// payments", so the parts are pulled out and given their own weight.
+function payDetails(account) {
+  const parts = String(account?.notes || '').split('·').map((x) => x.trim()).filter(Boolean);
+  const number = parts.find((x) => /\d[\d\s]{6,}/.test(x)) || null;
+  const holder = parts.find((x) => x !== number && /[a-z]/i.test(x) && !/payments?$/i.test(x)) || null;
+  return { number, holder };
+}
+
+// Brand-coloured marks, drawn here rather than copied from Vodacom or Airtel.
+// A rep recognises the colour and the wordmark instantly, which is the point;
+// shipping someone else's logo file into the bundle is not something to do
+// casually with a trademark.
+const PAY_BRAND = {
+  'M-Pesa': { wordmark: 'M-PESA', bg: 'bg-[#E60000]', fg: 'text-white', ring: 'ring-[#E60000]/30', glow: 'from-[#E60000]/[0.10]' },
+  'Airtel Money': { wordmark: 'airtel', bg: 'bg-[#E40000]', fg: 'text-white', ring: 'ring-[#E40000]/30', glow: 'from-[#E40000]/[0.10]' },
+};
+const PAY_FALLBACK = { wordmark: null, bg: 'bg-brand-500', fg: 'text-slate-950', ring: 'ring-white/[0.10]', glow: 'from-white/[0.04]' };
+
+function PayTo({ account, brandName }) {
+  const [copied, setCopied] = useState(false);
+  const { number, holder } = payDetails(account);
+  const b = PAY_BRAND[account?.name] || PAY_FALLBACK;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(String(number).replace(/\s+/g, ''));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className={`relative overflow-hidden rounded-xl bg-surface p-4 ring-1 ${b.ring}`}>
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${b.glow} to-transparent`} aria-hidden="true" />
+
+      <div className="relative flex items-center gap-2.5">
+        <span className={`inline-flex items-center rounded-md px-2 py-1 text-[11px] font-extrabold tracking-tight ${b.bg} ${b.fg}`}>
+          {b.wordmark || account?.name}
+        </span>
+        {b.wordmark === 'airtel' && <span className="text-xs font-semibold text-foreground">money</span>}
+        <span className="ml-auto text-[11px] text-faint">{brandName || 'This brand'} settles here</span>
+      </div>
+
+      {number ? (
+        <>
+          <div className="relative mt-3 flex items-center gap-3">
+            <span className="select-all font-mono text-2xl font-bold tracking-wide text-foreground">{number}</span>
+            <button
+              type="button"
+              onClick={copy}
+              className="ml-auto shrink-0 rounded-lg bg-elevated px-3 py-2 text-xs font-semibold text-foreground ring-1 ring-white/[0.10] transition active:scale-95"
+            >
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          {holder && <p className="relative mt-1 text-sm font-medium text-muted">{holder}</p>}
+        </>
+      ) : (
+        <p className="relative mt-2 text-sm font-semibold text-foreground">{account?.name}</p>
+      )}
     </div>
   );
 }
