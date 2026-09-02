@@ -730,12 +730,12 @@ export default function OrderDetailModal({ settlementId, onClose }) {
              equal weight on a phone is four decisions to make. */
           <div className="w-full space-y-2.5">
             {canAct && active && remaining > 0 && (
-              <Button className="w-full justify-center py-3 text-[15px]" onClick={() => setSub('settle')}>
+              <Button className="w-full justify-center py-2.5" onClick={() => setSub('settle')}>
                 <Wallet className="h-4 w-4" /> Submit settlement
               </Button>
             )}
             {staff && active && remaining <= 0 && (
-              <Button className="w-full justify-center py-3 text-[15px]" loading={settle.isPending} onClick={() => settle.mutate()}>
+              <Button className="w-full justify-center py-2.5" loading={settle.isPending} onClick={() => settle.mutate()}>
                 <CheckCircle2 className="h-4 w-4" /> Close this order
               </Button>
             )}
@@ -746,30 +746,30 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 plain for stepping out. */}
             <div className="grid grid-cols-3 gap-2">
               <button type="button" onClick={onClose}
-                className="flex flex-col items-center gap-1 rounded-xl bg-elevated px-2 py-2.5 text-xs font-semibold text-muted ring-1 ring-white/[0.08] transition active:scale-95 hover:text-foreground">
-                <X className="h-4 w-4" />
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-elevated px-2 py-2 text-xs font-semibold text-muted ring-1 ring-white/[0.08] transition active:scale-95 hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
                 Close
               </button>
 
               {canAct && active && remaining > 0 ? (
                 <button type="button" onClick={() => setSub('return')}
-                  className="flex flex-col items-center gap-1 rounded-xl bg-amber-500/10 px-2 py-2.5 text-xs font-semibold text-amber-300 ring-1 ring-amber-500/25 transition active:scale-95">
-                  <Undo2 className="h-4 w-4" />
-                  Return boxes
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-500/10 px-2 py-2 text-xs font-semibold text-amber-300 ring-1 ring-amber-500/25 transition active:scale-95">
+                  <Undo2 className="h-3.5 w-3.5" />
+                  Return
                 </button>
               ) : <span />}
 
               {canAct && active && order.canSelfExtend ? (
                 <button type="button" onClick={() => setSub('self-extend')}
-                  className="flex flex-col items-center gap-1 rounded-xl bg-sky-500/10 px-2 py-2.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
-                  <CalendarPlus className="h-4 w-4" />
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 px-2 py-2 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
+                  <CalendarPlus className="h-3.5 w-3.5" />
                   More time
                 </button>
               ) : staff && active ? (
                 <button type="button" onClick={() => setSub('extend')}
-                  className="flex flex-col items-center gap-1 rounded-xl bg-sky-500/10 px-2 py-2.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
-                  <Clock className="h-4 w-4" />
-                  Extend deadline
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 px-2 py-2 text-xs font-semibold text-sky-300 ring-1 ring-sky-500/25 transition active:scale-95">
+                  <Clock className="h-3.5 w-3.5" />
+                  Extend
                 </button>
               ) : <span />}
             </div>
@@ -794,15 +794,21 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 the eye is not hopping across a 2x2 of look-alike blocks. */}
             <div className="rounded-xl bg-elevated/50 px-4 py-3 ring-1 ring-white/[0.06]">
               <div className="flex items-center gap-3">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Rep</div>
-                  <div className="truncate text-[15px] font-semibold text-foreground">{order.salesRep?.user?.name}</div>
-                </div>
+                {/* A rep opening their own order already knows whose it is.
+                    Staff are looking at someone else's, so they still need it. */}
+                {isOwnRep ? (
+                  <div className="text-[13px] font-semibold text-muted">This order</div>
+                ) : (
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Rep</div>
+                    <div className="truncate text-[15px] font-semibold text-foreground">{order.salesRep?.user?.name}</div>
+                  </div>
+                )}
                 <Badge className={`ml-auto shrink-0 ${SETTLEMENT_STATUS_META[order.status]?.cls}`}>
                   {SETTLEMENT_STATUS_META[order.status]?.label}
                 </Badge>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-3">
+              <div className={`grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-3 ${isOwnRep ? 'mt-2.5' : 'mt-3'}`}>
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Issued</div>
                   <div className="mt-0.5 text-[13px] font-medium text-muted">{formatDateTime(order.issuedAt)}</div>
@@ -929,48 +935,125 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 quiet={!(order.order.totals.outstanding > 0)} />
             </div>
 
-            {/* Box-by-box breakdown: issued vs settled vs returned vs remaining */}
+            {/* Box-by-box, per product. A five-column table on a 390px phone
+                scrolls the product name off the left edge, so the header reads
+                "SUED" and the numbers belong to nothing. One block per product
+                with its own bar says the same thing and fits. */}
             <div>
-              <div className="mb-2 text-sm font-semibold text-foreground">Stock breakdown (boxes)</div>
-              <Table>
-                <THead><TR><TH>Product</TH><TH>Issued</TH><TH>Settled</TH><TH>Returned</TH><TH>{overdue ? 'Missing' : 'Remaining'}</TH></TR></THead>
-                <TBody>
-                  {order.order.lines.map((l) => (
-                    <TR key={l.productId}>
-                      <TD className="font-medium text-foreground">{l.name}</TD>
-                      <TD>{formatNumber(l.assigned)}</TD>
-                      <TD className="text-emerald-500">{formatNumber(l.settled)}</TD>
-                      <TD className="text-sky-400">{formatNumber(l.returned)}{(l.pendingReturn || 0) > 0 && <span className="ml-1 text-xs text-amber-500">+{formatNumber(l.pendingReturn)} pending</span>}</TD>
-                      <TD className={l.remaining > 0 && overdue ? 'font-semibold text-rose-500' : 'text-muted'}>{formatNumber(l.remaining)}</TD>
-                    </TR>
-                  ))}
-                  <TR className="font-semibold">
-                    <TD>Total</TD>
-                    <TD>{formatNumber(order.order.totals.assignedBoxes)}</TD>
-                    <TD className="text-emerald-500">{formatNumber(order.order.totals.settledBoxes)}</TD>
-                    <TD className="text-sky-400">{formatNumber(order.order.totals.returnedBoxes)}</TD>
-                    <TD className={order.order.totals.remainingBoxes > 0 && overdue ? 'text-rose-500' : 'text-muted'}>{formatNumber(order.order.totals.remainingBoxes)}</TD>
-                  </TR>
-                </TBody>
-              </Table>
-              <p className="mt-1 text-xs text-faint">Remaining = Issued − Settled − Returned. The order closes only when every box is <span className="text-emerald-500">settled</span> or <span className="text-sky-400">returned</span>. After the 72h deadline, unaccounted boxes show as <span className="text-rose-500">missing</span> · value {formatCurrency(order.order.totals.remainingValue)}.</p>
-              <p className="mt-1 text-xs text-faint">Commission earned on {formatNumber(order.order.totals.settledBoxes)} settled box(es): <span className="font-medium text-brand-600">{formatCurrency(order.order.totals.commission)}</span> · rate depends on brand · paid via Commissions.</p>
+              <div className="mb-2 text-sm font-semibold text-foreground">Every box in this order</div>
+              <div className="space-y-2">
+                {order.order.lines.map((l) => {
+                  const total = Math.max(1, l.assigned);
+                  const pct = (n) => `${Math.max(0, (n / total) * 100)}%`;
+                  return (
+                    <div key={l.productId} className="rounded-xl bg-elevated/50 p-3 ring-1 ring-white/[0.06]">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{l.name}</span>
+                        <span className="shrink-0 text-[11px] text-faint">{formatNumber(l.assigned)} issued</span>
+                      </div>
+                      <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="bg-emerald-400" style={{ width: pct(l.settled) }} />
+                        <div className="bg-sky-400" style={{ width: pct(l.returned) }} />
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+                        <span className="text-emerald-400">{formatNumber(l.settled)} settled</span>
+                        <span className="text-sky-400">
+                          {formatNumber(l.returned)} returned
+                          {(l.pendingReturn || 0) > 0 && <span className="ml-1 text-amber-400">+{formatNumber(l.pendingReturn)} pending</span>}
+                        </span>
+                        <span className={l.remaining > 0 && overdue ? 'ml-auto font-semibold text-rose-400' : 'ml-auto text-muted'}>
+                          {formatNumber(l.remaining)} {overdue ? 'missing' : 'left'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-elevated px-3 py-2.5 text-[12px] font-semibold ring-1 ring-white/[0.06]">
+                <span className="text-foreground">All {formatNumber(order.order.totals.assignedBoxes)} boxes</span>
+                <span className="text-emerald-400">{formatNumber(order.order.totals.settledBoxes)} settled</span>
+                <span className="text-sky-400">{formatNumber(order.order.totals.returnedBoxes)} returned</span>
+                <span className={order.order.totals.remainingBoxes > 0 && overdue ? 'ml-auto text-rose-400' : 'ml-auto text-muted'}>
+                  {formatNumber(order.order.totals.remainingBoxes)} {overdue ? 'missing' : 'left'}
+                </span>
+              </div>
+
+              <p className="mt-2 text-[11px] leading-snug text-faint">
+                The order closes only when every box is settled or returned. After the deadline, boxes not accounted
+                for count as missing — {formatCurrency(order.order.totals.remainingValue)} on this one.
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-faint">
+                Commission on {formatNumber(order.order.totals.settledBoxes)} settled box{order.order.totals.settledBoxes === 1 ? '' : 'es'}:{' '}
+                <span className="font-semibold text-brand-400">{formatCurrency(order.order.totals.commission)}</span> · paid via Commissions.
+              </p>
             </div>
 
-            {/* Settlement history — each settle is a recorded sale transaction */}
+            {/* Money in — one row per settlement, not a paragraph that wraps. */}
             <div>
-              <div className="mb-2 text-sm font-semibold text-foreground">Settlements</div>
-              {!order.sales?.length ? <p className="text-sm text-faint">Nothing settled yet.</p> : (
-                <ul className="space-y-1 text-sm">
-                  {order.sales.map((s) => (
-                    <li key={s.id} className="flex justify-between text-muted">
-                      <span>{formatDateTime(s.soldAt)} · {s.items?.map((i) => `${formatNumber(i.quantity)} box(es) ${i.product?.name}`).join(', ')} · {s.saleNumber}</span>
-                      <span className="font-medium text-emerald-500">{formatCurrency(s.total)}</span>
-                    </li>
-                  ))}
+              <div className="mb-2 flex items-baseline gap-2">
+                <span className="text-sm font-semibold text-foreground">Settled</span>
+                {order.sales?.length > 0 && (
+                  <span className="text-[11px] text-faint">
+                    {formatNumber(order.sales.length)} time{order.sales.length === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              {!order.sales?.length ? (
+                <p className="rounded-xl bg-elevated/40 px-3 py-2.5 text-[13px] text-faint">Nothing settled yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {order.sales.map((s) => {
+                    const boxes = (s.items || []).reduce((n, i) => n + (i.quantity || 0), 0);
+                    return (
+                      <li key={s.id} className="rounded-xl bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/20">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-[13px] font-semibold text-foreground">
+                            {formatNumber(boxes)} box{boxes === 1 ? '' : 'es'}
+                          </span>
+                          <span className="shrink-0 text-[15px] font-bold tabular-nums text-emerald-400">{formatCurrency(s.total)}</span>
+                        </div>
+                        <p className="mt-1 truncate text-[11px] text-muted">
+                          {(s.items || []).map((i) => i.product?.name).filter(Boolean).join(', ')}
+                        </p>
+                        <p className="mt-0.5 text-[11px] text-faint">{formatDateTime(s.soldAt)} · {s.saleNumber}</p>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
+
+            {/* Boxes that came back. These used to disappear into a total the
+                moment they were approved, with no way to see which ones. */}
+            {order.returnsList?.length > 0 && (
+              <div>
+                <div className="mb-2 flex items-baseline gap-2">
+                  <span className="text-sm font-semibold text-foreground">Returned</span>
+                  <span className="text-[11px] text-faint">
+                    {formatNumber(order.returnsList.length)} time{order.returnsList.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <ul className="space-y-2">
+                  {order.returnsList.map((r) => (
+                    <li key={r.id} className="rounded-xl bg-sky-500/[0.06] p-3 ring-1 ring-sky-500/20">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[13px] font-semibold text-foreground">
+                          {formatNumber(r.boxes)} box{r.boxes === 1 ? '' : 'es'} back
+                        </span>
+                        <span className="shrink-0 text-[11px] text-sky-300">{r.returnNumber}</span>
+                      </div>
+                      <p className="mt-1 truncate text-[11px] text-muted">
+                        {r.items.map((i) => i.productName).filter(Boolean).join(', ')}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-faint">
+                        {r.at ? formatDateTime(r.at) : '—'}{r.reason ? ` · ${r.reason}` : ''}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </Modal>

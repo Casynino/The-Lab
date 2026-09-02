@@ -283,6 +283,23 @@ async function get(id) {
     processedAt: r.processedAt,
     items: r.items.map((i) => ({ productName: i.product?.name, quantity: i.quantity, unitName: i.packagingUnit?.name })),
   }));
+  // Returns that have actually gone through. Only PENDING ones were fetched, so
+  // boxes a rep had sent back were nowhere on this screen once approved — they
+  // simply vanished into the "returned" total with no way to see which ones.
+  const settledReturns = await prisma.return.findMany({
+    where: { settlementId: id, status: { in: ['APPROVED', 'COMPLETED'] } },
+    include: { items: { include: { product: { select: { name: true } }, packagingUnit: { select: { name: true } } } } },
+    orderBy: { decidedAt: 'desc' },
+  });
+  decorated.returnsList = settledReturns.map((r) => ({
+    id: r.id,
+    returnNumber: r.returnNumber,
+    reason: r.reason,
+    at: r.decidedAt || r.processedAt,
+    boxes: r.items.reduce((n, i) => n + (i.baseQuantity || i.quantity || 0), 0),
+    items: r.items.map((i) => ({ productName: i.product?.name, quantity: i.quantity, unitName: i.packagingUnit?.name })),
+  }));
+
   // Pending settlement submissions on this order — awaiting The Doctor's
   // approval. They have NO business impact yet (no sale recorded). Surfaced so
   // staff can approve/reject straight from the order detail, like returns.
