@@ -364,7 +364,7 @@ async function command() {
     topProductsByRevenue(monthR).catch(() => []),
   ]).then(([daily, byRegion, byRep, topProducts]) => ({ daily, byRegion, byRep, topProducts }));
 
-  const [fin, profMonth, bd, stl, low, val, repsRows, repBal, commAll, supplierRows, products, pendCounts, salesTodayRows, salesMonthRows, activeStl, retTodayAgg, retSubmittedToday, retSubmittedTodayBoxes] = await Promise.all([
+  const [fin, profMonth, bd, stl, low, val, repsRows, repBal, commAll, supplierRows, products, pendCounts, pendingWithdrawals, salesTodayRows, salesMonthRows, activeStl, retTodayAgg, retSubmittedToday, retSubmittedTodayBoxes] = await Promise.all([
     finance.overview('today'),
     reports.profitOverview('month'),
     brandBreakdown(),
@@ -381,6 +381,11 @@ async function command() {
       prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
       prisma.return.count({ where: { status: 'PENDING' } }),
     ]),
+    prisma.commissionWithdrawal.findMany({
+      where: { status: 'PENDING' },
+      include: { salesRep: { select: { id: true, code: true, user: { select: { name: true } } } } },
+      orderBy: { requestedAt: 'asc' },
+    }),
     prisma.sale.groupBy({ by: ['salesRepId'], where: { status: { not: 'CANCELLED' }, soldAt: { gte: todayR.start, lte: todayR.end }, salesRepId: { not: null } }, _sum: { total: true } }),
     prisma.sale.groupBy({ by: ['salesRepId'], where: { status: { not: 'CANCELLED' }, soldAt: { gte: monthR.start, lte: monthR.end }, salesRepId: { not: null } }, _sum: { total: true } }),
     prisma.settlement.findMany({ where: { status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } }, select: { salesRepId: true, deadlineAt: true } }),
@@ -492,6 +497,27 @@ async function command() {
       lowStock: { count: low.length, items: low.slice(0, 5).map((l) => ({ name: l.name, onHand: l.onHand })) },
       outOfStock,
       supplierDue,
+      commissionRequests: {
+        count: pendingWithdrawals.length,
+        total: round2(pendingWithdrawals.reduce((n, w) => n + toNumber(w.amount), 0)),
+        items: pendingWithdrawals.map((w) => {
+          const bal = (commAll.items || []).find((c) => c.salesRepId === w.salesRepId);
+          return {
+            id: w.id,
+            salesRepId: w.salesRepId,
+            repName: w.salesRep?.user?.name || w.salesRep?.code || 'Rep',
+            repCode: w.salesRep?.code || null,
+            amount: round2(toNumber(w.amount)),
+            // Where the rep asked for it to go — name, number and method.
+            payTo: w.notes || null,
+            requestedAt: w.requestedAt,
+            // What they have earned and what is left after this request, so the
+            // decision does not need a second screen.
+            available: bal ? round2(toNumber(bal.available)) : null,
+            earned: bal ? round2(toNumber(bal.earned)) : null,
+          };
+        }),
+      },
     },
     inventory: {
       costValue: val.totals.totalValue,

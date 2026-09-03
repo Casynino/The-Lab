@@ -1,22 +1,60 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
-  Wallet, TrendingUp, TrendingDown, Boxes, Warehouse, Truck, AlertTriangle,
-  ArrowRight, Timer, CheckCircle2, Banknote, Landmark, Smartphone, PiggyBank,
-  ClipboardList, Undo2, Factory, PackageX, Receipt, ShoppingCart, SlidersHorizontal,
-  ArrowDownLeft, ArrowUpRight, Scale, ChevronRight, Coins,
+  Wallet,
+  TrendingUp,
+  TrendingDown,
+  Boxes,
+  Warehouse,
+  Truck,
+  AlertTriangle,
+  ArrowRight,
+  Timer,
+  CheckCircle2,
+  Banknote,
+  Landmark,
+  Smartphone,
+  PiggyBank,
+  ClipboardList,
+  Undo2,
+  Factory,
+  PackageX,
+  Receipt,
+  ShoppingCart,
+  SlidersHorizontal,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Scale,
+  ChevronRight,
+  Coins,
+  ShieldCheck,
+  X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import clsx from 'clsx';
-import api, { unwrap } from '@/lib/api';
+import toast from 'react-hot-toast';
+import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { formatCurrency, formatNumber } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import { TrendChart, BarChartCard, DonutChart } from '@/components/charts';
 import { tzGreeting, tzDateLabel } from '@/lib/tz';
 import {
-  StatCard, Card, CardHeader, CardBody, PageSpinner, EmptyState, Badge, Button,
-  Table, THead, TBody, TR, TH, TD,
+  StatCard,
+  Card,
+  CardHeader,
+  CardBody,
+  PageSpinner,
+  EmptyState,
+  Badge,
+  Button,
+  Table,
+  THead,
+  TBody,
+  TR,
+  TH,
+  TD,
+  Modal,
 } from '@/components/ui';
 
 // How many attention rows are visible before the list scrolls, and the height
@@ -75,8 +113,88 @@ function Mini({ label, value, sub }) {
 const HERO_BAR = ['bg-brand-400', 'bg-violet-400', 'bg-cyan-300', 'bg-amber-300'];
 const HERO_DOT = ['bg-brand-400', 'bg-violet-400', 'bg-cyan-300', 'bg-amber-300'];
 
+// Deciding a withdrawal needs three things in front of you: who is asking, how
+// much, and where they want it sent — plus what they are actually owed, so an
+// amount that looks wrong can be caught before the money moves. It opens from
+// the attention list rather than sending you off to hunt for it.
+function ReviewWithdrawals({ items, onClose }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(null);
+
+  const decide = useMutation({
+    mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action }),
+    onSuccess: (_r, v) => {
+      toast.success(v.action === 'APPROVE' ? 'Approved' : 'Rejected');
+      ['dashboard', 'commissions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      onClose();
+    },
+    onError: (e) => toast.error(apiError(e)),
+    onSettled: () => setBusy(null),
+  });
+
+  const run = (id, action) => { setBusy(`${id}:${action}`); decide.mutate({ id, action }); };
+
+  return (
+    <Modal open onClose={onClose} size="lg"
+      title={`Commission request${items.length !== 1 ? 's' : ''} · ${formatNumber(items.length)}`}>
+      <div className="space-y-3">
+        {items.map((w) => (
+          <div key={w.id} className="rounded-2xl bg-surface p-4 ring-1 ring-white/[0.07]">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-semibold text-foreground">{w.repName}</p>
+                {w.repCode && <p className="text-[11px] text-faint">{w.repCode}</p>}
+              </div>
+              <p className="shrink-0 text-2xl font-bold tabular-nums text-emerald-400">{formatCurrency(w.amount)}</p>
+            </div>
+
+            {/* Where the money is going. This is the part that has to be read. */}
+            {w.payTo && (
+              <div className="mt-3 rounded-xl bg-elevated/60 px-3.5 py-3 ring-1 ring-white/[0.07]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Send to</p>
+                <p className="mt-1 break-words font-mono text-[15px] font-bold text-foreground">{w.payTo}</p>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-faint">
+              {w.available != null && (
+                <span>
+                  Balance after this: <b className="text-foreground">{formatCurrency(Math.max(0, w.available))}</b>
+                </span>
+              )}
+              {w.earned != null && <span>Earned all time {formatCurrency(w.earned)}</span>}
+              <span className="ml-auto">{formatDateTime(w.requestedAt)}</span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button type="button" disabled={!!busy}
+                onClick={() => run(w.id, 'APPROVE')}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-slate-950 ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
+                <ShieldCheck className="h-4 w-4" />
+                {busy === `${w.id}:APPROVE` ? 'Approving…' : 'Approve'}
+              </button>
+              <button type="button" disabled={!!busy}
+                onClick={() => run(w.id, 'REJECT')}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-elevated text-[13px] font-semibold text-foreground ring-1 ring-white/[0.07] transition active:scale-[0.97] disabled:opacity-60">
+                <X className="h-4 w-4 text-rose-400" />
+                Reject
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <p className="text-[11px] leading-snug text-faint">
+          Approving does not move any money — it clears the request so you can pay it. The amount stays held aside
+          from the rep&rsquo;s balance either way until you decide.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Dashboard() {
   const [attentionFilter, setAttentionFilter] = useState('All');
+  const [reviewing, setReviewing] = useState(null); // pending commission requests
   // The actual month by name, so "this month" can never be mistaken for
   // "everything". Tanzania is UTC+3 with no DST, so the shift is fixed.
   const monthLabel = new Date(Date.now() + 3 * 3600_000)
@@ -255,6 +373,15 @@ export default function Dashboard() {
           count separately and a padding change silently makes the footer lie. */}
       {(() => {
         const items = [
+          (attention.commissionRequests?.count || 0) > 0 && {
+            key: 'commission-req', group: 'Sign-offs', tone: 'amber', icon: Coins,
+            title: `${attention.commissionRequests.count} commission request${attention.commissionRequests.count !== 1 ? 's' : ''} to decide`,
+            desc: attention.commissionRequests.items?.[0]
+              ? `${attention.commissionRequests.items[0].repName}${attention.commissionRequests.count > 1 ? ' and others' : ''} — waiting on your approval`
+              : 'Waiting on your approval',
+            value: formatCurrency(attention.commissionRequests.total),
+            onOpen: () => setReviewing(attention.commissionRequests.items || []),
+          },
           attention.overdueSettlements > 0 && {
             key: 'overdue', group: 'Overdue', tone: 'rose', icon: AlertTriangle,
             title: `${attention.overdueSettlements} order${attention.overdueSettlements !== 1 ? 's' : ''} past the deadline`,
@@ -349,7 +476,7 @@ export default function Dashboard() {
                 <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
                   <div className="overflow-y-auto" style={{ maxHeight: ATTENTION_ROWS * ATTENTION_ROW_PX }}>
                   {shown.map((i, idx) => (
-                    <button key={i.key} type="button" onClick={() => navigate(i.to)}
+                    <button key={i.key} type="button" onClick={() => (i.onOpen ? i.onOpen() : navigate(i.to))}
                       className={clsx(
                         'flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left transition duration-200 hover:bg-white/[0.04]',
                         idx > 0 && 'border-t border-white/[0.06]',
@@ -710,6 +837,7 @@ export default function Dashboard() {
         )}
       </Card>
 
+      {reviewing && <ReviewWithdrawals items={reviewing} onClose={() => setReviewing(null)} />}
     </div>
   );
 }
