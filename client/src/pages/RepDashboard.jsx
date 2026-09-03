@@ -11,7 +11,6 @@ import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { tzGreeting, tzDateLabel } from '@/lib/tz';
 import ProgressRows from '@/components/ProgressRows';
-import WithdrawalNote, { withdrawalState } from '@/components/WithdrawalNote';
 import { SETTLEMENT_STATUS_META } from '@/lib/constants';
 import OrderDetailModal from '@/components/OrderDetail';
 import { PageSpinner, EmptyState, Badge } from '@/components/ui';
@@ -74,25 +73,12 @@ export default function RepDashboard() {
     queryFn: async () => unwrap(await api.get('/dashboard/me')).data,
     refetchInterval: 60_000,
   });
-  // Only the most recent one: "where has my payout got to" is a question about
-  // the last request, not about a history. The list lives on the Commissions
-  // page, which this note links to.
-  const { data: wd } = useQuery({
-    queryKey: ['commissions', 'withdrawals', 'latest'],
-    queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 1 } })),
-  });
 
   if (isLoading) return <PageSpinner />;
   if (!data) return <EmptyState title="No data yet" />;
 
   const { commission, openSettlements, openSettlementsValue, pendingRequests, orders } = data;
   const first = user?.name?.split(' ')[0] || 'there';
-  // The progress bar above already carries the balance; this carries the
-  // request. It appears only when there IS one, so the dashboard never prints
-  // the same figure twice.
-  const latest = wd?.data?.[0] || null;
-  const noteState = withdrawalState({ commission, latest, firstName: user?.name?.split(' ')[0] || '' });
-  const showNote = ['pending', 'approved', 'paid', 'rejected'].includes(noteState.key);
 
   const settlementHint = openSettlements === 0
     ? 'No open orders'
@@ -113,16 +99,9 @@ export default function RepDashboard() {
       {/* Sales bonus — separate from box commission, so it sits on its own. */}
       <ProgressRows commission={commission} bonus={bonus} onOpenCommission={() => navigate('/commissions')} />
 
-      {/* Where the last withdrawal has got to — the only reason a rep opens the
-          Commissions page most mornings, answered before they have to. */}
-      {showNote && (
-        <WithdrawalNote commission={commission} latest={latest} firstName={first === 'there' ? '' : first}>
-          <button type="button" onClick={() => navigate('/commissions')}
-            className="cursor-pointer text-[11px] font-semibold text-brand-400 hover:text-brand-300">
-            See every payout &rsaquo;
-          </button>
-        </WithdrawalNote>
-      )}
+      {/* The withdrawal card lived here, under the balance. A request already
+          shows in the payouts list on the Commissions page with its own status,
+          so this was the same thing said twice and the bigger of the two. */}
 
       {/* Card grid */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

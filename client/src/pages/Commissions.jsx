@@ -8,7 +8,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
-import WithdrawalNote, { PayoutHistory, earnedOn, withdrawalState } from '@/components/WithdrawalNote';
+import { PayoutHistory, earnedOn } from '@/components/WithdrawalNote';
 import {
   PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea,
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
@@ -597,9 +597,6 @@ function RepView() {
   // has my request got to" — a different number and a different question, so it
   // only appears once there IS a request. Printing the balance twice on one
   // screen is exactly what the owner threw out last time.
-  const latest = withdrawals[0] || null;
-  const state = withdrawalState({ commission: c, latest, firstName });
-  const showNote = ['pending', 'approved', 'paid', 'rejected'].includes(state.key);
 
   return (
     <>
@@ -653,27 +650,19 @@ function RepView() {
         )}
       </div>
 
-      {/* Where a request that is already in flight has got to. */}
-      {showNote && <WithdrawalNote className="mt-3" commission={c} latest={latest} firstName={firstName} />}
+      {/* The live request used to get a card here, under the balance. It is
+          already in the payouts list below with its own status, so the card was
+          the same fact twice — and the balance is what this part of the page is
+          for. */}
 
-      {/* The note above already prints the live request's amount, and with one
-          request outstanding "Pending" repeats it a few pixels below. Same for
-          "Paid out" after a single payout. Drop whichever tile the note has
-          just said, rather than printing the figure twice. */}
+      {/* These swapped themselves out when the note above was showing the same
+          figure. With the note gone they just state the three facts. */}
       <div className="mt-3 grid grid-cols-3 gap-2">
         <MiniStat label="Earned" value={c.earned} />
-        {!(showNote && state.key === 'paid' && Number(c.paid) === Number(latest?.amount)) ? (
-          <MiniStat label="Paid out" value={c.paid} />
-        ) : (
-          <MiniStat label="Still to come" value={c.available} />
-        )}
-        {hasPenalties ? (
-          <MiniStat label="Fines" value={c.penalties} tone="rose" />
-        ) : !(showNote && state.key === 'pending' && Number(c.pendingRequests) === Number(latest?.amount)) ? (
-          <MiniStat label="Pending" value={c.pendingRequests} />
-        ) : (
-          <MiniStat label="Withdrawn so far" value={c.paid} />
-        )}
+        <MiniStat label="Paid out" value={c.paid} />
+        {hasPenalties
+          ? <MiniStat label="Fines" value={c.penalties} tone="rose" />
+          : <MiniStat label="Pending" value={c.pendingRequests} />}
       </div>
 
       {/* Four stacked sections became four tabs. The page was a single scroll
