@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, X } from 'lucide-react';
+import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
@@ -764,27 +764,30 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-violet-400',
             });
           }
-          actions.push({
-            key: 'close', label: 'Close', Icon: X, onClick: onClose,
-            cls: 'bg-elevated text-muted ring-white/[0.07]', icon: 'text-faint',
-          });
+
+          const [primary, ...rest] = actions;
+          const btn = 'flex h-11 items-center justify-center gap-2 rounded-xl px-3 text-[13px] font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60';
 
           return (
-            <div className="w-full space-y-2.5">
-              <div className="grid grid-cols-2 gap-2">
-                {actions.map((a) => (
-                  <button
-                    key={a.key}
-                    type="button"
-                    onClick={a.onClick}
-                    disabled={a.busy}
-                    className={`flex h-[52px] items-center justify-center gap-2.5 rounded-2xl px-3 text-[14px] font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60 ${a.cls}`}
-                  >
-                    <a.Icon className={`h-[17px] w-[17px] shrink-0 ${a.icon}`} />
-                    <span className="truncate">{a.label}</span>
-                  </button>
-                ))}
-              </div>
+            <div className="w-full space-y-2">
+              {primary && (
+                <button type="button" onClick={primary.onClick} disabled={primary.busy}
+                  className={`${btn} w-full ${primary.cls}`}>
+                  <primary.Icon className={`h-4 w-4 shrink-0 ${primary.icon}`} />
+                  {primary.label}
+                </button>
+              )}
+              {rest.length > 0 && (
+                <div className={`grid gap-2 ${rest.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {rest.map((a) => (
+                    <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy}
+                      className={`${btn} ${a.cls}`}>
+                      <a.Icon className={`h-4 w-4 shrink-0 ${a.icon}`} />
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {staff && active && remaining > 0 && (
                 <p className="text-center text-xs text-faint">
