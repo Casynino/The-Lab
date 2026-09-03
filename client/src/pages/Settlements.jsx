@@ -19,9 +19,37 @@ import {
 
 function hoursLabel(h) {
   if (h == null) return '—';
-  if (h < 0) return `${Math.abs(Math.round(h))}h overdue`;
+  // Rounding made the first hour either side of the deadline read as its
+  // opposite: half an hour late came out "0h overdue", which looks like it is
+  // not late, and the last minutes came out "0h left".
+  if (h < 0) {
+    const over = Math.abs(h);
+    return over < 1 ? 'just overdue' : `${Math.round(over)}h overdue`;
+  }
+  if (h < 1) return 'due now';
   if (h < 24) return `${Math.round(h)}h left`;
   return `${Math.round(h / 24)}d left`;
+}
+
+// How much time is left, told by colour as well as by words. It used to be
+// text-faint — the quietest style in the app — on the one figure in the row
+// that decides whether you act today. The bands are the ones that matter to a
+// 72-hour contract: past it, inside a day, inside the window, then the rest.
+function remainingTone(h) {
+  if (h == null) return 'bg-white/[0.06] text-muted ring-white/[0.10]';
+  if (h < 0) return 'bg-rose-500/15 text-rose-300 ring-rose-500/30';
+  if (h <= 24) return 'bg-rose-500/15 text-rose-300 ring-rose-500/30';
+  if (h <= 72) return 'bg-amber-500/15 text-amber-300 ring-amber-500/30';
+  if (h <= 168) return 'bg-sky-500/15 text-sky-300 ring-sky-500/30';
+  return 'bg-white/[0.06] text-muted ring-white/[0.10]';
+}
+
+function Remaining({ hours, className = '' }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ring-1 ${remainingTone(hours)} ${className}`}>
+      {hoursLabel(hours)}
+    </span>
+  );
 }
 
 // ── Rep-facing card for an ACTIVE order ─────────────────────────────────────
@@ -67,8 +95,11 @@ function ActiveOrderCard({ s, onClick }) {
 
       {/* Footer */}
       <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
-        <span className={clsx('text-xs font-medium', accent.timeCls)}>
-          {hoursLabel(s.hoursRemaining)} · {formatDateTime(s.deadlineAt)}
+        {/* The same pill the admin table uses, so a rep and The Lab are
+            reading the identical signal about the same order. */}
+        <span className="inline-flex items-center gap-2">
+          <Remaining hours={s.hoursRemaining} />
+          <span className="text-[11px] text-faint">{formatDateTime(s.deadlineAt)}</span>
         </span>
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-400">
           Open <ChevronRight className="h-3.5 w-3.5" />
@@ -405,10 +436,8 @@ function StaffSettlements({ viewing, setViewing }) {
                           </div>
                         ) : (
                           <>
-                            <div className="text-muted">{formatDateTime(s.deadlineAt)}</div>
-                            <div className={clsx('text-xs', s.hoursRemaining < 0 ? 'text-rose-500' : s.approaching ? 'text-amber-500' : 'text-faint')}>
-                              {hoursLabel(s.hoursRemaining)}
-                            </div>
+                            <Remaining hours={s.hoursRemaining} />
+                            <div className="mt-1 text-[11px] text-faint">{formatDateTime(s.deadlineAt)}</div>
                           </>
                         )}
                       </TD>
