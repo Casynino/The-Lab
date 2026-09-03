@@ -31,12 +31,13 @@ function WithdrawModal({ commission, firstName, onClose }) {
   const [via, setVia] = useState('mobile');
   const [payNumber, setPayNumber] = useState('');
   const [bank, setBank] = useState('');
+  const [payName, setPayName] = useState('');
   const [done, setDone] = useState(null); // { amount, to }
   // The payout address, written as one line so it reads back plainly wherever
   // the notes are shown — the Payouts list, the ledger, the WhatsApp message.
   const payTo = via === 'mobile'
-    ? `Mobile money · ${payNumber.trim()}`
-    : `Bank · ${bank.trim()} · ${payNumber.trim()}`;
+    ? `Mobile money · ${payNumber.trim()} · ${payName.trim()}`
+    : `Bank · ${bank.trim()} · ${payNumber.trim()} · ${payName.trim()}`;
 
   const req = useMutation({
     mutationFn: () => api.post('/commissions/withdrawals', { amount: Number(amount), notes: payTo }),
@@ -51,7 +52,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
   // amount need only be some of it. Mirrored here so the button never offers
   // something the API is about to refuse. And there is no point requesting
   // money without saying where it goes.
-  const addressed = payNumber.trim().length >= 6 && (via === 'mobile' || bank.trim());
+  const addressed = payNumber.trim().length >= 6 && payName.trim().length >= 2 && (via === 'mobile' || bank.trim());
   const valid = amt > 0 && amt <= available && addressed;
 
   if (done != null) {
@@ -159,6 +160,33 @@ function WithdrawModal({ commission, firstName, onClose }) {
                 placeholder={via === 'mobile' ? '0766 790 794' : '0150 1234 5678'}
               />
             </Field>
+
+            {/* The money goes exactly where this says. Reading it back large
+                is the only chance to catch a wrong digit, and the warning is
+                what makes clear whose mistake it is — The Lab pays what it is
+                told to pay and cannot pull it back afterwards. */}
+            <Field label="Name on the account" required
+              hint={via === 'mobile' ? 'The name that shows when the money is sent' : 'Exactly as the bank has it'}>
+              <Input value={payName} onChange={(e) => setPayName(e.target.value)} placeholder={firstName || 'Full name'} />
+            </Field>
+
+            {payNumber.trim() && (
+              <div className="rounded-xl bg-elevated/60 px-4 py-3 text-center ring-1 ring-white/[0.07]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Sending to</p>
+                <p className="mt-1 font-mono text-xl font-bold tracking-wide text-foreground">{payNumber.trim()}</p>
+                {payName.trim() && <p className="mt-0.5 text-sm font-semibold text-foreground">{payName.trim()}</p>}
+                {via === 'bank' && bank.trim() && <p className="mt-0.5 text-xs text-muted">{bank.trim()}</p>}
+              </div>
+            )}
+
+            <div className="flex gap-2.5 rounded-xl bg-amber-500/[0.07] px-3.5 py-3 ring-1 ring-amber-500/25">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+              <p className="text-[12px] leading-relaxed text-amber-200/90">
+                Check the number and the name before you send this. The Lab pays exactly what you write here — if it
+                is wrong the money goes to whoever owns that number, and <b className="text-amber-200">it cannot be
+                brought back</b>. Getting it right is on you.
+              </p>
+            </div>
           </div>
         </div>
 
