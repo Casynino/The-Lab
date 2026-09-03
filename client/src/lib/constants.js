@@ -51,9 +51,10 @@ export const NAV = [
 
   // ── Money ──
   { to: '/finance', label: 'Finance', icon: 'Wallet', roles: STAFF, group: 'money' },
-  // Staff/admin manage commissions inside Finance; reps keep their own page.
-  // `exact` beats hasRole()'s admin-sees-everything rule.
-  { to: '/commissions', label: 'Commissions', icon: 'Coins', roles: ['SALES_REP'], exact: true, group: 'money' },
+  // Everyone who deals with commission gets it in the sidebar. The same page
+  // serves a rep their own earnings and an admin the approvals; it is also a
+  // tab inside Finance, which is where staff used to be sent instead.
+  { to: '/commissions', label: 'Commissions', icon: 'Coins', roles: STAFF.concat(['SALES_REP']), group: 'money' },
 
   // ── People ──
   { to: '/reps', label: 'Sales Reps', icon: 'UserCog', roles: STAFF, group: 'people' },

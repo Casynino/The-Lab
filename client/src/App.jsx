@@ -42,10 +42,12 @@ function DashboardRouter() {
   return role === ROLES.SALES_REP ? <RepDashboard /> : <Dashboard />;
 }
 
-// Reps keep their own commissions page; staff manage commissions inside Finance.
+// One page, both audiences — it picks the rep view or the admin view from the
+// role itself. Staff used to be bounced to the Finance tab, which meant the
+// sidebar could never carry Commissions as a place of its own. It still lives
+// inside Finance as a tab; this is the same component, reached directly.
 function CommissionsRouter() {
-  const { role } = useAuth();
-  return role === ROLES.SALES_REP ? <Commissions /> : <Navigate to="/finance?tab=commissions" replace />;
+  return <Commissions />;
 }
 
 const W = [ROLES.WAREHOUSE_STAFF]; // ADMIN always allowed by hasRole
