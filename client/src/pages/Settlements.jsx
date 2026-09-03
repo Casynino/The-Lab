@@ -36,17 +36,19 @@ function hoursLabel(h) {
 // that decides whether you act today. The bands are the ones that matter to a
 // 72-hour contract: past it, inside a day, inside the window, then the rest.
 function remainingTone(h) {
-  if (h == null) return 'bg-white/[0.06] text-muted ring-white/[0.10]';
-  if (h < 0) return 'bg-rose-500/15 text-rose-300 ring-rose-500/30';
-  if (h <= 24) return 'bg-rose-500/15 text-rose-300 ring-rose-500/30';
-  if (h <= 72) return 'bg-amber-500/15 text-amber-300 ring-amber-500/30';
-  if (h <= 168) return 'bg-sky-500/15 text-sky-300 ring-sky-500/30';
-  return 'bg-white/[0.06] text-muted ring-white/[0.10]';
+  if (h == null) return 'text-muted';
+  if (h <= 24) return 'text-rose-400';
+  if (h <= 72) return 'text-amber-400';
+  if (h <= 168) return 'text-sky-400';
+  return 'text-muted';
 }
 
+// Colour and weight, and nothing else. A pill around it turned every row into
+// a row of blobs and the shape competed with the words inside it; the colour
+// alone carries the urgency and the text stays the thing you read.
 function Remaining({ hours, className = '' }) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ring-1 ${remainingTone(hours)} ${className}`}>
+    <span className={`text-[13px] font-bold tabular-nums ${remainingTone(hours)} ${className}`}>
       {hoursLabel(hours)}
     </span>
   );
