@@ -504,6 +504,17 @@ export default function SalesRepProfile() {
   const [deducting, setDeducting] = useState(false); // "Deduct commission" modal
   const [adding, setAdding] = useState(false);       // "Adjust commission" modal
 
+  // Putting a rep on or off commission. Their sales are untouched either way —
+  // this only decides whether those sales earn them anything.
+  const setsCommission = useMutation({
+    mutationFn: (on) => api.put(`/sales-reps/${id}`, { earnsCommission: on }),
+    onSuccess: (_r, on) => {
+      toast.success(on ? 'Back on commission' : 'Taken off commission');
+      ['salesRep', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
   // Which window the performance figures cover. Kept in the query key so
   // switching period refetches rather than showing last period's numbers.
   const [period, setPeriod] = useState('all');
@@ -833,13 +844,35 @@ export default function SalesRepProfile() {
             commission={{ available: c.available, minWithdrawal: c.threshold }}
             bonus={data.bonus}
           />
-          {/* Commission overview */}
+          {/* A rep who is not on commission has no balance to read, no fines
+              to carry and nothing to withdraw — so the panel says that instead
+              of a column of zeros pretending to be an account. */}
+          {rep.earnsCommission === false ? (
+            <Section icon={Wallet} title="Commission"
+              action={isAdmin && (
+                <Button variant="ghost" className="text-xs" loading={setsCommission.isPending}
+                  onClick={() => setsCommission.mutate(true)}>
+                  Put on commission
+                </Button>
+              )}>
+              <div className="rounded-xl bg-elevated/60 px-4 py-3.5 ring-1 ring-white/[0.07]">
+                <p className="text-[13px] font-semibold text-foreground">Not on commission</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted">
+                  {rep.name} settles boxes like any other rep and those sales count in full — they just do not earn
+                  commission on them, so there is nothing owed and nothing to withdraw.
+                </p>
+              </div>
+            </Section>
+          ) : (
           <Section icon={Wallet} title="Commission overview"
             action={isAdmin && (
               <div className="flex items-center gap-1">
                 <Button variant="ghost" className="text-xs" onClick={() => setAdding(true)}>Adjust</Button>
                 <Button variant="ghost" className="text-xs" onClick={() => setDeducting(true)}>Deduct</Button>
-                <Button variant="ghost" className="text-xs" onClick={() => navigate('/commissions')}>Payouts</Button>
+                <Button variant="ghost" className="text-xs" loading={setsCommission.isPending}
+                  onClick={() => { if (confirm(`Take ${rep.name} off commission? Their settlements will still count as sales, but they will stop earning.`)) setsCommission.mutate(false); }}>
+                  Off commission
+                </Button>
               </div>
             )}>
             <div className="grid grid-cols-2 gap-3">
@@ -873,6 +906,7 @@ export default function SalesRepProfile() {
             )}
             {c.pendingRequests > 0 && <p className="mt-2 text-xs text-amber-400">{formatCurrency(c.pendingRequests)} in pending withdrawal requests.</p>}
           </Section>
+          )}
 
           {/* ── Payouts ──
               What this rep has actually been handed, and where the latest

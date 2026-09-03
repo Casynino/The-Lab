@@ -97,6 +97,9 @@ const salesRepUpdate = {
     phone: z.string().trim().max(40).optional().nullable(),
     monthlyTarget: money.optional().nullable(),
     isActive: z.boolean().optional(),
+    // Whether this rep is on commission at all. Off means their settlements
+    // still count as sales but earn them nothing.
+    earnsCommission: z.boolean().optional(),
     whatsappPhone: z.string().trim().max(40).optional().nullable(),
     whatsappApiKey: z.string().trim().max(60).optional().nullable(),
   }),

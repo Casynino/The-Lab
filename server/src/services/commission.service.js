@@ -306,10 +306,39 @@ async function computeForRep(salesRepId) {
     currentRates(),
     prisma.salesRepresentative.findUnique({
       where: { id: salesRepId },
-      select: { withdrawalThreshold: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true },
+      select: { withdrawalThreshold: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true, earnsCommission: true },
     }).catch(() => null),
   ]);
   const { boxes } = earnedData;
+
+  // A rep who is not on commission. Their settlements are still real sales and
+  // still count as boxes moved — they simply earn nothing on them, owe nothing
+  // against a balance that does not exist, and cannot request a withdrawal.
+  // Nothing is deleted: flip the switch back and the history returns.
+  if (rep && rep.earnsCommission === false) {
+    return {
+      rule,
+      rates,
+      minWithdrawal: rule.amountPerThreshold,
+      hasCustomThreshold: false,
+      earnsCommission: false,
+      boxesSettled: round2(boxes),
+      earnedByBrand: [],
+      grossEarned: 0,
+      adjustment: 0,
+      adjustmentNote: null,
+      adjustedAt: null,
+      earned: 0,
+      paid: 0,
+      pending: 0,
+      pendingRequests: 0,
+      penalties: 0,
+      penaltyBreakdown: [],
+      available: 0,
+      eligible: false,
+    };
+  }
+
   // A one-off correction to a squared-up account. Kept separate from the
   // derived figure so the boxes that produced it stay untouched and visible.
   const adjustment = round2(toNumber(rep?.commissionAdjustment));

@@ -400,6 +400,10 @@ model SalesRepresentative {
   // are computed from settled boxes and must stay that way, so a negotiated
   // write-down or a squared-up account is recorded here instead of by editing
   // sales. Negative reduces what the rep is owed. Normally 0.
+  // Some reps are on a flat arrangement rather than commission — a driver who
+  // settles boxes but is paid another way. Their settlements still count as
+  // sales; they simply never accrue a shilling of commission.
+  earnsCommission            Boolean   @default(true)
   commissionAdjustment       Decimal   @default(0) @db.Decimal(14, 2)
   commissionAdjustmentNote   String?
   commissionAdjustedAt       DateTime?

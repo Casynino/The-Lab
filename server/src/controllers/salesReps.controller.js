@@ -550,6 +550,8 @@ const getProfile = asyncHandler(async (req, res) => {
       phone: rep.phone || rep.user?.phone || null,
       region: rep.region,
       isActive: rep.isActive,
+      // Whether this rep is on commission at all.
+      earnsCommission: rep.earnsCommission !== false,
       joinDate: rep.createdAt,
       monthlyTarget: rep.monthlyTarget ? toNumber(rep.monthlyTarget) : null,
       whatsappPhone: rep.whatsappPhone || null,
