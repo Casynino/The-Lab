@@ -722,7 +722,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
                 {split
                   ? 'owed back to you when it can afford it'
                   : (om.paidRepsFromPocket || 0) > 0
-                    ? 'all of it commission you paid reps by hand — owed back to you'
+                    ? 'total commission paid to reps from your own pocket — owed back to you'
                     : ownerBrands.length > 0
                       ? `cash you put in behind ${ownerBrands.map((b) => b.name).join(' and ')} — owed back to you`
                       : 'owed back to you when it can afford it'}
@@ -745,7 +745,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
 
             {split && (om.paidRepsFromPocket || 0) > 0 && (
               <span className="min-w-[8rem]">
-                <span className="block text-[11px] uppercase tracking-wider text-muted">Commission you paid</span>
+                <span className="block text-[11px] uppercase tracking-wider text-muted">Commission from your pocket</span>
                 <span className="block text-base font-semibold tabular-nums text-foreground">{formatCurrency(om.paidRepsFromPocket)}</span>
                 <span className="block text-[11px] text-faint">hand to hand — never through an account</span>
               </span>
