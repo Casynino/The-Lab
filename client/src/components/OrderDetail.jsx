@@ -736,37 +736,37 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           if (canAct && active && remaining > 0) {
             actions.push({
               key: 'settle', label: 'Submit settlement', Icon: Wallet, onClick: () => setSub('settle'),
-              cls: 'bg-brand-500 text-slate-950 ring-brand-500 font-bold shadow-lg shadow-brand-500/25',
+              cls: 'bg-brand-500 text-slate-950 ring-brand-500 font-bold shadow-lg shadow-brand-500/20', icon: 'text-slate-950',
             });
           }
           if (staff && active && remaining <= 0) {
             actions.push({
               key: 'close-order', label: 'Close this order', Icon: CheckCircle2,
               onClick: () => settle.mutate(), busy: settle.isPending,
-              cls: 'bg-emerald-400 text-slate-950 ring-emerald-400 font-bold shadow-lg shadow-emerald-500/25',
+              cls: 'bg-emerald-400 text-slate-950 ring-emerald-400 font-bold shadow-lg shadow-emerald-500/20', icon: 'text-slate-950',
             });
           }
           if (canAct && active && remaining > 0) {
             actions.push({
               key: 'return', label: 'Return boxes', Icon: Undo2, onClick: () => setSub('return'),
-              cls: 'bg-amber-400 text-slate-950 ring-amber-400 font-bold',
+              cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-amber-400',
             });
           }
           if (canAct && active && order.canSelfExtend) {
             actions.push({
               key: 'more-time', label: 'More time', Icon: CalendarPlus, onClick: () => setSub('self-extend'),
-              cls: 'bg-sky-400 text-slate-950 ring-sky-400 font-bold',
+              cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-sky-400',
             });
           }
           if (staff && active) {
             actions.push({
               key: 'extend', label: 'Extend deadline', Icon: Clock, onClick: () => setSub('extend'),
-              cls: 'bg-violet-400 text-slate-950 ring-violet-400 font-bold',
+              cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-violet-400',
             });
           }
           actions.push({
             key: 'close', label: 'Close', Icon: X, onClick: onClose,
-            cls: 'bg-white/[0.08] text-foreground ring-white/[0.14]',
+            cls: 'bg-elevated text-muted ring-white/[0.07]', icon: 'text-faint',
           });
 
           return (
@@ -778,9 +778,9 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                     type="button"
                     onClick={a.onClick}
                     disabled={a.busy}
-                    className={`flex h-[52px] items-center justify-center gap-2 rounded-2xl px-3 text-[13px] font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60 ${a.cls}`}
+                    className={`flex h-[52px] items-center justify-center gap-2.5 rounded-2xl px-3 text-[14px] font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60 ${a.cls}`}
                   >
-                    <a.Icon className="h-4 w-4 shrink-0" />
+                    <a.Icon className={`h-[17px] w-[17px] shrink-0 ${a.icon}`} />
                     <span className="truncate">{a.label}</span>
                   </button>
                 ))}
