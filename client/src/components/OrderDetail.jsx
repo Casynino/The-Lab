@@ -736,37 +736,37 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           if (canAct && active && remaining > 0) {
             actions.push({
               key: 'settle', label: 'Submit settlement', Icon: Wallet, onClick: () => setSub('settle'),
-              cls: 'bg-brand-500 text-slate-950 ring-brand-400/40 font-bold',
+              cls: 'bg-brand-500 text-slate-950 ring-brand-500 font-bold shadow-lg shadow-brand-500/25',
             });
           }
           if (staff && active && remaining <= 0) {
             actions.push({
               key: 'close-order', label: 'Close this order', Icon: CheckCircle2,
               onClick: () => settle.mutate(), busy: settle.isPending,
-              cls: 'bg-emerald-500 text-slate-950 ring-emerald-400/40 font-bold',
+              cls: 'bg-emerald-400 text-slate-950 ring-emerald-400 font-bold shadow-lg shadow-emerald-500/25',
             });
           }
           if (canAct && active && remaining > 0) {
             actions.push({
               key: 'return', label: 'Return boxes', Icon: Undo2, onClick: () => setSub('return'),
-              cls: 'bg-amber-500/15 text-amber-300 ring-amber-500/30',
+              cls: 'bg-amber-400 text-slate-950 ring-amber-400 font-bold',
             });
           }
           if (canAct && active && order.canSelfExtend) {
             actions.push({
               key: 'more-time', label: 'More time', Icon: CalendarPlus, onClick: () => setSub('self-extend'),
-              cls: 'bg-sky-500/15 text-sky-300 ring-sky-500/30',
+              cls: 'bg-sky-400 text-slate-950 ring-sky-400 font-bold',
             });
           }
           if (staff && active) {
             actions.push({
               key: 'extend', label: 'Extend deadline', Icon: Clock, onClick: () => setSub('extend'),
-              cls: 'bg-violet-500/15 text-violet-300 ring-violet-500/30',
+              cls: 'bg-violet-400 text-slate-950 ring-violet-400 font-bold',
             });
           }
           actions.push({
             key: 'close', label: 'Close', Icon: X, onClick: onClose,
-            cls: 'bg-elevated text-muted ring-white/[0.10]',
+            cls: 'bg-white/[0.08] text-foreground ring-white/[0.14]',
           });
 
           return (
@@ -778,7 +778,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                     type="button"
                     onClick={a.onClick}
                     disabled={a.busy}
-                    className={`flex h-12 items-center justify-center gap-2 rounded-xl px-3 text-[13px] font-semibold ring-1 transition active:scale-[0.97] disabled:opacity-60 ${a.cls}`}
+                    className={`flex h-[52px] items-center justify-center gap-2 rounded-2xl px-3 text-[13px] font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60 ${a.cls}`}
                   >
                     <a.Icon className="h-4 w-4 shrink-0" />
                     <span className="truncate">{a.label}</span>
@@ -978,13 +978,16 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 })}
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-elevated px-3 py-2.5 text-[12px] font-semibold ring-1 ring-white/[0.06]">
-                <span className="text-foreground">All {formatNumber(order.order.totals.assignedBoxes)} boxes</span>
+              <div className="relative mt-2 overflow-hidden rounded-xl bg-surface px-3 py-3 ring-1 ring-brand-500/25">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-brand-500/[0.12] to-transparent" aria-hidden="true" />
+                <div className="relative flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-semibold">
+                <span className="text-brand-300">All {formatNumber(order.order.totals.assignedBoxes)} boxes</span>
                 <span className="text-emerald-400">{formatNumber(order.order.totals.settledBoxes)} settled</span>
                 <span className="text-sky-400">{formatNumber(order.order.totals.returnedBoxes)} returned</span>
-                <span className={order.order.totals.remainingBoxes > 0 && overdue ? 'ml-auto text-rose-400' : 'ml-auto text-muted'}>
+                <span className={order.order.totals.remainingBoxes > 0 && overdue ? 'ml-auto text-rose-400' : 'ml-auto text-foreground'}>
                   {formatNumber(order.order.totals.remainingBoxes)} {overdue ? 'missing' : 'left'}
                 </span>
+                </div>
               </div>
 
               <p className="mt-2 text-[11px] leading-snug text-faint">
