@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
-import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper } from 'lucide-react';
+import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
@@ -195,6 +195,146 @@ function WithdrawModal({ commission, firstName, onClose }) {
         </p>
       </div>
     </Modal>
+  );
+}
+
+// The same strip the Stock Requests page uses for pending approvals. A rep
+// waiting on their money is the same kind of thing — someone stopped, waiting
+// on a decision — so it sits at the top of the page rather than three tabs
+// deep, and carries the detail the decision needs: who, how much, and the name
+// and number they asked it to be sent to.
+// Opening a request. The table can only show a line; deciding one deserves the
+// whole picture — who asked, how much, where they want it sent, what it leaves
+// them with, and who decided it if someone already has.
+function WithdrawalDetail({ w, balance, onClose, refresh }) {
+  const decide = useMutation({
+    mutationFn: (action) => api.post(`/commissions/withdrawals/${w.id}/decide`, { action }),
+    onSuccess: (_r, action) => {
+      toast.success(action === 'APPROVE' ? 'Approved — ready to pay' : action === 'PAY' ? 'Marked paid' : 'Request rejected');
+      refresh();
+      onClose();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  const meta = WITHDRAWAL_STATUS_META[w.status] || {};
+  const pending = w.status === 'PENDING';
+  const approved = w.status === 'APPROVED';
+
+  return (
+    <Modal open onClose={onClose} title={`${w.salesRep?.user?.name || 'Request'} · ${formatCurrency(w.amount)}`}>
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Badge className={meta.cls}>{meta.label || w.status}</Badge>
+          <span className="ml-auto text-[11px] text-faint">Asked {formatDateTime(w.requestedAt)}</span>
+        </div>
+
+        {/* Where the money is meant to go — the reason to open this at all. */}
+        <div className="rounded-xl bg-elevated/60 px-4 py-3 ring-1 ring-white/[0.07]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Send to</p>
+          {w.notes ? (
+            <p className="mt-1 break-words font-mono text-[15px] font-bold text-foreground">{w.notes}</p>
+          ) : (
+            <p className="mt-1 text-[13px] text-faint">
+              No payout details on this one — it was asked for before the app collected them. Check with the rep before paying.
+            </p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-elevated/60 p-3 ring-1 ring-white/[0.07]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-faint">Asking for</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-emerald-400">{formatCurrency(w.amount)}</p>
+          </div>
+          <div className="rounded-xl bg-elevated/60 p-3 ring-1 ring-white/[0.07]">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-faint">Left after this</p>
+            <p className="mt-1 text-xl font-bold tabular-nums text-foreground">
+              {balance == null ? '—' : formatCurrency(Math.max(0, balance))}
+            </p>
+          </div>
+        </div>
+
+        {(w.decidedAt || w.paidAt) && (
+          <div className="space-y-1 border-t border-white/[0.06] pt-3 text-[12px] text-muted">
+            {w.decidedAt && (
+              <p>Decided {formatDateTime(w.decidedAt)}{w.decidedBy?.name ? ` by ${w.decidedBy.name}` : ''}</p>
+            )}
+            {w.paidAt && <p className="text-emerald-400">Paid {formatDateTime(w.paidAt)}</p>}
+          </div>
+        )}
+
+        {pending && (
+          <div className="grid grid-cols-2 gap-2">
+            <Button className="justify-center py-2.5" loading={decide.isPending} onClick={() => decide.mutate('APPROVE')}>
+              <ShieldCheck className="h-4 w-4" /> Approve
+            </Button>
+            <Button variant="secondary" className="justify-center py-2.5 text-rose-400"
+              disabled={decide.isPending} onClick={() => decide.mutate('REJECT')}>
+              Reject
+            </Button>
+          </div>
+        )}
+        {approved && (
+          <Button className="w-full justify-center py-2.5" loading={decide.isPending} onClick={() => decide.mutate('PAY')}>
+            <Coins className="h-4 w-4" /> Mark paid — from my pocket
+          </Button>
+        )}
+        {pending && (
+          <p className="text-[11px] leading-snug text-faint">
+            Approving moves no money. It clears the request so you can send it, and the amount stays held aside from
+            their balance either way until you decide.
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
+  const decide = useMutation({
+    mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action }),
+    onSuccess: (_r, v) => {
+      toast.success(v.action === 'APPROVE' ? 'Approved — ready to pay' : 'Request rejected');
+      refresh();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  if (!items.length) return null;
+
+  return (
+    <Card className="mb-6 border-amber-500/30">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <Coins className="h-4 w-4 text-amber-400" />
+        <h2 className="text-sm font-bold text-foreground">Commission requests</h2>
+        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-400">{items.length}</span>
+        <span className="ml-auto hidden text-xs text-faint sm:block">Approving clears it to pay — no money moves yet</span>
+      </div>
+      <div className="divide-y divide-border">
+        {items.map((w) => {
+          const busy = decide.isPending && decide.variables?.id === w.id;
+          return (
+            <div key={w.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <button type="button" onClick={() => onOpen?.(w)} className="min-w-0 flex-1 text-left" title="Open to see the details">
+                <div className="text-sm font-semibold text-foreground">
+                  {w.salesRep?.user?.name}{w.salesRep?.code ? ` (${w.salesRep.code})` : ''} · {formatCurrency(w.amount)}
+                </div>
+                {/* Where they asked it to go. This is the line to read. */}
+                {w.notes && <div className="mt-0.5 font-mono text-xs text-amber-300">{w.notes}</div>}
+                <div className="mt-0.5 text-xs text-faint">{formatDateTime(w.requestedAt)}</div>
+              </button>
+              <div className="flex shrink-0 gap-2">
+                <Button variant="ghost" className="text-rose-400" disabled={busy}
+                  onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
+                <Button loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'APPROVE' })}>
+                  <ShieldCheck className="h-4 w-4" /> Approve
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
@@ -947,6 +1087,7 @@ function AdminView() {
   const qc = useQueryClient();
   const [deducting, setDeducting] = useState(false);
   const [tab, setTab] = useState('balances');
+  const [openWd, setOpenWd] = useState(null); // a withdrawal being read
   const { data: summary, isLoading } = useQuery({ queryKey: ['commissions', 'summary'], queryFn: async () => unwrap(await api.get('/commissions/summary')).data });
   const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'all'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 30 } })) });
   // Same query key as FinesHistory, so this shares its cache rather than refetching.
@@ -1004,6 +1145,20 @@ function AdminView() {
         </Button>
       </div>
       {deducting && <DeductModal reps={summary?.items || []} onClose={() => setDeducting(false)} />}
+      {openWd && (
+        <WithdrawalDetail
+          w={openWd}
+          balance={(summary?.items || []).find((r) => r.salesRepId === openWd.salesRepId)?.available ?? null}
+          onClose={() => setOpenWd(null)}
+          refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
+        />
+      )}
+
+      <PendingWithdrawalsStrip
+        items={(wd?.data || []).filter((w) => w.status === 'PENDING')}
+        refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
+        onOpen={setOpenWd}
+      />
 
       <SectionTabs
         value={tab}
@@ -1072,12 +1227,18 @@ function AdminView() {
             <THead><TR><TH>Rep</TH><TH>Amount</TH><TH>Status</TH><TH>Requested</TH><TH /></TR></THead>
             <TBody>{wd.data.map((w) => (
               <TR key={w.id}>
-                <TD className="font-medium">{w.salesRep?.user?.name}</TD>
+                <TD className="font-medium">
+                  <button type="button" onClick={() => setOpenWd(w)} className="text-left hover:text-brand-300">
+                    {w.salesRep?.user?.name}
+                  </button>
+                </TD>
                 <TD>
-                  <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
+                  <button type="button" onClick={() => setOpenWd(w)} className="text-left">
+                    <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
                   {/* Where to send it. This is the whole point of the request,
                       and it was only visible by hovering a different column. */}
-                  {w.notes && <div className="mt-0.5 text-[11px] text-brand-300">{w.notes}</div>}
+                    {w.notes && <div className="mt-0.5 text-[11px] text-brand-300">{w.notes}</div>}
+                  </button>
                 </TD>
                 <TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>
                 <TD className="text-faint">{formatDateTime(w.requestedAt)}</TD>
