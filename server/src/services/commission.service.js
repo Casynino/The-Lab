@@ -367,6 +367,12 @@ async function computeForRep(salesRepId) {
   // against a balance that does not exist, and cannot request a withdrawal.
   // Nothing is deleted: flip the switch back and the history returns.
   if (rep && rep.earnsCommission === false) {
+    // Their boxes still belong to a run, so the run figure has to be measured
+    // from the payout like everybody else's. The lifetime count sitting under a
+    // column headed "this run" would overstate it the moment such a rep had
+    // ever been paid — true today only because none of them has.
+    const offSince = payout ? new Date(payout.at) : null;
+    const offRunBoxes = offSince ? (await earnedForRep(salesRepId, { since: offSince })).boxes : boxes;
     return {
       rule,
       rates,
@@ -392,7 +398,7 @@ async function computeForRep(salesRepId) {
       run: {
         since: payout ? payout.at : null,
         lastPayout: payout ? { at: payout.at, amount: payout.amount } : null,
-        boxes: round2(boxes),
+        boxes: round2(offRunBoxes),
         earned: 0,
         penalties: 0,
         net: 0,

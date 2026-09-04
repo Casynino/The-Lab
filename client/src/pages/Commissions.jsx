@@ -1072,6 +1072,60 @@ function BonusSettings() {
   );
 }
 
+// Millions, floored, so a figure can never round its way past the target
+// printed beside it — a rep 40,000 short of 10M must not read "TSh 10.0M" with
+// "TSh 40,000 to go" underneath. Below a million the shorthand stops being
+// honest at all, so the whole number goes in. Deliberately not compactTsh,
+// which rounds half up and drops the decimal entirely above ten million.
+const bonusTsh = (n) => {
+  const v = Math.max(0, Number(n) || 0);
+  if (v < 1_000_000) return formatCurrency(v);
+  return `TSh ${(Math.floor(v / 100_000) / 10).toFixed(1)}M`;
+};
+
+// Where a rep stands in the SALES BONUS run — which is not the commission run.
+// It restarts when a bonus is paid, not when a withdrawal is, so the two dates
+// can differ and this cell never borrows the one printed under the rep's name.
+//
+// Written as figures rather than a bar on purpose. The server's `progress` and
+// `target` track the NEXT UNREACHED tier (bonus.service.js), so a bar drawn
+// from them falls from 99% to 67% the instant a rep crosses 10,000,000 — it
+// would shrink at the exact moment he did well, and turn green as it shrank.
+// Two numbers that both rise, with the target named, cannot do that.
+function BonusCell({ b, sharedStart }) {
+  if (!b) return <span className="text-faint">—</span>;
+  // `claimable` is the highest tier PASSED; `next` is the one still ahead. They
+  // are different tiers with different money, so each amount is only ever
+  // printed next to the target that actually pays it.
+  const won = b.claimable;
+  const next = b.next;
+  // Once one rep has been paid a bonus the runs diverge, and no single date in
+  // the footnote is true for everybody — so every row states its own instead.
+  const ownStart = sharedStart == null && b.cycleStart;
+  return (
+    <div className="leading-tight">
+      <div className="tabular-nums">{bonusTsh(b.sales)}</div>
+      {won && (
+        <div className="mt-0.5 text-[11px] font-semibold text-emerald-300">
+          {formatCurrency(won.bonusAmount)} earned
+        </div>
+      )}
+      {next && (
+        // Distance and the money it unlocks, never distance and the target —
+        // a rep who has sold nothing would read "TSh 10.0M to TSh 10.0M", and
+        // a reward printed beside a target belongs to that target or nowhere.
+        <div className="mt-0.5 text-[11px] text-faint">
+          {bonusTsh(next.remaining)} more → {formatCurrency(next.bonusAmount)}
+        </div>
+      )}
+      {!next && !won && <div className="mt-0.5 text-[11px] text-faint">no target set</div>}
+      {ownStart && (
+        <div className="mt-0.5 text-[10px] text-faint">from {formatDate(b.cycleStart)}</div>
+      )}
+    </div>
+  );
+}
+
 // One row per rep. It opens on the RUN IN PROGRESS — boxes settled and money
 // owed since that rep was last paid — because a lifetime total answers "how big
 // has this rep been", while the question the owner is actually asking at this
@@ -1079,31 +1133,67 @@ function BonusSettings() {
 //
 // Nothing is lost: the lifetime figures are the other half of the switch, with
 // total boxes, total earned and everything ever paid out.
-function BalancesTable({ items }) {
+function BalancesTable({ items, bonus }) {
   const [view, setView] = useState('run');
   const runView = view === 'run';
+
+  // The leader of the round comes first. Ranked on money earned this run, not
+  // boxes: brands pay different rates, so boxes would crown whoever happens to
+  // carry the dearer stock, and this is the table for what leaves his pocket.
+  // Not `available` either — that carries brought-forward money from BEFORE the
+  // run opened, which is the two-periods mistake expressed as a sort order.
+  // Copied before sorting: `items` is react-query's cached array, shared with
+  // the deduct dialog's rep list.
+  const rows = runView
+    ? [...items].sort((a, b) => (
+      (b.run?.earned || 0) - (a.run?.earned || 0)
+        || (b.run?.boxes || 0) - (a.run?.boxes || 0)
+        || String(a.name || '').localeCompare(String(b.name || ''))
+    ))
+    : items;
+  // Nobody is crowned in a table of zeros, and All time has no leader — it is a
+  // ledger, and the top of it is just whoever has been here longest.
+  const leadEarned = runView ? (rows[0]?.run?.earned || 0) : 0;
+
+  // The bonus keeps a run of its own. Only reps the server says are on a
+  // configured bonus appear; when no rule is live the column does not exist.
+  const bonusFor = new Map((bonus || []).filter((b) => b.configured).map((b) => [b.salesRepId, b]));
+  const showBonus = runView && bonusFor.size > 0;
+  const starts = [...bonusFor.values()].map((b) => new Date(b.cycleStart).getTime());
+  // When every rep is counting from the same day the period is stated once, in
+  // the footnote. The moment one of them has been paid a bonus their run starts
+  // somewhere else, and then each row carries its own date instead of a header
+  // date that would be true for eight reps and wrong for the ninth.
+  const sharedStart = starts.length && starts.every((t) => t === starts[0]) ? starts[0] : null;
+
   return (
     <Card className="mt-4">
       <CardHeader
         title="Commission by representative"
-        subtitle={runView ? 'Since each rep was last paid' : 'Everything since day one'}
+        subtitle={runView ? 'Since each rep was last paid · most earned first' : 'Everything since day one'}
         action={<RunSwitch value={view} onChange={setView} />}
       />
       <Table>
         <THead>
           <TR>
             <TH>Rep</TH>
-            <TH>{runView ? 'Boxes this run' : 'Boxes settled'}</TH>
+            {/* Earned leads because it is the column the table is sorted by. It
+                used to sit second, which put the boxes count first and made a
+                ranked table look broken — 56 boxes above 57. */}
             <TH>Earned</TH>
+            <TH>{runView ? 'Boxes this run' : 'Boxes settled'}</TH>
             <TH>{runView ? 'Fines' : 'Penalties'}</TH>
             {!runView && <TH>Paid</TH>}
             <TH>Available</TH>
+            {showBonus && <TH>Sales bonus</TH>}
           </TR>
         </THead>
-        <TBody>{items.map((i) => {
+        <TBody>{rows.map((i, n) => {
           const run = i.run || {};
           const fines = runView ? (run.penalties || 0) : i.penalties;
           const carried = runView ? wholeShillings(run.broughtForward) : 0;
+          const leads = runView && n === 0 && leadEarned > 0;
+          const offCommission = i.earnsCommission === false;
           return (
             <TR key={i.salesRepId}>
               <TD className="font-medium">
@@ -1112,12 +1202,17 @@ function BalancesTable({ items }) {
                   // Every rep's run starts on their own date, so the row has to
                   // say which date it is measuring from or the boxes mean nothing.
                   <div className="mt-0.5 text-[11px] font-normal text-faint">
-                    {run.since ? `since ${formatDate(run.since)}` : 'never withdrawn'}
+                    {offCommission && 'not on commission'}
+                    {offCommission && run.since && ' · '}
+                    {!offCommission && !run.since && 'never withdrawn'}
+                    {run.since && `since ${formatDate(run.since)}`}
                   </div>
                 )}
               </TD>
-              <TD className="tabular-nums">{formatNumber(runView ? (run.boxes || 0) : i.boxesSettled)}</TD>
-              <TD className="tabular-nums">
+              {/* The leader's figure in the bright accent — brand-400. The ramp
+                  here is inverted, so brand-300 is a dark olive and would have
+                  made the leading number the dimmest one in the column. */}
+              <TD className={clsx('tabular-nums', leads && 'font-bold text-brand-400')}>
                 {formatCurrency(runView ? (run.earned || 0) : i.earned)}
                 {/* An agreed one-off adjustment makes lifetime Earned differ from
                     boxes × rate — say so on the row, or the arithmetic looks
@@ -1130,6 +1225,7 @@ function BalancesTable({ items }) {
                   >*</span>
                 )}
               </TD>
+              <TD className="tabular-nums">{formatNumber(runView ? (run.boxes || 0) : i.boxesSettled)}</TD>
               <TD className={fines > 0 ? 'font-semibold tabular-nums text-rose-400' : 'text-faint'}>
                 {fines > 0 ? `−${formatCurrency(fines)}` : '—'}
               </TD>
@@ -1149,6 +1245,9 @@ function BalancesTable({ items }) {
                   <div className="text-[10px] text-faint">{formatCurrency(i.pendingRequests)} requested</div>
                 )}
               </TD>
+              {showBonus && (
+                <TD><BonusCell b={bonusFor.get(i.salesRepId)} sharedStart={sharedStart} /></TD>
+              )}
             </TR>
           );
         })}</TBody>
@@ -1157,6 +1256,10 @@ function BalancesTable({ items }) {
         <p className="border-t border-border px-5 py-3 text-xs text-faint">
           A run closes the moment a rep is paid, and the next one opens there. Whatever was left over comes forward,
           so earned − fines + brought forward is always what he can withdraw today.
+          {showBonus && (
+            <> The sales bonus counts on a run of its own{sharedStart ? `, from ${formatDate(new Date(sharedStart))}` : ''} —
+            it restarts when a bonus is paid, not when commission is, and never enters what he can withdraw here.</>
+          )}
         </p>
       )}
     </Card>
@@ -1200,6 +1303,10 @@ function AdminView() {
     queryKey: ['penalties', 'all'],
     queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 50 } })),
   });
+  // The sales bonus, for the balances table. Same key BonusSettings uses, so
+  // the two share one cache entry and paying a bonus over on Rates & bonus
+  // already invalidates this.
+  const { data: bonusRun } = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
   // Only fines still charged are worth a badge — counted by the SERVER over
   // the whole table. Counting the visible page understated it as soon as the
   // history outgrew one page.
@@ -1282,7 +1389,7 @@ function AdminView() {
         ]}
       />
 
-      {tab === 'balances' && <BalancesTable items={summary.items} />}
+      {tab === 'balances' && <BalancesTable items={summary.items} bonus={bonusRun?.items} />}
 
       {tab === 'penalties' && <FinesHistory admin />}
 
