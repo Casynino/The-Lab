@@ -1072,17 +1072,6 @@ function BonusSettings() {
   );
 }
 
-// Millions, floored, so a figure can never round its way past the target
-// printed beside it — a rep 40,000 short of 10M must not read "TSh 10.0M" with
-// "TSh 40,000 to go" underneath. Below a million the shorthand stops being
-// honest at all, so the whole number goes in. Deliberately not compactTsh,
-// which rounds half up and drops the decimal entirely above ten million.
-const bonusTsh = (n) => {
-  const v = Math.max(0, Number(n) || 0);
-  if (v < 1_000_000) return formatCurrency(v);
-  return `TSh ${(Math.floor(v / 100_000) / 10).toFixed(1)}M`;
-};
-
 // Where a rep stands in the SALES BONUS run — which is not the commission run.
 // It restarts when a bonus is paid, not when a withdrawal is, so the two dates
 // can differ and this cell never borrows the one printed under the rep's name.
@@ -1104,7 +1093,10 @@ function BonusCell({ b, sharedStart }) {
   const ownStart = sharedStart == null && b.cycleStart;
   return (
     <div className="leading-tight">
-      <div className="tabular-nums">{bonusTsh(b.sales)}</div>
+      {/* Written out in full. Millions shorthand hid the figure he wanted to
+          read, and rounding it invited a rep 40,000 short of a target to
+          render as though he had reached it. */}
+      <div className="tabular-nums">{formatCurrency(b.sales)}</div>
       {won && (
         <div className="mt-0.5 text-[11px] font-semibold text-emerald-300">
           {formatCurrency(won.bonusAmount)} earned
@@ -1115,7 +1107,7 @@ function BonusCell({ b, sharedStart }) {
         // a rep who has sold nothing would read "TSh 10.0M to TSh 10.0M", and
         // a reward printed beside a target belongs to that target or nowhere.
         <div className="mt-0.5 text-[11px] text-faint">
-          {bonusTsh(next.remaining)} more → {formatCurrency(next.bonusAmount)}
+          {formatCurrency(next.remaining)} more → {formatCurrency(next.bonusAmount)}
         </div>
       )}
       {!next && !won && <div className="mt-0.5 text-[11px] text-faint">no target set</div>}
