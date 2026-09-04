@@ -1118,6 +1118,30 @@ function BonusCell({ b, sharedStart }) {
   );
 }
 
+// How far a rep is from being able to take money out. The minimum is a FLOOR,
+// not a target — nobody is made to withdraw when they reach it, and a rep who
+// would rather let the balance build simply carries on. So this never reads as
+// finished, never fills up, and never resets anything: past the line it just
+// says the money can be taken whenever they want it.
+//
+// Quoted from the rep's OWN minimum, never a literal 250,000 — the figure is a
+// setting and can be agreed differently per rep.
+function ToMinimum({ i, sharedMin }) {
+  // A rep off commission has no balance to reach a minimum with.
+  if (i.earnsCommission === false) return null;
+  const min = Number(i.minWithdrawal) || 0;
+  if (!(min > 0)) return null;
+  const avail = Number(i.available) || 0;
+  if (avail >= min) {
+    return <div className="mt-0.5 text-[11px] font-semibold text-emerald-300">can withdraw</div>;
+  }
+  return (
+    <div className="mt-0.5 text-[11px] text-faint">
+      {formatCurrency(min - avail)} to the {sharedMin ? 'minimum' : `${formatCurrency(min)} minimum`}
+    </div>
+  );
+}
+
 // One row per rep. It opens on the RUN IN PROGRESS — boxes settled and money
 // owed since that rep was last paid — because a lifetime total answers "how big
 // has this rep been", while the question the owner is actually asking at this
@@ -1157,6 +1181,12 @@ function BalancesTable({ items, bonus }) {
   // somewhere else, and then each row carries its own date instead of a header
   // date that would be true for eight reps and wrong for the ninth.
   const sharedStart = starts.length && starts.every((t) => t === starts[0]) ? starts[0] : null;
+
+  // The same question for the withdrawal floor: when everyone is on the house
+  // minimum it is stated once, in the footnote, and the rows only carry the
+  // distance. A rep on terms of their own has their own figure on their row.
+  const mins = items.filter((i) => i.earnsCommission !== false).map((i) => Number(i.minWithdrawal) || 0);
+  const sharedMin = mins.length && mins.every((m) => m === mins[0]) ? mins[0] : null;
 
   return (
     <Card className="mt-4">
@@ -1236,6 +1266,7 @@ function BalancesTable({ items, bonus }) {
                 {i.pendingRequests > 0 && (
                   <div className="text-[10px] text-faint">{formatCurrency(i.pendingRequests)} requested</div>
                 )}
+                {runView && <ToMinimum i={i} sharedMin={sharedMin} />}
               </TD>
               {showBonus && (
                 <TD><BonusCell b={bonusFor.get(i.salesRepId)} sharedStart={sharedStart} /></TD>
@@ -1248,6 +1279,8 @@ function BalancesTable({ items, bonus }) {
         <p className="border-t border-border px-5 py-3 text-xs text-faint">
           A run closes the moment a rep is paid, and the next one opens there. Whatever was left over comes forward,
           so earned − fines + brought forward is always what he can withdraw today.
+          {sharedMin > 0 && <> {formatCurrency(sharedMin)} is the least a rep can take out — a floor, not a target,
+          so anyone who would rather let theirs build simply carries on.</>}
           {showBonus && (
             <> The sales bonus counts on a run of its own{sharedStart ? `, from ${formatDate(new Date(sharedStart))}` : ''} —
             it restarts when a bonus is paid, not when commission is, and never enters what he can withdraw here.</>
