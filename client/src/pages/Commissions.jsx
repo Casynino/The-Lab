@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
-import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck } from 'lucide-react';
+import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck, Boxes } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
 import { PayoutHistory, earnedOn } from '@/components/WithdrawalNote';
 import {
   PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea,
@@ -1072,6 +1072,122 @@ function BonusSettings() {
   );
 }
 
+// One row per rep. It opens on the RUN IN PROGRESS — boxes settled and money
+// owed since that rep was last paid — because a lifetime total answers "how big
+// has this rep been", while the question the owner is actually asking at this
+// table is "since I paid him, how is he doing, and what do I owe him now".
+//
+// Nothing is lost: the lifetime figures are the other half of the switch, with
+// total boxes, total earned and everything ever paid out.
+function BalancesTable({ items }) {
+  const [view, setView] = useState('run');
+  const runView = view === 'run';
+  return (
+    <Card className="mt-4">
+      <CardHeader
+        title="Commission by representative"
+        subtitle={runView ? 'Since each rep was last paid' : 'Everything since day one'}
+        action={<RunSwitch value={view} onChange={setView} />}
+      />
+      <Table>
+        <THead>
+          <TR>
+            <TH>Rep</TH>
+            <TH>{runView ? 'Boxes this run' : 'Boxes settled'}</TH>
+            <TH>Earned</TH>
+            <TH>{runView ? 'Fines' : 'Penalties'}</TH>
+            {!runView && <TH>Paid</TH>}
+            <TH>Available</TH>
+          </TR>
+        </THead>
+        <TBody>{items.map((i) => {
+          const run = i.run || {};
+          const fines = runView ? (run.penalties || 0) : i.penalties;
+          const carried = runView ? wholeShillings(run.broughtForward) : 0;
+          return (
+            <TR key={i.salesRepId}>
+              <TD className="font-medium">
+                {i.name}
+                {runView && (
+                  // Every rep's run starts on their own date, so the row has to
+                  // say which date it is measuring from or the boxes mean nothing.
+                  <div className="mt-0.5 text-[11px] font-normal text-faint">
+                    {run.since ? `since ${formatDate(run.since)}` : 'never withdrawn'}
+                  </div>
+                )}
+              </TD>
+              <TD className="tabular-nums">{formatNumber(runView ? (run.boxes || 0) : i.boxesSettled)}</TD>
+              <TD className="tabular-nums">
+                {formatCurrency(runView ? (run.earned || 0) : i.earned)}
+                {/* An agreed one-off adjustment makes lifetime Earned differ from
+                    boxes × rate — say so on the row, or the arithmetic looks
+                    broken. In the run view it sits in brought forward instead,
+                    because it was never earned on this run's boxes. */}
+                {!runView && Number(i.adjustment) !== 0 && (
+                  <span
+                    className="ml-1 cursor-help text-amber-400"
+                    title={`${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`}
+                  >*</span>
+                )}
+              </TD>
+              <TD className={fines > 0 ? 'font-semibold tabular-nums text-rose-400' : 'text-faint'}>
+                {fines > 0 ? `−${formatCurrency(fines)}` : '—'}
+              </TD>
+              {!runView && <TD className="tabular-nums">{formatCurrency(i.paid)}</TD>}
+              <TD className={clsx('tabular-nums', i.available < 0 && 'font-semibold text-rose-400')}>
+                {formatCurrency(i.available)}
+                {/* What the balance was already carrying when this run opened —
+                    a part-taken payout leaves a remainder behind. Shown only
+                    when there is one, so that earned − fines + this always
+                    comes to the figure above it. */}
+                {runView && carried !== 0 && (
+                  <div className="text-[10px] text-faint">
+                    {carried > 0 ? '+' : '−'}{formatCurrency(Math.abs(carried))} brought forward
+                  </div>
+                )}
+                {i.pendingRequests > 0 && (
+                  <div className="text-[10px] text-faint">{formatCurrency(i.pendingRequests)} requested</div>
+                )}
+              </TD>
+            </TR>
+          );
+        })}</TBody>
+      </Table>
+      {runView && (
+        <p className="border-t border-border px-5 py-3 text-xs text-faint">
+          A run closes the moment a rep is paid, and the next one opens there. Whatever was left over comes forward,
+          so earned − fines + brought forward is always what he can withdraw today.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+// Rounded to whole shillings before it is compared to zero: brought forward is
+// the difference of two derived figures, and a stray fraction of a shilling
+// would print "+TSh 0 brought forward" under a row that is square.
+const wholeShillings = (n) => Math.round(Number(n) || 0);
+
+function RunSwitch({ value, onChange }) {
+  return (
+    <div className="flex shrink-0 rounded-lg border border-border bg-elevated p-0.5">
+      {[{ k: 'run', l: 'This run' }, { k: 'all', l: 'All time' }].map((o) => (
+        <button
+          key={o.k}
+          type="button"
+          onClick={() => onChange(o.k)}
+          className={clsx(
+            'rounded-md px-3 py-1.5 text-xs font-semibold transition',
+            value === o.k ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
+          )}
+        >
+          {o.l}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AdminView() {
   const qc = useQueryClient();
   const [deducting, setDeducting] = useState(false);
@@ -1115,13 +1231,19 @@ function AdminView() {
   if (isLoading || !summary) return <PageSpinner />;
   return (
     <>
+      {/* This page answers "what do I owe, and how are they doing since I last
+          paid them" — so it leads with the payable and the run in progress. The
+          lifetime totals are still here, as the hint under the figure they
+          explain, rather than as headlines of their own. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <StatCard label="Total earned" value={formatCurrency(summary.totals.earned)} icon={Coins} tone="violet" />
-        <StatCard label="Total paid" value={formatCurrency(summary.totals.paid)} icon={Wallet} tone="emerald" />
         {/* "Total pending" was earned − paid, which still contained fines the
             reps will never receive — this is the money actually withdrawable. */}
         <StatCard label="Available to withdraw" value={formatCurrency(summary.totals.available ?? summary.totals.pending)} icon={Clock} tone="amber"
           hint={summary.totals.requested > 0 ? `+ ${formatCurrency(summary.totals.requested)} requested` : 'after fines & payouts'} />
+        <StatCard label="Boxes this run" value={formatNumber(summary.totals.runBoxes ?? 0)} icon={Boxes} tone="violet"
+          hint={`${formatCurrency(summary.totals.runEarned ?? 0)} earned since each rep's last payout`} />
+        <StatCard label="Paid out" value={formatCurrency(summary.totals.paid)} icon={Wallet} tone="emerald"
+          hint={`of ${formatCurrency(summary.totals.earned)} earned all time`} />
         <StatCard label="Total penalties" value={formatCurrency(summary.totals.penalties)} icon={AlertTriangle} tone="rose" />
       </div>
 
@@ -1160,51 +1282,7 @@ function AdminView() {
         ]}
       />
 
-      {tab === 'balances' && (
-      <Card className="mt-4">
-        <CardHeader title="Commission by representative" />
-        <Table>
-          <THead>
-            <TR>
-              <TH>Rep</TH>
-              <TH>Boxes settled</TH>
-              <TH>Earned</TH>
-              <TH>Penalties</TH>
-              <TH>Paid</TH>
-              <TH>Available</TH>
-            </TR>
-          </THead>
-          <TBody>{summary.items.map((i) => (
-            <TR key={i.salesRepId}>
-              <TD className="font-medium">{i.name}</TD>
-              <TD>{formatNumber(i.boxesSettled)}</TD>
-              {/* An agreed one-off adjustment makes Earned differ from boxes ×
-                  rate — say so on the row, or the arithmetic looks broken. */}
-              <TD>
-                {formatCurrency(i.earned)}
-                {Number(i.adjustment) !== 0 && (
-                  <span
-                    className="ml-1 cursor-help text-amber-400"
-                    title={`${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`}
-                  >*</span>
-                )}
-              </TD>
-              <TD className={i.penalties > 0 ? 'text-rose-400 font-semibold' : 'text-faint'}>
-                {i.penalties > 0 ? `−${formatCurrency(i.penalties)}` : '—'}
-              </TD>
-              <TD>{formatCurrency(i.paid)}</TD>
-              <TD className={i.available < 0 ? 'text-rose-400 font-semibold' : ''}>
-                {formatCurrency(i.available)}
-                {i.pendingRequests > 0 && (
-                  <div className="text-[10px] text-faint">{formatCurrency(i.pendingRequests)} requested</div>
-                )}
-              </TD>
-            </TR>
-          ))}</TBody>
-        </Table>
-      </Card>
-
-      )}
+      {tab === 'balances' && <BalancesTable items={summary.items} />}
 
       {tab === 'penalties' && <FinesHistory admin />}
 

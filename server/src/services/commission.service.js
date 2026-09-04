@@ -166,10 +166,24 @@ async function rateForBrandAt(brandName, when) {
 
 // What a rep has EARNED: every settled box priced with its own order's rule and
 // its own product's brand. Returns the total plus a per-brand breakdown.
-async function earnedForRep(salesRepId) {
+//
+// `since` narrows it to boxes settled after a moment in time. The settlement
+// writes its sale as the boxes are paid for, so a sale's own date IS the date
+// the box was settled — which is what makes "since the last payout" answerable
+// without storing anything new.
+async function earnedForRep(salesRepId, { since = null } = {}) {
   const [items, rates] = await Promise.all([
     prisma.saleItem.findMany({
-      where: { sale: { is: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' } } } },
+      where: {
+        sale: {
+          is: {
+            salesRepId,
+            settlementId: { not: null },
+            status: { not: 'CANCELLED' },
+            ...(since ? { soldAt: { gt: since } } : {}),
+          },
+        },
+      },
       select: {
         baseQuantity: true,
         product: { select: { brand: { select: { name: true } } } },
@@ -297,9 +311,45 @@ async function withdrawalTotals(salesRepId) {
   return { paid, pendingRequests };
 }
 
+// ── The current run ──────────────────────────────────────────────────────────
+// A commission run closes when the rep is paid. Everything after that payout is
+// the run they are in now, which is what the owner reads the balances page for:
+// not a lifetime total, but "since I last paid him, how is he doing".
+//
+// The boundary is the LAST withdrawal that took money out. `withdrawalTotals`
+// counts APPROVED and PAID alike as paid, so the run boundary has to agree with
+// it, or the figures on the row would not add up. Ordered in memory rather than
+// by SQL because the moment is paidAt when there is one and the decision
+// otherwise, and no index can sort across two columns like that.
+async function lastPayoutFor(salesRepId) {
+  const rows = await prisma.commissionWithdrawal.findMany({
+    where: { salesRepId, status: { in: ['APPROVED', 'PAID'] } },
+    select: { id: true, amount: true, status: true, paidAt: true, decidedAt: true, requestedAt: true },
+  });
+  let best = null;
+  for (const r of rows) {
+    const at = r.paidAt || r.decidedAt || r.requestedAt;
+    if (!at) continue;
+    if (!best || new Date(at).getTime() > new Date(best.at).getTime()) {
+      best = { id: r.id, at, amount: round2(toNumber(r.amount)), status: r.status };
+    }
+  }
+  return best;
+}
+
+// Fines charged inside the current run. WAIVED rows are excluded here exactly as
+// they are in the lifetime figure — a forgiven fine costs the rep nothing.
+async function penaltiesSince(salesRepId, since) {
+  const agg = await prisma.settlementPenalty.aggregate({
+    where: { salesRepId, status: 'APPLIED', appliedAt: { gt: since } },
+    _sum: { amount: true },
+  });
+  return round2(toNumber(agg._sum.amount));
+}
+
 async function computeForRep(salesRepId) {
   const rule = await getRule();
-  const [earnedData, wt, penaltyData, rates, rep] = await Promise.all([
+  const [earnedData, wt, penaltyData, rates, rep, payout] = await Promise.all([
     earnedForRep(salesRepId),
     withdrawalTotals(salesRepId),
     penaltyBreakdownForRep(salesRepId),
@@ -308,6 +358,7 @@ async function computeForRep(salesRepId) {
       where: { id: salesRepId },
       select: { withdrawalThreshold: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true, earnsCommission: true },
     }).catch(() => null),
+    lastPayoutFor(salesRepId),
   ]);
   const { boxes } = earnedData;
 
@@ -336,6 +387,17 @@ async function computeForRep(salesRepId) {
       penaltyBreakdown: [],
       available: 0,
       eligible: false,
+      // Their boxes are still real work and still belong to a run; only the
+      // money is nil.
+      run: {
+        since: payout ? payout.at : null,
+        lastPayout: payout ? { at: payout.at, amount: payout.amount } : null,
+        boxes: round2(boxes),
+        earned: 0,
+        penalties: 0,
+        net: 0,
+        broughtForward: 0,
+      },
     };
   }
 
@@ -356,6 +418,29 @@ async function computeForRep(salesRepId) {
   const penalties = penaltyData.total;
   const pending = round2(earned - wt.paid);
   const available = round2(earned - wt.paid - wt.pendingRequests - penalties);
+
+  // The run in progress. With no payout behind them the run IS their whole
+  // history, so the figures already in hand answer it and no second pass over
+  // the boxes is needed.
+  const since = payout ? new Date(payout.at) : null;
+  const [runEarnedData, runPenalties] = since
+    ? await Promise.all([earnedForRep(salesRepId, { since }), penaltiesSince(salesRepId, since)])
+    : [earnedData, penalties];
+  const runNet = round2(runEarnedData.earned - runPenalties);
+  const run = {
+    since: payout ? payout.at : null,
+    lastPayout: payout ? { at: payout.at, amount: payout.amount } : null,
+    boxes: round2(runEarnedData.boxes),
+    earned: runEarnedData.earned,
+    penalties: runPenalties,
+    net: runNet,
+    // What the balance was already carrying when this run opened: a part-taken
+    // payout leaves the remainder behind, and an agreed adjustment sits outside
+    // any run's boxes. Derived from `available` rather than summed separately,
+    // so earned − fines + brought forward always equals what he can withdraw.
+    broughtForward: round2(available - runNet),
+  };
+
   return {
     rule,
     rates,
@@ -376,6 +461,7 @@ async function computeForRep(salesRepId) {
     penalties,
     penaltyBreakdown: penaltyData.breakdown,
     available, // can be negative when penalties exceed remaining balance
+    run,
   };
 }
 
@@ -400,6 +486,13 @@ async function summaryAllReps() {
       // payable. `pending` above is earned − paid, which still contains fines.
       available: round2(items.reduce((s, i) => s + Math.max(0, i.available), 0)),
       requested: round2(items.reduce((s, i) => s + (i.pendingRequests || 0), 0)),
+      boxes: round2(items.reduce((s, i) => s + (i.boxesSettled || 0), 0)),
+      // The current run across everybody: boxes settled and commission earned
+      // since each rep's own last payout, which is what the balances page opens
+      // on. Each rep's run starts on a different date, so this is a sum of
+      // "since I last paid you", not a shared period.
+      runBoxes: round2(items.reduce((s, i) => s + (i.run?.boxes || 0), 0)),
+      runEarned: round2(items.reduce((s, i) => s + (i.run?.earned || 0), 0)),
     },
     items,
   };
