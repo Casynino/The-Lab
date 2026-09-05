@@ -548,25 +548,41 @@ function MoneyCard({ label, value, tone, sub, quiet }) {
   );
 }
 
-// The same three-segment bar every product block already draws, at order level
-// and half a pixel taller. It grows as the number falls: one event, told twice.
+// The same segmented bar every product block already draws, at order level and
+// half a pixel taller. It grows as the number falls: one event, told twice.
 //
-// The amber segment is boxes submitted but not yet approved. They eat into the
-// empty tail and never out of settled, because no sale exists until The Doctor
-// approves — the outstanding count is right to still be carrying them.
-function BoxBar({ settled, returned, pending, total }) {
+// Two kinds of pending, kept apart because their consequences are opposite: a
+// return awaiting a decision PAUSES the daily fine, a settlement awaiting one
+// does not. Summing them under a single word would tell a rep that boxes
+// costing him TSh 10,000 a day and boxes costing him nothing are the same
+// thing. Both sit inside the outstanding tail, never inside settled — no sale
+// exists until The Doctor approves.
+//
+// Segments are sized by width and grown with scaleX rather than by animating
+// width itself: transform is compositor-only, so the busiest 700ms on the
+// screen does not also relayout a flex row on every frame. It also means a
+// later data change resizes instantly instead of leaving a gap the emerald
+// segment takes three quarters of a second to grow into.
+function BoxBar({ settled, returned, pendingSubmitted, pendingReturned, total }) {
   const reduce = useReducedMotion();
   const pct = (n) => `${total > 0 ? Math.max(0, Math.min(100, (n / total) * 100)) : 0}%`;
-  const grow = (w, delay) => ({
-    initial: { width: reduce ? w : 0 },
-    animate: { width: w },
-    transition: { duration: reduce ? 0 : 0.7, delay: reduce ? 0 : delay, ease: [0.2, 0.7, 0.3, 1] },
-  });
+  const seg = (n, cls, delay) => (
+    <div className="h-full shrink-0" style={{ width: pct(n) }}>
+      <motion.div
+        className={`h-full w-full ${cls}`}
+        style={{ transformOrigin: 'left' }}
+        initial={{ scaleX: reduce ? 1 : 0 }}
+        animate={{ scaleX: 1 }}
+        transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : delay, ease: [0.2, 0.7, 0.3, 1] }}
+      />
+    </div>
+  );
   return (
     <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.07]" aria-hidden="true">
-      <motion.div className="bg-emerald-400" {...grow(pct(settled), 0.05)} />
-      <motion.div className="bg-sky-400" {...grow(pct(returned), 0.12)} />
-      {pending > 0 && <motion.div className="bg-amber-400/70" {...grow(pct(pending), 0.19)} />}
+      {seg(settled, 'bg-emerald-400', 0.05)}
+      {seg(returned, 'bg-sky-400', 0.12)}
+      {seg(pendingSubmitted, 'bg-amber-400/70', 0.19)}
+      {seg(pendingReturned, 'bg-sky-400/40', 0.19)}
     </div>
   );
 }
@@ -961,11 +977,14 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               // Submitted but not yet approved, plus returns awaiting a
               // decision. Clamped to what is outstanding so the segments can
               // never sum past the track.
-              const pending = Math.max(0, Math.min(
-                (order.pendingSubmissionsList || []).reduce((n, x) => n + (x.boxes || 0), 0)
-                  + (t.pendingReturnBoxes || 0),
-                t.remainingBoxes,
-              ));
+              const subs = (order.pendingSubmissionsList || []).reduce((n, x) => n + (x.boxes || 0), 0);
+              const rets = t.pendingReturnBoxes || 0;
+              // Nothing in the server stops the same boxes sitting in a pending
+              // return AND a pending submission at once, so the two shares are
+              // fitted into the outstanding tail in order rather than allowed
+              // to overrun it and make the bar contradict the number above it.
+              const barSubs = Math.max(0, Math.min(subs, t.remainingBoxes));
+              const barRets = Math.max(0, Math.min(rets, t.remainingBoxes - barSubs));
               return (
                 <div className={`relative overflow-hidden rounded-xl bg-surface p-4 ring-1 ${
                   done ? 'ring-emerald-500/25' : overdue ? 'ring-rose-500/25' : 'ring-brand-500/25'}`}>
@@ -982,14 +1001,16 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                         rose figure tumbling downward reads as boxes being lost. */}
                     <span className="inline-flex items-baseline gap-2" aria-hidden="true">
                       <BoxCount
-                        from={done ? 0 : t.assignedBoxes}
+                        from={t.assignedBoxes}
                         to={shown}
-                        countOnMount={!overdue}
+                        still={overdue || done}
+                        unitOne="box"
+                        unitMany="boxes"
+                        unitClassName="text-[13px] font-semibold text-muted"
                         className={`text-[34px] font-black leading-none ${
                           done ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-brand-400'}`}
                       />
                       <span className="text-[13px] font-semibold text-muted">
-                        {shown === 1 ? 'box' : 'boxes'}{' '}
                         {done ? 'accounted for' : overdue ? 'missing' : 'left'}
                       </span>
                       {!done && <span className="text-[13px] text-faint">of {formatNumber(t.assignedBoxes)}</span>}
@@ -1006,7 +1027,8 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   </div>
 
                   <div className="relative mt-3">
-                    <BoxBar settled={t.settledBoxes} returned={t.returnedBoxes} pending={pending} total={t.assignedBoxes} />
+                    <BoxBar settled={t.settledBoxes} returned={t.returnedBoxes}
+                      pendingSubmitted={barSubs} pendingReturned={barRets} total={t.assignedBoxes} />
                   </div>
 
                   <div className="relative mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold">
@@ -1014,7 +1036,8 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                       ? <span className="text-emerald-400">{formatNumber(t.settledBoxes)} settled</span>
                       : <span className="text-faint">Nothing settled yet</span>}
                     {t.returnedBoxes > 0 && <span className="text-sky-400">{formatNumber(t.returnedBoxes)} returned</span>}
-                    {pending > 0 && <span className="ml-auto text-amber-400">{formatNumber(pending)} awaiting approval</span>}
+                    {subs > 0 && <span className="ml-auto text-amber-400">{formatNumber(subs)} awaiting approval</span>}
+                    {rets > 0 && <span className={subs > 0 ? 'text-sky-300' : 'ml-auto text-sky-300'}>{formatNumber(rets)} return under review</span>}
                   </div>
                 </div>
               );
@@ -1040,16 +1063,25 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 {order.order.lines.map((l) => {
                   const total = Math.max(1, l.assigned);
                   const pct = (n) => `${Math.max(0, (n / total) * 100)}%`;
+                  // On a single-product order this block's bar and its three
+                  // figures are the hero's, restated a third of the size two
+                  // hundred pixels lower. The product NAME is the only thing
+                  // here the hero cannot say, so on those orders that is all
+                  // it says.
+                  const echoesHero = order.order.lines.length === 1;
                   return (
                     <div key={l.productId} className="rounded-xl bg-elevated/50 p-3 ring-1 ring-white/[0.06]">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{l.name}</span>
                         <span className="shrink-0 text-[11px] text-faint">{formatNumber(l.assigned)} issued</span>
                       </div>
+                      {!echoesHero && (
                       <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
                         <div className="bg-emerald-400" style={{ width: pct(l.settled) }} />
                         <div className="bg-sky-400" style={{ width: pct(l.returned) }} />
                       </div>
+                      )}
+                      {!echoesHero && (
                       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
                         <span className="text-emerald-400">{formatNumber(l.settled)} settled</span>
                         <span className="text-sky-400">
@@ -1060,6 +1092,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                           {formatNumber(l.remaining)} {overdue ? 'missing' : 'left'}
                         </span>
                       </div>
+                      )}
                     </div>
                   );
                 })}

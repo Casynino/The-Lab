@@ -100,7 +100,7 @@ async function boxesForOrders(rows) {
   const ids = rows.map((r) => r.id);
   const transferIds = rows.map((r) => r.transferId).filter(Boolean);
 
-  const [issuedRows, saleRows, retRows] = await Promise.all([
+  const [issuedRows, saleRows, retRows, subPendRows, retPendRows] = await Promise.all([
     transferIds.length
       ? prisma.stockTransferItem.groupBy({ by: ['transferId'], where: { transferId: { in: transferIds } }, _sum: { baseQuantity: true } })
       : [],
@@ -110,6 +110,21 @@ async function boxesForOrders(rows) {
     }),
     prisma.return.findMany({
       where: { settlementId: { in: ids }, status: { in: ['APPROVED', 'COMPLETED'] } },
+      select: { settlementId: true, items: { select: { baseQuantity: true } } },
+    }),
+    // Boxes the rep has handed over but The Doctor has not decided on. They are
+    // still outstanding — no sale and no stock movement exists yet — but they
+    // are not unaccounted for either, and the two are very different things to
+    // say to a rep whose order is late. Kept apart because their consequences
+    // are opposite: a pending RETURN pauses the daily fine (penalty.service
+    // skips an order with one), a pending SUBMISSION does not.
+    prisma.settlementSubmission.groupBy({
+      by: ['settlementId'],
+      where: { settlementId: { in: ids }, status: 'PENDING' },
+      _sum: { baseQuantity: true },
+    }),
+    prisma.return.findMany({
+      where: { settlementId: { in: ids }, status: 'PENDING' },
       select: { settlementId: true, items: { select: { baseQuantity: true } } },
     }),
   ]);
@@ -125,12 +140,22 @@ async function boxesForOrders(rows) {
   };
   const settledBy = rollUp(saleRows);
   const returnedBy = rollUp(retRows);
+  const pendingReturnBy = rollUp(retPendRows);
+  const pendingSubmitBy = new Map(subPendRows.map((r) => [r.settlementId, r._sum.baseQuantity || 0]));
 
   for (const r of rows) {
     const issued = (r.transferId && issuedByTransfer.get(r.transferId)) || 0;
     const settled = settledBy.get(r.id) || 0;
     const returned = returnedBy.get(r.id) || 0;
-    out.set(r.id, { issued, settled, returned, remaining: Math.max(0, issued - settled - returned) });
+    out.set(r.id, {
+      issued,
+      settled,
+      returned,
+      remaining: Math.max(0, issued - settled - returned),
+      // Sitting with The Doctor. Inside `remaining`, never subtracted from it.
+      pendingSubmitted: pendingSubmitBy.get(r.id) || 0,
+      pendingReturned: pendingReturnBy.get(r.id) || 0,
+    });
   }
   return out;
 }
@@ -165,7 +190,9 @@ async function list(filters, pagination) {
   // made of without opening it.
   const items = rows.map(decorate);
   const boxes = await boxesForOrders(rows);
-  for (const it of items) it.boxes = boxes.get(it.id) || { issued: 0, settled: 0, returned: 0, remaining: 0 };
+  for (const it of items) {
+    it.boxes = boxes.get(it.id) || { issued: 0, settled: 0, returned: 0, remaining: 0, pendingSubmitted: 0, pendingReturned: 0 };
+  }
   return { items, total };
 }
 

@@ -56,17 +56,31 @@ function ActiveOrderCard({ s, onClick }) {
           </span>
           {/* An order with no linked transfer has issued 0, and "0 boxes left"
               on a live order would be a lie about a finished one. */}
-          {s.boxes?.issued > 0 && (
-            <span className="ml-auto shrink-0 text-[12px] font-semibold text-muted">
-              <BoxCount
-                to={s.boxes.remaining}
-                countOnMount={false}
-                duration={450}
-                className={clsx('text-[15px] font-black', overdue ? 'text-rose-400' : 'text-foreground')}
-              />{' '}
-              {s.boxes.remaining === 1 ? 'box' : 'boxes'} {overdue ? 'missing' : 'left'}
-            </span>
-          )}
+          {s.boxes?.issued > 0 && (() => {
+            // "Missing" is an accusation, and it is the wrong one when the rep
+            // has already handed the boxes over and is waiting on The Doctor.
+            // A late order whose whole outstanding count is sitting in a
+            // submission or a return says so instead.
+            const withOffice = (s.boxes.pendingSubmitted || 0) + (s.boxes.pendingReturned || 0);
+            const waiting = s.boxes.remaining > 0 && withOffice >= s.boxes.remaining;
+            return (
+              <span className="ml-auto shrink-0 text-[12px] font-semibold text-muted">
+                <BoxCount
+                  to={s.boxes.remaining}
+                  countOnMount={false}
+                  duration={450}
+                  unitOne="box"
+                  unitMany="boxes"
+                  unitClassName="text-[12px] font-semibold text-muted"
+                  className={clsx(
+                    'text-[15px] font-black',
+                    waiting ? 'text-amber-400' : overdue ? 'text-rose-400' : 'text-foreground',
+                  )}
+                />{' '}
+                {waiting ? 'awaiting approval' : overdue ? 'missing' : 'left'}
+              </span>
+            );
+          })()}
         </div>
       </div>
 

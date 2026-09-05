@@ -1,7 +1,6 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { motion, useReducedMotion } from 'motion/react';
-import { formatNumber } from '@/lib/format';
 import { Loader2, X, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
 
 // --- Buttons ---------------------------------------------------------------
@@ -129,17 +128,29 @@ export function Remaining({ hours, className = '' }) {
 //
 // countOnMount={false} paints the value on the first frame and moves only when
 // it CHANGES — what the list cards use, so a background refetch every minute
-// does not turn a page of orders into a row of slot machines.
-export function BoxCount({ from, to, duration = 700, countOnMount = true, className = '' }) {
+// does not turn a page of orders into a row of slot machines. `still` goes
+// further and never animates at all, on mount or after.
+//
+// It owns the noun as well as the digits. Read from the target instead, the
+// label contradicts the number for the whole animation: an order ending on its
+// last box would say "28 box left" until the count landed.
+export function BoxCount({
+  from, to, duration = 700, countOnMount = true, still = false,
+  unitOne, unitMany, unitClassName = '', className = '',
+}) {
   // motion v12 ships reducedMotion: "never", so the preference is honoured
   // here explicitly or not at all.
   const reduce = useReducedMotion();
-  const start = countOnMount ? (from ?? to) : to;
+  const frozen = still || reduce;
+  // Under reduced motion the first painted frame must already be the truth —
+  // seeding it with `from` and correcting it is the one hard content jump the
+  // preference exists to suppress.
+  const start = countOnMount && !frozen ? (from ?? to) : to;
   const shown = useRef(start);
   const [val, setVal] = useState(start);
 
   useEffect(() => {
-    if (reduce) { shown.current = to; setVal(to); return undefined; }
+    if (frozen) { shown.current = to; setVal(to); return undefined; }
     const a = shown.current;
     if (a === to) { setVal(to); return undefined; }
     let raf;
@@ -156,10 +167,29 @@ export function BoxCount({ from, to, duration = 700, countOnMount = true, classN
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [to, duration, reduce]);
+  }, [to, duration, frozen]);
 
-  return <span className={clsx('tabular-nums', className)}>{formatNumber(val)}</span>;
+  // The digits sit in a box as wide as the widest they have been, so crossing
+  // a power of ten mid-count does not drag the word beside them sideways.
+  const widest = useRef(1);
+  widest.current = Math.max(widest.current, String(Math.abs(val)).length, String(Math.abs(Number(to) || 0)).length);
+
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span
+        className={clsx('inline-block text-right tabular-nums', className)}
+        style={{ minWidth: `${widest.current}ch` }}
+      >
+        {/* String, not formatNumber: a box count never needs a thousands
+            separator in this range, and formatNumber builds a fresh
+            Intl.NumberFormat on every one of the ~42 frames. */}
+        {String(val)}
+      </span>
+      {unitMany && <span className={unitClassName}>{val === 1 ? unitOne : unitMany}</span>}
+    </span>
+  );
 }
+
 
 // --- Loading / empty --------------------------------------------------------
 export function Spinner({ className }) {
