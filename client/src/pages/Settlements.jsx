@@ -71,13 +71,13 @@ function ActiveOrderCard({ s, onClick }) {
                   duration={450}
                   unitOne="box"
                   unitMany="boxes"
+                  suffix={waiting ? 'awaiting approval' : overdue ? 'missing' : 'left'}
                   unitClassName="text-[12px] font-semibold text-muted"
                   className={clsx(
                     'text-[15px] font-black',
                     waiting ? 'text-amber-400' : overdue ? 'text-rose-400' : 'text-foreground',
                   )}
-                />{' '}
-                {waiting ? 'awaiting approval' : overdue ? 'missing' : 'left'}
+                />
               </span>
             );
           })()}

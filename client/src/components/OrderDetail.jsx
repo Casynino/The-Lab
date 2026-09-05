@@ -578,7 +578,7 @@ function BoxBar({ settled, returned, pendingSubmitted, pendingReturned, total })
     </div>
   );
   return (
-    <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.07]" aria-hidden="true">
+    <div className="flex h-1.5 overflow-hidden rounded-full bg-white/[0.07]" aria-hidden="true">
       {seg(settled, 'bg-emerald-400', 0.05)}
       {seg(returned, 'bg-sky-400', 0.12)}
       {seg(pendingSubmitted, 'bg-amber-400/70', 0.19)}
@@ -986,7 +986,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               const barSubs = Math.max(0, Math.min(subs, t.remainingBoxes));
               const barRets = Math.max(0, Math.min(rets, t.remainingBoxes - barSubs));
               return (
-                <div className={`relative overflow-hidden rounded-xl bg-surface p-4 ring-1 ${
+                <div className={`relative overflow-hidden rounded-xl bg-surface p-3.5 ring-1 ${
                   done ? 'ring-emerald-500/25' : overdue ? 'ring-rose-500/25' : 'ring-brand-500/25'}`}>
                   <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${
                     done ? 'from-emerald-500/[0.12]' : overdue ? 'from-rose-500/[0.12]' : 'from-brand-500/[0.12]'
@@ -1006,14 +1006,12 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                         still={overdue || done}
                         unitOne="box"
                         unitMany="boxes"
-                        unitClassName="text-[13px] font-semibold text-muted"
-                        className={`text-[34px] font-black leading-none ${
+                        suffix={done ? 'accounted for' : overdue ? 'missing' : 'left'}
+                        unitClassName="text-[12px] font-semibold text-muted"
+                        className={`text-[26px] font-black leading-none ${
                           done ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-brand-400'}`}
                       />
-                      <span className="text-[13px] font-semibold text-muted">
-                        {done ? 'accounted for' : overdue ? 'missing' : 'left'}
-                      </span>
-                      {!done && <span className="text-[13px] text-faint">of {formatNumber(t.assignedBoxes)}</span>}
+                      {!done && <span className="text-[12px] text-faint">of {formatNumber(t.assignedBoxes)}</span>}
                     </span>
                     {/* Said once for a screen reader, instead of forty times as
                         the number counts. */}
@@ -1026,12 +1024,12 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                     )}
                   </div>
 
-                  <div className="relative mt-3">
+                  <div className="relative mt-2.5">
                     <BoxBar settled={t.settledBoxes} returned={t.returnedBoxes}
                       pendingSubmitted={barSubs} pendingReturned={barRets} total={t.assignedBoxes} />
                   </div>
 
-                  <div className="relative mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold">
+                  <div className="relative mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold">
                     {t.settledBoxes > 0
                       ? <span className="text-emerald-400">{formatNumber(t.settledBoxes)} settled</span>
                       : <span className="text-faint">Nothing settled yet</span>}

@@ -136,7 +136,7 @@ export function Remaining({ hours, className = '' }) {
 // last box would say "28 box left" until the count landed.
 export function BoxCount({
   from, to, duration = 700, countOnMount = true, still = false,
-  unitOne, unitMany, unitClassName = '', className = '',
+  unitOne, unitMany, suffix, unitClassName = '', className = '',
 }) {
   // motion v12 ships reducedMotion: "never", so the preference is honoured
   // here explicitly or not at all.
@@ -185,7 +185,14 @@ export function BoxCount({
             Intl.NumberFormat on every one of the ~42 frames. */}
         {String(val)}
       </span>
-      {unitMany && <span className={unitClassName}>{val === 1 ? unitOne : unitMany}</span>}
+      {/* The noun and the word after it are one text node, so "boxes left"
+          is spaced like the sentence it is rather than by a flex gap that
+          makes the two halves look like separate labels. */}
+      {unitMany && (
+        <span className={unitClassName}>
+          {val === 1 ? unitOne : unitMany}{suffix ? ` ${suffix}` : ''}
+        </span>
+      )}
     </span>
   );
 }
