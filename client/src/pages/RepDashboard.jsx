@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import api, { unwrap } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { formatCurrency, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import { tzGreeting, tzDateLabel } from '@/lib/tz';
 import ProgressRows from '@/components/ProgressRows';
 import { SETTLEMENT_STATUS_META } from '@/lib/constants';
@@ -77,12 +77,15 @@ export default function RepDashboard() {
   if (isLoading) return <PageSpinner />;
   if (!data) return <EmptyState title="No data yet" />;
 
-  const { commission, openSettlements, openSettlementsValue, pendingRequests, orders } = data;
+  const { commission, openSettlements, openSettlementsValue, openSettlementBoxes, pendingRequests, orders } = data;
   const first = user?.name?.split(' ')[0] || 'there';
 
+  // The money he owes and the stock he is carrying, in one line. Two orders is
+  // still one pile of boxes to him, so the count is the total across them.
   const settlementHint = openSettlements === 0
     ? 'No open orders'
-    : `${openSettlements} active order${openSettlements !== 1 ? 's' : ''} · settle now`;
+    : `${openSettlements} active order${openSettlements !== 1 ? 's' : ''}${
+      openSettlementBoxes > 0 ? ` · ${formatNumber(openSettlementBoxes)} box${openSettlementBoxes === 1 ? '' : 'es'} left` : ' · settle now'}`;
 
   return (
     <div className="space-y-6">
@@ -172,6 +175,14 @@ export default function RepDashboard() {
                       {formatCurrency(o.balance)}
                     </span>
                   </div>
+                  {o.boxes?.issued > 0 && (
+                    <div className="mt-1 text-xs font-semibold text-muted">
+                      <span className={clsx('tabular-nums', overdue ? 'text-rose-400' : 'text-foreground')}>
+                        {formatNumber(o.boxes.remaining)}
+                      </span>{' '}
+                      {o.boxes.remaining === 1 ? 'box' : 'boxes'} {overdue ? 'missing' : 'left'}
+                    </div>
+                  )}
                   <div className={clsx('mt-1.5 flex items-center justify-between text-xs', overdue ? 'text-rose-400' : approaching ? 'text-amber-400' : 'text-faint')}>
                     <span>{hoursLabel(o.hoursRemaining)} · {formatDateTime(o.deadlineAt)}</span>
                     <span className="font-semibold text-brand-400">Settle &rsaquo;</span>
@@ -207,6 +218,11 @@ export default function RepDashboard() {
                       </td>
                       <td className={clsx('px-4 py-3 font-bold', o.balance > 0 ? 'text-rose-400' : 'text-emerald-400')}>
                         {formatCurrency(o.balance)}
+                        {o.boxes?.issued > 0 && (
+                          <div className="text-[11px] font-semibold text-muted">
+                            {formatNumber(o.boxes.remaining)} {o.boxes.remaining === 1 ? 'box' : 'boxes'} {overdue ? 'missing' : 'left'}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="text-muted">{formatDateTime(o.deadlineAt)}</div>

@@ -63,9 +63,15 @@ const myOverview = asyncHandler(async (req, res) => {
   const heldValue = round2(positive.reduce((s, b) => s + b.baseQuantity * (costMap.get(b.productId) || 0), 0));
   const heldUnits = positive.reduce((s, b) => s + b.baseQuantity, 0);
 
+  // What each open order is MADE OF, not just what it is worth. Same three
+  // queries the orders list already runs, so the two screens can never
+  // disagree about how many boxes a rep is carrying.
+  const boxesByOrder = await settlement.boxesForOrders(openOrders);
+
   const orders = openOrders.map((s) => {
     const dec = settlement.decorate(s);
     return {
+      boxes: boxesByOrder.get(s.id) || { issued: 0, settled: 0, returned: 0, remaining: 0, pendingSubmitted: 0, pendingReturned: 0 },
       id: s.id,
       settlementNumber: s.settlementNumber,
       value: toNumber(s.assignedValue),
@@ -78,12 +84,17 @@ const myOverview = asyncHandler(async (req, res) => {
     };
   });
   const openSettlementsValue = round2(orders.reduce((s, o) => s + o.balance, 0));
+  // Boxes still on the rep across every open order at once — the figure the
+  // settlement tile leads with, since a rep carrying two orders thinks in one
+  // pile of stock rather than in two.
+  const openSettlementBoxes = orders.reduce((s, o) => s + (o.boxes?.remaining || 0), 0);
 
   return ok(res, {
     heldStock: { value: heldValue, units: heldUnits, lines: positive.length },
     commission: commissionData,
     openSettlements: orders.length,
     openSettlementsValue,
+    openSettlementBoxes,
     pendingRequests,
     orders,
   });

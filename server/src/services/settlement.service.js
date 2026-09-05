@@ -1119,6 +1119,7 @@ async function analytics() {
 
 module.exports = {
   SETTLEMENT_WINDOW_HOURS,
+  boxesForOrders,
   createForIssuance,
   list,
   get,
