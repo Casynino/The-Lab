@@ -84,7 +84,7 @@ export default function RepDashboard() {
   // still one pile of boxes to him, so the count is the total across them.
   const settlementHint = openSettlements === 0
     ? 'No open orders'
-    : `${openSettlements} active order${openSettlements !== 1 ? 's' : ''}${
+    : `${openSettlements} order${openSettlements !== 1 ? 's' : ''}${
       openSettlementBoxes > 0 ? ` · ${formatNumber(openSettlementBoxes)} box${openSettlementBoxes === 1 ? '' : 'es'} left` : ' · settle now'}`;
 
   return (
@@ -106,12 +106,18 @@ export default function RepDashboard() {
           shows in the payouts list on the Commissions page with its own status,
           so this was the same thing said twice and the bigger of the two. */}
 
-      {/* Card grid */}
+      {/* Card grid. The two "The Lab" titles carry a non-breaking space before
+          "Lab" so the line can only break in front of the whole name: "Order
+          from / The Lab", not "Order from The / Lab". text-wrap: balance was
+          the obvious fix and changes nothing here — measured in a browser
+          rather than assumed. Every hint is short enough to survive the
+          one-line clamp on a 390px phone; the settlement one was not, and was
+          eating the box count. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <DashCard
           icon={ClipboardList}
           label="Request stock"
-          value="Order from The Lab"
+          value={'Order from The\u00A0Lab'}
           hint="Request new inventory"
           badge={pendingRequests > 0 ? pendingRequests : undefined}
           onClick={() => navigate('/stock-requests')}
@@ -129,13 +135,13 @@ export default function RepDashboard() {
           icon={NotebookPen}
           label="Daily Report"
           value="Tap to Report"
-          hint="Submit your opening or closing"
+          hint="Opening or closing count"
           onClick={() => navigate('/daily-reports')}
         />
         <DashCard
           icon={Undo2}
           label="Return stock"
-          value="Return to The Lab"
+          value={'Return to The\u00A0Lab'}
           hint="Send back unsold boxes"
           onClick={() => navigate('/settlements')}
         />
