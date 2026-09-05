@@ -873,36 +873,43 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Extension status + the penalty rule currently in force */}
-            {active && (
-              <div className={`rounded-xl border px-3 py-2.5 text-sm ${
-                order.extensionStatus === 'ACTIVE' ? 'border-brand-500/30 bg-brand-500/10'
-                : order.extensionStatus === 'EXPIRED' ? 'border-rose-500/30 bg-rose-500/10'
-                : 'border-border bg-elevated'}`}>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <span className="text-xs uppercase tracking-wide text-faint">Extension</span>
-                  <Badge className={
-                    order.extensionStatus === 'ACTIVE' ? 'bg-brand-500/20 text-brand-400'
-                    : order.extensionStatus === 'EXPIRED' ? 'bg-rose-500/15 text-rose-300'
-                    : 'bg-elevated text-muted'}>
-                    {order.extensionStatus === 'ACTIVE' ? 'Extension active'
-                      : order.extensionStatus === 'EXPIRED' ? 'Extension expired'
-                      : 'Not used'}
-                  </Badge>
-                  <span className="ml-auto text-xs text-faint">
-                    Late penalty: <b className={order.extensionUsed ? 'text-rose-400' : 'text-muted'}>{formatCurrency(order.penaltyPerDay)}/day</b>
-                  </span>
-                </div>
-                {order.extensionUsed && order.preExtensionDeadline && (
-                  <div className="mt-1 text-xs text-faint">
-                    Original deadline was {formatDateTime(order.preExtensionDeadline)} · extended by {order.extensionHours}h
-                    {order.selfExtendedAt ? ` on ${formatDateTime(order.selfExtendedAt)}` : ''}
+              {/* The extension and the fine used to be a panel of their own, and
+                  a badly behaved one: three items in a wrapping flex row where
+                  the last carried ml-auto, so on a phone the penalty broke onto
+                  its own line and sat right-aligned under nothing. The chip
+                  beside it was bg-elevated inside a bg-elevated panel, which is
+                  a chip you cannot see.
+                  They are two more facts about this order, so they are now two
+                  more cells in the same grid as the dates, with the state told
+                  by the colour of the words rather than by a container. */}
+              {active && (
+                <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-3">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Extension</div>
+                    <div className={`mt-0.5 text-[13px] font-medium ${
+                      order.extensionStatus === 'ACTIVE' ? 'text-brand-400'
+                        : order.extensionStatus === 'EXPIRED' ? 'text-rose-400' : 'text-muted'}`}>
+                      {order.extensionStatus === 'ACTIVE' ? 'Active'
+                        : order.extensionStatus === 'EXPIRED' ? 'Expired' : 'Not used'}
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Late penalty</div>
+                    <div className={`mt-0.5 text-[13px] font-medium ${order.extensionUsed ? 'text-rose-400' : 'text-muted'}`}>
+                      {formatCurrency(order.penaltyPerDay)}/day
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {order.extensionUsed && order.preExtensionDeadline && (
+                <p className="mt-2.5 text-[11px] leading-snug text-faint">
+                  Original deadline {formatDateTime(order.preExtensionDeadline)}, extended by {order.extensionHours}h
+                  {order.selfExtendedAt ? ` on ${formatDateTime(order.selfExtendedAt)}` : ''}.
+                </p>
+              )}
+            </div>
 
             {/* Pending-return warning */}
             {order.pendingReturns > 0 && (
