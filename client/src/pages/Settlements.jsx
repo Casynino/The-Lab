@@ -15,44 +15,8 @@ import OrderDetailModal from '@/components/OrderDetail';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
   Pagination, Table, THead, TBody, TR, TH, TD,
+  Remaining, BoxCount,
 } from '@/components/ui';
-
-function hoursLabel(h) {
-  if (h == null) return '—';
-  // Rounding made the first hour either side of the deadline read as its
-  // opposite: half an hour late came out "0h overdue", which looks like it is
-  // not late, and the last minutes came out "0h left".
-  if (h < 0) {
-    const over = Math.abs(h);
-    return over < 1 ? 'just overdue' : `${Math.round(over)}h overdue`;
-  }
-  if (h < 1) return 'due now';
-  if (h < 24) return `${Math.round(h)}h left`;
-  return `${Math.round(h / 24)}d left`;
-}
-
-// How much time is left, told by colour as well as by words. It used to be
-// text-faint — the quietest style in the app — on the one figure in the row
-// that decides whether you act today. The bands are the ones that matter to a
-// 72-hour contract: past it, inside a day, inside the window, then the rest.
-function remainingTone(h) {
-  if (h == null) return 'text-muted';
-  if (h <= 24) return 'text-rose-400';
-  if (h <= 72) return 'text-amber-400';
-  if (h <= 168) return 'text-sky-400';
-  return 'text-muted';
-}
-
-// Colour and weight, and nothing else. A pill around it turned every row into
-// a row of blobs and the shape competed with the words inside it; the colour
-// alone carries the urgency and the text stays the thing you read.
-function Remaining({ hours, className = '' }) {
-  return (
-    <span className={`text-[13px] font-bold tabular-nums ${remainingTone(hours)} ${className}`}>
-      {hoursLabel(hours)}
-    </span>
-  );
-}
 
 // ── Rep-facing card for an ACTIVE order ─────────────────────────────────────
 
@@ -80,11 +44,29 @@ function ActiveOrderCard({ s, onClick }) {
         </Badge>
       </div>
 
-      {/* Outstanding — hero figure */}
+      {/* Outstanding, in both of this order's currencies: the money he owes and
+          the boxes he is still carrying. The count stays white — the accent is
+          already carrying urgency on the money, and a second lime figure beside
+          it reads as the money said twice. Late, they go rose together. */}
       <div className="mt-3">
         <div className="text-[11px] uppercase tracking-widest text-faint">Outstanding</div>
-        <div className={clsx('mt-0.5 text-2xl font-black tabular-nums', accent.text)}>
-          {formatCurrency(s.balance)}
+        <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+          <span className={clsx('text-2xl font-black tabular-nums', accent.text)}>
+            {formatCurrency(s.balance)}
+          </span>
+          {/* An order with no linked transfer has issued 0, and "0 boxes left"
+              on a live order would be a lie about a finished one. */}
+          {s.boxes?.issued > 0 && (
+            <span className="ml-auto shrink-0 text-[12px] font-semibold text-muted">
+              <BoxCount
+                to={s.boxes.remaining}
+                countOnMount={false}
+                duration={450}
+                className={clsx('text-[15px] font-black', overdue ? 'text-rose-400' : 'text-foreground')}
+              />{' '}
+              {s.boxes.remaining === 1 ? 'box' : 'boxes'} {overdue ? 'missing' : 'left'}
+            </span>
+          )}
         </div>
       </div>
 

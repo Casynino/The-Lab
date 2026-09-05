@@ -1,6 +1,7 @@
-import { forwardRef } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
+import { formatNumber } from '@/lib/format';
 import { Loader2, X, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
 
 // --- Buttons ---------------------------------------------------------------
@@ -74,6 +75,90 @@ export function Field({ label, error, required, children, hint }) {
 // --- Badge ------------------------------------------------------------------
 export function Badge({ className, children }) {
   return <span className={clsx('badge', className)}>{children}</span>;
+}
+
+// ── Time left on a settlement contract ──────────────────────────────────────
+// Lived in Settlements.jsx until the order screen needed it too. It cannot be
+// exported from there: Settlements already imports OrderDetail, so the arrow
+// would point both ways.
+
+function hoursLabel(h) {
+  if (h == null) return '—';
+  // Rounding made the first hour either side of the deadline read as its
+  // opposite: half an hour late came out "0h overdue", which looks like it is
+  // not late, and the last minutes came out "0h left".
+  if (h < 0) {
+    const over = Math.abs(h);
+    return over < 1 ? 'just overdue' : `${Math.round(over)}h overdue`;
+  }
+  if (h < 1) return 'due now';
+  if (h < 24) return `${Math.round(h)}h left`;
+  return `${Math.round(h / 24)}d left`;
+}
+
+// How much time is left, told by colour as well as by words. It used to be
+// text-faint — the quietest style in the app — on the one figure in the row
+// that decides whether you act today. The bands are the ones that matter to a
+// 72-hour contract: past it, inside a day, inside the window, then the rest.
+function remainingTone(h) {
+  if (h == null) return 'text-muted';
+  if (h <= 24) return 'text-rose-400';
+  if (h <= 72) return 'text-amber-400';
+  if (h <= 168) return 'text-sky-400';
+  return 'text-muted';
+}
+
+// Colour and weight, and nothing else. A pill around it turned every row into
+// a row of blobs and the shape competed with the words inside it; the colour
+// alone carries the urgency and the text stays the thing you read.
+export function Remaining({ hours, className = '' }) {
+  return (
+    <span className={`text-[13px] font-bold tabular-nums ${remainingTone(hours)} ${className}`}>
+      {hoursLabel(hours)}
+    </span>
+  );
+}
+
+// A count that arrives rather than appears. `from` is where the story starts —
+// the boxes that went out — and `to` is where it stands now, so 28 falling to
+// 12 IS the settling: told once, in under a second, by the number itself.
+//
+// It resumes from what is ON SCREEN rather than from the last target. `shown`
+// is written every frame, so an approval landing mid-count carries on from ~20
+// down to 9 instead of snapping back to 12 first.
+//
+// countOnMount={false} paints the value on the first frame and moves only when
+// it CHANGES — what the list cards use, so a background refetch every minute
+// does not turn a page of orders into a row of slot machines.
+export function BoxCount({ from, to, duration = 700, countOnMount = true, className = '' }) {
+  // motion v12 ships reducedMotion: "never", so the preference is honoured
+  // here explicitly or not at all.
+  const reduce = useReducedMotion();
+  const start = countOnMount ? (from ?? to) : to;
+  const shown = useRef(start);
+  const [val, setVal] = useState(start);
+
+  useEffect(() => {
+    if (reduce) { shown.current = to; setVal(to); return undefined; }
+    const a = shown.current;
+    if (a === to) { setVal(to); return undefined; }
+    let raf;
+    let t0 = null;
+    const tick = (now) => {
+      if (t0 == null) t0 = now;
+      const p = Math.min(1, (now - t0) / duration);
+      // easeOutCubic: most of the distance early, so the figure is readable
+      // well before it settles.
+      const v = Math.round(a + (to - a) * (1 - (1 - p) ** 3));
+      shown.current = v;
+      setVal(v);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [to, duration, reduce]);
+
+  return <span className={clsx('tabular-nums', className)}>{formatNumber(val)}</span>;
 }
 
 // --- Loading / empty --------------------------------------------------------

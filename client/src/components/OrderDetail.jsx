@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { motion, useReducedMotion } from 'motion/react';
 import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -10,6 +11,7 @@ import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import {
   Modal, Button, Field, Input, Select, Badge, PageSpinner,
   Table, THead, TBody, TR, TH, TD,
+  BoxCount, Remaining,
 } from '@/components/ui';
 
 // --- Submit settlement: the rep submits boxes + cash for The Doctor's approval
@@ -546,6 +548,29 @@ function MoneyCard({ label, value, tone, sub, quiet }) {
   );
 }
 
+// The same three-segment bar every product block already draws, at order level
+// and half a pixel taller. It grows as the number falls: one event, told twice.
+//
+// The amber segment is boxes submitted but not yet approved. They eat into the
+// empty tail and never out of settled, because no sale exists until The Doctor
+// approves — the outstanding count is right to still be carrying them.
+function BoxBar({ settled, returned, pending, total }) {
+  const reduce = useReducedMotion();
+  const pct = (n) => `${total > 0 ? Math.max(0, Math.min(100, (n / total) * 100)) : 0}%`;
+  const grow = (w, delay) => ({
+    initial: { width: reduce ? w : 0 },
+    animate: { width: w },
+    transition: { duration: reduce ? 0 : 0.7, delay: reduce ? 0 : delay, ease: [0.2, 0.7, 0.3, 1] },
+  });
+  return (
+    <div className="flex h-2 overflow-hidden rounded-full bg-white/[0.07]" aria-hidden="true">
+      <motion.div className="bg-emerald-400" {...grow(pct(settled), 0.05)} />
+      <motion.div className="bg-sky-400" {...grow(pct(returned), 0.12)} />
+      {pending > 0 && <motion.div className="bg-amber-400/70" {...grow(pct(pending), 0.19)} />}
+    </div>
+  );
+}
+
 // The number a rep has to send money to, made the biggest thing on the card.
 // It used to sit in an 11px grey line under the account name, which is where
 // you put something nobody needs to read — and this is the one thing they do
@@ -789,11 +814,6 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 </div>
               )}
 
-              {staff && active && remaining > 0 && (
-                <p className="text-center text-xs text-faint">
-                  {formatNumber(remaining)} box{remaining === 1 ? '' : 'es'} left to account for
-                </p>
-              )}
             </div>
           );
         })()}
@@ -855,13 +875,6 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                       : order.extensionStatus === 'EXPIRED' ? 'Extension expired'
                       : 'Not used'}
                   </Badge>
-                  {order.hoursRemaining != null && (
-                    <span className={order.hoursRemaining < 0 ? 'text-rose-400' : 'text-muted'}>
-                      {order.hoursRemaining < 0
-                        ? `${Math.abs(Math.round(order.hoursRemaining))}h overdue`
-                        : `${Math.round(order.hoursRemaining)}h remaining`}
-                    </span>
-                  )}
                   <span className="ml-auto text-xs text-faint">
                     Late penalty: <b className={order.extensionUsed ? 'text-rose-400' : 'text-muted'}>{formatCurrency(order.penaltyPerDay)}/day</b>
                   </span>
@@ -936,6 +949,77 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               </div>
             )}
 
+            {/* How many boxes are still on him. The boxes are the cause and the
+                money below is derived from them, so the cause goes first and
+                the grid reads as its consequence. This panel was the summary
+                strip that used to sit under the product list — moved, not
+                copied, and given the weight the figure deserves. */}
+            {order.order.totals.assignedBoxes > 0 && (() => {
+              const t = order.order.totals;
+              const done = t.remainingBoxes <= 0;
+              const shown = done ? t.assignedBoxes : t.remainingBoxes;
+              // Submitted but not yet approved, plus returns awaiting a
+              // decision. Clamped to what is outstanding so the segments can
+              // never sum past the track.
+              const pending = Math.max(0, Math.min(
+                (order.pendingSubmissionsList || []).reduce((n, x) => n + (x.boxes || 0), 0)
+                  + (t.pendingReturnBoxes || 0),
+                t.remainingBoxes,
+              ));
+              return (
+                <div className={`relative overflow-hidden rounded-xl bg-surface p-4 ring-1 ${
+                  done ? 'ring-emerald-500/25' : overdue ? 'ring-rose-500/25' : 'ring-brand-500/25'}`}>
+                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${
+                    done ? 'from-emerald-500/[0.12]' : overdue ? 'from-rose-500/[0.12]' : 'from-brand-500/[0.12]'
+                  } to-transparent`} aria-hidden="true" />
+
+                  <div className="relative flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    {/* Counted down rather than up: 28 went out, 16 came back as
+                        cash or stock, 12 remain. A count from zero would animate
+                        nothing that happened, and would make a live order read
+                        "0 boxes left" for half a second — the one value that
+                        means finished. Overdue orders do not count at all: a
+                        rose figure tumbling downward reads as boxes being lost. */}
+                    <span className="inline-flex items-baseline gap-2" aria-hidden="true">
+                      <BoxCount
+                        from={done ? 0 : t.assignedBoxes}
+                        to={shown}
+                        countOnMount={!overdue}
+                        className={`text-[34px] font-black leading-none ${
+                          done ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-brand-400'}`}
+                      />
+                      <span className="text-[13px] font-semibold text-muted">
+                        {shown === 1 ? 'box' : 'boxes'}{' '}
+                        {done ? 'accounted for' : overdue ? 'missing' : 'left'}
+                      </span>
+                      {!done && <span className="text-[13px] text-faint">of {formatNumber(t.assignedBoxes)}</span>}
+                    </span>
+                    {/* Said once for a screen reader, instead of forty times as
+                        the number counts. */}
+                    <span className="sr-only">
+                      {formatNumber(shown)} of {formatNumber(t.assignedBoxes)} boxes{' '}
+                      {done ? 'accounted for' : overdue ? 'missing' : 'left'}
+                    </span>
+                    {active && (
+                      <span className="ml-auto shrink-0"><Remaining hours={order.hoursRemaining} /></span>
+                    )}
+                  </div>
+
+                  <div className="relative mt-3">
+                    <BoxBar settled={t.settledBoxes} returned={t.returnedBoxes} pending={pending} total={t.assignedBoxes} />
+                  </div>
+
+                  <div className="relative mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-semibold">
+                    {t.settledBoxes > 0
+                      ? <span className="text-emerald-400">{formatNumber(t.settledBoxes)} settled</span>
+                      : <span className="text-faint">Nothing settled yet</span>}
+                    {t.returnedBoxes > 0 && <span className="text-sky-400">{formatNumber(t.returnedBoxes)} returned</span>}
+                    {pending > 0 && <span className="ml-auto text-amber-400">{formatNumber(pending)} awaiting approval</span>}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Money picture — all derived from settled/returned boxes */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <MoneyCard label="Order value" value={formatCurrency(order.order.totals.orderValue)} tone="brand" />
@@ -951,7 +1035,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 "SUED" and the numbers belong to nothing. One block per product
                 with its own bar says the same thing and fits. */}
             <div>
-              <div className="mb-2 text-sm font-semibold text-foreground">Every box in this order</div>
+              <div className="mb-2 text-sm font-semibold text-foreground">Box by box</div>
               <div className="space-y-2">
                 {order.order.lines.map((l) => {
                   const total = Math.max(1, l.assigned);
@@ -979,18 +1063,6 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                     </div>
                   );
                 })}
-              </div>
-
-              <div className="relative mt-2 overflow-hidden rounded-xl bg-surface px-3 py-3 ring-1 ring-brand-500/25">
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-brand-500/[0.12] to-transparent" aria-hidden="true" />
-                <div className="relative flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] font-semibold">
-                <span className="text-brand-300">All {formatNumber(order.order.totals.assignedBoxes)} boxes</span>
-                <span className="text-emerald-400">{formatNumber(order.order.totals.settledBoxes)} settled</span>
-                <span className="text-sky-400">{formatNumber(order.order.totals.returnedBoxes)} returned</span>
-                <span className={order.order.totals.remainingBoxes > 0 && overdue ? 'ml-auto text-rose-400' : 'ml-auto text-foreground'}>
-                  {formatNumber(order.order.totals.remainingBoxes)} {overdue ? 'missing' : 'left'}
-                </span>
-                </div>
               </div>
 
               <p className="mt-2 text-[11px] leading-snug text-faint">
