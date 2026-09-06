@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import clsx from 'clsx';
 import {
   ClipboardList, Undo2, ArrowRight, Timer, Eye, NotebookPen,
@@ -21,6 +21,33 @@ function hoursLabel(h) {
   if (h < 24) return `${Math.round(h)}h left`;
   return `${Math.round(h / 24)}d left`;
 }
+
+// Time of day already chooses the words, so it chooses the light too — keyed on
+// tzGreeting()'s own return value rather than on the hour, so the tint and the
+// sentence can never drift apart: move a boundary in tz.js and both move.
+//
+// Every class is a whole literal string. A gradient assembled from a variable
+// compiles to nothing and renders as flat black.
+//
+// Deliberately still. The drift these were designed with was a permanently
+// looping compositor animation on the most-opened screen in the app, which is
+// a standing battery cost on a cheap phone for something at 6% alpha. The tint
+// changes three times a day on its own, which is the part that survives
+// daylight anyway.
+const HEADER_LIGHT = {
+  'Good morning': {
+    near: 'bg-[radial-gradient(closest-side,rgba(251,146,60,0.10),transparent_72%)]',
+    far: 'bg-[radial-gradient(closest-side,rgba(163,230,53,0.06),transparent_75%)]',
+  },
+  'Good afternoon': {
+    near: 'bg-[radial-gradient(closest-side,rgba(132,204,22,0.11),transparent_72%)]',
+    far: 'bg-[radial-gradient(closest-side,rgba(16,185,129,0.06),transparent_75%)]',
+  },
+  'Good evening': {
+    near: 'bg-[radial-gradient(closest-side,rgba(99,102,241,0.13),transparent_72%)]',
+    far: 'bg-[radial-gradient(closest-side,rgba(132,204,22,0.05),transparent_75%)]',
+  },
+};
 
 // ── Standard dash card ───────────────────────────────────────────────────────
 
@@ -63,6 +90,9 @@ export default function RepDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [viewing, setViewing] = useState(null);
+  // motion v12 ships reducedMotion: "never", so the preference is honoured here
+  // or not at all. Above the early returns, where every hook has to be.
+  const reduce = useReducedMotion();
 
   const { data: bonus } = useQuery({
     queryKey: ['bonus', 'me'],
@@ -79,6 +109,8 @@ export default function RepDashboard() {
 
   const { commission, openSettlements, openSettlementsValue, openSettlementBoxes, pendingRequests, orders } = data;
   const first = user?.name?.split(' ')[0] || 'there';
+  const greeting = tzGreeting();
+  const light = HEADER_LIGHT[greeting] || HEADER_LIGHT['Good evening'];
 
   // The money he owes and the stock he is carrying, in one line. Two orders is
   // still one pile of boxes to him, so the count is the total across them.
@@ -89,13 +121,63 @@ export default function RepDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Greeting */}
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">
-          {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
-        <h1 className="mt-0.5 text-2xl font-bold text-foreground sm:text-3xl">
-          {tzGreeting()}, {first}.
+      {/* Greeting.
+          It read badly because it was two labels shouting past each other: an
+          11px all-caps date crammed onto a 24px bold sentence, no size
+          relationship between them, and a full stop closing the door. Nothing
+          is added — the sentence carries the hierarchy itself now, greeting
+          small and muted, the rep's own name large and white on the same
+          baseline, so the page is titled with his name rather than with a
+          pleasantry.
+          Exactly 50.5px tall, the height it has always been, so nothing below
+          it moves by a pixel. text-[16px] and leading-none pin the h1 strut, so
+          the line box is the name's own 28px box and the height cannot drift
+          with a longer name or a longer greeting.
+          The name stays white: brand-400 at 28px would sit 24px above the
+          brand-400 percentages in ProgressRows and read as their heading. The
+          accent goes on the full stop instead, which is the whole brand colour
+          this block needs.
+          The date is composed from three tzDateLabel calls to read "Saturday 5
+          September" — day before month, the order every deadline on this page
+          already uses — which also drops the comma that made the all-caps line
+          look like a typo. */}
+      <div className="relative">
+        {/* Absolute, pointer-events-none and -z-10, so the block is still the
+            same height and nothing here can be tapped. ProgressRows below is
+            opaque bg-surface, so the tail that spills past this block is
+            painted under it rather than over anything. */}
+        <span aria-hidden="true" className={clsx('pointer-events-none absolute -left-16 -top-16 -z-10 h-44 w-72', light.near)} />
+        <span aria-hidden="true" className={clsx('pointer-events-none absolute -top-12 left-44 -z-10 h-40 w-64', light.far)} />
+
+        <motion.p
+          initial={{ opacity: reduce ? 1 : 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduce ? 0 : 0.5, delay: reduce ? 0 : 0.05, ease: 'easeOut' }}
+          className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.22em] text-muted"
+        >
+          {tzDateLabel({ weekday: 'long' })} {tzDateLabel({ day: 'numeric' })} {tzDateLabel({ month: 'long' })}
+        </motion.p>
+
+        <h1 className="mt-1.5 text-[16px] font-normal leading-none">
+          <motion.span
+            initial={{ opacity: reduce ? 1 : 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: reduce ? 0 : 0.35, delay: reduce ? 0 : 0.12, ease: 'easeOut' }}
+            className="text-[18px] font-medium text-muted sm:text-[20px]"
+          >
+            {greeting},
+          </motion.span>{' '}
+          {/* inline-block so the slide applies at all — transforms are ignored
+              on non-replaced inline elements — and it still sits on the
+              greeting's baseline. */}
+          <motion.span
+            initial={{ opacity: reduce ? 1 : 0, x: reduce ? 0 : 8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: reduce ? 0 : 0.42, delay: reduce ? 0 : 0.22, ease: [0.2, 0.8, 0.3, 1] }}
+            className="inline-block text-[28px] font-bold tracking-[-0.02em] text-foreground sm:text-[34px]"
+          >
+            {first}<span className="text-brand-400">.</span>
+          </motion.span>
         </h1>
       </div>
 
