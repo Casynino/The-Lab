@@ -47,7 +47,10 @@ function decorate(s) {
   const extensionUsed = Boolean(s.selfExtendedAt);
   const extensionStatus = !extensionUsed
     ? (settled ? 'NOT_USED' : 'AVAILABLE')
-    : status === 'OVERDUE' ? 'EXPIRED' : 'ACTIVE';
+    // A closed order's extension is spent, not running. Without this arm a
+    // settled order that had taken the 96 hours reported them as ACTIVE.
+    : settled ? 'USED'
+      : status === 'OVERDUE' ? 'EXPIRED' : 'ACTIVE';
   return {
     ...s,
     status,
@@ -57,7 +60,7 @@ function decorate(s) {
     returned,
     balance,
     extensionUsed,
-    extensionStatus,          // AVAILABLE | ACTIVE | EXPIRED | NOT_USED (closed order)
+    extensionStatus,          // AVAILABLE | ACTIVE | EXPIRED | USED | NOT_USED (both closed)
     extensionHours: SELF_EXTENSION_HOURS,
     // Can the rep still take it? Only once, only on a live order, and only
     // before the deadline passes — an extension is extra time, not an escape

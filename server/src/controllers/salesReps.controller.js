@@ -383,7 +383,7 @@ async function repTopProducts(salesRepId, range, limit = 6) {
 //     timestamps, which are the record of what actually happened.
 async function repDiscipline(salesRepId) {
   const live = { in: ['OPEN', 'PARTIAL', 'OVERDUE'] };
-  const [closedOrders, open, overdue, finedOrders] = await Promise.all([
+  const [closedOrders, open, overdue, finedOrders, extended, total] = await Promise.all([
     prisma.settlement.findMany({
       where: { salesRepId, status: 'SETTLED' },
       select: { status: true, issuedAt: true, createdAt: true, settledAt: true, selfExtendedAt: true },
@@ -399,6 +399,11 @@ async function repDiscipline(salesRepId) {
       select: { settlementId: true },
       distinct: ['settlementId'],
     }),
+    // How often this rep takes the extra 96 hours. Not misconduct — it is an
+    // option the contract offers — but it is a habit worth being able to see,
+    // and it doubles what a late day costs them once it runs out.
+    prisma.settlement.count({ where: { salesRepId, selfExtendedAt: { not: null } } }),
+    prisma.settlement.count({ where: { salesRepId } }),
   ]);
   // Closed WITHOUT a close time cannot be graded at all; isGradeable drops it
   // from both sides of the fraction rather than flattering the rep with it.
@@ -412,6 +417,8 @@ async function repDiscipline(salesRepId) {
     onTimeOrders: onTime,
     ungradeable: closedOrders.length - gradeable.length,
     finedOrders: finedOrders.length,
+    extended,
+    totalOrders: total,
     // null, never 0 and never 100: a rep who has closed nothing gradeable has
     // no record yet, and reading them as perfect or hopeless would be a lie.
     onTimeRate: gradeable.length > 0 ? round2((onTime / gradeable.length) * 100) : null,

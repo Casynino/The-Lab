@@ -811,6 +811,18 @@ export default function SalesRepProfile() {
                       sub="past deadline"
                     />
                   </div>
+                  {/* The 96-hour rule. The deadline on an extended order is
+                      rewritten, so nothing else on this page would show that
+                      the rep bought more time. */}
+                  {data.discipline.extended > 0 && (
+                    <p className="mt-3 text-xs text-muted">
+                      Took the extra 96 hours on{' '}
+                      <span className="font-semibold text-amber-400">
+                        {formatNumber(data.discipline.extended)} of {formatNumber(data.discipline.totalOrders)}
+                      </span>{' '}
+                      orders. It is theirs to take, and it doubles the daily fine once it runs out.
+                    </p>
+                  )}
                   {/* Closed orders that cannot be timed are dropped from the
                       fraction, not counted as having met the deadline. Saying so
                       is the difference between a rate and a guess. */}

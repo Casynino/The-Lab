@@ -438,6 +438,15 @@ function StaffSettlements({ viewing, setViewing }) {
                             <div className="mt-1 text-[11px] text-faint">{formatDateTime(s.deadlineAt)}</div>
                           </>
                         )}
+                        {/* The self-extension rewrites deadlineAt, so without
+                            this the date above is the extended one and the row
+                            gives no sign that the rep took the extra time —
+                            which also doubles what a late day costs them. */}
+                        {s.extensionUsed && (
+                          <div className="mt-1 text-[11px] font-semibold text-amber-400">
+                            +{s.extensionHours}h taken
+                          </div>
+                        )}
                       </TD>
                       <TD><Badge className={SETTLEMENT_STATUS_META[s.status]?.cls}>{SETTLEMENT_STATUS_META[s.status]?.label}</Badge></TD>
                       <TD>
