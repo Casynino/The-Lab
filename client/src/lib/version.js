@@ -49,11 +49,14 @@ export function watchForNewVersion({ intervalMs = 3 * 60 * 1000 } = {}) {
     asked = true;
     toast(
       (t) => React.createElement('span', { className: 'flex items-center gap-3' },
-        'A newer version is live.',
+        // "A newer version is live · Reload" was the deploy talking about
+        // itself. What the person reading it wants to know is that there is
+        // something new for them and how to take it.
+        'The Lab has an update ready for you.',
         React.createElement('button', {
           className: 'rounded-md bg-brand-500 px-2 py-1 text-xs font-semibold text-slate-950',
           onClick: () => { toast.dismiss(t.id); window.location.reload(); },
-        }, 'Reload')),
+        }, 'Update now')),
       { duration: Infinity, id: 'new-version' },
     );
   };
