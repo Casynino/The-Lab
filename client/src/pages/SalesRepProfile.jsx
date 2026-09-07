@@ -27,11 +27,16 @@ import {
 function Section({ icon: Icon, title, count, children, action }) {
   return (
     <Card>
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 text-brand-500" />}
-          <h2 className="text-sm font-bold text-foreground">{title}</h2>
-          {count != null && <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] font-semibold text-muted">{count}</span>}
+      {/* Wraps as two blocks rather than squeezing both. With four actions in
+          the header the row had no room to give, so the title broke across two
+          lines and the buttons broke mid-phrase — "Allow / withdrawal" — and
+          spilled past the card. Now the actions drop to their own line intact
+          when they cannot sit beside the title. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {Icon && <Icon className="h-4 w-4 shrink-0 text-brand-500" />}
+          <h2 className="whitespace-nowrap text-sm font-bold text-foreground">{title}</h2>
+          {count != null && <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[11px] font-semibold text-muted">{count}</span>}
         </div>
         {action}
       </div>
@@ -935,21 +940,21 @@ export default function SalesRepProfile() {
           ) : (
           <Section icon={Wallet} title="Commission overview"
             action={isAdmin && (
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" className="text-xs" onClick={() => setAdding(true)}>Adjust</Button>
-                <Button variant="ghost" className="text-xs" onClick={() => setDeducting(true)}>Deduct</Button>
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                <Button variant="ghost" className="whitespace-nowrap text-xs" onClick={() => setAdding(true)}>Adjust</Button>
+                <Button variant="ghost" className="whitespace-nowrap text-xs" onClick={() => setDeducting(true)}>Deduct</Button>
                 {/* Only offered when it would do something: a rep already above
                     their minimum needs no window, and a window cannot lift a
                     balance that is not there. */}
                 {c.emergency?.open ? (
-                  <Button variant="ghost" className="text-xs text-amber-400" loading={setsWindow.isPending}
+                  <Button variant="ghost" className="whitespace-nowrap text-xs text-amber-400" loading={setsWindow.isPending}
                     onClick={() => setsWindow.mutate({ open: false })}>
                     Close window
                   </Button>
                 ) : c.available < c.threshold && c.available >= (c.emergencyFloor || 20000) ? (
-                  <Button variant="ghost" className="text-xs" onClick={() => setOpening(true)}>Allow withdrawal</Button>
+                  <Button variant="ghost" className="whitespace-nowrap text-xs" onClick={() => setOpening(true)}>Allow withdrawal</Button>
                 ) : null}
-                <Button variant="ghost" className="text-xs" loading={setsCommission.isPending}
+                <Button variant="ghost" className="whitespace-nowrap text-xs" loading={setsCommission.isPending}
                   onClick={() => { if (confirm(`Take ${rep.name} off commission? Their settlements will still count as sales, but they will stop earning.`)) setsCommission.mutate(false); }}>
                   Off commission
                 </Button>
