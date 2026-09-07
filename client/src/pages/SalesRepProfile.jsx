@@ -233,6 +233,51 @@ function hoursLabel(h) {
 // `commissionAdjustment` since go-live. Use it to correct a rep who was short,
 // or to put a figure on an account to walk through a withdrawal. It accumulates
 // and takes a negative, so it is undone by its opposite.
+// Open a one-off withdrawal window.
+//
+// The reason is required, and it is the only sentence anyone will ever be able
+// to read about why a money rule was set aside for one person: the audit screen
+// in this app shows when, who, what and on whom, and never the values written
+// alongside. So it is asked for here and kept on the rep, admin-side only.
+function OpenWindowModal({ rep, c, busy, onSubmit, onClose }) {
+  const [reason, setReason] = useState('');
+  const ok = reason.trim().length > 2;
+  return (
+    <Modal open title={`Let ${rep.name} withdraw now`} onClose={onClose} size="sm">
+      <div className="space-y-4">
+        <div className="rounded-xl bg-elevated/60 px-4 py-3 ring-1 ring-white/[0.07]">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">They have</span>
+            <span className="text-lg font-bold tabular-nums text-foreground">{formatCurrency(c.available)}</span>
+          </div>
+          <div className="mt-1 flex items-baseline justify-between gap-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">Their minimum</span>
+            <span className="text-[13px] font-medium tabular-nums text-muted">{formatCurrency(c.threshold)}</span>
+          </div>
+        </div>
+
+        <Field label="What is the emergency?" hint="Kept on this profile. The rep never sees it.">
+          <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. Hospital bill — asked on the phone this morning" />
+        </Field>
+
+        <p className="text-xs leading-relaxed text-faint">
+          This waives their minimum once and nothing else — they still cannot ask for more than they have, and you
+          still approve the request yourself. It closes as soon as they use it, or in two days, whichever comes
+          first, and you can close it any time. Approving the payout also ends their current commission round.
+        </p>
+
+        <div className="flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={onClose}>Cancel</Button>
+          <Button className="flex-1" loading={busy} disabled={!ok} onClick={() => onSubmit(reason.trim())}>
+            Open the window
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function AddCommissionModal({ rep, earned, onClose }) {
   const qc = useQueryClient();
   const [amount, setAmount] = useState('');
@@ -503,9 +548,21 @@ export default function SalesRepProfile() {
   const [editOpen, setEditOpen] = useState(false); // "Edit details" modal
   const [deducting, setDeducting] = useState(false); // "Deduct commission" modal
   const [adding, setAdding] = useState(false);       // "Adjust commission" modal
+  const [opening, setOpening] = useState(false);     // "Allow withdrawal" modal
 
   // Putting a rep on or off commission. Their sales are untouched either way —
   // this only decides whether those sales earn them anything.
+  // The one-off withdrawal window. Opening asks for a reason; closing does not.
+  const setsWindow = useMutation({
+    mutationFn: ({ open, reason }) => api.post('/commissions/emergency-window', { salesRepId: id, open, reason }),
+    onSuccess: (_r, v) => {
+      toast.success(v.open ? 'Window open — they can withdraw now' : 'Window closed');
+      setOpening(false);
+      ['salesRep', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
   const setsCommission = useMutation({
     mutationFn: (on) => api.put(`/sales-reps/${id}`, { earnsCommission: on }),
     onSuccess: (_r, on) => {
@@ -869,6 +926,17 @@ export default function SalesRepProfile() {
               <div className="flex items-center gap-1">
                 <Button variant="ghost" className="text-xs" onClick={() => setAdding(true)}>Adjust</Button>
                 <Button variant="ghost" className="text-xs" onClick={() => setDeducting(true)}>Deduct</Button>
+                {/* Only offered when it would do something: a rep already above
+                    their minimum needs no window, and a window cannot lift a
+                    balance that is not there. */}
+                {c.emergency?.open ? (
+                  <Button variant="ghost" className="text-xs text-amber-400" loading={setsWindow.isPending}
+                    onClick={() => setsWindow.mutate({ open: false })}>
+                    Close window
+                  </Button>
+                ) : c.available < c.threshold && c.available >= (c.emergencyFloor || 20000) ? (
+                  <Button variant="ghost" className="text-xs" onClick={() => setOpening(true)}>Allow withdrawal</Button>
+                ) : null}
                 <Button variant="ghost" className="text-xs" loading={setsCommission.isPending}
                   onClick={() => { if (confirm(`Take ${rep.name} off commission? Their settlements will still count as sales, but they will stop earning.`)) setsCommission.mutate(false); }}>
                   Off commission
@@ -888,12 +956,22 @@ export default function SalesRepProfile() {
               <Money label="Available" value={formatCurrency(c.available)} tone={c.available < 0 ? 'rose' : 'emerald'} />
               <Money label="Penalties" value={formatCurrency(c.penalties)} tone={c.penalties > 0 ? 'rose' : 'default'} />
             </div>
-            <div className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${c.eligible ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-border bg-elevated text-muted'}`}>
+            <div className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+              c.emergency?.open ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
+                : c.eligible ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                  : 'border-border bg-elevated text-muted'}`}>
               {c.eligible ? <ShieldCheck className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
-              {c.eligible
-                ? <span>Eligible to withdraw — balance ≥ {formatCurrency(c.threshold)}</span>
-                : <span>Not eligible — needs {formatCurrency(c.threshold)} (has {formatCurrency(c.available)})</span>}
+              {c.emergency?.open
+                ? <span>Window open — can withdraw once, below the minimum, until {formatDateTime(c.emergency.until)}</span>
+                : c.eligible
+                  ? <span>Eligible to withdraw — balance ≥ {formatCurrency(c.threshold)}</span>
+                  : <span>Not eligible — needs {formatCurrency(c.threshold)} (has {formatCurrency(c.available)})</span>}
             </div>
+            {c.emergency?.open && c.emergency.reason && (
+              <div className="mt-2 rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-faint">
+                <span className="font-medium text-muted">Opened because</span> — {c.emergency.reason}
+              </div>
+            )}
             {c.hasCustomThreshold && (
               <div className="mt-2 text-xs text-faint">
                 This rep withdraws at {formatCurrency(c.threshold)} — their own terms, not the business default.
@@ -995,6 +1073,16 @@ export default function SalesRepProfile() {
       {viewing && <OrderDetailModal settlementId={viewing} onClose={() => { setViewing(null); refreshAll(); }} />}
       {addOpen && <AddStockModal repId={id} repName={rep.name} onClose={() => setAddOpen(false)} />}
       {editOpen && <EditRepModal rep={rep} onClose={() => setEditOpen(false)} />}
+      {opening && (
+        <OpenWindowModal
+          rep={rep}
+          c={c}
+          busy={setsWindow.isPending}
+          onSubmit={(reason) => setsWindow.mutate({ open: true, reason })}
+          onClose={() => setOpening(false)}
+        />
+      )}
+
       {deducting && (
         <DeductCommissionModal
           rep={{ id: rep.id, name: rep.name, code: rep.code }}

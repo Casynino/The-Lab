@@ -578,7 +578,13 @@ const getProfile = asyncHandler(async (req, res) => {
       adjustment: comm.adjustment,
       adjustmentNote: comm.adjustmentNote,
       adjustedAt: comm.adjustedAt,
-      eligible: comm.available >= threshold,
+      // Read from the service rather than re-derived here. The rule was written
+      // twice, and once a window can waive the minimum the two copies disagree:
+      // this page would say "not eligible" about a rep who can withdraw now.
+      eligible: comm.eligible,
+      // Admin surface, so the reason stays on.
+      emergency: comm.emergency,
+      emergencyFloor: comm.emergencyFloor,
     },
     settlements: { active: activeSettlements, activeCount: active.length, total: settlementsRes.total, closings },
     performance,

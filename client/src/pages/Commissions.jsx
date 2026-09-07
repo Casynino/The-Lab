@@ -53,7 +53,11 @@ function WithdrawModal({ commission, firstName, onClose }) {
   // something the API is about to refuse. And there is no point requesting
   // money without saying where it goes.
   const addressed = payNumber.trim().length >= 6 && payName.trim().length >= 2 && (via === 'mobile' || bank.trim());
-  const valid = amt > 0 && amt <= available && addressed;
+  // The floor the server is actually enforcing right now — sent as one field so
+  // the button cannot refuse what the API would accept, or offer what it would
+  // refuse.
+  const floor = Number(commission.emergencyFloor) || 0;
+  const valid = amt > 0 && amt <= available && amt >= floor && addressed;
 
   if (done != null) {
     return (
@@ -191,7 +195,9 @@ function WithdrawModal({ commission, firstName, onClose }) {
         </div>
 
         <p className="text-xs text-faint">
-          The Lab reviews every request. The minimum balance to request one is {formatCurrency(minWithdrawal)}.
+          {floor > 0
+            ? <>The Lab has opened this one for you, so your usual {formatCurrency(minWithdrawal)} minimum does not apply. It still has to be at least {formatCurrency(floor)}, and no more than you have.</>
+            : <>The Lab reviews every request. The minimum balance to request one is {formatCurrency(minWithdrawal)}.</>}
         </p>
       </div>
     </Modal>
@@ -586,7 +592,11 @@ function RepView() {
 
   const hasPenalties = c.penalties > 0;
   const balanceNegative = c.available < 0;
-  const canWithdraw = c.available >= c.minWithdrawal;
+  // The server's own answer, not a second copy of the rule — otherwise a rep
+  // with an open window would be told he cannot withdraw by the very button
+  // the window exists to unlock.
+  const canWithdraw = c.eligible ?? (c.available >= c.minWithdrawal);
+  const windowOpen = Boolean(c.emergency?.open);
   const pct = c.minWithdrawal > 0
     ? Math.max(0, Math.min(100, (Math.max(0, c.available) / c.minWithdrawal) * 100))
     : 0;
@@ -640,7 +650,14 @@ function RepView() {
               />
             </div>
             <p className="mt-1.5 text-[11px] leading-snug text-muted">
-              {canWithdraw
+              {windowOpen
+                ? (
+                  <span className="font-semibold text-amber-400">
+                    The Lab has opened one withdrawal for you — your usual minimum does not apply
+                    until {formatDateTime(c.emergency.until)}.
+                  </span>
+                )
+                : canWithdraw
                 ? <span className="font-semibold text-emerald-400">Ready to withdraw — earned on {earnedOn(c)}</span>
                 : c.earned > 0
                   ? `${formatCurrency(c.available)} of ${formatCurrency(c.minWithdrawal)} minimum · ${formatCurrency(c.minWithdrawal - c.available)} to go`

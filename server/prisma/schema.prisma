@@ -108,12 +108,12 @@ enum ReturnType {
 }
 
 enum ReturnStatus {
-  PENDING   // submitted by rep, awaiting warehouse verification
-  APPROVED  // verified and accepted — inventory has been updated
-  REJECTED  // not accepted by warehouse
+  PENDING // submitted by rep, awaiting warehouse verification
+  APPROVED // verified and accepted — inventory has been updated
+  REJECTED // not accepted by warehouse
   COMPLETED // legacy: pre-approval-flow records (treated as APPROVED)
   CANCELLED // withdrawn by the rep (or staff) before a decision
-  EXPIRED   // not decided within the 24h window — auto-cancelled + delay fine
+  EXPIRED // not decided within the 24h window — auto-cancelled + delay fine
 }
 
 enum ItemCondition {
@@ -215,13 +215,13 @@ model User {
   decidedStockRequests       StockRequest[]         @relation("SRDecidedBy")
   decidedWithdrawals         CommissionWithdrawal[] @relation("CWDecidedBy")
   receivedSettlementPayments SettlementPayment[]    @relation("SettlementPaymentReceivedBy")
+  commissionRates            CommissionRate[]       @relation("CommissionRateCreatedBy")
+  bonusRules                 BonusRule[]            @relation("BonusRuleCreatedBy")
+  bonusAwardsPaid            BonusAward[]           @relation("BonusAwardPaidBy")
 
   @@index([roleId])
   @@index([warehouseId])
   @@map("users")
-  commissionRates      CommissionRate[] @relation("CommissionRateCreatedBy")
-  bonusRules           BonusRule[]      @relation("BonusRuleCreatedBy")
-  bonusAwardsPaid      BonusAward[]     @relation("BonusAwardPaidBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -380,22 +380,22 @@ model Warehouse {
 }
 
 model SalesRepresentative {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  code          String   @unique // e.g. REP-001
-  region        String?
-  phone         String?
+  id                       String    @id @default(cuid())
+  userId                   String    @unique
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code                     String    @unique // e.g. REP-001
+  region                   String?
+  phone                    String?
   // Per-rep WhatsApp (CallMeBot): the rep activates their own number and gets
   // their own apikey; when both are set, important alerts push to their phone.
-  whatsappPhone  String?
-  whatsappApiKey String?
+  whatsappPhone            String?
+  whatsappApiKey           String?
   // Optional monthly sales target for performance tracking.
-  monthlyTarget Decimal? @db.Decimal(14, 2)
+  monthlyTarget            Decimal?  @db.Decimal(14, 2)
   // Per-rep minimum withdrawal. NULL means the business-wide default in
   // commission.amountPerThreshold. Set only where a rep has been placed on
   // different terms.
-  withdrawalThreshold Decimal? @db.Decimal(14, 2)
+  withdrawalThreshold      Decimal?  @db.Decimal(14, 2)
   // A one-off correction ADDED to this rep's derived commission total. Earnings
   // are computed from settled boxes and must stay that way, so a negotiated
   // write-down or a squared-up account is recorded here instead of by editing
@@ -403,13 +403,26 @@ model SalesRepresentative {
   // Some reps are on a flat arrangement rather than commission — a driver who
   // settles boxes but is paid another way. Their settlements still count as
   // sales; they simply never accrue a shilling of commission.
-  earnsCommission            Boolean   @default(true)
-  commissionAdjustment       Decimal   @default(0) @db.Decimal(14, 2)
-  commissionAdjustmentNote   String?
-  commissionAdjustedAt       DateTime?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  earnsCommission          Boolean   @default(true)
+  // An emergency withdrawal window, opened by The Doctor for one rep. While it
+  // is open the rep's MINIMUM is waived and nothing else — the ceiling on what
+  // they can request is still their available balance. NULL means closed.
+  //
+  // It closes three ways: a request claims it, The Doctor closes it, or 48
+  // hours pass. The expiry is arithmetic on read rather than a swept job, so a
+  // window cannot outlive a cron that stopped running — the one failure worse
+  // than a forgotten window.
+  emergencyWindowAt        DateTime?
+  emergencyWindowById      String?
+  // Why it was opened. Admin-only: stripped before this ever reaches the rep's
+  // own commission payload.
+  emergencyWindowReason    String?
+  commissionAdjustment     Decimal   @default(0) @db.Decimal(14, 2)
+  commissionAdjustmentNote String?
+  commissionAdjustedAt     DateTime?
+  isActive                 Boolean   @default(true)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   customers             Customer[]
   sales                 Sale[]
@@ -539,9 +552,9 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sales        Sale[]
-  creditSales  CreditSale[]
-  returns      Return[]
+  sales       Sale[]
+  creditSales CreditSale[]
+  returns     Return[]
 
   @@index([salesRepId])
   @@index([region])
@@ -770,7 +783,7 @@ model Return {
   decidedById     String?
   decidedAt       DateTime?
   rejectionReason String?
-  decidedBy       User? @relation("ReturnDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedBy       User?     @relation("ReturnDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1166,17 +1179,17 @@ model Settlement {
   // Rep-activated self-extension: +96h added AFTER the original 72h window, so
   // the total becomes 168h. No approval needed, but it raises the stakes —
   // the daily late fine doubles and a failed return costs more. Null = unused.
-  selfExtendedAt        DateTime?
-  selfExtendedById      String?
-  preExtensionDeadline  DateTime? // the deadline before the extension (audit)
+  selfExtendedAt       DateTime?
+  selfExtendedById     String?
+  preExtensionDeadline DateTime? // the deadline before the extension (audit)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  payments    SettlementPayment[]
-  sales       Sale[]              @relation("OrderSales")
-  returns     Return[]            @relation("OrderReturns")
-  penalties   SettlementPenalty[]
+  payments  SettlementPayment[]
+  sales     Sale[]              @relation("OrderSales")
+  returns   Return[]            @relation("OrderReturns")
+  penalties SettlementPenalty[]
 
   @@index([salesRepId])
   @@index([status])
@@ -1185,7 +1198,7 @@ model Settlement {
 }
 
 enum SettlementSubmissionStatus {
-  PENDING  // submitted by rep, awaiting The Doctor's verification
+  PENDING // submitted by rep, awaiting The Doctor's verification
   APPROVED // money verified — sale recorded, commission generated
   REJECTED // not accepted; no business impact
 }
@@ -1281,17 +1294,25 @@ model SettlementPenalty {
 // --- Commission withdrawals (earned commission is computed from sales) ------
 
 model CommissionWithdrawal {
-  id          String              @id @default(cuid())
-  salesRepId  String
-  salesRep    SalesRepresentative @relation(fields: [salesRepId], references: [id], onDelete: Cascade)
-  amount      Decimal             @db.Decimal(14, 2)
-  status      WithdrawalStatus    @default(PENDING)
-  notes       String?
-  requestedAt DateTime            @default(now())
-  decidedAt   DateTime?
-  decidedById String?
-  decidedBy   User?               @relation("CWDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
-  paidAt      DateTime?
+  id             String              @id @default(cuid())
+  salesRepId     String
+  salesRep       SalesRepresentative @relation(fields: [salesRepId], references: [id], onDelete: Cascade)
+  amount         Decimal             @db.Decimal(14, 2)
+  status         WithdrawalStatus    @default(PENDING)
+  notes          String?
+  requestedAt    DateTime            @default(now())
+  decidedAt      DateTime?
+  decidedById    String?
+  decidedBy      User?               @relation("CWDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  paidAt         DateTime?
+  // Stamped on the money itself, because the audit log in this app renders only
+  // when/who/action/entity and never the values written with it — so a note
+  // left there cannot answer "why was this rep paid below his minimum" without
+  // opening the database. These two can, on the payout list both sides read.
+  // No free text here: every scalar on this model is shipped to the rep's own
+  // browser by listWithdrawals, and the reason is The Doctor's, not theirs.
+  underEmergency Boolean             @default(false)
+  minWaived      Decimal?            @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1302,7 +1323,6 @@ model CommissionWithdrawal {
 }
 
 // --- Online orders ----------------------------------------------------------
-
 
 // --- Daily opening/closing reports -----------------------------------------
 
@@ -1377,7 +1397,7 @@ enum FinanceTxnType {
 
 model BusinessAccount {
   id             String             @id @default(cuid())
-  name           String @unique
+  name           String             @unique
   type           FinanceAccountType @default(CASH)
   brandId        String? // account is reserved for this brand's payments (null = any brand, e.g. Cash)
   currency       String             @default("TZS")
@@ -1432,7 +1452,6 @@ model ExpenseCategory {
 
   @@map("expense_categories")
 }
-
 
 // ── Commission rates ─────────────────────────────────────────────────────────
 // What one settled box of a brand earns, from `effectiveFrom` until a later row
@@ -1506,7 +1525,7 @@ model BonusAward {
   // Which run of the counter this was earned in. Taking a bonus resets a rep to
   // zero, so the same tier can be earned again in a later run — the run's start
   // is what makes each one distinct.
-  cycleStart      DateTime            @default(now())
+  cycleStart DateTime @default(now())
 
   @@unique([salesRepId, bonusRuleId, cycleStart])
   @@index([salesRepId])

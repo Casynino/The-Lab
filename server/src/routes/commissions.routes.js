@@ -25,6 +25,11 @@ router.post('/withdrawals/:id/decide', staff, validate({ ...idParam, ...withdraw
 // business owes someone.
 router.post('/adjust', requireRoles(ROLES.ADMIN), ctrl.adjustEarned);
 
+// Open or close a rep's one-off emergency withdrawal window. Admin only, and
+// deliberately not `staff`: paying a withdrawal is a staff action, but setting
+// aside the rule that governs it is not.
+router.post('/emergency-window', admin, ctrl.setEmergencyWindow);
+
 // Commission rates — reading is open to any signed-in user (a rep should be
 // able to see what a box earns); only an admin may add or remove one.
 router.get('/rates', ctrl.listRates);

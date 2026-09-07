@@ -12,7 +12,11 @@ const { ROLES } = require('../middleware/authorize');
 
 const me = asyncHandler(async (req, res) => {
   if (!req.user.salesRepId) throw ApiError.forbidden('Only sales representatives have commissions');
-  return ok(res, await commission.computeForRep(req.user.salesRepId));
+  const c = await commission.computeForRep(req.user.salesRepId);
+  // The rep is told the window is open and until when. Why it was opened, and
+  // by whom, is The Doctor's note about them and is stripped here rather than
+  // in the service, so the admin paths keep it.
+  return ok(res, { ...c, emergency: { open: c.emergency.open, until: c.emergency.until } });
 });
 
 const getForRep = asyncHandler(async (req, res) => ok(res, await commission.computeForRep(req.params.salesRepId)));
@@ -109,6 +113,26 @@ const payBonusAward = asyncHandler(async (req, res) => {
 // Credit or claw back a rep's commission by hand. Deducting has always been
 // possible through a penalty; this is the other direction, which nothing could
 // do — and it is the same lever, so a correction can be undone by its opposite.
+// Open or close a rep's one-off withdrawal window. Admin only: it sets aside a
+// money rule for one person.
+//
+// The action string is deliberately its own word rather than a generic UPDATE.
+// The audit screen in this app renders only when / who / action / entity and
+// never the values recorded with them, and it searches on the action — so
+// "EMERGENCY_WINDOW_OPEN" is visible in the table and findable by typing
+// "emergency", where a note buried in newValues would be neither.
+const setEmergencyWindow = asyncHandler(async (req, res) => {
+  const { salesRepId, open, reason } = req.body || {};
+  const row = await commission.setEmergencyWindow({ salesRepId, open: Boolean(open), reason }, req.user);
+  await audit.record(req, {
+    action: open ? 'EMERGENCY_WINDOW_OPEN' : 'EMERGENCY_WINDOW_CLOSE',
+    entityType: 'SalesRepresentative',
+    entityId: salesRepId,
+    newValues: { reason: reason || null, openedAt: row.emergencyWindowAt },
+  });
+  return ok(res, row);
+});
+
 const adjustEarned = asyncHandler(async (req, res) => {
   const row = await commission.adjustEarned(req.body || {}, req.user);
   await audit.record(req, {
@@ -127,6 +151,7 @@ const adjustEarned = asyncHandler(async (req, res) => {
 
 module.exports = {
   adjustEarned,
+  setEmergencyWindow,
   listRates, createRate, deleteRate,
   bonusMe, bonusSummary, bonusRules, createBonusRule, updateBonusRule, setBonusRuleActive, bonusAwards, payBonusAward,
   me, getForRep, summary, rule, listWithdrawals, requestWithdrawal, decideWithdrawal };

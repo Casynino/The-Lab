@@ -356,7 +356,11 @@ async function computeForRep(salesRepId) {
     currentRates(),
     prisma.salesRepresentative.findUnique({
       where: { id: salesRepId },
-      select: { withdrawalThreshold: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true, earnsCommission: true },
+      select: {
+        withdrawalThreshold: true, commissionAdjustment: true, commissionAdjustmentNote: true,
+        commissionAdjustedAt: true, earnsCommission: true,
+        emergencyWindowAt: true, emergencyWindowById: true, emergencyWindowReason: true,
+      },
     }).catch(() => null),
     lastPayoutFor(salesRepId),
   ]);
@@ -393,6 +397,9 @@ async function computeForRep(salesRepId) {
       penaltyBreakdown: [],
       available: 0,
       eligible: false,
+      // A rep off commission has no balance, so a window would waive nothing.
+      emergency: { open: false, openedAt: null, until: null, reason: null, openedById: null },
+      emergencyFloor: 0,
       // Their boxes are still real work and still belong to a run; only the
       // money is nil.
       run: {
@@ -447,10 +454,23 @@ async function computeForRep(salesRepId) {
     broughtForward: round2(available - runNet),
   };
 
+  // The one place the eligibility rule lives. It used to be re-derived in the
+  // rep-profile controller as `available >= threshold`, which was the same rule
+  // written twice — and with a window in play the two would disagree: the
+  // profile would read "not eligible" about a rep who can withdraw right now.
+  const emergency = emergencyStateFor(rep);
+  const waived = emergency.open && available < minWithdrawal;
+  const eligible = available >= minWithdrawal || (waived && available >= EMERGENCY_FLOOR);
+
   return {
     rule,
     rates,
     minWithdrawal,
+    emergency,
+    // The floor actually in force, so the button and the server cannot disagree
+    // about what the smallest allowed request is.
+    emergencyFloor: waived ? EMERGENCY_FLOOR : 0,
+    eligible,
     // True when this rep is on terms of their own, so the UI can say so rather
     // than silently showing a number that differs from every other rep's.
     hasCustomThreshold: rep?.withdrawalThreshold != null,
@@ -505,23 +525,101 @@ async function summaryAllReps() {
 }
 
 const WITHDRAWAL_INCLUDE = {
-  salesRep: { include: { user: { select: { name: true } } } },
+  // `id` was missing, and decideWithdrawal reads salesRep.user.id to decide who
+  // to tell. It was always undefined, so the notify block below it has never
+  // once fired: no rep has ever been told their withdrawal was approved,
+  // rejected or paid. One word, and it starts working.
+  salesRep: { include: { user: { select: { id: true, name: true } } } },
   decidedBy: { select: { id: true, name: true } },
 };
+
+// ── The emergency withdrawal window ──────────────────────────────────────────
+// A rep may only ask for a payout once their balance reaches a minimum. That
+// rule has no exception, and a real emergency needs one, so The Doctor can open
+// a window for one rep: while it is open the MINIMUM is waived and nothing
+// else — what they may ask for is still capped at what they have.
+//
+// 48 hours rather than "today": a window opened at 7pm with a 24h clock dies
+// while the rep is asleep. It is deliberately shorter than the 72h settlement
+// deadline so it never reads as one of the house deadlines.
+const EMERGENCY_WINDOW_HOURS = 48;
+// A floor under the waived floor, on the AMOUNT and not on the balance. Without
+// it a window can be spent on a request for one shilling — and that is not
+// cosmetic: approving any withdrawal closes the rep's commission run, because
+// lastPayoutFor counts APPROVED as a payout. A dust request would end their
+// round and reset the figures the balances page opens on.
+const EMERGENCY_FLOOR = 20000;
+
+const windowCutoff = () => new Date(Date.now() - EMERGENCY_WINDOW_HOURS * 3_600_000);
+
+// Expiry is arithmetic on read, never a swept job — so a window cannot outlive
+// a cron that stopped running, which is the one failure worse than a forgotten
+// window. The stale timestamp is deliberately left in the row: it is the record
+// of a press, and clearing it on read would turn a GET into a write.
+function emergencyStateFor(rep) {
+  const at = rep?.emergencyWindowAt ? new Date(rep.emergencyWindowAt) : null;
+  const open = Boolean(at && at.getTime() > windowCutoff().getTime());
+  return {
+    open,
+    openedAt: at ? at.toISOString() : null,
+    until: open ? new Date(at.getTime() + EMERGENCY_WINDOW_HOURS * 3_600_000).toISOString() : null,
+    reason: rep?.emergencyWindowReason || null,
+    openedById: rep?.emergencyWindowById || null,
+  };
+}
 
 async function requestWithdrawal(salesRepId, amount, notes, actor) {
   const amt = round2(amount);
   if (amt <= 0) throw ApiError.badRequest('Amount must be greater than zero');
   const c = await computeForRep(salesRepId);
   const minWithdrawal = c.minWithdrawal;
-  if (c.available < minWithdrawal) {
-    throw ApiError.badRequest(`Minimum withdrawal is TZS ${minWithdrawal.toLocaleString()}. Your available balance is TZS ${c.available.toLocaleString()}.`);
-  }
+
+  // The ceiling is checked FIRST, and outside the emergency branch. A request
+  // refused for asking more than the rep has must never cost them the window
+  // they were given.
   if (amt > c.available + 0.001) {
     throw ApiError.badRequest(`Amount exceeds available commission (${c.available})`);
   }
+
+  // The window is only ever read by a rep who is actually below their minimum.
+  // One whose balance has climbed above it takes the ordinary path and leaves
+  // the window untouched, rather than silently spending it on a request that
+  // never needed it.
+  let underEmergency = false;
+  if (c.available < minWithdrawal) {
+    if (!c.emergency.open) {
+      throw ApiError.badRequest(`Minimum withdrawal is TZS ${minWithdrawal.toLocaleString()}. Your available balance is TZS ${c.available.toLocaleString()}.`);
+    }
+    if (amt < EMERGENCY_FLOOR) {
+      throw ApiError.badRequest(`An emergency withdrawal has to be at least TZS ${EMERGENCY_FLOOR.toLocaleString()}.`);
+    }
+    // Claiming the window is a conditional UPDATE, not a read followed by a
+    // write. The balance check above is a check-then-create with nothing
+    // serialising it, and decideWithdrawal never re-checks solvency — so two
+    // taps at the same instant would otherwise both pass and both create a
+    // request for the whole balance. This is the compare-and-swap the rest of
+    // the codebase uses for exactly this: exactly one caller can win.
+    const claimed = await prisma.salesRepresentative.updateMany({
+      where: { id: salesRepId, emergencyWindowAt: { not: null, gt: windowCutoff() } },
+      data: { emergencyWindowAt: null },
+    });
+    if (claimed.count !== 1) {
+      throw ApiError.badRequest('That withdrawal window has already been used, or it has closed.');
+    }
+    underEmergency = true;
+  }
+
   const w = await prisma.commissionWithdrawal.create({
-    data: { salesRepId, amount: amt, notes: notes || null, status: 'PENDING' },
+    data: {
+      salesRepId,
+      amount: amt,
+      notes: notes || null,
+      status: 'PENDING',
+      // Stamped on the money, because it is the only record of the exception
+      // that can be read without opening the database.
+      underEmergency,
+      minWaived: underEmergency ? minWithdrawal : null,
+    },
     include: WITHDRAWAL_INCLUDE,
   });
 
@@ -585,6 +683,17 @@ async function decideWithdrawal(id, action, actor) {
     include: WITHDRAWAL_INCLUDE,
   });
 
+  // A rejected emergency request hands the window back. The rep spent it on a
+  // wrong phone number, not on the money, and the alternative is that a typo at
+  // 9pm costs him the one shot he was given and the only person who can reopen
+  // it has gone to bed.
+  if (t.to === 'REJECTED' && w.underEmergency) {
+    await prisma.salesRepresentative.update({
+      where: { id: w.salesRepId },
+      data: { emergencyWindowAt: new Date() },
+    }).catch(() => {});
+  }
+
   const repUserId = updated.salesRep?.user?.id;
   const decisionMsgs = {
     APPROVED: { title: 'Withdrawal approved', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} has been approved.`, severity: 'INFO' },
@@ -604,6 +713,57 @@ async function decideWithdrawal(id, action, actor) {
   }
 
   return updated;
+}
+
+// Open or close a rep's emergency withdrawal window.
+//
+// Opening requires a reason. It is the only account of why a money rule was set
+// aside for one person, and it is kept on the REP rather than on the payout:
+// listWithdrawals ships every scalar of a withdrawal to the rep's own browser,
+// and this sentence is The Doctor's, not theirs.
+async function setEmergencyWindow({ salesRepId, open, reason }, actor) {
+  const rep = await prisma.salesRepresentative.findUnique({
+    where: { id: salesRepId },
+    include: { user: { select: { id: true, name: true } } },
+  });
+  if (!rep) throw ApiError.notFound('Sales rep not found');
+
+  if (open) {
+    if (rep.earnsCommission === false) {
+      throw ApiError.badRequest('This rep is not on commission, so there is no balance for a window to open.');
+    }
+    if (!String(reason || '').trim()) {
+      throw ApiError.badRequest('Say what the emergency is — it is the only record of why the minimum was waived.');
+    }
+  }
+
+  const at = new Date();
+  const updated = await prisma.salesRepresentative.update({
+    where: { id: salesRepId },
+    data: open
+      ? { emergencyWindowAt: at, emergencyWindowById: actor?.id || null, emergencyWindowReason: String(reason).trim().slice(0, 300) }
+      : { emergencyWindowAt: null },
+    select: { id: true, emergencyWindowAt: true, emergencyWindowById: true, emergencyWindowReason: true },
+  });
+
+  const repUserId = rep.user?.id;
+  if (repUserId) {
+    notification.notifyUser(repUserId, {
+      type: 'GENERAL',
+      severity: 'INFO',
+      title: open ? 'You can withdraw now' : 'Withdrawal window closed',
+      message: open
+        ? 'The Lab has opened a one-off withdrawal for you. Your usual minimum does not apply — request it from your Commission page within the next two days.'
+        : 'The one-off withdrawal opened for you has been closed. Your usual minimum applies again.',
+      entityType: 'SalesRepresentative',
+      // The WhatsApp mirror deduplicates on rep + entity + title, all of which
+      // would be identical every time — so a rep's SECOND window would never
+      // reach their phone. The instant makes each one its own event.
+      entityId: `${salesRepId}:${at.getTime()}`,
+    }).catch(() => {});
+  }
+
+  return { ...updated, emergency: emergencyStateFor(updated) };
 }
 
 // Credit or claw back commission by hand. The `commissionAdjustment` column has
@@ -635,6 +795,9 @@ async function adjustEarned({ salesRepId, amount, note }, actor) {
 
 module.exports = {
   adjustEarned,
+  setEmergencyWindow,
+  EMERGENCY_WINDOW_HOURS,
+  EMERGENCY_FLOOR,
   getRule,
   ratesOn,
   listRates,
