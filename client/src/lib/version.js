@@ -51,10 +51,18 @@ export function watchForNewVersion({ intervalMs = 3 * 60 * 1000 } = {}) {
       (t) => React.createElement('span', { className: 'flex items-center gap-3' },
         // A short line and a button — kept brief so it doesn't wrap to two
         // lines and shove the button down with it.
-        'New update is up.',
+        'New update is up',
         React.createElement('button', {
           className: 'shrink-0 whitespace-nowrap rounded-md bg-brand-500 px-2 py-1 text-xs font-semibold text-slate-950',
-          onClick: () => { toast.dismiss(t.id); window.location.reload(); },
+          // Fetching the new build takes a beat on a phone, and a button that
+          // goes dead with nothing to show for it invites a second press. The
+          // same toast turns into a spinner and stays that way until the new
+          // page replaces it — the reload is what clears it, so it can never be
+          // left spinning on screen.
+          onClick: () => {
+            toast.loading('Updating…', { id: t.id, duration: Infinity });
+            window.location.reload();
+          },
         }, 'Update now')),
       { duration: Infinity, id: 'new-version' },
     );
