@@ -1221,10 +1221,11 @@ function BalancesTable({ items, bonus }) {
         <THead>
           <TR>
             <TH>Rep</TH>
-            {/* Earned leads because it is the column the table is sorted by. It
-                used to sit second, which put the boxes count first and made a
-                ranked table look broken — 56 boxes above 57. */}
-            <TH>Earned</TH>
+            {/* Earned only survives in All time. In the run view it was the same
+                figure as Available on six rows out of nine — the two only part
+                company when a rep carries a fine or something brought forward,
+                and both of those already say so under Available. */}
+            {!runView && <TH>Earned</TH>}
             <TH>{runView ? 'Boxes this run' : 'Boxes settled'}</TH>
             <TH>{runView ? 'Fines' : 'Penalties'}</TH>
             {!runView && <TH>Paid</TH>}
@@ -1240,7 +1241,7 @@ function BalancesTable({ items, bonus }) {
           const offCommission = i.earnsCommission === false;
           return (
             <TR key={i.salesRepId}>
-              <TD className="font-medium">
+              <TD className={clsx('font-medium', leads && 'text-brand-400')}>
                 {i.name}
                 {runView && (
                   // Every rep's run starts on their own date, so the row has to
@@ -1253,22 +1254,21 @@ function BalancesTable({ items, bonus }) {
                   </div>
                 )}
               </TD>
-              {/* The leader's figure in the bright accent — brand-400. The ramp
-                  here is inverted, so brand-300 is a dark olive and would have
-                  made the leading number the dimmest one in the column. */}
-              <TD className={clsx('tabular-nums', leads && 'font-bold text-brand-400')}>
-                {formatCurrency(runView ? (run.earned || 0) : i.earned)}
+              {!runView && (
+              <TD className="tabular-nums">
+                {formatCurrency(i.earned)}
                 {/* An agreed one-off adjustment makes lifetime Earned differ from
                     boxes × rate — say so on the row, or the arithmetic looks
                     broken. In the run view it sits in brought forward instead,
                     because it was never earned on this run's boxes. */}
-                {!runView && Number(i.adjustment) !== 0 && (
+                {Number(i.adjustment) !== 0 && (
                   <span
                     className="ml-1 cursor-help text-amber-400"
                     title={`${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`}
                   >*</span>
                 )}
               </TD>
+              )}
               <TD className="tabular-nums">{formatNumber(runView ? (run.boxes || 0) : i.boxesSettled)}</TD>
               <TD className={fines > 0 ? 'font-semibold tabular-nums text-rose-400' : 'text-faint'}>
                 {fines > 0 ? `−${formatCurrency(fines)}` : '—'}
