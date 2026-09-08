@@ -121,10 +121,14 @@ function ReviewWithdrawals({ items, onClose }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(null);
 
+  // One press, not two. Approving and then marking paid were separate steps for
+  // a single decision, and there was never a case where he approved and did not
+  // pay — so this goes straight to PAID, which is also the only status that
+  // records the payment against the Commission account.
   const decide = useMutation({
-    mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action }),
+    mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action, fromOwnPocket: action === 'PAY' }),
     onSuccess: (_r, v) => {
-      toast.success(v.action === 'APPROVE' ? 'Approved' : 'Rejected');
+      toast.success(v.action === 'PAY' ? 'Paid' : 'Rejected');
       ['dashboard', 'commissions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       onClose();
     },
@@ -168,10 +172,10 @@ function ReviewWithdrawals({ items, onClose }) {
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" disabled={!!busy}
-                onClick={() => run(w.id, 'APPROVE')}
+                onClick={() => run(w.id, 'PAY')}
                 className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-slate-950 ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
                 <ShieldCheck className="h-4 w-4" />
-                {busy === `${w.id}:APPROVE` ? 'Approving…' : 'Approve'}
+                {busy === `${w.id}:PAY` ? 'Paying…' : 'Approve & pay'}
               </button>
               <button type="button" disabled={!!busy}
                 onClick={() => run(w.id, 'REJECT')}

@@ -213,10 +213,15 @@ function WithdrawModal({ commission, firstName, onClose }) {
 // whole picture — who asked, how much, where they want it sent, what it leaves
 // them with, and who decided it if someone already has.
 function WithdrawalDetail({ w, balance, onClose, refresh }) {
+  // Approving and then marking paid were two presses for one decision. There
+  // was never a case where he approved and did not pay — the money leaves his
+  // own pocket either way, and the balance already treated APPROVED and PAID
+  // the same. So the one button goes straight to PAID, which is also the only
+  // status that records the payment in the ledger.
   const decide = useMutation({
-    mutationFn: (action) => api.post(`/commissions/withdrawals/${w.id}/decide`, { action }),
+    mutationFn: (action) => api.post(`/commissions/withdrawals/${w.id}/decide`, { action, fromOwnPocket: action === 'PAY' }),
     onSuccess: (_r, action) => {
-      toast.success(action === 'APPROVE' ? 'Approved — ready to pay' : action === 'PAY' ? 'Marked paid' : 'Request rejected');
+      toast.success(action === 'PAY' ? 'Paid — and recorded on the Commission account' : 'Request rejected');
       refresh();
       onClose();
     },
@@ -271,8 +276,8 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
 
         {pending && (
           <div className="grid grid-cols-2 gap-2">
-            <Button className="justify-center py-2.5" loading={decide.isPending} onClick={() => decide.mutate('APPROVE')}>
-              <ShieldCheck className="h-4 w-4" /> Approve
+            <Button className="justify-center py-2.5" loading={decide.isPending} onClick={() => decide.mutate('PAY')}>
+              <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
             </Button>
             <Button variant="secondary" className="justify-center py-2.5 text-rose-400"
               disabled={decide.isPending} onClick={() => decide.mutate('REJECT')}>
@@ -298,9 +303,9 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
 
 function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
   const decide = useMutation({
-    mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action }),
+    mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action, fromOwnPocket: action === 'PAY' }),
     onSuccess: (_r, v) => {
-      toast.success(v.action === 'APPROVE' ? 'Approved — ready to pay' : 'Request rejected');
+      toast.success(v.action === 'PAY' ? 'Paid — and recorded on the Commission account' : 'Request rejected');
       refresh();
     },
     onError: (e) => toast.error(apiError(e)),
@@ -314,7 +319,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
         <Coins className="h-4 w-4 text-amber-400" />
         <h2 className="text-sm font-bold text-foreground">Commission requests</h2>
         <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-400">{items.length}</span>
-        <span className="ml-auto hidden text-xs text-faint sm:block">Approving clears it to pay — no money moves yet</span>
+        <span className="ml-auto hidden text-xs text-faint sm:block">One press pays it, from your own pocket</span>
       </div>
       <div className="divide-y divide-border">
         {items.map((w) => {
@@ -332,8 +337,8 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
               <div className="flex shrink-0 gap-2">
                 <Button variant="ghost" className="text-rose-400" disabled={busy}
                   onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
-                <Button loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'APPROVE' })}>
-                  <ShieldCheck className="h-4 w-4" /> Approve
+                <Button loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
+                  <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
                 </Button>
               </div>
             </div>
@@ -1461,8 +1466,8 @@ function AdminView() {
                 <TD>
                   <div className="flex justify-end gap-1">
                     {w.status === 'PENDING' && <>
-                      <Button variant="secondary" className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'APPROVE' })}>Approve</Button>
-                      <Button variant="ghost" className="px-2 py-1 text-xs text-rose-600" onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
+                      <Button className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>Approve &amp; pay</Button>
+                      <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
                     </>}
                     {w.status === 'APPROVED' && (
                       // One button, because there is only one truth: rep
