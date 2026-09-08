@@ -63,7 +63,8 @@ const GLYPH_RESTING = 'h-4 w-4 shrink-0 animate-reload-settle overflow-visible t
 const GLYPH_TURNING = 'h-4 w-4 shrink-0 animate-spin overflow-visible text-brand-500';
 
 // A ceiling over the line, not a target — a longer label degrades by not
-// animating rather than by being clipped.
+// animating rather than by being clipped. "New update is up" measures about
+// 124px, so 12rem (192px) leaves room to spare.
 const WORDS_OPEN = { maxWidth: '12rem', opacity: 1 };
 const WORDS_SHUT = { maxWidth: '0px', opacity: 0 };
 
@@ -108,7 +109,7 @@ function updatePill(turning, onTap) {
       React.createElement(
         'span',
         { className: 'block whitespace-nowrap pl-2.5 text-sm font-medium leading-5' },
-        turning ? 'Updating…' : 'Update ready',
+        turning ? 'Updating…' : 'New update is up',
       ),
     ),
   );
