@@ -47,23 +47,26 @@ export function watchForNewVersion({ intervalMs = 3 * 60 * 1000 } = {}) {
     }
     if (!live || live === mine) return;
     asked = true;
+    // The whole toast is the button: "New update is up". Tapping it appends a
+    // spinner to the same line and reloads — the current page stays on screen
+    // while the new build loads, so the spinner shows it's working. The reload
+    // clears the toast, so it can never be left spinning.
     toast(
-      (t) => React.createElement('span', { className: 'flex items-center gap-3' },
-        // A short line and a button — kept brief so it doesn't wrap to two
-        // lines and shove the button down with it.
-        'New update is up',
-        React.createElement('button', {
-          className: 'shrink-0 whitespace-nowrap rounded-md bg-brand-500 px-2 py-1 text-xs font-semibold text-slate-950',
-          // Fetching the new build takes a beat on a phone, and a button that
-          // goes dead with nothing to show for it invites a second press. The
-          // same toast turns into a spinner and stays that way until the new
-          // page replaces it — the reload is what clears it, so it can never be
-          // left spinning on screen.
-          onClick: () => {
-            toast.loading('Updating…', { id: t.id, duration: Infinity });
-            window.location.reload();
-          },
-        }, 'Update now')),
+      () => React.createElement('button', {
+        type: 'button',
+        className: 'flex items-center gap-2 whitespace-nowrap text-left text-sm font-medium',
+        onClick: () => {
+          toast(
+            () => React.createElement('span', { className: 'flex items-center gap-2 whitespace-nowrap text-sm font-medium' },
+              'New update is up',
+              React.createElement('span', {
+                className: 'h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60',
+              })),
+            { id: 'new-version', duration: Infinity },
+          );
+          setTimeout(() => window.location.reload(), 50);
+        },
+      }, 'New update is up'),
       { duration: Infinity, id: 'new-version' },
     );
   };
