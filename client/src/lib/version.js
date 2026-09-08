@@ -72,7 +72,18 @@ export function watchForNewVersion({ intervalMs = 3 * 60 * 1000 } = {}) {
           );
           setTimeout(() => window.location.reload(), 50);
         },
-      }, 'New update is up'),
+      },
+      'New update is up',
+      // The same glyph the browser's own reload button uses, so what the tap
+      // does is legible without reading the line.
+      React.createElement('svg', {
+        className: 'h-3.5 w-3.5 shrink-0 text-brand-400',
+        viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+        strokeWidth: '2.5', strokeLinecap: 'round', strokeLinejoin: 'round',
+        'aria-hidden': 'true',
+      },
+      React.createElement('path', { d: 'M21 12a9 9 0 1 1-2.64-6.36' }),
+      React.createElement('polyline', { points: '21 3 21 9 15 9' }))),
       { duration: Infinity, id: 'new-version' },
     );
   };

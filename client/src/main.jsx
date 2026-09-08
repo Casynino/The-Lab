@@ -31,13 +31,26 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <BrowserRouter>
         <AuthProvider>
           <App />
+          {/* Every toast in this app was the library's default white card on a
+              near-black page — a bright slab that arrived, took the eye off
+              whatever it interrupted, and matched nothing around it. These are
+              the app's own surface, border and text tokens, so a toast now
+              looks like it belongs to the screen it lands on. */}
           <Toaster
             position="top-right"
             toastOptions={{
               duration: 3500,
-              style: { fontSize: '14px' },
-              success: { iconTheme: { primary: '#84cc16', secondary: '#fff' } },
-              error: { iconTheme: { primary: '#e11d48', secondary: '#fff' } },
+              style: {
+                fontSize: '14px',
+                background: '#151517',
+                color: '#f4f4f5',
+                border: '1px solid #2a2a30',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6)',
+              },
+              // The tick and the cross sit on the dark card now, so their
+              // secondary colour is the card, not white.
+              success: { iconTheme: { primary: '#84cc16', secondary: '#151517' } },
+              error: { iconTheme: { primary: '#fb7185', secondary: '#151517' } },
             }}
           />
         </AuthProvider>
