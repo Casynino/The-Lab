@@ -75,6 +75,11 @@ function updatePill(turning, onTap) {
       type: 'button',
       className: PILL_BUTTON,
       onClick: onTap,
+      // The line says a new build exists; it does not say that pressing is what
+      // takes it. On a pointer that is a tooltip, and to a screen reader it is
+      // the accessible name of the control.
+      title: turning ? 'Loading the new version…' : 'Tap to load the new version',
+      'aria-label': turning ? 'Loading the new version' : 'New update is up — tap to load it',
       // Once tapped it is no longer a target: it stops taking focus and stops
       // announcing itself as pressable while it finishes.
       'aria-disabled': turning ? 'true' : undefined,
