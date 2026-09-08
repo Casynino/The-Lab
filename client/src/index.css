@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* react-hot-toast wraps a toast's message in a div carrying margin: 4px 10px.
+   The update pill IS its button — 44px tall, and 44px square once the words
+   close — so that margin has to go, or the pill is 8px too tall, its right edge
+   sits 10px off from every other toast, and the collapsed circle is an oval.
+   Targeted by class rather than cancelled with a negative margin on the button,
+   which would hard-code a private detail of the library. Specificity 0,1,1
+   beats goober's generated single class, so source order does not matter.
+   Deliberately outside @layer: a custom class inside one is tree-shaken against
+   the content globs, and this rule must survive regardless. */
+.toast-update-pill > div {
+  margin: 0;
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
@@ -128,8 +141,31 @@
     animation: halo 0.9s 0.1s cubic-bezier(0.2, 0.7, 0.3, 1) both;
   }
 
+  /* The update pill's reload mark arrives with one clockwise turn and then
+     stops for good. Same object and same direction as the spin it becomes when
+     tapped: one turn means there is something to do, endless turns mean it is
+     being done. */
+  @keyframes reload-settle {
+    from { transform: rotate(-360deg); }
+    to { transform: rotate(0deg); }
+  }
+  .animate-reload-settle {
+    animation: reload-settle 0.85s 0.12s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* The words closing into the glyph after the tap. Opacity finishes first, so
+     the line is gone before the box has finished shutting. Short enough to
+     complete before the reload commits. */
+  .toast-collapse {
+    transition: max-width 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 120ms linear;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .animate-rise, .animate-pop, .animate-halo { animation: none; opacity: 1; transform: none; }
+    .animate-rise, .animate-pop, .animate-halo, .animate-reload-settle { animation: none; opacity: 1; transform: none; }
     .animate-tick { animation: none; stroke-dashoffset: 0; }
+    .toast-collapse { transition: none; }
+    /* animate-spin is deliberately left alone. A loading indicator that does
+       not move is a broken one, and it is the only thing on screen saying the
+       new build is on its way. */
   }
 }
