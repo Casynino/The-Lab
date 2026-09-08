@@ -57,10 +57,16 @@ export function watchForNewVersion({ intervalMs = 3 * 60 * 1000 } = {}) {
         className: 'flex items-center gap-2 whitespace-nowrap text-left text-sm font-medium',
         onClick: () => {
           toast(
-            () => React.createElement('span', { className: 'flex items-center gap-2 whitespace-nowrap text-sm font-medium' },
-              'New update is up',
+            () => React.createElement('span', {
+              className: 'flex items-center gap-2 whitespace-nowrap text-sm font-medium',
+              // Announced once when it swaps in, so the update is not a silent
+              // state change for anyone using a screen reader.
+              role: 'status',
+            },
+              'Updating…',
               React.createElement('span', {
                 className: 'h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60',
+                'aria-hidden': 'true',
               })),
             { id: 'new-version', duration: Infinity },
           );
