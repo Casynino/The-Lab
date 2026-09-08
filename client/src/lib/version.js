@@ -49,14 +49,13 @@ export function watchForNewVersion({ intervalMs = 3 * 60 * 1000 } = {}) {
     asked = true;
     toast(
       (t) => React.createElement('span', { className: 'flex items-center gap-3' },
-        // Two words and a button. A sentence here wrapped to two lines and
-        // pushed the button into wrapping with it, which is a lot of screen for
-        // something that only ever means "press this".
-        'Update ready',
+        // A short line and a button — kept brief so it doesn't wrap to two
+        // lines and shove the button down with it.
+        'New update is up.',
         React.createElement('button', {
           className: 'shrink-0 whitespace-nowrap rounded-md bg-brand-500 px-2 py-1 text-xs font-semibold text-slate-950',
           onClick: () => { toast.dismiss(t.id); window.location.reload(); },
-        }, 'Update')),
+        }, 'Update now')),
       { duration: Infinity, id: 'new-version' },
     );
   };
