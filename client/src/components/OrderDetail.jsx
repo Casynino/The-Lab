@@ -793,7 +793,11 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-amber-400',
             });
           }
-          if (canAct && active && order.canSelfExtend) {
+          // isOwnRep, not canAct: the 96 hours are the rep's one use, they
+          // double the rep's own fines, and they cannot be given back. The Lab
+          // sees whether it has been taken — that is in the header — but does
+          // not get to take it for them.
+          if (isOwnRep && active && order.canSelfExtend) {
             actions.push({
               key: 'more-time', label: 'More time', Icon: CalendarPlus, onClick: () => setSub('self-extend'),
               cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-sky-400',

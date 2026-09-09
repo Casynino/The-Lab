@@ -860,8 +860,19 @@ async function selfExtend(id, actor) {
   const s = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE });
   if (!s) throw ApiError.notFound('Order not found');
 
-  // Reps may only extend their own order.
-  if (actor?.salesRepId && s.salesRepId !== actor.salesRepId) {
+  // The extension is the REP'S to spend, and only on their own order. It can be
+  // taken once, it doubles their own daily fine for the rest of the order, and
+  // it cannot be undone — so it is a decision the person who pays for it makes,
+  // not one The Lab makes for them.
+  //
+  // The old test read `if (actor?.salesRepId && ...)`, which skipped itself
+  // entirely for anyone without a salesRepId. Staff and admins have none, so
+  // the guard passed them straight through and either could burn a rep's one
+  // extension on their behalf.
+  if (!actor?.salesRepId) {
+    throw ApiError.forbidden('Only the rep holding this order can take the extension — it is their one use, and it doubles their own fines.');
+  }
+  if (s.salesRepId !== actor.salesRepId) {
     throw ApiError.forbidden('This order is not yours');
   }
   const dec = decorate(s);
