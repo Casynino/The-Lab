@@ -204,13 +204,17 @@ async function brandBreakdown() {
 
   const brandOf = new Map(products.map((p) => [p.id, p.brandId]));
   const costOf = new Map(products.map((p) => [p.id, toNumber(p.purchasePrice)]));
-  const mk = (b) => ({ brandId: b.id, name: b.name, stockValue: 0, stockUnits: 0, warehouseUnits: 0, salesMonth: 0, costMonth: 0, unitsSoldMonth: 0, salesToday: 0 });
+  const mk = (b) => ({ brandId: b.id, name: b.name, stockValue: 0, stockRetail: 0, stockUnits: 0, warehouseUnits: 0, salesMonth: 0, costMonth: 0, unitsSoldMonth: 0, salesToday: 0 });
   const byBrand = new Map(brands.map((b) => [b.id, mk(b)]));
 
   for (const it of val.items) {
     const b = byBrand.get(brandOf.get(it.productId));
     if (!b) continue;
     b.stockValue += it.costValue;
+    // What the same boxes are worth at selling price. valuation() already
+    // prices every line both ways, so the brand split is a second sum over
+    // rows already in hand rather than another pass at the database.
+    b.stockRetail += it.retailValue;
     b.stockUnits += it.totalBase;
     b.warehouseUnits += it.warehouseBase;
   }
@@ -233,6 +237,10 @@ async function brandBreakdown() {
       return {
         ...b,
         stockValue: round2(b.stockValue),
+        stockRetail: round2(b.stockRetail),
+        // What this brand's shelf would leave behind if it all sold at today's
+        // prices — before commission, like the figure for both brands together.
+        stockPotential: round2(b.stockRetail - b.stockValue),
         salesMonth: round2(b.salesMonth),
         salesToday: round2(b.salesToday),
         profitMonth,
@@ -243,7 +251,15 @@ async function brandBreakdown() {
   const sum = (k) => round2(items.reduce((t, b) => t + b[k], 0));
   return {
     brands: items,
-    totals: { stockValue: sum('stockValue'), stockUnits: items.reduce((t, b) => t + b.stockUnits, 0), salesMonth: sum('salesMonth'), salesToday: sum('salesToday'), profitMonth: sum('profitMonth') },
+    totals: {
+      stockValue: sum('stockValue'),
+      stockRetail: sum('stockRetail'),
+      stockPotential: sum('stockPotential'),
+      stockUnits: items.reduce((t, b) => t + b.stockUnits, 0),
+      salesMonth: sum('salesMonth'),
+      salesToday: sum('salesToday'),
+      profitMonth: sum('profitMonth'),
+    },
   };
 }
 

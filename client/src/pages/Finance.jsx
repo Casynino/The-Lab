@@ -1595,10 +1595,33 @@ function ProfitTab() {
                         </span>
                       </div>
                     </div>
+                    {/* What this brand has made, then what it could still
+                        make. The three figures under the fold were only ever
+                        shown for both brands together, which answered "is
+                        there money on the shelf" but never "whose". Same shape
+                        as the path above it, so the card reads as one story:
+                        money earned, then money waiting. */}
                     {stock && (
-                      <p className="mt-3 text-[11px] text-faint">
-                        Inventory {formatCurrency(stock.stockValue)} ({formatNumber(stock.stockUnits)} boxes)
-                      </p>
+                      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-xs text-muted">Still in stock</span>
+                          <span className="text-xs text-faint">
+                            {formatNumber(stock.stockUnits)} boxes · {formatCurrency(stock.stockValue)} at cost
+                          </span>
+                        </div>
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-xs text-muted">If it all sells</span>
+                          <span className="text-sm font-semibold tabular-nums text-foreground">
+                            {formatCurrency(stock.stockRetail)}
+                          </span>
+                        </div>
+                        <div className="flex items-baseline justify-between border-t border-white/[0.06] pt-1.5">
+                          <span className="text-xs font-semibold text-foreground">= Potential profit</span>
+                          <span className={`text-sm font-bold tabular-nums ${stock.stockPotential > 0 ? 'text-brand-400' : 'text-muted'}`}>
+                            {formatCurrency(stock.stockPotential)}
+                          </span>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </Card>
