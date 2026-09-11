@@ -2197,15 +2197,33 @@ function SuppliersTab({ accounts }) {
     queryFn: async () => unwrap(await api.get('/finance/suppliers')).data,
   });
   if (isLoading) return <PageSpinner />;
-  const totals = suppliers.reduce((s, x) => ({ purchased: s.purchased + x.totalPurchased, paid: s.paid + x.totalPaid, out: s.out + x.outstanding }), { purchased: 0, paid: 0, out: 0 });
+  const totals = suppliers.reduce((s, x) => ({
+    purchased: s.purchased + x.totalPurchased,
+    returned: s.returned + (x.totalReturned || 0),
+    paid: s.paid + x.totalPaid,
+    out: s.out + x.outstanding,
+  }), { purchased: 0, returned: 0, paid: 0, out: 0 });
+  // What the bill actually came to after goods went back. The share paid is
+  // measured against this rather than against everything ever ordered —
+  // otherwise returning stock quietly makes you look further behind on paying
+  // for it than you are.
+  const netPurchased = totals.purchased - totals.returned;
+  const anyReturns = totals.returned > 0;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {/* The returned card only appears once something has gone back, so a
+          business that has never returned stock sees the four cards it always
+          saw. */}
+      <div className={anyReturns ? 'grid grid-cols-2 gap-3 xl:grid-cols-5' : 'grid grid-cols-2 gap-3 xl:grid-cols-4'}>
         <TintCard label="Suppliers" value={formatNumber(suppliers.length)} icon={Factory} tone="slate" sub="who you buy from" />
         <TintCard label="Total purchased" value={formatCurrency(totals.purchased)} icon={Package} tone="brand" sub="all stock ever bought" />
+        {anyReturns && (
+          <TintCard label="Goods returned" value={formatCurrency(totals.returned)} icon={Undo2} tone="amber"
+            sub={`bill is ${formatCurrency(netPurchased)} after them`} />
+        )}
         <TintCard label="Total paid" value={formatCurrency(totals.paid)} icon={Wallet} tone="emerald"
-          sub={totals.purchased > 0 ? `${Math.round((totals.paid / totals.purchased) * 100)}% of purchases` : 'nothing yet'} />
+          sub={netPurchased > 0 ? `${Math.round((totals.paid / netPurchased) * 100)}% of the bill` : 'nothing yet'} />
         <TintCard label="Still owed" value={formatCurrency(totals.out)} icon={Scale} tone={totals.out > 0 ? 'rose' : 'emerald'}
           sub={totals.out > 0 ? 'they are financing your stock' : 'all settled'} />
       </div>
@@ -2216,17 +2234,22 @@ function SuppliersTab({ accounts }) {
         </div>
         {!suppliers.length ? <EmptyState title="No suppliers yet" message="Add your suppliers to start tracking purchases and payments." icon={Factory} /> : (
           <Table>
-            <THead><TR><TH>Supplier</TH><TH>Brand</TH><TH>Country</TH><TH>Orders</TH><TH>Purchased</TH><TH>Paid</TH><TH>Outstanding</TH></TR></THead>
+            <THead><TR><TH>Supplier</TH><TH>Brand</TH><TH>Country</TH><TH>Orders</TH><TH>Purchased</TH>{anyReturns && <TH>Returned</TH>}<TH>Paid</TH><TH>Outstanding</TH></TR></THead>
             <TBody>
-              {suppliers.map((s) => (
+              {suppliers.map((s) => {
+                // Measured against the bill after returns, not against
+                // everything ever ordered — otherwise sending stock back makes
+                // the bar go backwards on money already paid.
+                const billed = s.totalPurchased - (s.totalReturned || 0);
+                return (
                 <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
                   <TD className="font-medium text-foreground">
                     {s.name}{s.contactName ? <span className="ml-1.5 text-xs text-faint">· {s.contactName}</span> : null}
                     {/* How much of this supplier's stock is actually paid for. */}
-                    {s.totalPurchased > 0 && (
+                    {billed > 0 && (
                       <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-white/[0.07]">
                         <div className={s.outstanding > 0 ? 'h-full bg-amber-500' : 'h-full bg-emerald-500'}
-                          style={{ width: `${Math.max(2, (s.totalPaid / s.totalPurchased) * 100)}%` }} />
+                          style={{ width: `${Math.min(100, Math.max(2, (s.totalPaid / billed) * 100))}%` }} />
                       </div>
                     )}
                   </TD>
@@ -2234,10 +2257,16 @@ function SuppliersTab({ accounts }) {
                   <TD className="text-muted">{s.country}</TD>
                   <TD>{s.poCount}</TD>
                   <TD>{formatCurrency(s.totalPurchased)}</TD>
+                  {anyReturns && (
+                    <TD className={s.totalReturned > 0 ? 'text-amber-400' : 'text-faint'}>
+                      {s.totalReturned > 0 ? `−${formatCurrency(s.totalReturned)}` : '—'}
+                    </TD>
+                  )}
                   <TD className="text-emerald-500">{formatCurrency(s.totalPaid)}</TD>
                   <TD className={s.outstanding > 0 ? 'font-semibold text-rose-400' : 'text-faint'}>{formatCurrency(s.outstanding)}</TD>
                 </TR>
-              ))}
+                );
+              })}
             </TBody>
           </Table>
         )}
