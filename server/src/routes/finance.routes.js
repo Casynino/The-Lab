@@ -18,6 +18,8 @@ router.get('/suppliers', ctrl.suppliers);
 router.get('/suppliers/:id', ctrl.supplierDetail);
 router.post('/supplier-payments', ctrl.paySupplier);
 router.post('/suppliers/:id/pay', ctrl.paySupplierBalance); // pay down overall balance (installments)
+// Goods sent back. Admin only: it reduces a bill without any money moving.
+router.post('/suppliers/:id/credits', requireRoles(ROLES.ADMIN), ctrl.creditSupplier);
 router.get('/accounts', ctrl.accounts);
 router.post('/accounts', ctrl.createAccount);
 router.put('/accounts/:id', ctrl.updateAccount);

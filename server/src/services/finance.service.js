@@ -1068,6 +1068,20 @@ async function report(opts = {}) {
 // --- Suppliers (accounts payable) -----------------------------------------------
 
 // Every supplier with their financial picture: total purchased (non-cancelled
+// Goods returned to a supplier, by supplier. Supplier debt is worked out in
+// more than one place in this file — the per-supplier roll-up, the detail for
+// one supplier, and a raw aggregate behind the Finance overview — so all of
+// them read the credits from here. Two subtractions written twice is how the
+// modal and the dashboard end up quoting different debt.
+async function creditsBySupplier(supplierIds = null) {
+  const rows = await prisma.supplierCredit.groupBy({
+    by: ['supplierId'],
+    ...(supplierIds ? { where: { supplierId: { in: supplierIds } } } : {}),
+    _sum: { amount: true },
+  });
+  return new Map(rows.map((r) => [r.supplierId, round2(toNumber(r._sum.amount))]));
+}
+
 // POs), total paid (ledger payments keyed to their POs), outstanding balance.
 async function supplierSummaries() {
   await ensureDefaults();
@@ -1099,6 +1113,7 @@ async function supplierSummaries() {
       _max: { occurredAt: true },
     }),
   ]);
+  const creditBySupplier = await creditsBySupplier(supplierIds);
   const paidByPo = new Map(payRows.map((p) => [p.refId, toNumber(p._sum.amount)]));
   const paidBySupplier = new Map(supplierPayRows.map((p) => [p.refId, toNumber(p._sum.amount)]));
   const lastPayBySupplier = new Map(supplierPayRows.map((p) => [p.refId, p._max.occurredAt]));
@@ -1126,7 +1141,11 @@ async function supplierSummaries() {
       brandId: s.brandId || null, brandName: s.brandId ? brandName.get(s.brandId) || null : null,
       totalPurchased: round2(f.purchased),
       totalPaid: round2(f.paid),
-      outstanding: round2(f.purchased - f.paid),
+      // Goods that went back. Off the purchases, never onto the payments — no
+      // money moved, and counting it as paid would report shillings as having
+      // left an account when none did.
+      totalReturned: round2(creditBySupplier.get(s.id) || 0),
+      outstanding: round2(f.purchased - (creditBySupplier.get(s.id) || 0) - f.paid),
       poCount: f.poCount,
       lastActivity: f.last,
       lastPayment: lastPayBySupplier.get(s.id) || null,
@@ -1151,6 +1170,10 @@ async function supplierDetail(id) {
     s.brandId ? prisma.brand.findUnique({ where: { id: s.brandId }, select: { name: true } }) : null,
   ]);
   const poIds = pos.map((p) => p.id);
+  const credits = await prisma.supplierCredit.findMany({
+    where: { supplierId: id },
+    orderBy: { occurredAt: 'desc' },
+  });
   const txns = await prisma.financeTransaction.findMany({
     where: {
       direction: 'OUT',
@@ -1180,6 +1203,7 @@ async function supplierDetail(id) {
   });
   const purchased = round2(orders.reduce((x, o) => x + o.totalCost, 0));
   const paid = round2(txns.reduce((x, t) => x + toNumber(t.amount), 0));
+  const returned = round2(credits.reduce((x, c) => x + toNumber(c.amount), 0));
   const productsPurchased = [...new Set(orders.flatMap((o) => o.products))];
   return {
     supplier: { ...s, brandName: brand?.name || null },
@@ -1192,8 +1216,42 @@ async function supplierDetail(id) {
     productsPurchased,
     lastPurchase: orders[0]?.receivedAt || orders[0]?.createdAt || null,
     lastPayment: txns[0]?.occurredAt || null,
-    totals: { purchased, paid, outstanding: round2(purchased - paid) },
+    credits: credits.map((c) => ({
+      id: c.id, amount: toNumber(c.amount), reason: c.reason, occurredAt: c.occurredAt,
+    })),
+    totals: { purchased, paid, returned, outstanding: round2(purchased - returned - paid) },
   };
+}
+
+// Record goods sent back to a supplier. Money only — the boxes are corrected
+// through the stock ledger, which is the one place stock is allowed to change.
+//
+// Capped at what is still owed: a return bigger than the outstanding bill would
+// mean the supplier owes money back, which is a refund and a different
+// transaction, not a credit against a bill that no longer exists.
+async function recordSupplierCredit(supplierId, { amount, reason, occurredAt }, actor) {
+  const s = await prisma.supplier.findUnique({ where: { id: supplierId } });
+  if (!s) throw ApiError.notFound('Supplier not found');
+  const amt = round2(toNumber(amount));
+  if (!(amt > 0)) throw ApiError.badRequest('Enter the value of the goods going back');
+  if (!String(reason || '').trim()) {
+    throw ApiError.badRequest('Say what went back — a credit against a bill with no reason cannot be checked later');
+  }
+  const detail = await supplierDetail(supplierId);
+  if (amt > detail.totals.outstanding + 0.001) {
+    throw ApiError.badRequest(
+      `You only owe ${s.name} TZS ${detail.totals.outstanding.toLocaleString()}. A return bigger than the bill means they owe you money back, which is a refund rather than a credit.`,
+    );
+  }
+  return prisma.supplierCredit.create({
+    data: {
+      supplierId,
+      amount: amt,
+      reason: String(reason).trim().slice(0, 300),
+      occurredAt: occurredAt ? new Date(occurredAt) : new Date(),
+      createdById: actor?.id || null,
+    },
+  });
 }
 
 // Pay down a supplier's overall balance (installments welcome): one OUT
@@ -1602,8 +1660,9 @@ async function overview(period = 'month') {
     select: { id: true },
   });
   const livePoIds = livePos.map((x) => x.id);
-  const [poAgg, poPayAgg, wdAgg, pendingApprovals] = await Promise.all([
+  const [poAgg, poCreditAgg, poPayAgg, wdAgg, pendingApprovals] = await Promise.all([
     prisma.purchaseOrder.aggregate({ where: { status: { not: 'CANCELLED' } }, _sum: { totalCost: true } }),
+    prisma.supplierCredit.aggregate({ _sum: { amount: true } }),
     prisma.financeTransaction.aggregate({
       where: {
         direction: 'OUT',
@@ -1664,7 +1723,11 @@ async function overview(period = 'month') {
   const customersOwe = round2(toNumber(debtAgg._sum.balance));
 
   const needsYou = {
-    supplierOutstanding: round2(Math.max(0, toNumber(poAgg._sum.totalCost) - toNumber(poPayAgg._sum.amount))),
+    // Returned goods come off here too. This aggregate is computed
+    // independently of supplierSummaries, so a credit that lands in one and not
+    // the other makes the overview card and the supplier modal disagree about
+    // the same debt.
+    supplierOutstanding: round2(Math.max(0, toNumber(poAgg._sum.totalCost) - toNumber(poCreditAgg._sum.amount || 0) - toNumber(poPayAgg._sum.amount))),
     pendingWithdrawals: { count: wdAgg._count, amount: round2(toNumber(wdAgg._sum.amount)) },
     pendingApprovals,
     negativeAccounts: accounts.filter((a) => a.balance < 0).map((a) => a.name),
@@ -1947,6 +2010,7 @@ module.exports = {
   report,
   supplierSummaries,
   supplierDetail,
+  recordSupplierCredit,
   paySupplier,
   paySupplierBalance,
 };

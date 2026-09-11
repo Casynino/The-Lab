@@ -6,6 +6,7 @@ import {
   Wallet, TrendingUp, TrendingDown, Banknote, Landmark, Smartphone, Coins,
   Plus, Trash2, Pencil, ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Boxes, Receipt, PiggyBank,
   Factory, Package, Scale, FileBarChart, ChevronRight, ShieldCheck, AlertTriangle, Search as SearchIcon,
+  Undo2,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useBrands } from '@/lib/hooks';
@@ -2020,6 +2021,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
   const [paying, setPaying] = useState(null); // PO row being paid
   const [payingBalance, setPayingBalance] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const [returning, setReturning] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ['finance', 'supplier', supplierId],
     queryFn: async () => unwrap(await api.get(`/finance/suppliers/${supplierId}`)).data,
@@ -2038,6 +2040,9 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
             <Button variant="secondary" onClick={onClose}>Close</Button>
             <Button variant="secondary" onClick={() => setPurchasing(true)}><Package className="h-4 w-4" /> New purchase</Button>
             {data.totals.outstanding > 0 && (
+              <Button variant="secondary" onClick={() => setReturning(true)}><Undo2 className="h-4 w-4" /> Return goods</Button>
+            )}
+            {data.totals.outstanding > 0 && (
               <Button onClick={() => setPayingBalance(true)}><Wallet className="h-4 w-4" /> Pay supplier</Button>
             )}
           </>
@@ -2054,8 +2059,13 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
             </div>
 
             {/* Balances */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Returned sits between what was bought and what was paid, because
+                that is where it acts: it comes off the purchases. It only
+                appears when there is something to show, so a supplier who has
+                never had goods back looks exactly as it did. */}
+            <div className={`grid gap-3 ${data.totals.returned > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <Money label="Total purchased" value={data.totals.purchased} />
+              {data.totals.returned > 0 && <Money label="Goods returned" value={data.totals.returned} tone="amber" />}
               <Money label="Total paid" value={data.totals.paid} tone="emerald" />
               <Money label="Balance owed" value={data.totals.outstanding} tone={data.totals.outstanding > 0 ? 'rose' : 'emerald'} big />
             </div>
@@ -2112,7 +2122,70 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
       {paying && <PaySupplierModal order={paying} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
       {payingBalance && s && <PayBalanceModal supplier={s} outstanding={data.totals.outstanding} accounts={accounts} onClose={() => setPayingBalance(false)} onDone={refresh} />}
       {purchasing && s && <NewPurchaseModal supplier={s} onClose={() => setPurchasing(false)} onDone={refresh} />}
+      {returning && s && <ReturnGoodsModal supplier={s} outstanding={data.totals.outstanding} onClose={() => setReturning(false)} onDone={refresh} />}
     </>
+  );
+}
+
+// Goods sent back to a supplier. Money only: it comes off the bill, and the
+// boxes are corrected through the stock ledger like any other movement — one
+// place changes stock, and this is not it.
+function ReturnGoodsModal({ supplier, outstanding, onClose, onDone }) {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('');
+  const amt = Number(amount) || 0;
+  const overBill = amt > outstanding;
+  const valid = amt > 0 && !overBill && reason.trim().length > 2;
+
+  const save = useMutation({
+    mutationFn: () => api.post(`/finance/suppliers/${supplier.id}/credits`, { amount: amt, reason: reason.trim() }),
+    onSuccess: () => { toast.success('Taken off the bill'); onDone?.(); onClose(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  return (
+    <Modal open onClose={onClose} size="sm" title={`Return goods to ${supplier.name}`}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>
+          Take it off the bill
+        </Button>
+      </>}>
+      <div className="space-y-4">
+        <div className="rounded-xl bg-elevated/60 px-4 py-3 ring-1 ring-white/[0.07]">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">You owe them now</span>
+            <span className="text-lg font-bold tabular-nums text-foreground">{formatCurrency(outstanding)}</span>
+          </div>
+          {amt > 0 && !overBill && (
+            <div className="mt-1 flex items-baseline justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">After this</span>
+              <span className="text-sm font-semibold tabular-nums text-emerald-400">{formatCurrency(outstanding - amt)}</span>
+            </div>
+          )}
+        </div>
+
+        <Field label="What are the goods worth?">
+          <Input type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1776000" />
+        </Field>
+        {overBill && (
+          <p className="text-xs text-rose-400">
+            That is more than you owe {supplier.name}. A return bigger than the bill means they owe you money back,
+            which is a refund rather than a credit.
+          </p>
+        )}
+
+        <Field label="What went back?" hint="Kept on the supplier's record.">
+          <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. 64 boxes Civlily Pepa Ndogo — wrong filter" />
+        </Field>
+
+        <p className="text-xs leading-relaxed text-faint">
+          This takes the value off what you owe. It does not say you paid anything, and it does not move stock —
+          adjust the boxes in Inventory as usual.
+        </p>
+      </div>
+    </Modal>
   );
 }
 

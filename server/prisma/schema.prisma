@@ -1040,6 +1040,35 @@ model Supplier {
   purchaseOrders PurchaseOrder[]
 
   @@map("suppliers")
+  credits SupplierCredit[]
+}
+
+// Goods sent back to a supplier.
+//
+// A return is NOT a payment — no money moves, and saying it did would put
+// shillings in "total paid" that never left an account. It is the opposite of a
+// purchase: stock that was billed and then went back, so it comes off what was
+// bought. Outstanding is purchased − returned − paid everywhere it is worked
+// out, and it is worked out in more than one place.
+//
+// Money only. It deliberately does not touch inventory: the boxes are adjusted
+// through the stock ledger like any other movement, so this never becomes a
+// second, competing way to change what is on the shelf.
+model SupplierCredit {
+  id          String   @id @default(cuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(16, 2)
+  // Required. A credit against a bill with no stated cause is unauditable.
+  reason      String
+  occurredAt  DateTime @default(now())
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([supplierId])
+  @@index([occurredAt])
+  @@map("supplier_credits")
 }
 
 model PurchaseOrder {

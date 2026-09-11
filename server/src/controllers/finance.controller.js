@@ -165,6 +165,19 @@ const paySupplier = asyncHandler(async (req, res) => {
 });
 
 // Pay down a supplier's overall balance (installments) from a business account.
+// Goods sent back to a supplier. Not a payment — it comes off what was bought,
+// so the balance falls without claiming money left an account.
+const creditSupplier = asyncHandler(async (req, res) => {
+  const row = await finance.recordSupplierCredit(req.params.id, req.body || {}, req.user);
+  await audit.record(req, {
+    action: 'SUPPLIER_GOODS_RETURNED',
+    entityType: 'Supplier',
+    entityId: req.params.id,
+    newValues: { amount: req.body?.amount, reason: req.body?.reason || null },
+  });
+  return created(res, row);
+});
+
 const paySupplierBalance = asyncHandler(async (req, res) => {
   const txn = await finance.paySupplierBalance(req.params.id, req.body, req.user);
   await audit.record(req, {
@@ -211,6 +224,6 @@ const reportArchivePdf = asyncHandler(async (req, res) => {
 module.exports = {
   overview, sync, accounts, createAccount, updateAccount, categories, createCategory,
   transactions, recordExpense, recordIncome, recordOwnerMoney, recordAdjustment, updateTransaction, deleteTransaction,
-  cashflow, report, suppliers, supplierDetail, paySupplier, paySupplierBalance,
+  cashflow, report, suppliers, supplierDetail, paySupplier, paySupplierBalance, creditSupplier,
   reportArchive, reportArchivePdf, transferBetween,
 };
