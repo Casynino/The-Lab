@@ -920,6 +920,18 @@ async function selfExtend(id, actor) {
     entityId: updated.id,
   }).catch(() => {});
 
+  // And on WhatsApp. The bell only reaches him if he opens the app; this is a
+  // decision he cannot undo, made without him, so it should find him where he
+  // is. Queued in the background so a slow provider never holds up the rep's
+  // own request.
+  try {
+    const wa = require('./whatsappNotify.service');
+    wa.background(wa.extensionTaken(updated, {
+      newDeadline,
+      rate: penalty.EXTENDED_PENALTY_PER_DAY,
+    }));
+  } catch { /* WhatsApp is optional — never block the extension on it */ }
+
   return decorate(updated);
 }
 

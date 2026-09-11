@@ -60,7 +60,7 @@ function WhatsAppPanel({ settings }) {
   });
 
   const test = useMutation({
-    mutationFn: async () => unwrap(await api.post('/settings/whatsapp/test')).data,
+    mutationFn: async (kind) => unwrap(await api.post('/settings/whatsapp/test', kind ? { kind } : {})).data,
     onSuccess: (r) => {
       if (r.sent) toast.success('Test message sent — check your WhatsApp');
       else toast.error(`Not sent: ${r.reason || 'delivery failed (will retry automatically)'}`);
@@ -88,9 +88,25 @@ function WhatsAppPanel({ settings }) {
           ? 'Live business alerts sent to your phone the moment something happens.'
           : 'Set whatsapp.phone and whatsapp.apikey below to activate.'}
         action={
-          <Button variant="secondary" loading={test.isPending} disabled={!configured} onClick={() => test.mutate()}>
-            <Send className="mr-1.5 h-4 w-4" /> Send test
-          </Button>
+          // Samples of the two alerts that fire on their own, so they can be
+          // seen once rather than waited for.
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            <Button variant="ghost" className="whitespace-nowrap text-xs" disabled={!configured}
+              loading={test.isPending && test.variables === 'deadline'}
+              onClick={() => test.mutate('deadline')}>
+              Sample: fine warning
+            </Button>
+            <Button variant="ghost" className="whitespace-nowrap text-xs" disabled={!configured}
+              loading={test.isPending && test.variables === 'extension'}
+              onClick={() => test.mutate('extension')}>
+              Sample: extension
+            </Button>
+            <Button variant="secondary" className="whitespace-nowrap" disabled={!configured}
+              loading={test.isPending && !test.variables}
+              onClick={() => test.mutate()}>
+              <Send className="mr-1.5 h-4 w-4" /> Send test
+            </Button>
+          </div>
         }
       />
       <CardBody>

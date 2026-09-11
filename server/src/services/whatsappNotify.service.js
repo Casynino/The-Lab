@@ -43,6 +43,8 @@ const TYPES = {
   DAILY_SUMMARY: { label: 'Daily business report (21:00)', priority: 'INFO' },
   WEEKLY_REPORT: { label: 'Weekly business report (Monday 08:00, with PDF)', priority: 'INFO' },
   MONTHLY_REPORT: { label: 'Monthly business report (1st of month 08:00, with PDF)', priority: 'INFO' },
+  DEADLINE_IMMINENT: { label: 'An order is minutes from its deadline', priority: 'WARNING' },
+  EXTENSION_TAKEN: { label: 'A rep took the 96-hour extension', priority: 'ACTION' },
   REP_ALERT: { label: "Sales rep alerts (to the rep's own WhatsApp)", priority: 'INFO' },
   TEST: { label: 'Test message', priority: 'INFO' },
 };
@@ -450,6 +452,100 @@ async function stockAlertForProduct(productId) {
 }
 
 // Cron sweep: catch anything the movement hooks missed.
+// A rep bought themselves 96 more hours. The owner does not decide it and
+// cannot undo it, so the only thing the app owes him is to say it happened.
+async function extensionTaken(settlement, { newDeadline, rate }) {
+  const who = `${settlement.salesRep?.user?.name || 'A rep'} (${settlement.salesRep?.code || '—'})`;
+  const text = compose({
+    priority: 'ACTION',
+    title: 'EXTENSION TAKEN',
+    ref: settlement.settlementNumber,
+    who,
+    lines: [
+      '*Extra time:* 96 hours',
+      `*New deadline:* ${fmtWhen(newDeadline)}`,
+      `*Late fine after it:* ${fmt(rate)} per day (doubled)`,
+    ],
+    status: 'No fine until the new deadline',
+  });
+  return queue('EXTENSION_TAKEN', {
+    dedupeKey: `extension:${settlement.id}`,
+    refType: 'Settlement',
+    refId: settlement.id,
+    text,
+  });
+}
+
+// ── Orders about to start costing the rep money ─────────────────────────────
+// The first fine lands the MOMENT the deadline passes — there is no grace — so
+// a warning is only useful before it, not after. Anything already overdue is
+// past helping and is left alone.
+//
+// An order with a return awaiting a decision is skipped, because penalty.service
+// skips it too: while a return is pending the clock is paused and no fine is
+// charged. Warning about a fine that will not be charged is worse than silence.
+//
+// Deduplicated on the order, so an order is warned about once and never again
+// however often the sweep runs.
+const DEADLINE_WARN_MINUTES = 10;
+
+async function deadlineWarnings(withinMinutes = DEADLINE_WARN_MINUTES) {
+  const notification = require('./notification.service');
+  const penalty = require('./penalty.service');
+  const now = new Date();
+  const edge = new Date(now.getTime() + withinMinutes * 60_000);
+
+  const due = await prisma.settlement.findMany({
+    where: {
+      status: { in: ['OPEN', 'PARTIAL'] },
+      deadlineAt: { gt: now, lte: edge },
+    },
+    include: { salesRep: { include: { user: { select: { id: true, name: true } } } } },
+  });
+
+  let queued = 0;
+  for (const s of due) {
+    const paused = await prisma.return.count({ where: { settlementId: s.id, status: 'PENDING' } });
+    if (paused > 0) continue;
+
+    const mins = Math.max(0, Math.round((new Date(s.deadlineAt).getTime() - now.getTime()) / 60_000));
+    const rate = penalty.dailyRateFor(s);
+    const who = `${s.salesRep?.user?.name || 'A rep'} (${s.salesRep?.code || '—'})`;
+    const outstanding = round2(toNumber(s.assignedValue) - toNumber(s.settledValue) - toNumber(s.returnedValue));
+
+    notification.createIfAbsent({
+      type: 'GENERAL',
+      severity: 'WARNING',
+      title: 'A fine is about to start',
+      message: `${who} has ${mins} minute${mins === 1 ? '' : 's'} left on order ${s.settlementNumber}. When the deadline passes it starts charging ${fmt(rate)} a day.`,
+      entityType: 'Settlement',
+      entityId: `deadlinewarn-${s.id}`,
+    }).catch(() => {});
+
+    const text = compose({
+      priority: 'WARNING',
+      title: 'FINE ABOUT TO START',
+      ref: s.settlementNumber,
+      who,
+      lines: [
+        `*Time left:* ${mins} minute${mins === 1 ? '' : 's'}`,
+        `*Still outstanding:* ${fmt(outstanding)}`,
+        `*Fine once it passes:* ${fmt(rate)} per day`,
+        s.selfExtendedAt ? '_This order already used its 96-hour extension._' : null,
+      ].filter(Boolean),
+      status: 'Not settled yet',
+    });
+    const r = await queue('DEADLINE_IMMINENT', {
+      dedupeKey: `deadlinewarn:${s.id}`,
+      refType: 'Settlement',
+      refId: s.id,
+      text,
+    }).catch(() => ({ queued: false }));
+    if (r.queued) queued += 1;
+  }
+  return { candidates: due.length, queued };
+}
+
 async function scanStockAlerts() {
   const reorder = require('./reorder.service');
   const low = await reorder.lowStock();
@@ -650,18 +746,53 @@ async function history(limit = 30) {
   });
 }
 
-async function test() {
-  const text = compose({
+// A sample of a real alert, so a new one can be seen before it has to fire for
+// real. `kind` picks which; anything else is the plain connectivity check.
+// Sent with a fresh dedupe key every time, or the second press would be
+// swallowed as a duplicate and look like a failure.
+const SAMPLES = {
+  deadline: () => compose({
+    priority: 'WARNING',
+    title: 'FINE ABOUT TO START',
+    ref: 'STL-20260911-0001',
+    who: 'Paul (REP-002)',
+    lines: [
+      '*Time left:* 8 minutes',
+      `*Still outstanding:* ${fmt(30000)}`,
+      `*Fine once it passes:* ${fmt(10000)} per day`,
+    ],
+    status: 'Not settled yet',
+  }),
+  extension: () => compose({
+    priority: 'ACTION',
+    title: 'EXTENSION TAKEN',
+    ref: 'STL-20260911-0001',
+    who: 'Paul (REP-002)',
+    lines: [
+      '*Extra time:* 96 hours',
+      `*New deadline:* ${fmtWhen(new Date(Date.now() + 96 * 3600_000))}`,
+      `*Late fine after it:* ${fmt(20000)} per day (doubled)`,
+    ],
+    status: 'No fine until the new deadline',
+  }),
+};
+
+async function test(kind) {
+  const sample = SAMPLES[kind];
+  const text = sample ? sample() : compose({
     priority: 'INFO',
     title: 'TEST NOTIFICATION',
     lines: ['WhatsApp notifications are working.', 'This is how live business alerts will look.'],
     status: 'Delivered',
   });
-  return queue('TEST', { text });
+  return queue('TEST', { text, dedupeKey: `test:${kind || 'plain'}:${Date.now()}` });
 }
 
 module.exports = {
   retryFailed,
+  deadlineWarnings,
+  extensionTaken,
+  DEADLINE_WARN_MINUTES,
   providerBudgetCap,
   TYPES,
   compose,

@@ -39,6 +39,23 @@ router.get(
   }),
 );
 
+// Every few minutes: orders that are minutes away from their deadline, so the
+// owner hears about a fine BEFORE it starts rather than after. The first fine
+// lands the moment the deadline passes, so a daily sweep is far too coarse for
+// this one — it is its own schedule for that reason.
+// Deduplicated per order, so running it often costs nothing and repeats nothing.
+router.get(
+  '/deadline-watch',
+  guard,
+  asyncHandler(async (req, res) => {
+    const wa = require('../services/whatsappNotify.service');
+    const minutes = Number(req.query.minutes) || wa.DEADLINE_WARN_MINUTES;
+    const result = await wa.deadlineWarnings(minutes);
+    await wa.flush({ throttleMs: 0 }).catch(() => {});
+    return res.json({ success: true, data: { ...result, minutes, at: new Date().toISOString() } });
+  }),
+);
+
 // Evening WhatsApp pulse (21:00 EAT): today's sales, profit, cash position,
 // activity and alerts. Deduped per day; ?force=1 resends (for testing).
 router.get(

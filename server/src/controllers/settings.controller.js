@@ -80,7 +80,9 @@ const whatsappRetryFailed = asyncHandler(async (req, res) => {
 
 const whatsappTest = asyncHandler(async (req, res) => {
   const wa = require('../services/whatsappNotify.service');
-  const result = await wa.test();
+  // ?kind=deadline|extension sends a sample of that alert instead of the plain
+  // connectivity check, so a new alert can be seen before it fires for real.
+  const result = await wa.test(req.body?.kind || req.query?.kind);
   await audit.record(req, { action: 'CREATE', entityType: 'WhatsAppNotification', entityId: 'test', newValues: { sent: result.sent ?? false } });
   return ok(res, result);
 });
