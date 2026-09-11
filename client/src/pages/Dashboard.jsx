@@ -266,12 +266,23 @@ export default function Dashboard() {
               {formatCurrency(totalFunds)}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className={clsx(
-                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold',
-                today.netCash >= 0 ? 'bg-emerald-400/15 text-emerald-200' : 'bg-rose-400/15 text-rose-200',
-              )}>
-                {today.netCash >= 0 ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
-                {formatCurrency(Math.abs(today.netCash))} {today.netCash >= 0 ? 'in' : 'out'} today
+              {/* This is the NET move in the balance above it, so it has to be
+                  worded as one. It read "TSh 449,000 out today" on a day when
+                  624,000 went out and 175,000 came in — 449,000 never left
+                  anything, and the cash-flow card further down the same screen
+                  said so plainly. Both gross figures are already in the
+                  payload, so they carry the detail on hover. */}
+              <span
+                title={`In ${formatCurrency(today.moneyIn || 0)} · out ${formatCurrency(today.moneyOut || 0)}`}
+                className={clsx(
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                  today.netCash === 0 ? 'bg-white/10 text-white/80'
+                    : today.netCash > 0 ? 'bg-emerald-400/15 text-emerald-200' : 'bg-rose-400/15 text-rose-200',
+                )}>
+                {today.netCash === 0 ? null : today.netCash > 0 ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+                {today.netCash === 0
+                  ? 'No change today'
+                  : <>{formatCurrency(Math.abs(today.netCash))} {today.netCash > 0 ? 'up' : 'down'} today</>}
               </span>
               {today.boxesSold > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80">
