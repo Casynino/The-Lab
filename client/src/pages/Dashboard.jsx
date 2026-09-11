@@ -534,7 +534,7 @@ export default function Dashboard() {
         // Below three trading days there is no average worth comparing against,
         // and a delta drawn from one quiet day would mislead more than it helps.
         const cmp = past.length >= 3 && avg > 0
-          ? { pct: Math.round(((today.revenue - avg) / avg) * 100), avg }
+          ? { pct: Math.round(((today.revenue - avg) / avg) * 100), avg, days: past.length }
           : null;
         return (
           <>
@@ -544,10 +544,18 @@ export default function Dashboard() {
                 <p className="text-xs text-faint">Money in and out since midnight, straight from Finance.</p>
               </div>
               {cmp && (
-                <span className={clsx(
-                  'rounded-full px-2.5 py-1 text-[11px] font-semibold',
-                  cmp.pct >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400',
-                )}>
+                // "Daily average" is looser than the figure behind it, which is
+                // the mean of the days that actually had sales — a quiet
+                // Sunday is left out rather than dragging every working day
+                // above the line. And today is still running, so before the
+                // afternoon a part-day is being measured against whole ones.
+                // Both are stated on hover rather than crammed into the pill.
+                <span
+                  title={`Average of the ${cmp.days} day${cmp.days === 1 ? '' : 's'} with sales in the last fortnight, today not counted. Today is still running, so it is a part-day against whole ones.`}
+                  className={clsx(
+                    'cursor-help rounded-full px-2.5 py-1 text-[11px] font-semibold',
+                    cmp.pct >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400',
+                  )}>
                   {cmp.pct >= 0 ? '▲' : '▼'} {Math.abs(cmp.pct)}% vs the {formatCurrency(Math.round(cmp.avg))} daily average
                 </span>
               )}
