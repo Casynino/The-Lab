@@ -1,0 +1,43 @@
+# Warn the owner minutes before a rep's fine starts.
+#
+# This cannot live in vercel.json. The project is on Vercel's Hobby plan, where
+# a cron may only run ONCE A DAY — a */5 schedule is rejected outright and the
+# whole deployment fails to build, which is exactly what happened when it was
+# tried. A fine begins the moment a deadline passes, so a daily sweep is useless
+# for this one alert.
+#
+# GitHub Actions runs it instead, free, every five minutes. The endpoint is
+# idempotent and deduplicated per order, so a run that finds nothing costs
+# nothing and a repeated run repeats nothing.
+#
+# If CRON_SECRET is set in Vercel, add the same value as a repository secret of
+# the same name (Settings → Secrets and variables → Actions). Without it the
+# endpoint refuses the request and the warnings stop silently.
+name: Deadline watch
+
+on:
+  schedule:
+    # GitHub's shortest interval is 5 minutes, and it runs on a best-effort
+    # queue — a run can be late under load. Warnings therefore land between
+    # roughly 5 and 10 minutes before the fine, never after it.
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: deadline-watch
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the app to check deadlines
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://hao-stock.vercel.app/api/cron/deadline-watch")
+          echo "HTTP $code"
+          cat /tmp/out.json || true
+          # A non-2xx is a real failure worth seeing in the Actions log.
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]

@@ -26,10 +26,6 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/deadline-watch",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/settlement-sweep",
       "schedule": "0 6 * * *"
     },
