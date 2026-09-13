@@ -48,6 +48,14 @@ if (!env.isProd) {
   app.use(morgan('combined', { stream: { write: (m) => logger.info(m.trim()) } }));
 }
 
+// The page behind the QR code on the carton. Mounted at the app root rather
+// than under /api so the printed address stays short — every character is QR
+// modules, and modules are millimetres on a 70 x 36 mm box. It sits above the
+// rate limiter deliberately: Tanzanian mobile networks put a whole market
+// street behind a handful of IP addresses, and a limiter tuned for an API
+// would lock all of them out of a page printed on the product.
+app.use('/p', require('./routes/productPage.routes'));
+
 // Global rate limiter (auth endpoints add a stricter one of their own).
 app.use(
   rateLimit({

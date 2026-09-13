@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
   ClipboardCheck, UserCog, Repeat, BarChart3, ScrollText, ShieldCheck, Settings,
   Bell, Menu, X, LogOut, ChevronDown, User, Lock, Eye, EyeOff, Loader2,
-  Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt, Wallet, Wrench,
+  Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt, Wallet, Wrench, QrCode,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NAV, NAV_GROUPS, ROLE_LABELS, ROLES } from '@/lib/constants';
@@ -19,7 +19,7 @@ const ICONS = {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
   ClipboardCheck, UserCog, Repeat, BarChart3, ScrollText, ShieldCheck, Settings,
   Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt,
-  Wrench,
+  Wrench, QrCode,
 };
 
 // Small "action required" count pill (e.g. pending settlements/returns).

@@ -29,6 +29,13 @@ export default defineConfig({
         target: process.env.VITE_PROXY_TARGET || 'http://localhost:4000',
         changeOrigin: true,
       },
+      // The public product page is served by Express at the app root, not
+      // under /api, so the label editor's preview needs its own proxy in dev.
+      // In production vercel.json rewrites /p to the same function.
+      '/p': {
+        target: process.env.VITE_PROXY_TARGET || 'http://localhost:4000',
+        changeOrigin: true,
+      },
     },
   },
   preview: { port: 4173 },

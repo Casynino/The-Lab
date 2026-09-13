@@ -20,6 +20,22 @@
       "destination": "/api/index"
     },
     {
+      "source": "/p",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/P",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/p/",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/P/",
+      "destination": "/api/index"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "The Lab \u2014 Distribution ERP (frontend)",
+  "description": "The Lab — Distribution ERP (frontend)",
   "scripts": {
     "dev": "vite",
     "build": "node scripts/check-jsx-imports.mjs && vite build",
@@ -20,6 +20,7 @@
     "jspdf": "^2.5.2",
     "lucide-react": "^0.451.0",
     "motion": "^12.40.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.0",

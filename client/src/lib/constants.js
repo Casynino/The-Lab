@@ -67,6 +67,7 @@ export const NAV = [
 
   // ── Administration ──
   { to: '/users', label: 'Users', icon: 'ShieldCheck', roles: ['ADMIN'], group: 'admin' },
+  { to: '/label', label: 'Product Label', icon: 'QrCode', roles: ['ADMIN'], group: 'admin' },
   { to: '/settings', label: 'Settings', icon: 'Settings', roles: ['ADMIN'], group: 'admin' },
 ];
 

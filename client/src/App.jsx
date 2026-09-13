@@ -35,6 +35,7 @@ import NotFound from '@/pages/NotFound';
 // Lazy-loaded so the PDF library (jspdf) only downloads when a user actually
 // opens the Invoice Generator, keeping the main bundle small.
 const InvoiceGenerator = lazy(() => import('@/pages/InvoiceGenerator'));
+const ProductLabel = lazy(() => import('@/pages/ProductLabel'));
 
 // Sales reps get a personal dashboard; everyone else gets the management one.
 function DashboardRouter() {
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/audit" element={<ProtectedRoute roles={[ROLES.ADMIN]}><AuditLogs /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute roles={[ROLES.ADMIN]}><Users /></ProtectedRoute>} />
+        <Route path="/label" element={<ProtectedRoute roles={[ROLES.ADMIN]}><Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute roles={[ROLES.ADMIN]}><Settings /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Route>
