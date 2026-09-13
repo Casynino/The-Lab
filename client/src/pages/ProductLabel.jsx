@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
 import { Save, Download, Plus, Trash2, ExternalLink, RefreshCw } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
-import { PageHeader, Card, CardHeader, CardBody, PageSpinner, Input, Button, Field, Badge } from '@/components/ui';
+import { PageHeader, Card, CardHeader, CardBody, PageSpinner, Input, Textarea, Button, Field, Badge } from '@/components/ui';
 
 // One QR code, the same on every carton, pointing at one page that carries
 // every product. Nothing here is per-box: a code unique to each box would mean
@@ -229,7 +229,7 @@ function FactRows({ facts, onChange }) {
       {facts.map((f, i) => (
         <div key={i} className="flex gap-2">
           <Input
-            className="w-2/5" placeholder="Booklets per pack" value={f.label}
+            className="w-2/5" placeholder="Papers per booklet" value={f.label}
             onChange={(e) => onChange(facts.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
           />
           <Input
@@ -330,7 +330,7 @@ export default function ProductLabel() {
               action={(
                 <Button
                   variant="secondary"
-                  onClick={() => set({ products: [...form.products, { name: '', note: '', facts: [{ label: 'Paper size', value: '' }] }] })}
+                  onClick={() => set({ products: [...form.products, { name: '', note: '', intro: '', facts: [{ label: 'Size', value: '' }] }] })}
                 >
                   <Plus className="mr-2 h-4 w-4" /> Add a paper
                 </Button>
@@ -341,11 +341,11 @@ export default function ProductLabel() {
                 <div key={i} className="space-y-3 rounded-lg border border-border p-4">
                   <div className="flex gap-2">
                     <Input
-                      className="font-medium" placeholder="Pepa 70 × 36" value={p.name}
+                      className="font-medium" placeholder="Pepa Ndogo" value={p.name}
                       onChange={(e) => setProduct(i, { name: e.target.value })}
                     />
                     <Input
-                      className="w-40" placeholder="Single wide" value={p.note}
+                      className="w-44" placeholder="Brown · Unfiltered" value={p.note}
                       onChange={(e) => setProduct(i, { note: e.target.value })}
                     />
                     <button
@@ -356,6 +356,11 @@ export default function ProductLabel() {
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
+                  <Textarea
+                    rows={3} placeholder="A sentence or two about how it rolls and burns."
+                    value={p.intro || ''}
+                    onChange={(e) => setProduct(i, { intro: e.target.value })}
+                  />
                   <FactRows facts={p.facts} onChange={(facts) => setProduct(i, { facts })} />
                 </div>
               ))}

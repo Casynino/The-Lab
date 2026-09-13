@@ -33,15 +33,20 @@ const DEFAULTS = {
   tagline: 'Natural unrefined rolling papers',
   maker: 'The Lab',
   city: 'Dar es Salaam, Tanzania',
+  heroImage: '/pepa-box.jpg',
   products: [
     {
-      name: 'Pepa 70 × 36',
-      note: 'Single wide',
+      name: 'Pepa Ndogo',
+      note: 'Brown · Unfiltered',
+      intro: 'Made from quality raw materials and designed for a slow, smooth and even burn, '
+        + 'Pepa Ndogo delivers a consistent rolling experience every time.',
       facts: [
-        { label: 'Paper size', value: '70 × 36 mm' },
-        { label: 'Booklets per pack', value: '50' },
-        { label: 'Packs per box', value: '50' },
-        { label: 'Paper', value: 'Natural unrefined, unbleached' },
+        { label: 'Colour', value: 'Brown' },
+        { label: 'Size', value: '70 × 36 mm' },
+        { label: 'Type', value: 'Unfiltered' },
+        { label: 'Papers per booklet', value: '50' },
+        { label: 'Booklets per box', value: '50' },
+        { label: 'Papers per box', value: '2,500' },
       ],
     },
   ],
@@ -60,11 +65,18 @@ function shape(raw) {
     tagline: str(c.tagline, DEFAULTS.tagline),
     maker: str(c.maker, DEFAULTS.maker),
     city: str(c.city, DEFAULTS.city),
+    // Only a same-origin path is allowed. An absolute URL here would be a way
+    // to point the page's one image at somebody else's server.
+    heroImage: (() => {
+      const v = str(c.heroImage, DEFAULTS.heroImage);
+      return /^\/[A-Za-z0-9._\-/]*$/.test(v) ? v : DEFAULTS.heroImage;
+    })(),
     products: products
       .filter((p) => p && typeof p === 'object' && String(p.name || '').trim())
       .map((p) => ({
         name: String(p.name).trim(),
         note: str(p.note, ''),
+        intro: str(p.intro, ''),
         // A row with a label but no value yet is KEPT here, so the editor can
         // show it as still to be filled in. renderHtml is what leaves it off
         // the page — the page would rather say less than show a blank line.
@@ -138,7 +150,9 @@ function renderHtml(c, { host } = {}) {
 
   const facts = withValues.map((p) => `
       <section class="item">
-        <h3>${esc(p.name)}${p.note ? `<span class="note">${esc(p.note)}</span>` : ''}</h3>
+        <h3>${esc(p.name)}</h3>
+        ${p.note ? `<p class="note">${esc(p.note)}</p>` : ''}
+        ${p.intro ? `<p class="intro">${esc(p.intro)}</p>` : ''}
         ${p.facts.length ? `<dl>${p.facts.map((f) => `
           <div><dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd></div>`).join('')}
         </dl>` : ''}
@@ -200,10 +214,15 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
     font-size:15px;font-weight:600}
   .addr-url{margin-top:12px;font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     color:var(--soft);word-break:break-all}
-  .item{margin-bottom:20px}
-  .item h3{font-size:19px;font-weight:700}
-  .item .note{font-size:13px;font-weight:500;color:var(--soft);margin-left:9px}
-  dl{margin-top:9px}
+  /* The box, shot from its own die-line. Bleeds to the full width of the
+     page because it is the first thing worth looking at. */
+  .shot{display:block;width:calc(100% + 40px);max-width:none;margin:22px -20px 0;height:auto}
+  .item{margin-bottom:22px}
+  .item h3{font-size:21px;font-weight:700;letter-spacing:-.01em}
+  .item .note{margin-top:3px;font-size:13px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--brick)}
+  .item .intro{margin-top:10px;font-size:15px;line-height:1.6;color:var(--soft)}
+  dl{margin-top:16px}
   dl div{display:flex;justify-content:space-between;gap:18px;padding:7px 0;
     border-bottom:1px solid var(--line)}
   dt{color:var(--soft);font-size:14px;flex:none}
@@ -232,7 +251,14 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   <h1>${esc(c.name)}<sup>™</sup></h1>
   <p class="say">${esc(c.tagline)}</p>
 
+  ${c.heroImage ? `<img class="shot" src="${esc(c.heroImage)}" width="1040" height="437"
+    alt="A box of ${esc(c.name)} rolling papers">` : ''}
+
   <div class="bead"></div>
+
+  ${facts}
+
+  <hr>
 
   <div class="addr">
     <p class="lead">The same code is on every box.</p>
@@ -240,11 +266,6 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
     <p class="same">Not sure about a seller or a price? Call us.</p>
     <p class="addr-url">${esc(host || '')}</p>
   </div>
-
-  <hr>
-
-  <h2>The papers</h2>
-  ${facts}
 
   <hr>
 
