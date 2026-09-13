@@ -312,13 +312,18 @@ export default function ProductLabel() {
             <CardBody className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name"><Input value={form.name} onChange={(e) => set({ name: e.target.value })} /></Field>
-                <Field label="Made by"><Input value={form.maker} onChange={(e) => set({ maker: e.target.value })} /></Field>
+                <Field label="Distributor"><Input value={form.maker} onChange={(e) => set({ maker: e.target.value })} /></Field>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Tagline">
                   <Input value={form.tagline} onChange={(e) => set({ tagline: e.target.value })} />
                 </Field>
-                <Field label="City"><Input value={form.city} onChange={(e) => set({ city: e.target.value })} /></Field>
+                <Field label="Address"><Input value={form.city} onChange={(e) => set({ city: e.target.value })} /></Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Email" hint="Left blank, no email is shown.">
+                  <Input value={form.email ?? ''} onChange={(e) => set({ email: e.target.value })} />
+                </Field>
               </div>
             </CardBody>
           </Card>

@@ -1,10 +1,10 @@
-"""Render a 3/4 product shot of the Pepa display box from its own die-line.
+"""Render a product shot of the Pepa pack from its own die-line.
 
-The box is 155 x 48 x 74 mm (long x tall x deep) — what the die-line's fold
-geometry measures, and what 50 booklets of 70 x 36 mm papers occupy standing
-on edge. The savannah scene is the front; the repeating wordmark panel is the
-top. Both are lifted straight from the print file, so this is the real artwork,
-not an impression of it.
+The pack is 74 x 155 x 48 mm, standing upright — the same format as the
+Civlily box. The die-line's wrap is 74 mm across and 427 mm long, which is
+front (155) + bottom (48) + back (155) + top (48) plus a glue flap, so the
+74 mm dimension is the pack's width and 155 mm its height. The side wings
+are 48 x 155. Both faces below are lifted straight out of the print file.
 """
 from PIL import Image, ImageFilter, ImageEnhance, ImageDraw
 import sys
@@ -43,60 +43,50 @@ def place(canvas, face, quad, shade=1.0):
     ImageDraw.Draw(mask).polygon(quad, fill=255)
     canvas.paste(warped, (0, 0), mask)
 
-# --- axonometric projection: parallel, so nothing warps oddly ----------------
-S = 7.0
-W, H, D = 155 * S, 48 * S, 74 * S
-EZX, EZY = 0.40, -0.33                 # depth runs back, up and to the right
+S = 5.6
+W, H, D = 74 * S, 155 * S, 48 * S
+EZX, EZY = 0.42, -0.26                # depth runs back, up and to the right
 
-PAD = 60
+PAD = 70
 CW = int(W + D * EZX + PAD * 2)
-CH = int(H + abs(D * EZY) + PAD * 2 + 40)
-ox = PAD
-oy = PAD + abs(D * EZY)
+CH = int(H + abs(D * EZY) + PAD * 2 + 30)
+ox, oy = PAD, PAD + abs(D * EZY)
 
 def P(x, y, z): return (ox + x + z * EZX, oy + y + z * EZY)
 
-FTL, FTR = P(0, 0, 0),  P(W, 0, 0)
-FBL, FBR = P(0, H, 0),  P(W, H, 0)
-BTL, BTR = P(0, 0, D),  P(W, 0, D)
+FTL, FTR = P(0, 0, 0), P(W, 0, 0)
+FBL, FBR = P(0, H, 0), P(W, H, 0)
+BTL, BTR = P(0, 0, D), P(W, 0, D)
 BBR      = P(W, H, D)
 
 canvas = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
 
-# Shadow on the ground, before the box.
 sh = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
 ImageDraw.Draw(sh).polygon(
-    [(FBL[0] + 14, FBL[1] + 10), (FBR[0] + 22, FBR[1] + 10),
-     (FBR[0] + 22 + D * EZX, FBR[1] + 10 + D * EZY * 0.42),
-     (FBL[0] + 14 + D * EZX, FBL[1] + 10 + D * EZY * 0.42)],
-    fill=(58, 38, 22, 120))
-canvas.alpha_composite(sh.filter(ImageFilter.GaussianBlur(26)))
+    [(FBL[0] + 10, FBL[1] + 6), (FBR[0] + 18, FBR[1] + 6),
+     (FBR[0] + 18 + D * EZX, FBR[1] + 6 + D * EZY * 0.45),
+     (FBL[0] + 10 + D * EZX, FBL[1] + 6 + D * EZY * 0.45)],
+    fill=(58, 38, 22, 115))
+canvas.alpha_composite(sh.filter(ImageFilter.GaussianBlur(20)))
 
-front = Image.open(SP + "/die/face-hero.png")   # savannah scene, 155 x 48
-top   = Image.open(SP + "/die/face-lid.png")    # wordmark panel, 155 x 74
+front = Image.open(SP + "/die/f-front.png")   # wordmark panel, 74 x 155
+side  = Image.open(SP + "/die/f-side.png")    # savannah strip,  48 x 155
+top   = Image.new("RGB", (64, 64), front.convert("RGB").getpixel((430, 60)))
 
-# The ends carry no artwork on the die-line, so they are flat board.
-end = Image.new("RGB", (64, 64), front.convert("RGB").getpixel((40, 40)))
-
-place(canvas, end,   [FTR, BTR, BBR, FBR], shade=0.78)
-place(canvas, top,   [BTL, BTR, FTR, FTL], shade=1.04)
-place(canvas, front, [FTL, FTR, FBR, FBL], shade=0.98)
+place(canvas, top,   [BTL, BTR, FTR, FTL], shade=1.05)
+place(canvas, side,  [FTR, BTR, BBR, FBR], shade=0.86)
+place(canvas, front, [FTL, FTR, FBR, FBL], shade=1.0)
 
 d = ImageDraw.Draw(canvas)
-d.line([FTL, FTR], fill=(148, 116, 92, 110), width=2)   # front/top fold
-d.line([FTR, BTR], fill=(120, 92, 70, 90),  width=2)    # top/end fold
-d.line([FTR, FBR], fill=(120, 92, 70, 80),  width=2)    # front/end fold
+d.line([FTL, FTR], fill=(150, 118, 94, 110), width=2)
+d.line([FTR, BTR], fill=(122, 94, 72, 90),  width=2)
+d.line([FTR, FBR], fill=(122, 94, 72, 95),  width=2)
 
-# Trim to what was actually drawn, then hand back a sensible delivery size.
-bbox = canvas.getbbox()
-canvas = canvas.crop(bbox)
-TARGET = 1040
+canvas = canvas.crop(canvas.getbbox())
+TARGET = 760
 canvas = canvas.resize((TARGET, round(canvas.height * TARGET / canvas.width)), Image.LANCZOS)
 canvas.save(SP + "/pepa-box.png", optimize=True)
 
-# Delivered as JPEG on the page's own paper colour: a soft shadow needs more
-# tones than a quantised PNG can hold, and every phone in the market can read
-# a JPEG. The page background is a constant we control, so baking it is safe.
 flat = Image.new("RGB", canvas.size, (246, 241, 231))
 flat.paste(canvas, (0, 0), canvas)
 flat.save(SP + "/pepa-box.jpg", quality=84, optimize=True, progressive=True)

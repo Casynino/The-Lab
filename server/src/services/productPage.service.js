@@ -31,8 +31,9 @@ const SETTING_KEY = 'public.productPage';
 const DEFAULTS = {
   name: 'Pepa',
   tagline: 'Natural unrefined rolling papers',
-  maker: 'The Lab',
-  city: 'Dar es Salaam, Tanzania',
+  maker: 'Hǎo-Labs',
+  city: 'Mbezi Goigi, Dar es Salaam',
+  email: 'haodealtz@gmail.com',
   heroImage: '/pepa-box.jpg',
   products: [
     {
@@ -65,6 +66,9 @@ function shape(raw) {
     tagline: str(c.tagline, DEFAULTS.tagline),
     maker: str(c.maker, DEFAULTS.maker),
     city: str(c.city, DEFAULTS.city),
+    // An address, not a link target — rendered as text, escaped like the rest.
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(c.email || '').trim())
+      ? String(c.email).trim() : (c.email === '' ? '' : DEFAULTS.email),
     // Only a same-origin path is allowed. An absolute URL here would be a way
     // to point the page's one image at somebody else's server.
     heroImage: (() => {
@@ -216,7 +220,7 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
     color:var(--soft);word-break:break-all}
   /* The box, shot from its own die-line. Bleeds to the full width of the
      page because it is the first thing worth looking at. */
-  .shot{display:block;width:calc(100% + 40px);max-width:none;margin:22px -20px 0;height:auto}
+  .shot{display:block;width:66%;max-width:300px;margin:24px auto 4px;height:auto}
   .item{margin-bottom:22px}
   .item h3{font-size:21px;font-weight:700;letter-spacing:-.01em}
   .item .note{margin-top:3px;font-size:13px;font-weight:600;letter-spacing:.06em;
@@ -231,6 +235,9 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   .made .lead{font-weight:700;font-size:17px}
   .made .lead + .lead{margin-top:8px}
   .tm{margin-top:12px;font-size:13px;color:var(--soft)}
+  .mail{margin-top:4px;font-size:16px}
+  .mail a{color:var(--brick);text-decoration:none;border-bottom:1px solid currentColor}
+  .nums{margin-top:20px}
   .num{margin-bottom:18px}
   .num-n{font:700 26px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     letter-spacing:.02em;margin-bottom:8px}
@@ -251,7 +258,7 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   <h1>${esc(c.name)}<sup>™</sup></h1>
   <p class="say">${esc(c.tagline)}</p>
 
-  ${c.heroImage ? `<img class="shot" src="${esc(c.heroImage)}" width="1040" height="437"
+  ${c.heroImage ? `<img class="shot" src="${esc(c.heroImage)}" width="760" height="1266"
     alt="A box of ${esc(c.name)} rolling papers">` : ''}
 
   <div class="bead"></div>
@@ -271,15 +278,17 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
 
   <h2>Made by</h2>
   <div class="made">
-    <p class="lead">${esc(c.name)} is made by ${esc(c.maker)}, ${esc(c.city)}.</p>
+    <p class="lead">${esc(c.name)} is distributed by ${esc(c.maker)}.</p>
     <p class="lead">${esc(c.maker)} is the only distributor.</p>
     <p class="tm">${esc(c.name)}™ is a trademark of ${esc(c.maker)}.</p>
   </div>
 
   <hr>
 
-  <h2>Wholesale</h2>
-  ${call}
+  <h2>Get in touch</h2>
+  <p class="say">${esc(c.city)}</p>
+  ${c.email ? `<p class="mail"><a href="mailto:${esc(c.email)}">${esc(c.email)}</a></p>` : ''}
+  <div class="nums">${call}</div>
 
   <hr>
 
