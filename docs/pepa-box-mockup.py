@@ -69,7 +69,7 @@ ImageDraw.Draw(sh).polygon(
     fill=(58, 38, 22, 115))
 canvas.alpha_composite(sh.filter(ImageFilter.GaussianBlur(20)))
 
-front = Image.open(SP + "/die/f-front.png")   # wordmark panel, 74 x 155
+front = Image.open(SP + "/die/pepa-front.png") # composed front, 74 x 155
 side  = Image.open(SP + "/die/f-side.png")    # savannah strip,  48 x 155
 top   = Image.new("RGB", (64, 64), front.convert("RGB").getpixel((430, 60)))
 

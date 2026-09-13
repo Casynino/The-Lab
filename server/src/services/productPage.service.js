@@ -51,7 +51,7 @@ const DEFAULTS = {
       ],
     },
   ],
-  phones: ['0752828082', '0788734003'],
+  phones: ['0788734003'],
   waText: 'Hello, I want wholesale prices for Pepa.',
 };
 
@@ -165,14 +165,15 @@ function renderHtml(c, { host } = {}) {
   // One number, two ways to reach it. The WhatsApp link arrives with the
   // wholesale question already typed — in this market that prefilled message
   // is worth more than everything else on the page.
+  // The number rides inside the button that dials it. Set loose as a heading,
+  // the phone underlines it in its own blue and the block falls apart.
   const call = phones.map((p) => `
-      <div class="num">
-        <div class="num-n">${esc(p.display)}</div>
-        <div class="num-a">
-          <a class="btn" href="tel:${esc(p.tel)}">Call</a>
-          <a class="btn wa" href="https://wa.me/${esc(p.wa)}?text=${waMsg}">WhatsApp</a>
-        </div>
-      </div>`).join('');
+      <a class="btn" href="tel:${esc(p.tel)}">
+        <span class="btn-k">Call</span><span class="btn-n">${esc(p.display)}</span>
+      </a>
+      <a class="btn wa" href="https://wa.me/${esc(p.wa)}?text=${waMsg}">
+        <span class="btn-k">WhatsApp</span><span class="btn-n">${esc(p.display)}</span>
+      </a>`).join('');
 
   const title = `${c.name} — ${c.tagline}`;
 
@@ -181,6 +182,7 @@ function renderHtml(c, { host } = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(`${c.name} — ${c.tagline}. ${c.maker}, ${c.city}. Wholesale: ${phones.map((p) => p.display).join(', ')}`)}">
 <meta property="og:type" content="website">
@@ -207,17 +209,6 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
       var(--brick) 0 7px,#e0a03c 7px 14px,var(--ink) 14px 21px,#e8dcc2 21px 28px)}
   h2{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--soft);
     font-weight:700;margin-bottom:12px}
-  .addr{border:1px solid var(--line);border-left:3px solid var(--brick);
-    background:rgba(255,255,255,.5);padding:14px 16px;border-radius:2px}
-  .addr .url{font:700 19px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    color:var(--brick);word-break:break-all}
-  .addr p{margin-top:8px;font-size:14px}
-  .addr .sub{margin-top:4px;font-size:14px}
-  .addr .lead{font-size:16px;font-weight:700}
-  .addr .same{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);
-    font-size:15px;font-weight:600}
-  .addr-url{margin-top:12px;font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    color:var(--soft);word-break:break-all}
   /* The box, shot from its own die-line. Bleeds to the full width of the
      page because it is the first thing worth looking at. */
   .shot{display:block;width:66%;max-width:300px;margin:24px auto 4px;height:auto}
@@ -237,16 +228,15 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   .tm{margin-top:12px;font-size:13px;color:var(--soft)}
   .mail{margin-top:4px;font-size:16px}
   .mail a{color:var(--brick);text-decoration:none;border-bottom:1px solid currentColor}
-  .nums{margin-top:20px}
-  .num{margin-bottom:18px}
-  .num-n{font:700 26px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    letter-spacing:.02em;margin-bottom:8px}
-  .num-a{display:flex;gap:8px}
-  .btn{flex:1;display:flex;align-items:center;justify-content:center;
-    min-height:56px;padding:0 10px;border:1px solid var(--ink);border-radius:2px;
+  .nums{margin-top:18px}
+  .btn{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    min-height:58px;padding:0 20px;margin-bottom:10px;border-radius:3px;
     background:var(--ink);color:var(--paper);text-decoration:none;
-    font-size:15px;font-weight:700;-webkit-tap-highlight-color:transparent}
-  .btn.wa{background:#128c4a;border-color:#128c4a;color:#fff}
+    -webkit-tap-highlight-color:transparent}
+  .btn-k{font-size:15px;font-weight:700;letter-spacing:.03em}
+  .btn-n{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;
+    letter-spacing:.02em;opacity:.92}
+  .btn.wa{background:#128c4a;color:#fff}
   footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);
     font-size:12px;color:var(--soft)}
   /* Deliberately light in every case, including on a phone set to dark mode.
@@ -264,15 +254,6 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   <div class="bead"></div>
 
   ${facts}
-
-  <hr>
-
-  <div class="addr">
-    <p class="lead">The same code is on every box.</p>
-    <p class="sub">It shows the product and who makes it. It does not prove this box.</p>
-    <p class="same">Not sure about a seller or a price? Call us.</p>
-    <p class="addr-url">${esc(host || '')}</p>
-  </div>
 
   <hr>
 
