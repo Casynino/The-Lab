@@ -229,7 +229,7 @@ function FactRows({ facts, onChange }) {
       {facts.map((f, i) => (
         <div key={i} className="flex gap-2">
           <Input
-            className="w-2/5" placeholder="Leaves per booklet" value={f.label}
+            className="w-2/5" placeholder="Booklets per pack" value={f.label}
             onChange={(e) => onChange(facts.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
           />
           <Input
@@ -314,11 +314,8 @@ export default function ProductLabel() {
                 <Field label="Name"><Input value={form.name} onChange={(e) => set({ name: e.target.value })} /></Field>
                 <Field label="Made by"><Input value={form.maker} onChange={(e) => set({ maker: e.target.value })} /></Field>
               </div>
-              <Field label="Tagline — Swahili">
-                <Input value={form.taglineSw} onChange={(e) => set({ taglineSw: e.target.value })} />
-              </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Tagline — English">
+                <Field label="Tagline">
                   <Input value={form.tagline} onChange={(e) => set({ tagline: e.target.value })} />
                 </Field>
                 <Field label="City"><Input value={form.city} onChange={(e) => set({ city: e.target.value })} /></Field>

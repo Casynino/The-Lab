@@ -31,7 +31,6 @@ const SETTING_KEY = 'public.productPage';
 const DEFAULTS = {
   name: 'Pepa',
   tagline: 'Natural unrefined rolling papers',
-  taglineSw: 'Karatasi za kusokota — asilia, hazijasafishwa',
   maker: 'The Lab',
   city: 'Dar es Salaam, Tanzania',
   products: [
@@ -40,15 +39,14 @@ const DEFAULTS = {
       note: 'Single wide',
       facts: [
         { label: 'Paper size', value: '70 × 36 mm' },
-        { label: 'Paper', value: 'Natural unrefined — unbleached, no chlorine' },
-        { label: 'Leaves per booklet', value: '' },
-        { label: 'Booklets per box', value: '' },
-        { label: 'Gum', value: '' },
+        { label: 'Booklets per pack', value: '50' },
+        { label: 'Packs per box', value: '50' },
+        { label: 'Paper', value: 'Natural unrefined, unbleached' },
       ],
     },
   ],
   phones: ['0752828082', '0788734003'],
-  waText: 'Habari, nataka bei ya jumla ya Pepa.',
+  waText: 'Hello, I want wholesale prices for Pepa.',
 };
 
 // Merge stored content over the defaults, dropping anything of the wrong
@@ -60,7 +58,6 @@ function shape(raw) {
   return {
     name: str(c.name, DEFAULTS.name),
     tagline: str(c.tagline, DEFAULTS.tagline),
-    taglineSw: str(c.taglineSw, DEFAULTS.taglineSw),
     maker: str(c.maker, DEFAULTS.maker),
     city: str(c.city, DEFAULTS.city),
     products: products
@@ -154,7 +151,7 @@ function renderHtml(c, { host } = {}) {
       <div class="num">
         <div class="num-n">${esc(p.display)}</div>
         <div class="num-a">
-          <a class="btn" href="tel:${esc(p.tel)}">Piga simu · Call</a>
+          <a class="btn" href="tel:${esc(p.tel)}">Call</a>
           <a class="btn wa" href="https://wa.me/${esc(p.wa)}?text=${waMsg}">WhatsApp</a>
         </div>
       </div>`).join('');
@@ -162,15 +159,15 @@ function renderHtml(c, { host } = {}) {
   const title = `${c.name} — ${c.tagline}`;
 
   return `<!doctype html>
-<html lang="sw">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(title)}</title>
-<meta name="description" content="${esc(`${c.name} — ${c.tagline}. ${c.maker}, ${c.city}. Jumla / wholesale: ${phones.map((p) => p.display).join(', ')}`)}">
+<meta name="description" content="${esc(`${c.name} — ${c.tagline}. ${c.maker}, ${c.city}. Wholesale: ${phones.map((p) => p.display).join(', ')}`)}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="${esc(title)}">
-<meta property="og:description" content="${esc(`${c.maker} ndiye msambazaji pekee. Jumla: ${phones.map((p) => p.display).join(' · ')}`)}">
+<meta property="og:description" content="${esc(`${c.maker} is the only distributor. Wholesale: ${phones.map((p) => p.display).join(' · ')}`)}">
 ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
 <meta name="robots" content="index, follow">
 <style>
@@ -182,8 +179,8 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
     padding:28px 20px 44px;max-width:520px;margin:0 auto}
   h1{font-size:clamp(44px,17vw,76px);line-height:.92;letter-spacing:-.03em;font-weight:800}
   h1 sup{font-size:.24em;font-weight:600;letter-spacing:0;vertical-align:super;margin-left:.12em}
-  .sw{margin-top:12px;font-size:17px;font-weight:600}
-  .en{color:var(--soft);font-size:15px}
+  .say{margin-top:12px;font-size:17px;font-weight:600}
+  .sub{color:var(--soft);font-size:15px}
   hr{border:0;border-top:1px solid var(--line);margin:26px 0}
   /* The beadwork band off the carton border. Used exactly twice — under the
      wordmark and above the footer — so it stays a signature, not a pattern. */
@@ -197,10 +194,10 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   .addr .url{font:700 19px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     color:var(--brick);word-break:break-all}
   .addr p{margin-top:8px;font-size:14px}
-  .addr .en{margin-top:2px;font-size:13px}
+  .addr .sub{margin-top:4px;font-size:14px}
   .addr .lead{font-size:16px;font-weight:700}
   .addr .same{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);
-    font-size:14px}
+    font-size:15px;font-weight:600}
   .addr-url{margin-top:12px;font:600 13px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     color:var(--soft);word-break:break-all}
   .item{margin-bottom:20px}
@@ -213,7 +210,7 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   dd{text-align:right;font-size:14px;font-weight:600}
   .made p{font-size:15px}
   .made .lead{font-weight:700;font-size:17px}
-  .made .en{margin-top:2px}
+  .made .lead + .lead{margin-top:8px}
   .tm{margin-top:12px;font-size:13px;color:var(--soft)}
   .num{margin-bottom:18px}
   .num-n{font:700 26px/1.1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
@@ -233,46 +230,40 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
 </head>
 <body>
   <h1>${esc(c.name)}<sup>™</sup></h1>
-  <p class="sw">${esc(c.taglineSw)}</p>
-  <p class="en">${esc(c.tagline)}</p>
+  <p class="say">${esc(c.tagline)}</p>
 
   <div class="bead"></div>
 
-  <h2>Msimbo huu unamaanisha nini</h2>
   <div class="addr">
-    <p class="lead">Msimbo huu ni sawa kwenye kila boksi. Unakuonyesha bidhaa na mtengenezaji — hauthibitishi boksi hili peke yake.</p>
-    <p class="en">This code is the same on every box. It shows you the product and who makes it — it does not prove this one box is genuine.</p>
-    <p class="same">Ukiwa na shaka kuhusu muuzaji au bei, tupigie simu. Namba ziko hapa chini.<br>
-      <span class="en">If you are unsure about the seller or the price, call us. The numbers are below — that call is the real check.</span></p>
+    <p class="lead">The same code is on every box.</p>
+    <p class="sub">It shows the product and who makes it. It does not prove this box.</p>
+    <p class="same">Not sure about a seller or a price? Call us.</p>
     <p class="addr-url">${esc(host || '')}</p>
   </div>
 
   <hr>
 
-  <h2>Bidhaa · The papers</h2>
+  <h2>The papers</h2>
   ${facts}
 
   <hr>
 
-  <h2>Mtengenezaji · Who makes it</h2>
+  <h2>Made by</h2>
   <div class="made">
-    <p class="lead">${esc(c.name)} ni bidhaa ya ${esc(c.maker)}.</p>
-    <p class="en">${esc(c.name)} is a product of ${esc(c.maker)}, ${esc(c.city)}.</p>
-    <p class="lead" style="margin-top:12px">${esc(c.maker)} ndiye msambazaji pekee.</p>
-    <p class="en">${esc(c.maker)} is the only distributor. If someone offers you ${esc(c.name)} wholesale and they are not ${esc(c.maker)}, it did not come from us.</p>
-    <p class="tm">${esc(c.name)}™ — alama ya biashara ya ${esc(c.maker)} · a trademark of ${esc(c.maker)}.</p>
+    <p class="lead">${esc(c.name)} is made by ${esc(c.maker)}, ${esc(c.city)}.</p>
+    <p class="lead">${esc(c.maker)} is the only distributor.</p>
+    <p class="tm">${esc(c.name)}™ is a trademark of ${esc(c.maker)}.</p>
   </div>
 
   <hr>
 
-  <h2>Bei ya jumla · Wholesale</h2>
+  <h2>Wholesale</h2>
   ${call}
 
   <hr>
 
-  <h2>Umeona bandia? · Seen a fake?</h2>
-  <p class="sw">Tupigie na utuambie ulinunua wapi.</p>
-  <p class="en">Call us and tell us where you bought it.</p>
+  <h2>Seen a fake?</h2>
+  <p class="say">Call us and say where you bought it.</p>
 
   <div class="bead"></div>
   <footer>${esc(c.maker)} · ${esc(c.city)}</footer>
