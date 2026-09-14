@@ -27,12 +27,14 @@ router.get(
       "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
     );
 
-    // The CDN is the real cost control here, not a rate limiter: content that
-    // changes twice a year is served from the edge, so a busy scanning day
-    // costs about one invocation per region per day instead of one per scan.
-    // stale-while-revalidate also means a database outage serves a slightly
-    // old page rather than a dead link on somebody's shelf.
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800');
+    // The CDN is the real cost control here, not a rate limiter: a busy
+    // scanning day costs a handful of invocations per region per hour rather
+    // than one per scan. Ten minutes rather than a day, because the label
+    // editor writes straight to this page — a day-long edge cache means an
+    // admin saves a correction and cannot see it, which is how a wrong figure
+    // survives. stale-while-revalidate still covers a database outage: an
+    // old page beats a dead link on somebody's shelf.
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=600, stale-while-revalidate=86400');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(page.renderHtml(content, { host }));
   }),
