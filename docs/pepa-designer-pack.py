@@ -31,7 +31,7 @@ p = Image.new("RGB", (A4W, A4H), BG); d = ImageDraw.Draw(p)
 M = int(18 * MM)
 d.text((M, M), "Pepa — box artwork", font=FT(26, True), fill=INK)
 d.text((M, M + int(11 * MM)),
-       "155 × 74 × 48 mm · 50 booklets per box · 32 leaves per booklet",
+       "155 × 74 × 48 mm · 50 booklets per box · 50 leaves per booklet",
        font=FT(12), fill=SOFT)
 
 body = [
@@ -83,7 +83,7 @@ pages.append(p2)
 
 # ── one page per face, at true size ─────────────────────────────────────────
 for label, key, w_mm, h_mm in FACES:
-    src = Image.open(SP + f"/die2/{key}.png").convert("RGB")
+    src = Image.open(SP + f"/die3/{key}.png").convert("RGB")
     target = (int(round(w_mm * MM)), int(round(h_mm * MM)))
     face = src.resize(target, Image.LANCZOS)
     face.save(f"{OUT}/faces/pepa-{label.lower().replace(' ', '-')}-{w_mm}x{h_mm}mm.png",

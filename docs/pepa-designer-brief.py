@@ -111,13 +111,13 @@ y = para(d, M, y, [
     "It must encode exactly:  HTTPS://THE-HAOLAB.VERCEL.APP/P",
     "Keep it UPPERCASE. Lower case forces the code into byte mode, which needs more modules",
     "and makes every module smaller at the same printed size.",
-    "Print it 15 mm or larger, with 3 mm clear on all four sides. It is ~17 mm today, which is good.",
+    "Print it 15 mm or larger, with 3 mm clear on all four sides. It is ~21 mm today, which is good.",
     "It can live on a 48 mm side or on the back — anywhere it keeps that size and clear space.",
 ])
 y += int(4 * MM)
 d.text((M, y), "Also still to place", font=FT(13, True), fill=INK); y += int(8 * MM)
 para(d, M, y, [
-    "‘32 LEAVES’ — it is on the current artwork and must survive the re-layout.",
+    "‘50 LEAVES’ — it is on the current artwork and must survive the re-layout.",
     "Final files to be set from the original vector, not from any image supplied for reference.",
 ])
 pages.append(p)

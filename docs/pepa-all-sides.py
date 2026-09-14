@@ -31,7 +31,7 @@ def fit(img, box_w):
 view_t = [fit(v, COL) for v in views]
 flat = []
 for label, dims, key in FACES:
-    im = Image.open(SP + f"/die2/{key}.png").convert("RGB")
+    im = Image.open(SP + f"/die3/{key}.png").convert("RGB")
     w = round(im.width / (300 / 25.4) * PPM)
     flat.append((label, dims, fit(im, min(w, COL))))
 

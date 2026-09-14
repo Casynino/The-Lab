@@ -45,10 +45,10 @@ const DEFAULTS = {
         { label: 'Colour', value: 'Brown' },
         { label: 'Size', value: '70 × 36 mm' },
         { label: 'Type', value: 'Unfiltered' },
-        // Straight off the printed box: it says 32 LEAVES and 50 PER BOX.
-        { label: 'Leaves per booklet', value: '32' },
+        // Straight off the printed box: it says 50 LEAVES and 50 PER BOX.
+        { label: 'Leaves per booklet', value: '50' },
         { label: 'Booklets per box', value: '50' },
-        { label: 'Papers per box', value: '1,600' },
+        { label: 'Papers per box', value: '2,500' },
       ],
     },
   ],

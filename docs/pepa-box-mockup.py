@@ -44,7 +44,7 @@ def place(canvas, face, quad, shade=1.0):
     ImageDraw.Draw(mask).polygon(quad, fill=255)
     canvas.paste(warped, (0, 0), mask)
 
-F = {n: Image.open(SP + f"/die2/{n}.png") for n in
+F = {n: Image.open(SP + f"/die3/{n}.png") for n in
      ("front", "back", "top", "bottom", "end", "end2")}
 
 def render(face_img, lid_img, end_img, scale=6.4):
