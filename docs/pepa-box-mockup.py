@@ -1,14 +1,15 @@
-"""Render a product shot of the Pepa pack from its own die-line.
+"""Render the Pepa display box from its final die-line, from two angles.
 
-The pack is 74 x 155 x 48 mm, standing upright — the same format as the
-Civlily box. The die-line's wrap is 74 mm across and 427 mm long, which is
-front (155) + bottom (48) + back (155) + top (48) plus a glue flap, so the
-74 mm dimension is the pack's width and 155 mm its height. The side wings
-are 48 x 155. Both faces below are lifted straight out of the print file.
+Geometry comes from the die-line's own folds, not from guesswork. The wrap is
+74 mm across and 436 mm long, and its folds fall at 47.6 / 155 / 46.9 / 155 —
+so the box is 155 x 74 x 48 mm. Which way up is settled by the end panels:
+the Maasai on one of them stands 74 mm tall, so 74 is the height, not the
+depth. That makes the 155 x 74 wrap panels the front and back, the 155 x 48
+wings the top and bottom, and the 48 x 74 panels the two ends. 50 booklets of
+70 x 36 mm papers stand in a row along the 155 mm length.
 """
 from PIL import Image, ImageFilter, ImageEnhance, ImageDraw
 import sys
-
 SP = sys.argv[1]
 
 def solve(M, b):
@@ -43,51 +44,43 @@ def place(canvas, face, quad, shade=1.0):
     ImageDraw.Draw(mask).polygon(quad, fill=255)
     canvas.paste(warped, (0, 0), mask)
 
-S = 5.6
-W, H, D = 74 * S, 155 * S, 48 * S
-EZX, EZY = 0.42, -0.26                # depth runs back, up and to the right
+F = {n: Image.open(SP + f"/die2/{n}.png") for n in
+     ("front", "back", "top", "bottom", "end", "end2")}
 
-PAD = 70
-CW = int(W + D * EZX + PAD * 2)
-CH = int(H + abs(D * EZY) + PAD * 2 + 30)
-ox, oy = PAD, PAD + abs(D * EZY)
+def render(face_img, lid_img, end_img, scale=6.4):
+    W, H, D = 155 * scale, 74 * scale, 48 * scale
+    EZX, EZY = 0.40, -0.31
+    PAD = 64
+    CW = int(W + D * EZX + PAD * 2)
+    CH = int(H + abs(D * EZY) + PAD * 2 + 26)
+    ox, oy = PAD, PAD + abs(D * EZY)
+    P = lambda x, y, z: (ox + x + z * EZX, oy + y + z * EZY)
+    FTL, FTR, FBL, FBR = P(0,0,0), P(W,0,0), P(0,H,0), P(W,H,0)
+    BTL, BTR, BBR      = P(0,0,D), P(W,0,D), P(W,H,D)
 
-def P(x, y, z): return (ox + x + z * EZX, oy + y + z * EZY)
+    c = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+    sh = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).polygon(
+        [(FBL[0]+12, FBL[1]+8), (FBR[0]+20, FBR[1]+8),
+         (FBR[0]+20+D*EZX, FBR[1]+8+D*EZY*0.42),
+         (FBL[0]+12+D*EZX, FBL[1]+8+D*EZY*0.42)], fill=(56, 36, 20, 120))
+    c.alpha_composite(sh.filter(ImageFilter.GaussianBlur(20)))
 
-FTL, FTR = P(0, 0, 0), P(W, 0, 0)
-FBL, FBR = P(0, H, 0), P(W, H, 0)
-BTL, BTR = P(0, 0, D), P(W, 0, D)
-BBR      = P(W, H, D)
+    place(c, end_img,  [FTR, BTR, BBR, FBR], shade=0.80)
+    place(c, lid_img,  [BTL, BTR, FTR, FTL], shade=1.05)
+    place(c, face_img, [FTL, FTR, FBR, FBL], shade=1.0)
 
-canvas = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+    d = ImageDraw.Draw(c)
+    d.line([FTL, FTR], fill=(150, 118, 94, 110), width=2)
+    d.line([FTR, BTR], fill=(120, 92, 70, 90),  width=2)
+    d.line([FTR, FBR], fill=(120, 92, 70, 95),  width=2)
+    return c.crop(c.getbbox())
 
-sh = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
-ImageDraw.Draw(sh).polygon(
-    [(FBL[0] + 10, FBL[1] + 6), (FBR[0] + 18, FBR[1] + 6),
-     (FBR[0] + 18 + D * EZX, FBR[1] + 6 + D * EZY * 0.45),
-     (FBL[0] + 10 + D * EZX, FBL[1] + 6 + D * EZY * 0.45)],
-    fill=(58, 38, 22, 115))
-canvas.alpha_composite(sh.filter(ImageFilter.GaussianBlur(20)))
-
-front = Image.open(SP + "/die/pepa-front.png") # composed front, 74 x 155
-side  = Image.open(SP + "/die/f-side.png")    # savannah strip,  48 x 155
-top   = Image.new("RGB", (64, 64), front.convert("RGB").getpixel((430, 60)))
-
-place(canvas, top,   [BTL, BTR, FTR, FTL], shade=1.05)
-place(canvas, side,  [FTR, BTR, BBR, FBR], shade=0.86)
-place(canvas, front, [FTL, FTR, FBR, FBL], shade=1.0)
-
-d = ImageDraw.Draw(canvas)
-d.line([FTL, FTR], fill=(150, 118, 94, 110), width=2)
-d.line([FTR, BTR], fill=(122, 94, 72, 90),  width=2)
-d.line([FTR, FBR], fill=(122, 94, 72, 95),  width=2)
-
-canvas = canvas.crop(canvas.getbbox())
-TARGET = 760
-canvas = canvas.resize((TARGET, round(canvas.height * TARGET / canvas.width)), Image.LANCZOS)
-canvas.save(SP + "/pepa-box.png", optimize=True)
-
-flat = Image.new("RGB", canvas.size, (246, 241, 231))
-flat.paste(canvas, (0, 0), canvas)
-flat.save(SP + "/pepa-box.jpg", quality=84, optimize=True, progressive=True)
-print("wrote", canvas.size)
+# A: the Kilimanjaro front, the QR lid, and the Maasai end.
+# B: the box turned right round — the 32 LEAVES back, the same lid seen from
+# behind (so its type is upside down, as it would really be), the other end.
+a = render(F["bottom"], F["front"], F["end2"])
+b = render(F["top"], F["front"].rotate(180), F["end"])
+for name, img in (("a", a), ("b", b)):
+    img.save(SP + f"/view-{name}.png", optimize=True)
+    print(name, img.size)

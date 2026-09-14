@@ -45,9 +45,10 @@ const DEFAULTS = {
         { label: 'Colour', value: 'Brown' },
         { label: 'Size', value: '70 × 36 mm' },
         { label: 'Type', value: 'Unfiltered' },
-        { label: 'Papers per booklet', value: '50' },
+        // Straight off the printed box: it says 32 LEAVES and 50 PER BOX.
+        { label: 'Leaves per booklet', value: '32' },
         { label: 'Booklets per box', value: '50' },
-        { label: 'Papers per box', value: '2,500' },
+        { label: 'Papers per box', value: '1,600' },
       ],
     },
   ],
@@ -211,7 +212,7 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
     font-weight:700;margin-bottom:12px}
   /* The box, shot from its own die-line. Bleeds to the full width of the
      page because it is the first thing worth looking at. */
-  .shot{display:block;width:66%;max-width:300px;margin:24px auto 4px;height:auto}
+  .shot{display:block;width:calc(100% + 40px);max-width:none;margin:22px -20px 6px;height:auto}
   .item{margin-bottom:22px}
   .item h3{font-size:21px;font-weight:700;letter-spacing:-.01em}
   .item .note{margin-top:3px;font-size:13px;font-weight:600;letter-spacing:.06em;
@@ -248,7 +249,7 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   <h1>${esc(c.name)}<sup>™</sup></h1>
   <p class="say">${esc(c.tagline)}</p>
 
-  ${c.heroImage ? `<img class="shot" src="${esc(c.heroImage)}" width="760" height="1266"
+  ${c.heroImage ? `<img class="shot" src="${esc(c.heroImage)}" width="1040" height="548"
     alt="A box of ${esc(c.name)} rolling papers">` : ''}
 
   <div class="bead"></div>
