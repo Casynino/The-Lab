@@ -210,9 +210,9 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
       var(--brick) 0 7px,#e0a03c 7px 14px,var(--ink) 14px 21px,#e8dcc2 21px 28px)}
   h2{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--soft);
     font-weight:700;margin-bottom:12px}
-  /* The box, shot from its own die-line. Bleeds to the full width of the
-     page because it is the first thing worth looking at. */
-  .shot{display:block;width:calc(100% + 40px);max-width:none;margin:22px -20px 6px;height:auto}
+  /* The pack, rendered from its own die-line. It stands upright, so it sits
+     centred at most of the column width rather than bleeding edge to edge. */
+  .shot{display:block;width:74%;max-width:340px;margin:18px auto 4px;height:auto}
   .item{margin-bottom:22px}
   .item h3{font-size:21px;font-weight:700;letter-spacing:-.01em}
   .item .note{margin-top:3px;font-size:13px;font-weight:600;letter-spacing:.06em;
@@ -249,7 +249,7 @@ ${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
   <h1>${esc(c.name)}<sup>™</sup></h1>
   <p class="say">${esc(c.tagline)}</p>
 
-  ${c.heroImage ? `<img class="shot" src="${esc(c.heroImage)}" width="1040" height="548"
+  ${c.heroImage ? `<img class="shot" src="${esc(c.heroImage)}" width="900" height="1200"
     alt="A box of ${esc(c.name)} rolling papers">` : ''}
 
   <div class="bead"></div>
