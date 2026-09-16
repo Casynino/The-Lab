@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
 import { Save, Download, Plus, Trash2, ExternalLink, RefreshCw } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
-import { PageHeader, Card, CardHeader, CardBody, PageSpinner, Input, Textarea, Button, Field, Badge } from '@/components/ui';
+import { PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, Input, Textarea, Button, Field, Badge } from '@/components/ui';
 
 // One QR code, the same on every carton, pointing at one page that carries
 // every product. Nothing here is per-box: a code unique to each box would mean
@@ -258,7 +258,7 @@ function FactRows({ facts, onChange }) {
 
 export default function ProductLabel() {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['product-page'],
     queryFn: () => api.get('/product-page').then(unwrap),
   });
@@ -270,8 +270,12 @@ export default function ProductLabel() {
 
   const save = useMutation({
     mutationFn: (body) => api.put('/product-page', body),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success('Saved — the page is live');
+      // Continue from what the server stored, not from what was sent: it gives
+      // each product its picture key, and a form that never took those back
+      // would drop them again on the next Save.
+      if (res?.data?.data) setForm(res.data.data);
       qc.invalidateQueries({ queryKey: ['product-page'] });
       setPreviewKey(Date.now());
     },
@@ -285,6 +289,19 @@ export default function ProductLabel() {
     return form.products.reduce((n, p) => n + p.facts.filter((f) => f.label && !f.value).length, 0);
   }, [form]);
 
+  // The server refuses to hand over defaults when it cannot read the saved
+  // label, so that a Save can never overwrite it. Say so, rather than spin.
+  if (isError && !form) {
+    return (
+      <Card>
+        <EmptyState
+          title="Couldn't load the label"
+          message={`${apiError(error)} — nothing has been changed. Try again in a moment.`}
+          action={<Button onClick={() => refetch()} loading={isFetching}><RefreshCw className="mr-2 h-4 w-4" /> Try again</Button>}
+        />
+      </Card>
+    );
+  }
   if (isLoading || !form) return <PageSpinner />;
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));

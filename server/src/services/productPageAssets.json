@@ -1,0 +1,118 @@
+{
+  "range": {
+    "alt": "Pepa 70 × 36 pack and Pepa King Size Slim display box",
+    "webp": [
+      {
+        "w": 700,
+        "src": "/pepa/range-700.4f573326ec.webp",
+        "bytes": 20654
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/range-1000.f1a16c23db.webp",
+        "bytes": 36552
+      }
+    ],
+    "jpg": [
+      {
+        "w": 700,
+        "src": "/pepa/range-700.01d46aba26.jpg",
+        "bytes": 30339
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/range-1000.a66c8c1f3e.jpg",
+        "bytes": 55408
+      }
+    ],
+    "w": 1000,
+    "h": 750
+  },
+  "small": {
+    "alt": "Pepa 70 × 36 pack, front and back, with two booklets",
+    "webp": [
+      {
+        "w": 700,
+        "src": "/pepa/small-700.0eee3aa728.webp",
+        "bytes": 23056
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/small-1000.4185922d82.webp",
+        "bytes": 39812
+      }
+    ],
+    "jpg": [
+      {
+        "w": 700,
+        "src": "/pepa/small-700.ae03a8bab1.jpg",
+        "bytes": 38475
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/small-1000.98f0693f8a.jpg",
+        "bytes": 67951
+      }
+    ],
+    "w": 1000,
+    "h": 900
+  },
+  "kss-open": {
+    "alt": "Pepa King Size Slim display box, open, with a booklet",
+    "webp": [
+      {
+        "w": 700,
+        "src": "/pepa/kss-open-700.1f2a148335.webp",
+        "bytes": 19890
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/kss-open-1000.69d44af942.webp",
+        "bytes": 35810
+      }
+    ],
+    "jpg": [
+      {
+        "w": 700,
+        "src": "/pepa/kss-open-700.73588dfb33.jpg",
+        "bytes": 29513
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/kss-open-1000.69b5504961.jpg",
+        "bytes": 54072
+      }
+    ],
+    "w": 1000,
+    "h": 900
+  },
+  "kss-closed": {
+    "alt": "Pepa King Size Slim display box, closed",
+    "webp": [
+      {
+        "w": 700,
+        "src": "/pepa/kss-closed-700.98ca7f2f60.webp",
+        "bytes": 26650
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/kss-closed-1000.e06594c1e7.webp",
+        "bytes": 44536
+      }
+    ],
+    "jpg": [
+      {
+        "w": 700,
+        "src": "/pepa/kss-closed-700.d127ea2824.jpg",
+        "bytes": 38884
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/kss-closed-1000.d09e22aff8.jpg",
+        "bytes": 67564
+      }
+    ],
+    "w": 1000,
+    "h": 717
+  }
+}

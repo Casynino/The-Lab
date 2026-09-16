@@ -15,6 +15,10 @@ King Size Slim box (112 x 126 x 55): walls 126 / 112 / 126 / 112 from
 36.7 mm, 220.2-275.3 mm tall; lid 400.7-512.7 x 94.2-220.2 hinged off the back
 wall; tuck flap 54.2-94.2. Booklet (110 x 26 x 4): cover folds at 100.1 /
 125.6 / 129.5 / 155.4 / 159.7 / 185.7 on page 2, 68.3-178.4 mm across.
+
+70 x 36 booklet (73 x 22.5 x 5): the small drawing in the corner of the 70 x 36
+sheet, 25.6-98.6 mm across; back cover 290.6-312.7 (printed upside down),
+spine 312.7-317.7, front cover 317.7-340.4.
 """
 import sys, os
 from PIL import Image
@@ -47,4 +51,8 @@ b.crop((bx0+I, P(159.7)+I, bx1-I, P(185.7)-I)).save(os.path.join(F, "bk_front.pn
 b.crop((bx0+I, P(129.5)+I, bx1-I, P(155.4)-I)).rotate(180).save(os.path.join(F, "bk_back.png"))
 b.crop((bx0+I, P(155.4)+1, bx1-I, P(159.7)-1)).save(os.path.join(F, "bk_spine.png"))
 b.crop((bx0+I, P(100.1)+I, bx1-I, P(125.6)-I)).save(os.path.join(F, "bk_inner.png"))
+x0, x1 = P(25.6), P(98.6)
+n.crop((x0+I, P(317.7)+I, x1-I, P(340.4)-I)).save(os.path.join(F, "bk70_front.png"))
+n.crop((x0+I, P(290.6)+I, x1-I, P(312.7)-I)).rotate(180).save(os.path.join(F, "bk70_back.png"))
+n.crop((x0+I, P(312.7)+1, x1-I, P(317.7)-1)).save(os.path.join(F, "bk70_spine.png"))
 print("faces written to", F)

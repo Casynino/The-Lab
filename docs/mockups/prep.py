@@ -43,14 +43,66 @@ def seam(img):
                         p[xx, yy] = ((r+SEAM[0])//2, (g+SEAM[1])//2, (b+SEAM[2])//2, a)
     return im
 
-kf = Image.open(F+"kss_front.png")
+
+def erase_folds(img):
+    """The King Size file draws its fold lines in light blue, exactly
+    (80, 173, 229). Folds are not printed, so they are erased, not creased.
+    Only perfectly straight runs of that exact colour, at least 40 px long and
+    at most 3 px thick, count — the lake's shoreline is (95, 166, 215) and is
+    never touched. Each line is filled from the board just outside it."""
+    im = img.convert("RGBA"); p = im.load(); W, H = im.size
+    hit = lambda x, y: 0 <= x < W and 0 <= y < H and all(abs(a - b) <= 3 for a, b in zip(p[x, y][:3], (80, 173, 229)))
+    marks = []
+    for y in range(H):
+        x = 0
+        while x < W:
+            if hit(x, y):
+                s = x
+                while x < W and hit(x, y): x += 1
+                if x - s >= 40:
+                    t = 1
+                    while hit(s, y - t) or hit(s, y + t): t += 1
+                    if t <= 3: marks.append(("h", y, s, x))
+            else:
+                x += 1
+    for x in range(W):
+        y = 0
+        while y < H:
+            if hit(x, y):
+                s = y
+                while y < H and hit(x, y): y += 1
+                if y - s >= 40:
+                    t = 1
+                    while hit(x - t, s) or hit(x + t, s): t += 1
+                    if t <= 3: marks.append(("v", x, s, y))
+            else:
+                y += 1
+    for kind, i, a, b in marks:
+        for j in range(a, b):
+            if kind == "h":
+                src = next((i + d for d in (-4, 4, -5, 5) if 0 <= i + d < H and not hit(j, i + d)), i)
+                p[j, i] = p[j, src]
+            else:
+                src = next((i + d for d in (-4, 4, -5, 5) if 0 <= i + d < W and not hit(i + d, j)), i)
+                p[i, j] = p[src, j]
+    return im, len(marks)
+
+kf, _ = erase_folds(Image.open(F+"kss_front.png"))
 cut_hole(kf, [(kf.width//2, 1), (kf.width//2, 6)]).save(F+"t_kss_front.png")
 
-fl = Image.open(F+"kss_flap.png")
+fl, _ = erase_folds(Image.open(F+"kss_flap.png"))
 w, h = fl.size
 cut_hole(fl, [(1, h-2), (w-2, h-2), (4, h-4), (w-5, h-4)]).save(F+"t_kss_flap.png")
 
 for n in ("n70_front", "n70_top", "n70_bottom", "n70_back", "n70_left", "n70_right",
           "kss_lid", "kss_left", "kss_right", "kss_back"):
-    seam(Image.open(F+n+".png")).save(F+"t_"+n+".png")
+    im, k = erase_folds(Image.open(F+n+".png"))
+    if k: print(f"  {n}: erased {k} fold line(s)")
+    seam(im).save(F+"t_"+n+".png")
+
+# Booklet faces go through the same clean-up, keeping their own names.
+for n in ("bk_front", "bk_back", "bk_spine", "bk70_front", "bk70_back", "bk70_spine"):
+    im, k = erase_folds(Image.open(F+n+".png"))
+    if k: print(f"  {n}: erased {k} fold line(s)")
+    seam(im).save(F+n+".png")
 print("textures ready")

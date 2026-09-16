@@ -10,7 +10,8 @@ const PRIORITY_ICON = { INFO: '🟢', ACTION: '🟡', WARNING: '🟠', CRITICAL:
 
 // Settings the WhatsApp panel manages itself — hidden from the raw list below.
 const MANAGED_PREFIXES = ['whatsapp.notify.', 'whatsapp.quiet'];
-const MANAGED_KEYS = ['whatsapp.lastWeeklySent', 'commission.boxThreshold'];
+// public.productPage is JSON owned by the label editor; a hand edit here could break it.
+const MANAGED_KEYS = ['whatsapp.lastWeeklySent', 'commission.boxThreshold', 'public.productPage'];
 
 function useSettingSave() {
   const qc = useQueryClient();

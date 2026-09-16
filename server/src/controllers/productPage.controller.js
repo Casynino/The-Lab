@@ -11,7 +11,9 @@ const page = require('../services/productPage.service');
 const env = require('../config/env');
 
 const get = asyncHandler(async (req, res) => {
-  const content = await page.getContent();
+  // Strict read: if the row cannot be read, fail loudly rather than hand the
+  // editor defaults that the next Save would write over the real content.
+  const content = await page.readContent();
   // The URL that will be printed. Host is taken from the request so a preview
   // on localhost shows localhost and production shows production.
   const host = req.get('host') || String(env.appUrl).replace(/^https?:\/\//, '');

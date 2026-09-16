@@ -209,3 +209,12 @@ def finish(layers, W, H, pad=0.08, bg=None):
     layer.paste(both, (int(W/2 - ocx), int(H/2 - ocy)), both)
     out.alpha_composite(layer)
     return out.convert("RGB")
+
+def transform(quads, pos=(0, 0, 0), yaw=0, layer=None):
+    """Place a finished set of quads somewhere else in the scene."""
+    out = []
+    for q in quads:
+        cs = [add(roty(p, yaw), pos) for p in q.c]
+        out.append(Quad(cs, tex=q.tex, color=q.color, layer=q.layer if layer is None else layer,
+                        sheen=q.sheen, twosided=q.twosided, shade=q.shade))
+    return out

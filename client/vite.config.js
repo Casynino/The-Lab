@@ -32,7 +32,9 @@ export default defineConfig({
       // The public product page is served by Express at the app root, not
       // under /api, so the label editor's preview needs its own proxy in dev.
       // In production vercel.json rewrites /p to the same function.
-      '/p': {
+      // Anchored: a bare '/p' key is a prefix match and would also swallow
+      // /pepa/* pictures, which Vite serves itself from client/public.
+      '^/[pP]/?(\\?.*)?$': {
         target: process.env.VITE_PROXY_TARGET || 'http://localhost:4000',
         changeOrigin: true,
       },

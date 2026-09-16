@@ -62,8 +62,14 @@ def open_box(tilt_deg=13):
     base_l, base_r = (-w, H, -d), (w, H, -d)
     at = lambda p, s: add(p, (up[0]*s, up[1]*s, up[2]*s))
     q.append(Quad([at(base_l, 126), at(base_r, 126), base_r, base_l], tex=T("t_kss_lid"), layer=0, sheen=0.14))
-    flap = T("t_kss_flap").rotate(180)
-    q.append(Quad([at(base_l, 166), at(base_r, 166), at(base_r, 126), at(base_l, 126)], tex=flap, layer=0, sheen=0.14))
+    # Stood up as a display you are looking at the INSIDE of the lid, so its
+    # tuck flap shows as unprinted board. The lid itself carries the Pepa art
+    # facing forward, which assumes the factory prints the inside as OHIS does.
+    # The flap texture's top row is its fold; here the fold joins the lid's
+    # free edge below, so it is turned over and the rounded corners stand up.
+    flap = Image.new("RGBA", T("t_kss_flap").size, BOARD + (255,))
+    flap.putalpha(T("t_kss_flap").rotate(180).split()[3])
+    q.append(Quad([at(base_l, 166), at(base_r, 166), at(base_r, 126), at(base_l, 126)], tex=flap, layer=0, sheen=0.06, shade=0.95))
     return q
 
 def booklet(pos, yaw):
