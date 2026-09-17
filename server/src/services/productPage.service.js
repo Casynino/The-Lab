@@ -41,9 +41,10 @@ const PRODUCT_IMAGES = {
   ndogo: ['hero', 'open', 'pair'],
 };
 
-// v2 added product keys; v3 took the King Size Slim box back off this page.
-// See upgrade().
-const CONTENT_VERSION = 3;
+// v2 added product keys; v3 took the King Size Slim box back off this page;
+// v4 reworded Pepa Ndogo's note. See upgrade().
+const CONTENT_VERSION = 4;
+const NDOGO_NOTE = 'Brown • Slow burn Unfiltered';
 
 // The frozen fallback. These are also the starting values in the editor.
 // Facts left empty are simply not shown — the page would rather say less than
@@ -59,7 +60,7 @@ const DEFAULTS = {
     {
       key: 'ndogo',
       name: 'Pepa Ndogo',
-      note: 'Brown · Unfiltered',
+      note: NDOGO_NOTE,
       intro: 'Made from quality raw materials and designed for a slow, smooth and even burn, '
         + 'Pepa Ndogo delivers a consistent rolling experience every time.',
       facts: [
@@ -179,6 +180,14 @@ function upgrade(raw, { append = true } = {}) {
   // describe the 70 x 36 box only (17 Sep 2026), so it comes off — by its key,
   // or by name for a copy that lost its key.
   const kept = products.filter((p) => p.key !== 'kss' && !sameName(p.name, 'Pepa King Size Slim'));
+  // The owner asked for the line under Pepa Ndogo to read "BROWN • SLOW BURN
+  // UNFILTERED" (17 Sep 2026; the page sets it in capitals). Only the exact
+  // old wording is replaced, so a note he has written himself is left alone.
+  if (from < 4) {
+    for (const p of kept) {
+      if (p.key === 'ndogo' && /^\s*brown\s*[·•.-]\s*unfiltered\s*$/i.test(String(p.note || ''))) p.note = NDOGO_NOTE;
+    }
+  }
   for (const d of DEFAULTS.products) {
     if (append && !kept.some((p) => p.key === d.key || sameName(p.name, d.name))) kept.push(d);
   }

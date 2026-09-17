@@ -123,6 +123,14 @@ test('a product deleted and added back by name gets its pictures back', async ()
   assert.deepEqual(pictures(page.renderHtml(c, { host: 'x' })), ALL_PICTURES);
 });
 
+test('the note becomes "Brown • Slow burn Unfiltered" only where it still said "Brown · Unfiltered"', () => {
+  const up = (v, note) => page.shape(page.upgrade({ v, products: [{ key: 'ndogo', name: 'Pepa Ndogo', note }] })).products[0].note;
+  assert.equal(up(undefined, 'Brown · Unfiltered'), 'Brown • Slow burn Unfiltered');
+  assert.equal(up(3, 'Brown · Unfiltered'), 'Brown • Slow burn Unfiltered');
+  assert.equal(up(3, 'Brown · Rolling papers'), 'Brown · Rolling papers');
+  assert.equal(up(4, 'Brown · Unfiltered'), 'Brown · Unfiltered');   // a current row is the owner's own
+});
+
 test('a small rename keeps the pictures', () => {
   assert.deepEqual(keys(page.shape({ v: 3, products: [{ key: 'ndogo', name: 'Pepa Ndogo Brown' }] })), ['ndogo:Pepa Ndogo Brown']);
 });
