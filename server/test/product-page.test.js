@@ -154,6 +154,16 @@ test('the editor read fails loudly; the public page still serves', async () => {
   assert.equal((await page.getContent()).products.length, 1);
 });
 
+test('all three pictures sit together under Pepa Ndogo, none above it', async () => {
+  seed(V1_ROW);
+  const html = page.renderHtml(await page.readContent(), { host: 'x' });
+  assert.equal(html.indexOf('<picture>') > html.indexOf('<h3>Pepa Ndogo</h3>'), true);
+  assert.deepEqual(pictures(html), ALL_PICTURES);
+  const first = html.split('<picture>')[1];
+  assert.match(first, /fetchpriority="high"/);
+  assert.equal((html.match(/loading="lazy"/g) || []).length, 2);
+});
+
 test('the page references only pictures that ship, and carries no script', async () => {
   seed(V1_ROW);
   const html = page.renderHtml(await page.readContent(), { host: 'the-haolab.vercel.app' });

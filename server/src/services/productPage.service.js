@@ -33,10 +33,12 @@ const SETTING_KEY = 'public.productPage';
 // never wipe them. Each product's pictures are found by its key.
 //
 // This page belongs to the QR on the 70 x 36 box and describes that box only.
-// The King Size Slim box gets its own QR and page.
+// The King Size Slim box gets its own QR and page. All three pictures sit
+// together under the product, not one above it (owner, 17 Sep 2026). The
+// first is still what a forwarded WhatsApp link shows.
 const SHOWCASE = 'hero';
 const PRODUCT_IMAGES = {
-  ndogo: ['open', 'pair'],
+  ndogo: ['hero', 'open', 'pair'],
 };
 
 // v2 added product keys; v3 took the King Size Slim box back off this page.
@@ -272,6 +274,9 @@ function renderHtml(c, { host } = {}) {
   const phones = c.phones.map(phoneParts);
   const waMsg = encodeURIComponent(c.waText);
 
+  // The first picture on the page loads straight away; the rest may wait.
+  const firstPicture = c.products.map((p) => (PRODUCT_IMAGES[p.key] || [])[0]).find(Boolean);
+
   // Only facts that actually have a value reach the page.
   const withValues = c.products.map((p) => ({ ...p, facts: p.facts.filter((f) => f.value) }));
 
@@ -279,7 +284,7 @@ function renderHtml(c, { host } = {}) {
       <section class="item">
         <h3>${esc(p.name)}</h3>
         ${p.note ? `<p class="note">${esc(p.note)}</p>` : ''}
-        ${(PRODUCT_IMAGES[p.key] || []).map((n) => picture(n)).join('')}
+        ${(PRODUCT_IMAGES[p.key] || []).map((n) => picture(n, { eager: n === firstPicture })).join('')}
         ${p.intro ? `<p class="intro">${esc(p.intro)}</p>` : ''}
         ${p.facts.length ? `<dl>${p.facts.map((f) => `
           <div><dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd></div>`).join('')}
@@ -377,8 +382,6 @@ ${host && ASSETS[SHOWCASE] ? `<meta property="og:image" content="${esc(`https://
 <body>
   <h1>${esc(c.name)}<sup>™</sup></h1>
   <p class="say">${esc(c.tagline)}</p>
-
-  ${picture(SHOWCASE, { eager: true })}
 
   <div class="bead"></div>
 

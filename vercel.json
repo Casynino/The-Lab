@@ -45,7 +45,11 @@
       "destination": "/api/index"
     },
     {
-      "source": "/((?!pepa/).*)",
+      "source": "/pepa/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ],
