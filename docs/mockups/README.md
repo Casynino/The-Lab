@@ -9,6 +9,7 @@ pdftoppm -r 300 -png "【7244】册子KSS本色13g无水印 OHIS棕色-- 2.pdf" 
 cp *.py $W/ && cd $W
 python3 extract.py $W              # cut every face at its measured folds
 python3 prep.py $W                 # cut-outs -> transparency, guide lines -> creases / erased
+python3 tab.py $W                  # the King Size lid's pop-up Pepa tab, cut along its die line
 python3 scene_final.py $W          # both boxes: hero shots, back, above, every-angle sheets
 python3 scene_small_display.py $W  # small box open as a display (OHIS layout)
 python3 sheets.py $W               # one presentation sheet per box

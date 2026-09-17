@@ -1,5 +1,5 @@
 import sys, math, random; SP = sys.argv[1]; sys.path.insert(0, SP)
-from PIL import Image
+from PIL import Image, ImageChops
 import r3d
 from r3d import Quad, add, roty
 F = SP + "/f/"
@@ -8,6 +8,10 @@ T = lambda n: Image.open(F + n + ".png")
 W, H, D = 112, 55, 126
 w, d = W/2, D/2
 BOARD = (238, 230, 216)
+PX = 300 / 25.4              # texture pixels per mm
+FOLD = 63.0                  # lid fold, from the hinge (die: 220.2 - 157.2 mm)
+TAB_H = 541 / PX             # kss_tab.png height; its bottom row is the fold
+TAB_X = (-w + 171 / PX, -w + 1126 / PX)
 
 def closed_box():
     tex = {"front": T("t_kss_front"), "back": T("t_kss_back"), "left": T("t_kss_left"),
@@ -19,7 +23,7 @@ def closed_box():
                   tex=T("t_kss_flap"), layer=-1, sheen=0, shade=0.80))
     return q
 
-def open_box(tilt_deg=13):
+def open_box(tilt_deg=4):
     q = []
     tex = {"front": T("t_kss_front"), "back": T("t_kss_back"), "left": T("t_kss_left"), "right": T("t_kss_right")}
     q += r3d.box_quads(W, H, D, tex, sheen=0.10, layer=5)
@@ -56,20 +60,40 @@ def open_box(tilt_deg=13):
         if i == 0:
             q.append(Quad([(-L/2, top, zf), (L/2, top, zf), (L/2, top-26, zf), (-L/2, top-26, zf)],
                           tex=cover, layer=3, sheen=0.05))
-    # the lid, stood up as the display
+    # The lid as the display, the way the die is cut. It folds across its
+    # middle (FOLD mm from the hinge): the hinge half stands up off the back
+    # wall, the free half folds forward over it so its printed face — the
+    # scene and 50 PER BOX — faces you, and the Pepa tab, cut into the hinge
+    # half but joined to the free half, pops up above the fold. The tuck flap
+    # tucks down inside the back wall.
+    lid = T("t_kss_lid"); tab = T("kss_tab")
+    lw, lh = lid.size; mid = lh // 2
+    tab_a = tab.split()[3].resize((lw, tab.height))
+    hole = Image.new("L", (lw, mid), 255)
+    hole.paste(ImageChops.invert(tab_a), (0, mid - tab.height))
+    hinge_out = lid.crop((0, 0, lw, mid))
+    hinge_out.putalpha(ImageChops.multiply(hinge_out.split()[3], hole))
+    hinge_in = Image.new("RGBA", (lw, mid), BOARD + (255,))
+    hinge_in.putalpha(hole.transpose(Image.FLIP_TOP_BOTTOM))
+    tab_back = Image.new("RGBA", tab.size, BOARD + (255,))
+    tab_back.putalpha(tab.split()[3].transpose(Image.FLIP_LEFT_RIGHT))
     a = math.radians(tilt_deg)
-    up = (0, math.cos(a), -math.sin(a))
-    base_l, base_r = (-w, H, -d), (w, H, -d)
-    at = lambda p, s: add(p, (up[0]*s, up[1]*s, up[2]*s))
-    q.append(Quad([at(base_l, 126), at(base_r, 126), base_r, base_l], tex=T("t_kss_lid"), layer=0, sheen=0.14))
-    # Stood up as a display you are looking at the INSIDE of the lid, so its
-    # tuck flap shows as unprinted board. The lid itself carries the Pepa art
-    # facing forward, which assumes the factory prints the inside as OHIS does.
-    # The flap texture's top row is its fold; here the fold joins the lid's
-    # free edge below, so it is turned over and the rounded corners stand up.
-    flap = Image.new("RGBA", T("t_kss_flap").size, BOARD + (255,))
-    flap.putalpha(T("t_kss_flap").rotate(180).split()[3])
-    q.append(Quad([at(base_l, 166), at(base_r, 166), at(base_r, 126), at(base_l, 126)], tex=flap, layer=0, sheen=0.06, shade=0.95))
+    up, fwd = (0, math.cos(a), -math.sin(a)), (0, math.sin(a), math.cos(a))
+    P = lambda x, s, o: (x, H + up[1]*s + fwd[1]*o, -d + up[2]*s + fwd[2]*o)
+    oh, of = 0.3, 1.0
+    face = lambda s0, s1, o, tex=None, color=None, back=False, **k: Quad(
+        [P(w, s1, o), P(-w, s1, o), P(-w, s0, o), P(w, s0, o)] if back else
+        [P(-w, s1, o), P(w, s1, o), P(w, s0, o), P(-w, s0, o)], tex=tex, color=color, layer=0, **k)
+    q.append(face(0, FOLD, oh, tex=hinge_out.rotate(180), back=True, sheen=0.10))
+    q.append(face(0, FOLD, oh, tex=hinge_in, sheen=0, shade=0.86))
+    q.append(face(0, FOLD, of, tex=lid.crop((0, mid, lw, lh)), sheen=0.14))
+    q.append(face(0, FOLD, of, color=BOARD, back=True, sheen=0, shade=0.92))
+    q.append(face(FOLD, FOLD + TAB_H, of, tex=tab, sheen=0.14))
+    q.append(face(FOLD, FOLD + TAB_H, of, tex=tab_back, back=True, sheen=0, shade=0.92))
+    zf = -d + t + 0.3
+    fl = T("t_kss_flap"); fh = fl.height / PX
+    q.append(Quad([(-w+t, H, zf), (w-t, H, zf), (w-t, H-fh, zf), (-w+t, H-fh, zf)],
+                  tex=fl, layer=1, sheen=0, shade=0.80))
     return q
 
 def booklet(pos, yaw):
@@ -90,7 +114,8 @@ if __name__ == "__main__":
     if which in ("all", "open"):
         bpos, byaw = (w + 78, 0, 42), -16
         q = open_box() + booklet(bpos, byaw)
-        shadows = [box_shadow, (-w, w, -d-18, -d, 150, (0, 0, 0), 0, 0.55),
+        shadows = [box_shadow, (-w, w, -d-1, -d+2, H+FOLD, (0, 0, 0), 0, 0.55),
+                   (TAB_X[0], TAB_X[1], -d-1, -d+2, H+FOLD+TAB_H, (0, 0, 0), 0, 0.45),
                    (-55, 55, -13, 13, 4.3, bpos, byaw, 0.85)]
         cam = r3d.Camera(target=(34, 74, -14), dist=640, az=24, el=25, fov=30, W=1900, H=1700)
         layers = r3d.render(q, cam, light=(-0.45, 0.95, 0.60), shadows=shadows)

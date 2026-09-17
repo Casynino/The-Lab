@@ -1,12 +1,14 @@
 """Cut every face out of the rendered die-lines, measured off their fold lines.
 
 Render the PDFs first (poppler):
-  pdftoppm -r 300 -png "70×36刀版 -01.pdf" <work>/n70/p
-  pdftoppm -r 300 -png "【7244】册子KSS本色13g无水印 OHIS棕色--.pdf" <work>/kss2/p
+  pdftoppm -r 300 -png "70×36刀版 0.pdf" <work>/n70/p
+  pdftoppm -r 300 -png "【7244】册子KSS本色13g无水印 OHIS棕色-- 2.pdf" <work>/kss2/p
 then:  python3 extract.py <work>  &&  python3 prep.py <work>
 
 70 x 36 pack (74 x 155 x 48): column 118.2-192.2 mm, wings 70.3-118.2 and
-192.2-240.2; folds at 18.5 / 66.5 / 221.5 / 267.6 / 422.6 down the column.
+192.2-240.2; folds at 18.5 / 66.5 / 221.5 / 269.57 / 424.57 down the column (the top/front
+fold has no line: the dust-flap notches meet the column at 269.57, giving the
+48 mm top the box needs).
 The back and both sides are turned 180 degrees because the wrap rolls about
 the page's horizontal axis — seen from outside, they are upside down on the
 sheet.
@@ -31,9 +33,9 @@ def cut(img, x0, y0, x1, y1, name, rot=0):
     c.save(os.path.join(F, name + ".png"))
 
 n = Image.open(os.path.join(W, "n70/p-1.png")).convert("RGB")
-cut(n, 118.2, 267.6, 192.2, 422.6, "n70_front")
+cut(n, 118.2, 269.57, 192.2, 424.57, "n70_front")
 cut(n, 118.2,  66.5, 192.2, 221.5, "n70_back", 180)
-cut(n, 118.2, 221.5, 192.2, 267.6, "n70_top")
+cut(n, 118.2, 221.57, 192.2, 269.57, "n70_top")
 cut(n, 118.2,  18.5, 192.2,  66.5, "n70_bottom")
 cut(n,  70.3,  66.5, 118.2, 221.5, "n70_left", 180)
 cut(n, 192.2,  66.5, 240.2, 221.5, "n70_right", 180)

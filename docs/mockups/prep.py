@@ -30,6 +30,15 @@ def seam(img):
             r, g, b, a = p[x, y]
             if r < 85 and g < 85 and b > 105 and b - r > 55:
                 core.add((x, y))
+    # A line's rounded ends print a touch lighter, (86, 90, 175). Take those
+    # only where they touch a line already found: the same test anywhere else
+    # would take the King Size side panels' blue pattern.
+    lighter = lambda r, g, b: r < 100 and g < 105 and b > 105 and b - r > 55 and b - g > 55
+    for _ in range(4):
+        grow = {(x+dx, y+dy) for (x, y) in core for dx in (-2, -1, 0, 1, 2) for dy in (-2, -1, 0, 1, 2)
+                if 0 <= x+dx < W and 0 <= y+dy < H and (x+dx, y+dy) not in core and lighter(*p[x+dx, y+dy][:3])}
+        if not grow: break
+        core |= grow
     SEAM = (148, 116, 94)
     for (x, y) in core:
         p[x, y] = SEAM + (p[x, y][3],)

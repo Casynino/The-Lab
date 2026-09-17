@@ -35,7 +35,7 @@ def sheet(title, sub, hero, hero_label, tiles, out, WIDTH=2400):
 
 sheet("Pepa 70 × 36 — small box", "Pepa Ndogo · 74 × 155 × 48 mm · 50 booklets of 50 leaves · final design",
       "small-open-display", "Open as a display, with booklets",
-      [("small-front", "Front"), ("small-back", "Back"), ("small-with-booklets", "With booklets"), ("small-top", "Top — info panel and QR")],
+      [("small-front", "Front"), ("small-back", "Back"), ("small-with-booklets", "With booklets"), ("small-top", "Top, seen from the front")],
       O + "Pepa-small-box-sheet.png")
 sheet("Pepa King Size Slim — big box", "112 × 126 × 55 mm display box · 50 booklets of 108 × 44 mm papers · final design",
       "big-open-display", "Open as a display, with a booklet",

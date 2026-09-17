@@ -6,7 +6,7 @@ Lying down the carton is 74 wide, 155 long, 48 tall. A 73 x 22.5 x 5 mm
 booklet stands across the 74 mm width; two layers of 22.5 mm fill the 48 mm
 height; 25 to a layer along the 155 mm length makes 50. The long side panels
 — sideways on a standing box — read level this way up. The lid hinges on the
-74 mm end panel, and its cut 79 mm from that hinge is where the header stands.
+74 mm end panel, and its cut 77 mm from that hinge is where the header stands.
 Every wall is shown with its art reading level, and the header with the
 lid's top half facing forward, as the OHIS display does."""
 import sys, math, random
@@ -23,7 +23,7 @@ EDGE = (222, 204, 178)
 
 X, Y, Z = 74.0, 48.0, 155.0
 w, d, t = X / 2, Z / 2, 1.0
-HEADER = 346.5 - 267.6                                   # 78.9 mm
+HEADER = 346.5 - 269.57                                  # 76.9 mm
 
 lid = T("t_n70_front")
 header_tex = lid.crop((0, 0, lid.width, round(HEADER * K - 4)))
