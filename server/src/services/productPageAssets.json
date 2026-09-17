@@ -4,25 +4,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/hero-700.ca17e13e89.webp",
-        "bytes": 25192
+        "src": "/pepa/hero-700.be36a29492.webp",
+        "bytes": 25996
       },
       {
         "w": 1000,
-        "src": "/pepa/hero-1000.0d6bc25244.webp",
-        "bytes": 40146
+        "src": "/pepa/hero-1000.c240930289.webp",
+        "bytes": 42068
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/hero-700.6961b84cc7.jpg",
-        "bytes": 43347
+        "src": "/pepa/hero-700.cd635e4c43.jpg",
+        "bytes": 43715
       },
       {
         "w": 1000,
-        "src": "/pepa/hero-1000.8ad8996a42.jpg",
-        "bytes": 74233
+        "src": "/pepa/hero-1000.90d4f6587d.jpg",
+        "bytes": 74539
       }
     ],
     "w": 1000,
@@ -33,25 +33,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/open-700.7e12b3604c.webp",
-        "bytes": 17058
+        "src": "/pepa/open-700.43dc8b06be.webp",
+        "bytes": 17700
       },
       {
         "w": 1000,
-        "src": "/pepa/open-1000.8435d11cff.webp",
-        "bytes": 29628
+        "src": "/pepa/open-1000.8d9fdc6ebf.webp",
+        "bytes": 30906
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/open-700.b16dd65140.jpg",
-        "bytes": 29177
+        "src": "/pepa/open-700.74bc8328b5.jpg",
+        "bytes": 29120
       },
       {
         "w": 1000,
-        "src": "/pepa/open-1000.435dba50d8.jpg",
-        "bytes": 51545
+        "src": "/pepa/open-1000.85d414145d.jpg",
+        "bytes": 51221
       }
     ],
     "w": 1000,
@@ -62,25 +62,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/pair-700.42f2726a5c.webp",
-        "bytes": 23624
+        "src": "/pepa/pair-700.254585f622.webp",
+        "bytes": 24286
       },
       {
         "w": 1000,
-        "src": "/pepa/pair-1000.2a1acaf4a0.webp",
-        "bytes": 39456
+        "src": "/pepa/pair-1000.b4efc9bd81.webp",
+        "bytes": 41058
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/pair-700.39c066d322.jpg",
-        "bytes": 39225
+        "src": "/pepa/pair-700.e5fc766b57.jpg",
+        "bytes": 39818
       },
       {
         "w": 1000,
-        "src": "/pepa/pair-1000.309ce6fe25.jpg",
-        "bytes": 68260
+        "src": "/pepa/pair-1000.f8a7afd25f.jpg",
+        "bytes": 69020
       }
     ],
     "w": 1000,

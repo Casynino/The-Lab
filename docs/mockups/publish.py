@@ -41,8 +41,8 @@ for name, alt in ALT.items():
     entry = {"alt": alt, "webp": [], "jpg": []}
     for width in WIDTHS:
         img = src.resize((width, round(src.height * width / src.width)), Image.LANCZOS)
-        entry["webp"].append(write(img, name, width, "webp", format="WEBP", quality=80, method=6))
-        entry["jpg"].append(write(img, name, width, "jpg", format="JPEG", quality=80, optimize=True, progressive=True))
+        entry["webp"].append(write(img, name, width, "webp", format="WEBP", quality=81, method=6))
+        entry["jpg"].append(write(img, name, width, "jpg", format="JPEG", quality=81, optimize=True, progressive=True))
         if width == max(WIDTHS):
             entry["w"], entry["h"] = img.width, img.height
     manifest[name] = entry
