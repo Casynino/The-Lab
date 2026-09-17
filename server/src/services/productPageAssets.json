@@ -1,118 +1,89 @@
 {
-  "range": {
-    "alt": "Pepa 70 × 36 pack and Pepa King Size Slim display box",
+  "hero": {
+    "alt": "Pepa Ndogo 70 × 36 box",
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/range-700.4f573326ec.webp",
-        "bytes": 20654
+        "src": "/pepa/hero-700.ca17e13e89.webp",
+        "bytes": 25192
       },
       {
         "w": 1000,
-        "src": "/pepa/range-1000.f1a16c23db.webp",
-        "bytes": 36552
+        "src": "/pepa/hero-1000.0d6bc25244.webp",
+        "bytes": 40146
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/range-700.01d46aba26.jpg",
-        "bytes": 30339
+        "src": "/pepa/hero-700.6961b84cc7.jpg",
+        "bytes": 43347
       },
       {
         "w": 1000,
-        "src": "/pepa/range-1000.a66c8c1f3e.jpg",
-        "bytes": 55408
+        "src": "/pepa/hero-1000.8ad8996a42.jpg",
+        "bytes": 74233
       }
     ],
     "w": 1000,
-    "h": 750
+    "h": 1182
   },
-  "small": {
-    "alt": "Pepa 70 × 36 pack, front and back, with two booklets",
+  "open": {
+    "alt": "Pepa Ndogo box open as a display, with booklets",
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/small-700.0eee3aa728.webp",
-        "bytes": 23056
+        "src": "/pepa/open-700.7e12b3604c.webp",
+        "bytes": 17058
       },
       {
         "w": 1000,
-        "src": "/pepa/small-1000.4185922d82.webp",
-        "bytes": 39812
+        "src": "/pepa/open-1000.8435d11cff.webp",
+        "bytes": 29628
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/small-700.ae03a8bab1.jpg",
-        "bytes": 38475
+        "src": "/pepa/open-700.b16dd65140.jpg",
+        "bytes": 29177
       },
       {
         "w": 1000,
-        "src": "/pepa/small-1000.98f0693f8a.jpg",
-        "bytes": 67951
+        "src": "/pepa/open-1000.435dba50d8.jpg",
+        "bytes": 51545
+      }
+    ],
+    "w": 1000,
+    "h": 883
+  },
+  "pair": {
+    "alt": "Pepa Ndogo box, front and back, with two booklets",
+    "webp": [
+      {
+        "w": 700,
+        "src": "/pepa/pair-700.42f2726a5c.webp",
+        "bytes": 23624
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/pair-1000.2a1acaf4a0.webp",
+        "bytes": 39456
+      }
+    ],
+    "jpg": [
+      {
+        "w": 700,
+        "src": "/pepa/pair-700.39c066d322.jpg",
+        "bytes": 39225
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/pair-1000.309ce6fe25.jpg",
+        "bytes": 68260
       }
     ],
     "w": 1000,
     "h": 900
-  },
-  "kss-open": {
-    "alt": "Pepa King Size Slim display box, open, with a booklet",
-    "webp": [
-      {
-        "w": 700,
-        "src": "/pepa/kss-open-700.1f2a148335.webp",
-        "bytes": 19890
-      },
-      {
-        "w": 1000,
-        "src": "/pepa/kss-open-1000.69d44af942.webp",
-        "bytes": 35810
-      }
-    ],
-    "jpg": [
-      {
-        "w": 700,
-        "src": "/pepa/kss-open-700.73588dfb33.jpg",
-        "bytes": 29513
-      },
-      {
-        "w": 1000,
-        "src": "/pepa/kss-open-1000.69b5504961.jpg",
-        "bytes": 54072
-      }
-    ],
-    "w": 1000,
-    "h": 900
-  },
-  "kss-closed": {
-    "alt": "Pepa King Size Slim display box, closed",
-    "webp": [
-      {
-        "w": 700,
-        "src": "/pepa/kss-closed-700.98ca7f2f60.webp",
-        "bytes": 26650
-      },
-      {
-        "w": 1000,
-        "src": "/pepa/kss-closed-1000.e06594c1e7.webp",
-        "bytes": 44536
-      }
-    ],
-    "jpg": [
-      {
-        "w": 700,
-        "src": "/pepa/kss-closed-700.d127ea2824.jpg",
-        "bytes": 38884
-      },
-      {
-        "w": 1000,
-        "src": "/pepa/kss-closed-1000.d09e22aff8.jpg",
-        "bytes": 67564
-      }
-    ],
-    "w": 1000,
-    "h": 717
   }
 }

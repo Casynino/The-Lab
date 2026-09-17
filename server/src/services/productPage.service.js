@@ -31,14 +31,17 @@ const SETTING_KEY = 'public.productPage';
 // from the die-lines and published as build assets with hashed names, so no
 // one can type an image address into the editor, and pressing Save there can
 // never wipe them. Each product's pictures are found by its key.
-const SHOWCASE = 'range';
+//
+// This page belongs to the QR on the 70 x 36 box and describes that box only.
+// The King Size Slim box gets its own QR and page.
+const SHOWCASE = 'hero';
 const PRODUCT_IMAGES = {
-  ndogo: ['small'],
-  kss: ['kss-open', 'kss-closed'],
+  ndogo: ['open', 'pair'],
 };
 
-// v2 added product keys and the King Size Slim box. See upgrade().
-const CONTENT_VERSION = 2;
+// v2 added product keys; v3 took the King Size Slim box back off this page.
+// See upgrade().
+const CONTENT_VERSION = 3;
 
 // The frozen fallback. These are also the starting values in the editor.
 // Facts left empty are simply not shown — the page would rather say less than
@@ -63,22 +66,6 @@ const DEFAULTS = {
         { label: 'Type', value: 'Slow burn Unfiltered' },
         // Straight off the printed box: it says 50 LEAVES and 50 PER BOX.
         // "Papers per booklet" is the wording saved in the editor in production.
-        { label: 'Papers per booklet', value: '50' },
-        { label: 'Booklets per box', value: '50' },
-        { label: 'Papers per box', value: '2,500' },
-      ],
-    },
-    {
-      key: 'kss',
-      name: 'Pepa King Size Slim',
-      note: 'Display box of 50',
-      intro: '',
-      // From the die-line's own spec block: KING SIZE SLIM 108 x 44 mm, 50
-      // BOOKLETS, and 50 LEAVES printed on every face. Colour and paper weight
-      // are left off: that file's name is the OHIS template's, so the "brown,
-      // 13g" in it cannot be taken as Pepa's until someone confirms it.
-      facts: [
-        { label: 'Size', value: '108 × 44 mm' },
         { label: 'Papers per booklet', value: '50' },
         { label: 'Booklets per box', value: '50' },
         { label: 'Papers per box', value: '2,500' },
@@ -152,11 +139,10 @@ function shape(raw) {
   };
 }
 
-// Content saved before v2 — production has such a row — is brought up to
-// date in memory. It runs on every read AND on every save: an editor tab
-// loaded before the deploy still holds v1 content, and saving that as-is would
-// stamp it v2 without its keys, losing the pictures and the King Size Slim
-// product for good. Nothing is written from the read path, which the public
+// Content saved under an older version — production has such a row — is
+// brought up to date in memory. It runs on every read AND on every save: an editor tab
+// loaded before a deploy still holds older content, and saving that as-is
+// would stamp it current without its keys, losing the pictures for good. Nothing is written from the read path, which the public
 // page also uses.
 //
 // v1 only ever carried the 70 x 36 pack. So a v1 product whose name matches a
@@ -166,28 +152,35 @@ function shape(raw) {
 // deleted in the editor stays deleted.
 function upgrade(raw, { append = true } = {}) {
   if (!raw || typeof raw !== 'object' || Number(raw.v) >= CONTENT_VERSION) return raw;
+  const from = Number(raw.v) >= 2 ? Number(raw.v) : 1;
   // Blank cards ("Add a paper", never filled in) are not products; shape()
   // drops them, and counting them here would defeat the lone-product rule.
   const products = Array.isArray(raw.products)
     ? raw.products.filter((p) => p && typeof p === 'object' && String(p.name || '').trim()).map((p) => ({ ...p }))
     : [];
-  for (const p of products) {
-    const d = !p.key && DEFAULTS.products.find((x) => sameName(x.name, p.name));
-    if (d && !products.some((q) => q.key === d.key)) p.key = d.key;
+  if (from < 2) {
+    for (const p of products) {
+      const d = !p.key && DEFAULTS.products.find((x) => sameName(x.name, p.name));
+      if (d && !products.some((q) => q.key === d.key)) p.key = d.key;
+    }
+    if (products.length === 1 && !products[0].key) products[0].key = 'ndogo';
+    // The owner asked for the 70 x 36 pack's Type to read "Slow burn
+    // Unfiltered" (16 Sep 2026). Only the exact old wording is replaced, so
+    // anything he has typed there himself is left alone.
+    for (const p of products) {
+      if (p.key !== 'ndogo' || !Array.isArray(p.facts)) continue;
+      p.facts = p.facts.map((f) => (f && sameName(f.label, 'Type') && sameName(f.value, 'Unfiltered')
+        ? { ...f, value: 'Slow burn Unfiltered' } : f));
+    }
   }
-  if (products.length === 1 && !products[0].key) products[0].key = 'ndogo';
-  // The owner asked for the 70 x 36 pack's Type to read "Slow burn Unfiltered"
-  // (16 Sep 2026). Only the exact old wording is replaced, so anything he has
-  // typed there himself is left alone.
-  for (const p of products) {
-    if (p.key !== 'ndogo' || !Array.isArray(p.facts)) continue;
-    p.facts = p.facts.map((f) => (f && sameName(f.label, 'Type') && sameName(f.value, 'Unfiltered')
-      ? { ...f, value: 'Slow burn Unfiltered' } : f));
-  }
+  // v2 put the King Size Slim box on this page. The owner wants this QR to
+  // describe the 70 x 36 box only (17 Sep 2026), so it comes off — by its key,
+  // or by name for a copy that lost its key.
+  const kept = products.filter((p) => p.key !== 'kss' && !sameName(p.name, 'Pepa King Size Slim'));
   for (const d of DEFAULTS.products) {
-    if (append && !products.some((p) => p.key === d.key || sameName(p.name, d.name))) products.push(d);
+    if (append && !kept.some((p) => p.key === d.key || sameName(p.name, d.name))) kept.push(d);
   }
-  return { ...raw, v: CONTENT_VERSION, products };
+  return { ...raw, v: CONTENT_VERSION, products: kept };
 }
 
 // The editor's read. It throws on a database error or an unreadable row: had
@@ -210,10 +203,10 @@ async function getContent() {
 }
 
 async function saveContent(content, userId) {
-  // A body without a version comes from an editor tab loaded before v2. Give
-  // it keys. Only append the new defaults if the stored row is itself still
-  // pre-v2: once someone has saved v2 — and perhaps deleted a product — an old
-  // tab must not bring that product back, since its form never showed it.
+  // A body with an older version comes from an editor tab loaded before the
+  // last deploy. Upgrade it. Only append defaults if the stored row is itself
+  // still old: once someone has saved the current version — and perhaps
+  // deleted a product — an old tab must not bring that product back.
   let storedIsCurrent = false;
   if (!(Number(content && content.v) >= CONTENT_VERSION)) {
     try {

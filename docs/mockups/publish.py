@@ -12,10 +12,9 @@ PUB = os.path.join(REPO, "client", "public", "pepa")
 os.makedirs(PUB, exist_ok=True)
 WIDTHS = (700, 1000)
 ALT = {
-    "range": "Pepa 70 × 36 pack and Pepa King Size Slim display box",
-    "small": "Pepa 70 × 36 pack, front and back, with two booklets",
-    "kss-open": "Pepa King Size Slim display box, open, with a booklet",
-    "kss-closed": "Pepa King Size Slim display box, closed",
+    "hero": "Pepa Ndogo 70 × 36 box",
+    "open": "Pepa Ndogo box open as a display, with booklets",
+    "pair": "Pepa Ndogo box, front and back, with two booklets",
 }
 def write(img, name, width, ext, **kw):
     tmp = os.path.join(PUB, f".tmp.{ext}")
@@ -24,6 +23,17 @@ def write(img, name, width, ext, **kw):
     fn = f"{name}-{width}.{h}.{ext}"
     os.replace(tmp, os.path.join(PUB, fn))
     return {"w": width, "src": f"/pepa/{fn}", "bytes": os.path.getsize(os.path.join(PUB, fn))}
+
+# Files the page currently points at stay one more release: an edge cache
+# can serve the previous page for a few minutes after a deploy.
+out_path = os.path.join(REPO, "server", "src", "services", "productPageAssets.json")
+previous = set()
+if os.path.exists(out_path):
+    try:
+        prev = json.load(open(out_path))
+        previous = {os.path.basename(f["src"]) for m in prev.values() for f in m.get("webp", []) + m.get("jpg", [])}
+    except Exception:
+        previous = set()
 
 manifest = {}
 for name, alt in ALT.items():
@@ -45,6 +55,7 @@ with open(tmp_manifest, "w") as fh:
     json.dump(manifest, fh, indent=2, ensure_ascii=False); fh.write("\n")
 os.replace(tmp_manifest, out)
 keep = {os.path.basename(f["src"]) for m in manifest.values() for f in m["webp"] + m["jpg"]}
+keep |= previous
 for old in glob.glob(os.path.join(PUB, "*")):
     if os.path.basename(old) not in keep:
         os.remove(old)
