@@ -17,6 +17,18 @@ python3 scene_page.py $W           # the three pictures on the Pepa Ndogo QR pag
 python3 publish.py $W <repo>       # encode + hash them, write the page's asset manifest
 ```
 
+Two more, for showing the work rather than shipping it:
+
+```bash
+python3 compare.py $W              # both designs side by side, shot for shot
+python3 spec.py $W                 # a bilingual PDF per box per design, for the factory
+```
+
+`spec.py` expects the workspace to hold one folder per design (`d1`, `d2`), each with its
+own `n70/`, `kss2/` and `out/`. Every figure it prints is measured off the die-line at
+300 dpi; where a fold is not drawn on the file, the notes page says so and gives the
+position taken. Do not type a size into it that the die does not show.
+
 `publish.py` writes `client/public/pepa/*` and
 `server/src/services/productPageAssets.json`; never edit either by hand. It
 keeps the previous release's pictures one more deploy, so a page still cached

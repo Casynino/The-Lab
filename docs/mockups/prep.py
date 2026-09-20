@@ -20,16 +20,49 @@ def cut_hole(img, seeds, thresh=22):
     return out
 
 def seam(img):
-    """Only the printer's cut/fold guide: dark blue with almost no green,
-    measured at (46, 49, 146). The sky and lake are (108, 185, 222) and must
-    survive untouched. Core pixels first, then their antialiased fringe."""
+    """Turn the printer's cut/fold guide into a quiet crease.
+
+    Two tests, because colour alone is not enough. The guide is drawn in
+    (46, 49, 146) and (45, 46, 136) — but so, nearly, is the navy check in the
+    Maasai shuka, and a colour-only rule pulled threads out of the cloth and
+    left brown specks in it. A guide line is also long and straight, so only
+    pixels lying in a run of 40 or more across or down count, plus whatever
+    shape those runs are part of, which brings a line's rounded corner with it
+    and leaves a diagonal thread behind. The sky and lake, (108, 185, 222),
+    are never close enough to matter.
+    """
     im = img.convert("RGBA"); p = im.load(); W, H = im.size
-    core = set()
+    blue = set()
     for y in range(H):
         for x in range(W):
             r, g, b, a = p[x, y]
-            if r < 85 and g < 85 and b > 105 and b - r > 55:
-                core.add((x, y))
+            if abs(r - 46) <= 20 and abs(g - 48) <= 20 and abs(b - 141) <= 26:
+                blue.add((x, y))
+    seeds = set()
+    for y in range(H):
+        run = []
+        for x in range(W + 1):
+            if (x, y) in blue:
+                run.append((x, y))
+            else:
+                if len(run) >= 40: seeds.update(run)
+                run = []
+    for x in range(W):
+        run = []
+        for y in range(H + 1):
+            if (x, y) in blue:
+                run.append((x, y))
+            else:
+                if len(run) >= 40: seeds.update(run)
+                run = []
+    core, stack = set(seeds), list(seeds)
+    while stack:
+        x, y = stack.pop()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                n = (x + dx, y + dy)
+                if n in blue and n not in core:
+                    core.add(n); stack.append(n)
     # A line's rounded ends print a touch lighter, (86, 90, 175). Take those
     # only where they touch a line already found: the same test anywhere else
     # would take the King Size side panels' blue pattern.
