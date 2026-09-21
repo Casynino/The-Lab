@@ -10,7 +10,7 @@ import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent
 import { ROLES, SALE_STATUS_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, NumberInput,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -141,9 +141,9 @@ function NewSaleModal({ open, onClose }) {
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Discount"><Input type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} /></Field>
+          <Field label="Discount"><NumberInput min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} /></Field>
           <Field label="Amount paid" hint="Leave empty for the full amount">
-            <Input type="number" min="0" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder={String(total)} />
+            <NumberInput min="0" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder={String(total)} />
           </Field>
           {!isRep && source.startsWith('w:') && (
             <Field label="Where was it paid?" hint="Which account received the money">

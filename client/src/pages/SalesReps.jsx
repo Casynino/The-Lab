@@ -7,7 +7,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { formatCurrency, formatNumber, fromNow } from '@/lib/format';
 import { TZ_REGIONS } from '@/lib/regions';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, Pagination,
+  PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, NumberInput, Pagination,
 } from '@/components/ui';
 
 function RepModal({ onClose }) {
@@ -42,7 +42,7 @@ function RepModal({ onClose }) {
             {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
             </Select>
           </Field>
-          <Field label="Monthly target"><Input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(e.target.value)} /></Field>
+          <Field label="Monthly target"><NumberInput min="0" value={monthlyTarget} onChange={(e) => setMonthlyTarget(e.target.value)} /></Field>
         </div>
       </div>
     </Modal>

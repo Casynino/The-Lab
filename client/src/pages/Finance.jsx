@@ -16,7 +16,7 @@ import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/
 import { DonutChart, BarChartCard, TrendChart } from '@/components/charts';
 import {
   PageHeader, Card, CardHeader, CardBody, StatCard, PageSpinner, EmptyState, Badge, Button,
-  Modal, Field, Input, Select, Textarea, Table, THead, TBody, TR, TH, TD, Pagination,
+  Modal, Field, Input, NumberInput, Select, Textarea, Table, THead, TBody, TR, TH, TD, Pagination,
 } from '@/components/ui';
 
 const PERIODS = [['today', 'Today'], ['week', 'Week'], ['month', 'Month'], ['all', 'All time']];
@@ -200,7 +200,7 @@ function CorrectBalanceModal({ accounts, onClose }) {
           </Select>
         </Field>
         <Field label="What it really holds now (TZS)" required hint={`The app currently shows ${formatCurrency(shown)}.`}>
-          <Input type="number" value={actual} onChange={(e) => setActual(e.target.value)} autoFocus placeholder="0" />
+          <NumberInput key={accountId} value={actual} onChange={(e) => setActual(e.target.value)} autoFocus placeholder="0" />
         </Field>
         {valid && (
           <p className="text-xs text-muted">
@@ -264,7 +264,7 @@ function TransferModal({ accounts: all, onClose }) {
           </Field>
         </div>
         <Field label="Amount" required hint={from ? `${from.name} holds ${formatCurrency(from.balance)}` : undefined}>
-          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         <Field label="Notes" hint="Optional — why the money moved">
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Banked the cash drawer into M-Pesa" />
@@ -304,7 +304,7 @@ function AddAccountModal({ onClose }) {
             {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </Select>
         </Field>
-        <Field label="Opening balance (TZS)" hint="What's in this account right now"><Input type="number" min="0" value={form.openingBalance} onChange={set('openingBalance')} placeholder="0" /></Field>
+        <Field label="Opening balance (TZS)" hint="What's in this account right now"><NumberInput min="0" value={form.openingBalance} onChange={set('openingBalance')} placeholder="0" /></Field>
         <Field label="Notes"><Textarea rows={2} value={form.notes} onChange={set('notes')} /></Field>
       </div>
     </Modal>
@@ -347,7 +347,7 @@ function MoneyModal({ mode, accounts: all, categories, onClose }) {
     <Modal open onClose={onClose} title={isExpense ? 'Record expense' : 'Record income'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>{isExpense ? 'Save expense' : 'Save income'}</Button></>}>
       <div className="space-y-4">
-        <Field label="Amount (TZS)" required><Input type="number" min="0" value={form.amount} onChange={set('amount')} autoFocus placeholder="0" /></Field>
+        <Field label="Amount (TZS)" required><NumberInput min="0" value={form.amount} onChange={set('amount')} autoFocus placeholder="0" /></Field>
         {isExpense && (
           <Field label="Category" required>
             <Select value={form.category} onChange={set('category')}>
@@ -427,7 +427,7 @@ function OwnerMoneyModal({ mode, accounts: all, onClose }) {
             ? 'Your personal cash entering the business — paying rep commissions out of your own pocket, or topping up an account. It is not counted as income, so it never inflates profit.'
             : 'Profit you are taking out of the business for yourself. It is not counted as an expense, so it never reduces the profit the business earned.'}
         </p>
-        <Field label="Amount (TZS)" required><Input type="number" min="0" value={form.amount} onChange={set('amount')} autoFocus placeholder="0" /></Field>
+        <Field label="Amount (TZS)" required><NumberInput min="0" value={form.amount} onChange={set('amount')} autoFocus placeholder="0" /></Field>
         <Field label={isIn ? 'Into which account' : 'Out of which account'} required>
           <Select value={form.accountId} onChange={set('accountId')}>
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
@@ -1449,7 +1449,7 @@ function EditTxnModal({ txn, accounts, brands, onClose }) {
     <Modal open onClose={onClose} title={`Correct ${txn.txnNumber || 'transaction'}`} footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={save.isPending} disabled={!accountId || !reason.trim()} onClick={() => save.mutate()}>Save correction</Button>
+        <Button loading={save.isPending} disabled={!accountId || !reason.trim() || !(saleLinked || Number(amount) > 0)} onClick={() => save.mutate()}>Save correction</Button>
       </>
     }>
       <div className="space-y-4">
@@ -1475,7 +1475,7 @@ function EditTxnModal({ txn, accounts, brands, onClose }) {
             </Select>
           </Field>
           <Field label="Amount" hint={saleLinked ? 'Locked — comes from the sale. Recall the sale to change it.' : undefined}>
-            <Input type="number" min="0" value={amount} disabled={saleLinked} onChange={(e) => setAmount(e.target.value)} />
+            <NumberInput min="0" value={amount} disabled={saleLinked} onChange={(e) => setAmount(e.target.value)} />
           </Field>
           <Field label="Date">
             <Input type="date" value={occurredAt} onChange={(e) => setOccurredAt(e.target.value)} />
@@ -1880,7 +1880,7 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
           Order total {formatCurrency(order.totalCost)} · paid {formatCurrency(order.paid)} · <b className="text-rose-400">outstanding {formatCurrency(order.outstanding)}</b>
         </div>
         <Field label="Amount (TZS)" required error={amt > order.outstanding + 0.001 ? 'More than what is outstanding' : undefined}>
-          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+          <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
         <Field label="Paid from account" required>
           <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
@@ -1917,7 +1917,7 @@ function PayBalanceModal({ supplier, outstanding, accounts: all, onClose, onDone
           You currently owe {supplier.name} <b className="text-rose-400">{formatCurrency(outstanding)}</b>. Partial payments are fine — pay in installments until it reaches zero.
         </div>
         <Field label="Amount (TZS)" required error={amt > outstanding + 0.001 ? 'More than you owe' : undefined}>
-          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+          <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
         <Field label="Paid from account" required>
           <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
@@ -1995,8 +1995,8 @@ function NewPurchaseModal({ supplier, onClose, onDone }) {
                 <option value="">Select product…</option>
                 {options.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
-              <Input type="number" min="1" className="w-20" placeholder="Boxes" value={l.quantity} onChange={(e) => patch(i, { quantity: e.target.value })} />
-              <Input type="number" min="0" className="w-28" placeholder="Cost/box" value={l.unitCost} onChange={(e) => patch(i, { unitCost: e.target.value })} />
+              <NumberInput min="1" className="w-20" placeholder="Boxes" value={l.quantity} onChange={(e) => patch(i, { quantity: e.target.value })} />
+              <NumberInput min="0" className="w-28" placeholder="Cost/box" value={l.unitCost} onChange={(e) => patch(i, { unitCost: e.target.value })} />
               <button onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))} className="text-faint hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}
@@ -2004,8 +2004,8 @@ function NewPurchaseModal({ supplier, onClose, onDone }) {
             className="inline-flex items-center gap-1 text-xs font-medium text-brand-500 hover:underline"><Plus className="h-3.5 w-3.5" /> Add product</button>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Shipping / transport (TZS)"><Input type="number" min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="0" /></Field>
-          <Field label="Other costs (TZS)"><Input type="number" min="0" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" /></Field>
+          <Field label="Shipping / transport (TZS)"><NumberInput min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="0" /></Field>
+          <Field label="Other costs (TZS)"><NumberInput min="0" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" /></Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Purchase date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
@@ -2166,7 +2166,7 @@ function ReturnGoodsModal({ supplier, outstanding, onClose, onDone }) {
         </div>
 
         <Field label="What are the goods worth?">
-          <Input type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1776000" />
+          <NumberInput min="0" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1776000" />
         </Field>
         {overBill && (
           <p className="text-xs text-rose-400">

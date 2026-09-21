@@ -1,5 +1,5 @@
 import { Plus, X } from 'lucide-react';
-import { Select, Input } from '@/components/ui';
+import { Select, Input, NumberInput } from '@/components/ui';
 import { formatCurrency } from '@/lib/format';
 
 // Reusable editor for product line items (product → packaging → quantity, with
@@ -59,13 +59,13 @@ export default function ItemLines({ products = [], value, onChange, showPrice = 
               <Select value={line.packagingUnitId} onChange={(e) => onPackaging(i, line, e.target.value)} className="w-32" disabled={!product}>
                 {packagings.map((pk) => <option key={pk.id} value={pk.packagingUnitId}>{pk.packagingUnit.name} (×{pk.baseQuantity})</option>)}
               </Select>
-              <Input type="number" min="1" value={line.quantity} onChange={(e) => patch(i, { quantity: Number(e.target.value) })} className="w-20" placeholder="Qty" />
+              <NumberInput min="1" value={line.quantity} onChange={(e) => patch(i, { quantity: Number(e.target.value) })} className="w-20" placeholder="Qty" />
               {showPrice && (priceReadOnly ? (
                 <div className="flex h-[38px] w-28 items-center justify-end rounded-lg bg-elevated px-3 text-sm font-medium text-muted" title="Price per unit">
                   {line.unitPrice !== '' && line.unitPrice != null ? formatCurrency(line.unitPrice) : '—'}
                 </div>
               ) : (
-                <Input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(e) => patch(i, { unitPrice: e.target.value })} className="w-28" placeholder="Unit price" />
+                <NumberInput min="0" value={line.unitPrice} onChange={(e) => patch(i, { unitPrice: e.target.value })} className="w-28" placeholder="Unit price" />
               ))}
               {showCondition && (
                 <Select value={line.condition} onChange={(e) => patch(i, { condition: e.target.value })} className="w-28">

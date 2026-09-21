@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
 import { formatCurrency, formatDate } from '@/lib/format';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -30,18 +30,18 @@ function ReportModal({ type, onClose }) {
         {type === 'OPENING' ? (
           <>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Cash on hand"><Input type="number" min="0" onChange={set('cashOnHand')} /></Field>
-              <Field label="Customers to visit"><Input type="number" min="0" onChange={set('customersToVisit')} /></Field>
+              <Field label="Cash on hand"><NumberInput min="0" onChange={set('cashOnHand')} /></Field>
+              <Field label="Customers to visit"><NumberInput min="0" onChange={set('customersToVisit')} /></Field>
             </div>
             <Field label="Notes"><Textarea rows={2} onChange={setText('openingNote')} placeholder="Plan for the day…" /></Field>
           </>
         ) : (
           <>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Sales made"><Input type="number" min="0" onChange={set('salesAmount')} /></Field>
-              <Field label="Cash collected"><Input type="number" min="0" onChange={set('cashCollected')} /></Field>
-              <Field label="Debts created"><Input type="number" min="0" onChange={set('debtsCreated')} /></Field>
-              <Field label="Debts collected"><Input type="number" min="0" onChange={set('debtsCollected')} /></Field>
+              <Field label="Sales made"><NumberInput min="0" onChange={set('salesAmount')} /></Field>
+              <Field label="Cash collected"><NumberInput min="0" onChange={set('cashCollected')} /></Field>
+              <Field label="Debts created"><NumberInput min="0" onChange={set('debtsCreated')} /></Field>
+              <Field label="Debts collected"><NumberInput min="0" onChange={set('debtsCollected')} /></Field>
             </div>
             <Field label="Notes"><Textarea rows={2} onChange={setText('closingNote')} placeholder="Remaining stock, issues…" /></Field>
           </>

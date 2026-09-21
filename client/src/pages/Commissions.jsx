@@ -10,7 +10,7 @@ import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
 import { PayoutHistory, earnedOn } from '@/components/WithdrawalNote';
 import {
-  PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea,
+  PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -119,7 +119,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
           </div>
         </div>
         <Field label="Amount" required hint={`Up to ${formatCurrency(available)} — take all of it, or leave some to build up`}>
-          <Input type="number" min="0" max={available} value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
+          <NumberInput min="0" max={available} value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
         {amt > 0 && amt < available && (
           <button type="button" onClick={() => setAmount(String(Math.floor(available)))}
@@ -778,7 +778,7 @@ function DeductModal({ reps, onClose }) {
           </Select>
         </Field>
         <Field label="Amount to deduct" required hint={rep ? `${rep.name} currently has ${formatCurrency(rep.available)} available` : undefined}>
-          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         <Field label="Reason" required hint="Shown to the rep and kept in the record">
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Commission removed by The Lab" />
@@ -876,7 +876,7 @@ function CommissionRateSettings() {
           </Select>
         </Field>
         <Field label="Commission per box" required>
-          <Input type="number" min="0" value={perBox} onChange={(e) => setPerBox(e.target.value)} placeholder="5000" />
+          <NumberInput min="0" value={perBox} onChange={(e) => setPerBox(e.target.value)} placeholder="5000" />
         </Field>
         <Field label="Starts" required hint="Must be in the future">
           <Input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -979,8 +979,8 @@ function BonusSettings() {
     <Card className="mt-6">
       <CardHeader title="Sales bonus" subtitle="Reach a sales target, earn a bonus. Kept entirely separate from box commission." />
       <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
-        <Field label="Sales target" required><Input type="number" min="0" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="10000000" /></Field>
-        <Field label="Bonus amount" required><Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></Field>
+        <Field label="Sales target" required><NumberInput min="0" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="10000000" /></Field>
+        <Field label="Bonus amount" required><NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></Field>
         <Field label="Counts sales from" hint="Blank means straight away"><Input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <div className="flex items-end gap-2">
           {editingId ? (

@@ -9,7 +9,8 @@
     "build": "node scripts/check-jsx-imports.mjs && vite build",
     "preview": "vite preview --port 4173",
     "lint": "eslint src",
-    "check:jsx": "node scripts/check-jsx-imports.mjs"
+    "check:jsx": "node scripts/check-jsx-imports.mjs",
+    "test": "node --test \"src/lib/*.test.mjs\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

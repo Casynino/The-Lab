@@ -13,7 +13,7 @@ import { useProducts } from '@/lib/hooks';
 import { ROLES, REQUEST_STATUS_META } from '@/lib/constants';
 import { formatDate, formatDateTime, formatCurrency, formatNumber } from '@/lib/format';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -375,7 +375,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
                   </TD>
                   {editable && (
                     <TD>
-                      <Input type="number" min="0" value={qtys[i.id]} onChange={(e) => setQtys({ ...qtys, [i.id]: e.target.value })} className="w-20" />
+                      <NumberInput min="0" value={qtys[i.id]} onChange={(e) => setQtys({ ...qtys, [i.id]: e.target.value })} className="w-20" />
                     </TD>
                   )}
                   <TD>{formatCurrency(i.unitPrice)}</TD>

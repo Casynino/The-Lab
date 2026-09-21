@@ -7,7 +7,7 @@ import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Select, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -103,8 +103,8 @@ function POModal({ onClose, editing }) {
               <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
                 <Select value={r.productId} onChange={(e) => onProduct(i, e.target.value)} className="min-w-[160px] flex-1"><option value="">Product…</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
                 <Select value={r.packagingUnitId} onChange={(e) => setRow(i, { packagingUnitId: e.target.value })} className="w-32" disabled={!product}>{pkgs.map((pk) => <option key={pk.id} value={pk.packagingUnitId}>{pk.packagingUnit.name} (×{pk.baseQuantity})</option>)}</Select>
-                <Input type="number" min="1" value={r.quantity} onChange={(e) => setRow(i, { quantity: e.target.value })} className="w-20" placeholder="Qty" />
-                <Input type="number" min="0" value={r.unitCost} onChange={(e) => setRow(i, { unitCost: e.target.value })} className="w-28" placeholder="Cost/box" />
+                <NumberInput min="1" value={r.quantity} onChange={(e) => setRow(i, { quantity: e.target.value })} className="w-20" placeholder="Qty" />
+                <NumberInput min="0" value={r.unitCost} onChange={(e) => setRow(i, { unitCost: e.target.value })} className="w-28" placeholder="Cost/box" />
                 {(() => {
                   const pk = pkgs.find((k) => k.packagingUnitId === r.packagingUnitId);
                   const boxes = (Number(r.quantity) || 0) * (pk?.baseQuantity || 1);
@@ -122,9 +122,9 @@ function POModal({ onClose, editing }) {
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Shipping cost (TZS)"><Input type="number" min="0" value={costs.shippingCost} onChange={(e) => setCosts({ ...costs, shippingCost: e.target.value })} /></Field>
-          <Field label="Clearing cost (TZS)"><Input type="number" min="0" value={costs.clearingCost} onChange={(e) => setCosts({ ...costs, clearingCost: e.target.value })} /></Field>
-          <Field label="Other cost (TZS)"><Input type="number" min="0" value={costs.otherCost} onChange={(e) => setCosts({ ...costs, otherCost: e.target.value })} /></Field>
+          <Field label="Shipping cost (TZS)"><NumberInput min="0" value={costs.shippingCost} onChange={(e) => setCosts({ ...costs, shippingCost: e.target.value })} /></Field>
+          <Field label="Clearing cost (TZS)"><NumberInput min="0" value={costs.clearingCost} onChange={(e) => setCosts({ ...costs, clearingCost: e.target.value })} /></Field>
+          <Field label="Other cost (TZS)"><NumberInput min="0" value={costs.otherCost} onChange={(e) => setCosts({ ...costs, otherCost: e.target.value })} /></Field>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Ordered date"><Input type="date" value={orderedAt} onChange={(e) => setOrderedAt(e.target.value)} /></Field>

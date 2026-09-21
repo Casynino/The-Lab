@@ -1,5 +1,8 @@
-import { forwardRef, useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
+import {
+  withCommas, meaning, sameNumber, toPlain, readTyped, readPaste, stepPlain, rangeMessage, countsForCaret, caretAfter,
+} from '@/lib/typedNumber';
 import { motion, useReducedMotion } from 'motion/react';
 import { Loader2, X, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
 
@@ -42,6 +45,206 @@ export function CardBody({ className, children }) {
 // --- Form controls ----------------------------------------------------------
 export const Input = forwardRef(function Input({ className, ...props }, ref) {
   return <input ref={ref} className={clsx('input', className)} {...props} />;
+});
+
+/*
+  A NUMBER BOX THAT SHOWS ITS COMMAS WHILE YOU TYPE.
+
+  A bare 500000 in a payment box is one zero away from 50000 or 5000000, and
+  here that zero is shillings in somebody's books. So the box reads 500,000 as
+  it is typed and hands the page exactly what a number input handed it:
+  e.target.value is the plain "500000", and "" for a box holding only "." or
+  "-". Every form that read the old box reads this one unchanged.
+
+  What a keystroke or a paste means is decided in lib/typedNumber, where it is
+  tested; this component only keeps the box, the caret and the page in step.
+  Two rules it keeps that the old box kept for free:
+  - the box always shows what the page holds. A page that refuses a keystroke
+    (a quantity clamped back to 1) gets its own figure back on screen;
+  - a minus only where the field has no minimum of zero or more — the
+    commission adjustment takes a negative, a payment never does.
+*/
+export const NumberInput = forwardRef(function NumberInput(
+  { value, defaultValue, onChange, onKeyDown, min, max, step, decimals: decimalsProp, inputMode, className, placeholder, type: _type, ...props },
+  ref
+) {
+  const negative = min == null || min === '' || Number(min) < 0;
+  // A "." only where a field asks for decimals with a fractional step — none
+  // does today: shillings have no cents here and boxes are counted whole, and
+  // in a whole box "1.500.000" typed is the 1,500,000 that was meant, not 1.5.
+  const decimals = decimalsProp ?? (step != null && (String(step) === 'any' || String(step).includes('.')));
+  const rules = { negative, decimals };
+  // Once the page has driven the box, a later undefined means empty, not "let go".
+  const driven = useRef(value !== undefined);
+  if (value !== undefined) driven.current = true;
+  const controlled = driven.current;
+  const [plain, setPlain] = useState(() => toPlain(controlled ? value : defaultValue));
+  const text = withCommas(plain);
+  // A figure the page brought with a fraction (a stored 12,345.67) stays
+  // editable: its point may be kept or deleted, just not a new one added.
+  const typing = { negative, decimals: decimals || plain.includes('.') };
+  const box = useRef(null);
+  const caret = useRef(null); // a count of digits to sit after, or 'all'
+  useImperativeHandle(ref, () => box.current);
+
+  const placeCaret = () => {
+    const el = box.current;
+    if (caret.current == null || !el) return;
+    if (document.activeElement === el) {
+      if (caret.current === 'all') el.select();
+      else {
+        const at = caretAfter(el.value, caret.current);
+        el.setSelectionRange(at, at);
+      }
+    }
+    caret.current = null;
+  };
+
+  // The box always shows the page's figure. Checked after every change of the
+  // page's value AND of what was typed: a page that clamps a keystroke leaves
+  // its own value unchanged, so watching the value alone let the box keep a 0
+  // the invoice was billing as 1. When the page overrules what was typed, its
+  // figure is selected, so the next digit replaces it — clearing a quantity the
+  // page puts back to 1, then typing 2, gives 2, not 12.
+  useLayoutEffect(() => {
+    if (!controlled) return;
+    const held = toPlain(value);
+    if (!sameNumber(plain, held)) {
+      const focused = box.current && document.activeElement === box.current;
+      setPlain(held);
+      if (focused) queueMicrotask(() => { caret.current = 'all'; placeCaret(); });
+    }
+  }, [controlled, value, plain]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useLayoutEffect(placeCaret);
+
+  // A number input refused to submit a value outside its min/max; keep that.
+  useEffect(() => {
+    box.current?.setCustomValidity(rangeMessage(plain, { min, max }));
+  }, [plain, min, max]);
+
+  const accept = (next, count, event) => {
+    caret.current = count;
+    setPlain(next);
+    const said = meaning(next);
+    onChange?.({
+      type: 'change',
+      target: { name: props.name, value: said },
+      currentTarget: { name: props.name, value: said },
+      nativeEvent: event?.nativeEvent,
+      preventDefault: () => event?.preventDefault?.(),
+      stopPropagation: () => event?.stopPropagation?.(),
+    });
+    // When nothing visible changes (a comma typed into "12,345"), React puts
+    // the old text back after this handler and throws the caret to the end.
+    queueMicrotask(placeCaret);
+  };
+
+  const refuse = (count) => {
+    caret.current = count;
+    queueMicrotask(placeCaret);
+  };
+
+  const digitsIn = (str) => [...str].filter(countsForCaret).length;
+
+  /*
+    A pasted figure is read on its own, then put where the selection was.
+    Reading the whole box after the paste glued "500.000" onto a default "0"
+    as 0500.000 — five hundred — where on its own it is refused.
+  */
+  const insertFigure = (before, pasted, after, event) => {
+    const read = readPaste(pasted, rules);
+    if (!read.ok) return refuse(digitsIn(before));
+    // Judged on what the whole box held, not on what the selection left: a
+    // box that held "10" with its 1 selected is not a box holding its
+    // starting 0. And a minus the user typed first is theirs — pasting 25,000
+    // after it is minus 25,000; a signed paste simply replaces it.
+    let head = before;
+    let tail = after;
+    if (plain === '' || plain === '0') { head = ''; tail = ''; }
+    if (plain === '-') { head = read.plain.startsWith('-') ? '' : '-'; tail = ''; }
+    const next = readTyped(head + read.plain + tail, typing);
+    if (!next.ok) return refuse(digitsIn(before));
+    accept(next.plain, digitsIn(head + read.plain), event);
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const el = e.currentTarget;
+    const s = el.selectionStart ?? text.length;
+    const end = el.selectionEnd ?? s;
+    insertFigure(text.slice(0, s), e.clipboardData?.getData('text') ?? '', text.slice(end), e);
+  };
+
+  const handleChange = (e) => {
+    const el = e.target;
+    const kind = e.nativeEvent?.inputType || '';
+    const data = e.nativeEvent?.data;
+    const caretNow = el.selectionStart ?? el.value.length;
+    // A phone keyboard's clipboard or suggestion inserts a whole string as
+    // "typing". It is read as the paste it is.
+    if ((kind === 'insertText' || kind === 'insertReplacementText') && data && data.length > 1) {
+      const at = Math.max(0, caretNow - data.length);
+      return insertFigure(el.value.slice(0, at), data, el.value.slice(caretNow), e);
+    }
+    // A paste or drop that got past the paste handler is not guessed at.
+    if (/^insertFrom(Paste|Drop)/.test(kind)) return refuse(Infinity);
+    const before = el.value.slice(0, caretNow);
+    const read = readTyped(el.value, typing);
+    if (!read.ok) {
+      // Refused: the box keeps what it had, and the caret goes back to where
+      // the keystroke was made instead of jumping to the end.
+      return refuse(digitsIn(before) - (countsForCaret(before.slice(-1)) ? 1 : 0));
+    }
+    accept(read.plain, digitsIn(before), e);
+  };
+
+  const handleKeyDown = (e) => {
+    onKeyDown?.(e);
+    if (e.defaultPrevented) return;
+    const { selectionStart: s, selectionEnd: end } = e.currentTarget;
+    const plainKey = !e.altKey && !e.ctrlKey && !e.metaKey; // Cmd/Alt+Backspace keep their own meaning
+    // Backspace just after a comma, or Delete just before one, would remove
+    // the comma and put it straight back, and the key would seem dead. Take
+    // the digit on the far side of the comma instead. Done here rather than by
+    // moving the caret: the browser deletes at the caret it had on key-down.
+    const edit = (next, caretText) => {
+      e.preventDefault();
+      const read = readTyped(next, typing);
+      if (read.ok) accept(read.plain, digitsIn(caretText), e);
+    };
+    if (plainKey && s === end && e.key === 'Backspace' && s > 1 && text[s - 1] === ',') {
+      const next = text.slice(0, s - 2) + text.slice(s - 1);
+      return edit(next, next.slice(0, s - 2));
+    }
+    if (plainKey && s === end && e.key === 'Delete' && text[s] === ',' && s + 1 < text.length) {
+      const next = text.slice(0, s + 1) + text.slice(s + 2);
+      return edit(next, next.slice(0, s + 1));
+    }
+    // Up and down still count, as they did on the old box.
+    if (plainKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      accept(stepPlain(plain, { step, dir: e.key === 'ArrowUp' ? 1 : -1, min, max }), Infinity, e);
+    }
+  };
+
+  return (
+    <input
+      ref={box}
+      type="text"
+      inputMode={inputMode ?? (negative ? undefined : decimals ? 'decimal' : 'numeric')}
+      autoComplete="off"
+      className={clsx('input tabular-nums', className)}
+      value={text}
+      onChange={handleChange}
+      onKeyDown={handleKeyDown}
+      onPaste={handlePaste}
+      onDrop={(e) => e.preventDefault()}
+      // A figure used as a hint — "the bill is 1776000" — gets its commas too.
+      placeholder={/^-?\d+(\.\d+)?$/.test(String(placeholder ?? '')) ? withCommas(String(placeholder)) : placeholder}
+      {...props}
+    />
+  );
 });
 
 export const Textarea = forwardRef(function Textarea({ className, ...props }, ref) {

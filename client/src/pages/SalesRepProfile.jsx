@@ -20,7 +20,7 @@ import WithdrawalNote, { PayoutHistory, withdrawalState } from '@/components/Wit
 import { TrendChart } from '@/components/charts';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
-  Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, Textarea,
+  Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, NumberInput, Textarea,
 } from '@/components/ui';
 
 // ── Section wrapper ──────────────────────────────────────────────────────────
@@ -316,7 +316,7 @@ function AddCommissionModal({ rep, earned, onClose }) {
           commission comes out of your own pocket. A negative amount takes it back off.
         </p>
         <Field label="Amount" required hint={`Earned so far: ${formatCurrency(earned)}`}>
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus placeholder="0" />
+          <NumberInput value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus placeholder="0" />
         </Field>
         <Field label="Why" required hint="This is the only record of why the balance moved.">
           <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. testing the withdrawal flow" />
@@ -354,7 +354,7 @@ function DeductCommissionModal({ rep, available, onClose }) {
     }>
       <div className="space-y-4">
         <Field label="Amount to deduct" required hint={`Available now: ${formatCurrency(available)}`}>
-          <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         {/* Clearing the balance exactly is the common case — save the arithmetic. */}
         {available > 0 && (
@@ -436,7 +436,7 @@ function EditRepModal({ rep, onClose }) {
             </Select>
         </Field>
         <Field label="Monthly target (TZS)" hint="Optional">
-          <Input type="number" min="0" value={form.monthlyTarget} onChange={set('monthlyTarget')} placeholder="0" />
+          <NumberInput min="0" value={form.monthlyTarget} onChange={set('monthlyTarget')} placeholder="0" />
         </Field>
 
         <div className="rounded-xl border border-border bg-elevated/40 p-3">
@@ -531,7 +531,7 @@ function AddStockModal({ repId, repName, onClose }) {
           error={overMax ? `Only ${formatNumber(available)} box(es) in The Lab` : undefined}
           hint={selected && !overMax ? `${formatCurrency(selected.sellingPrice)}/box · adds ${formatCurrency((selected.sellingPrice || 0) * n)} to the order` : undefined}
         >
-          <Input type="number" min="1" max={available || undefined} value={boxes} disabled={!productId}
+          <NumberInput min="1" max={available || undefined} value={boxes} disabled={!productId}
             onChange={(e) => setBoxes(e.target.value)} placeholder="0" />
         </Field>
         <Field label="Reason / note" hint="Optional — saved to the audit log">

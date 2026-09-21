@@ -9,7 +9,7 @@ import { sortByCanonical } from '@/lib/productOrder';
 import { MOVEMENT_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, NumberInput, Textarea,
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -102,7 +102,7 @@ function AdjustModal({ mode, onClose }) {
               {packagings.map((pk) => <option key={pk.id} value={pk.packagingUnitId}>{pk.packagingUnit.name} (×{pk.baseQuantity})</option>)}
             </Select>
           </Field>
-          <Field label="Quantity"><Input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Field>
+          <Field label="Quantity"><NumberInput min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Field>
         </div>
         {mode === 'adjust' && (
           <Field label="Direction">

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, Package, X, TrendingDown, Boxes, Wallet } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useBrands, useCategories, usePackagingUnits, useDebounce } from '@/lib/hooks';
 import { formatCurrency, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Select, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -30,9 +30,9 @@ function PackagingEditor({ rows, setRows, units }) {
             <Select value={r.packagingUnitId} onChange={(e) => update(i, { packagingUnitId: e.target.value })} className="flex-1">
               {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </Select>
-            <Input type="number" min="1" value={r.baseQuantity} disabled={r.isBaseUnit}
+            <NumberInput min="1" value={r.baseQuantity} disabled={r.isBaseUnit}
               onChange={(e) => update(i, { baseQuantity: Number(e.target.value) })} className="w-24" placeholder="Base qty" />
-            <Input type="number" min="0" value={r.unitPrice} onChange={(e) => update(i, { unitPrice: e.target.value })} className="w-28" placeholder="Price (opt)" />
+            <NumberInput min="0" value={r.unitPrice} onChange={(e) => update(i, { unitPrice: e.target.value })} className="w-28" placeholder="Price (opt)" />
             <label className="flex items-center gap-1 whitespace-nowrap text-xs text-muted">
               <input type="radio" name="baseUnit" checked={r.isBaseUnit} onChange={() => setBase(i)} /> base
             </label>
@@ -47,7 +47,7 @@ function PackagingEditor({ rows, setRows, units }) {
 function ProductModal({ open, onClose, editing, brands, categories, units }) {
   const qc = useQueryClient();
   const isEdit = !!editing;
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const { register, control, handleSubmit, formState: { errors } } = useForm({
     defaultValues: editing
       ? {
           name: editing.name, sku: editing.sku, barcode: editing.barcode || '', brandId: editing.brandId, categoryId: editing.categoryId,
@@ -131,11 +131,23 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="Base unit"><Input {...register('baseUnitName')} placeholder="Pack" /></Field>
-          <Field label="Purchase price" required><Input type="number" step="0.01" {...register('purchasePrice', { required: true })} /></Field>
-          <Field label="Selling price" required><Input type="number" step="0.01" {...register('sellingPrice', { required: true })} /></Field>
-          <Field label="Min stock"><Input type="number" {...register('minStockLevel')} /></Field>
+          {/* Controlled, not register(): register writes the saved price straight
+              into the DOM, and the box would open showing 12500 instead of 12,500. */}
+          <Field label="Purchase price" required>
+            <Controller name="purchasePrice" control={control} rules={{ required: true }}
+              render={({ field }) => <NumberInput min="0" {...field} />} />
+          </Field>
+          <Field label="Selling price" required>
+            <Controller name="sellingPrice" control={control} rules={{ required: true }}
+              render={({ field }) => <NumberInput min="0" {...field} />} />
+          </Field>
+          <Field label="Min stock">
+            <Controller name="minStockLevel" control={control} render={({ field }) => <NumberInput min="0" {...field} />} />
+          </Field>
         </div>
-        <Field label="Reorder quantity (base units)"><Input type="number" {...register('reorderQuantity')} /></Field>
+        <Field label="Reorder quantity (base units)">
+          <Controller name="reorderQuantity" control={control} render={({ field }) => <NumberInput min="0" {...field} />} />
+        </Field>
 
         <PackagingEditor rows={rows} setRows={setRows} units={units} />
 

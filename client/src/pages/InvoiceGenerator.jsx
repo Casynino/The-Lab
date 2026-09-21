@@ -7,7 +7,7 @@ import {
 import api, { unwrap } from '@/lib/api';
 import { useProducts } from '@/lib/hooks';
 import {
-  PageHeader, Card, CardHeader, CardBody, Button, Field, Input, EmptyState,
+  PageHeader, Card, CardHeader, CardBody, Button, Field, Input, NumberInput, EmptyState,
 } from '@/components/ui';
 import { INVOICE_COMPANY, INVOICE_PAYMENT, INVOICE_TERMS, INVOICE_FOOTER } from '@/lib/invoiceConfig';
 import { invoiceBlob, invoiceFilename } from '@/lib/invoicePdf';
@@ -271,7 +271,7 @@ export default function InvoiceGenerator() {
                         <div className="truncate text-sm font-medium text-foreground">{it.name}</div>
                         <div className="text-xs text-faint">{tzs(it.unitPrice)} / unit · line {tzs(it.qty * it.unitPrice)}</div>
                       </div>
-                      <Input type="number" min="1" value={it.qty} onChange={(e) => setQty(it.productId, e.target.value)} className="w-16 text-center" />
+                      <NumberInput min="1" value={it.qty} onChange={(e) => setQty(it.productId, e.target.value)} className="w-16 text-center" />
                       <button onClick={() => removeItem(it.productId)} className="text-faint hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   ))}
