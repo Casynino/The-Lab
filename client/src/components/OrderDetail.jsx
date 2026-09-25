@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { motion, useReducedMotion } from 'motion/react';
-import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert } from 'lucide-react';
+import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCcw } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
@@ -402,6 +402,71 @@ function SelfExtendModal({ order, onClose, onDone }) {
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5" />
           <span className="text-muted">I understand the higher penalties and want the extra time.</span>
         </label>
+      </div>
+    </Modal>
+  );
+}
+
+// Time given by mistake, taken back. One step: whatever last moved the
+// deadline — The Lab's own extension, or the rep's 96 hours — goes back to
+// what it was. The screen says what that costs the rep before it happens,
+// because cancelling their extension hands back their one use and their
+// normal fine rate, and a restored deadline that has already passed makes the
+// order overdue the moment it is done.
+function UndoDeadlineModal({ order, onClose, onDone }) {
+  const undo = useMutation({
+    mutationFn: () => api.post(`/settlements/${order.id}/undo-deadline`),
+    onSuccess: () => { toast.success('Deadline put back'); onDone(); onClose(); },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const wasSelfExtension = order.undoDeadlineKind === 'SELF_EXTENSION';
+  const back = order.undoDeadlineTo ? new Date(order.undoDeadlineTo) : null;
+  const alreadyPast = back && back <= new Date();
+
+  return (
+    <Modal open onClose={onClose} title={`${wasSelfExtension ? 'Cancel extension' : 'Undo deadline change'} · ${order.settlementNumber}`}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Leave it</Button>
+        <Button variant="danger" loading={undo.isPending} onClick={() => undo.mutate()}>
+          <RotateCcw className="h-4 w-4" /> {wasSelfExtension ? 'Cancel the extension' : 'Put the deadline back'}
+        </Button>
+      </>}
+    >
+      <div className="space-y-4 text-sm">
+        <div className="rounded-xl border border-border bg-elevated p-3">
+          <div className="flex justify-between"><span className="text-muted">Deadline now</span><span className="font-medium">{formatDateTime(order.deadlineAt)}</span></div>
+          <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
+            <span>Goes back to</span><span>{back ? formatDateTime(back) : '—'}</span>
+          </div>
+        </div>
+
+        {wasSelfExtension && (
+          <div className="rounded-xl border border-border bg-elevated p-3">
+            <div className="mb-1.5 font-semibold text-foreground">What changes for the rep</div>
+            <ul className="list-disc space-y-1 pl-4 text-xs text-muted">
+              <li>The late fine returns to <b>{formatCurrency(10000)} per day</b> (it is {formatCurrency(20000)} while extended).</li>
+              <li>A return not approved in 24 hours costs <b>{formatCurrency(15000)}</b> again, not {formatCurrency(30000)}.</li>
+              <li>
+                Their {order.extensionHours || 96}-hour extension is unused again — they can take it themselves
+                {alreadyPast ? ', once the order is no longer overdue.' : '.'}
+              </li>
+            </ul>
+          </div>
+        )}
+
+        {alreadyPast && (
+          <div className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-rose-300">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="text-xs">
+              That deadline has already passed, so the order is <b>overdue from now</b>. The daily fine runs from today —
+              the days the extra time covered are not charged. Extend it again if the rep is meant to have more time.
+            </span>
+          </div>
+        )}
+
+        <p className="text-xs text-faint">
+          This takes back the last change to the deadline. The rep is told, and it goes in the audit log.
+        </p>
       </div>
     </Modal>
   );
@@ -809,6 +874,16 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-violet-400',
             });
           }
+          // Time given by mistake is not permanent any more.
+          if (staff && active && order.canUndoDeadline) {
+            actions.push({
+              key: 'undo-deadline',
+              label: order.undoDeadlineKind === 'SELF_EXTENSION' ? 'Cancel extension' : 'Undo deadline change',
+              Icon: RotateCcw,
+              onClick: () => setSub('undo-deadline'),
+              cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-rose-400',
+            });
+          }
 
           const [primary, ...rest] = actions;
           const btn = 'flex h-11 items-center justify-center gap-2 rounded-xl px-3 text-[13px] font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60';
@@ -911,6 +986,27 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 <p className="mt-2.5 text-[11px] leading-snug text-faint">
                   Original deadline {formatDateTime(order.preExtensionDeadline)}, extended by {order.extensionHours}h
                   {order.selfExtendedAt ? ` on ${formatDateTime(order.selfExtendedAt)}` : ''}.
+                </p>
+              )}
+              {/* The Lab's own note. A rep has no use for a countdown of the
+                  time that might be taken off his order. */}
+              {staff && order.canUndoDeadline && (
+                <p className="mt-1 text-[11px] leading-snug text-faint">
+                  This can be taken back — the deadline would return to {formatDateTime(order.undoDeadlineTo)}.
+                </p>
+              )}
+              {/* And why it cannot, when it cannot: the button simply going
+                  missing reads as a bug. */}
+              {staff && !order.canUndoDeadline && order.undoDeadlineTo && order.finesCharged > 0 && (
+                <p className="mt-1 text-[11px] leading-snug text-faint">
+                  This cannot be taken back — {order.finesCharged} fine{order.finesCharged !== 1 ? 's' : ''} already charged against this
+                  deadline. Set a new deadline instead.
+                </p>
+              )}
+              {/* An order can be overdue while the fine only starts later. */}
+              {order.finesFrom && (
+                <p className="mt-1 text-[11px] leading-snug text-amber-400/80">
+                  Daily fine runs from {formatDateTime(order.finesFrom)} — the time that was taken back is not charged.
                 </p>
               )}
             </div>
@@ -1189,6 +1285,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
       {order && sub === 'settle' && <SettleBoxesModal order={order} onClose={() => setSub(null)} onDone={refresh} />}
       {order && sub === 'return' && <RecordReturnModal order={order} onClose={() => setSub(null)} onDone={refresh} />}
       {order && sub === 'extend' && <ExtendDeadlineModal order={order} onClose={() => setSub(null)} onDone={refresh} />}
+      {order && sub === 'undo-deadline' && <UndoDeadlineModal order={order} onClose={() => setSub(null)} onDone={refresh} />}
       {order && sub === 'self-extend' && <SelfExtendModal order={order} onClose={() => setSub(null)} onDone={refresh} />}
       {rejectingReturn && <RejectReturnModal ret={rejectingReturn} onClose={() => setRejectingReturn(null)} onDone={refresh} />}
       {rejectingSubmission && <RejectSubmissionModal submission={rejectingSubmission} onClose={() => setRejectingSubmission(null)} onDone={refresh} />}

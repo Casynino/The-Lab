@@ -111,17 +111,46 @@ const selfExtend = asyncHandler(async (req, res) => {
 const refreshOverdue = asyncHandler(async (_req, res) => ok(res, await settlement.refreshOverdue()));
 
 const extendDeadline = asyncHandler(async (req, res) => {
-  const result = await settlement.extendDeadline(req.params.id, req.body);
+  const result = await settlement.extendDeadline(req.params.id, req.body, req.user);
   await audit.record(req, {
     action: 'EXTEND_DEADLINE',
     entityType: 'Settlement',
     entityId: req.params.id,
-    newValues: { deadlineAt: result.deadlineAt },
+    newValues: { deadlineAt: result.deadlineAt, previousDeadline: result.deadlineBefore },
+  });
+  return ok(res, result);
+});
+
+// POST /settlements/:id/undo-deadline — take back the last deadline change,
+// including the rep's own 96 hours. The audit line says what it put back and
+// what it took away, because the rep's fine rate changes with it.
+const undoDeadlineChange = asyncHandler(async (req, res) => {
+  const result = await settlement.undoDeadlineChange(req.params.id, req.user);
+  // The service reports what it undid — the audit line reads it from there, so
+  // it names the right change even on orders extended before this shipped.
+  const { undone } = result;
+  await audit.record(req, {
+    // Its own action: the audit list shows the action and nothing else, so
+    // taking time back must not read as giving it.
+    action: 'UNDO_DEADLINE',
+    entityType: 'Settlement',
+    entityId: req.params.id,
+    oldValues: { deadlineAt: undone.from, kind: undone.kind, hours: undone.hours },
+    newValues: {
+      kind: 'UNDO_DEADLINE_CHANGE',
+      settlementNumber: result.settlementNumber,
+      deadlineAt: result.deadlineAt,
+      status: result.status,
+      penaltyPerDay: result.penaltyPerDay,
+      extensionReturned: undone.extensionReturned,
+      overdueNow: undone.overdueNow,
+      finesRunFrom: result.penaltyFrom || result.deadlineAt,
+    },
   });
   return ok(res, result);
 });
 
 module.exports = {
-  list, summary, analytics, get, settle, refreshOverdue, extendDeadline, selfExtend,
+  list, summary, analytics, get, settle, refreshOverdue, extendDeadline, undoDeadlineChange, selfExtend,
   submitSettlement, pendingApprovals, approveSubmission, rejectSubmission, paymentAccounts,
 };

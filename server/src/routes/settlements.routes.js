@@ -26,6 +26,8 @@ router.get('/:id', validate(idParam), ctrl.get);
 router.post('/:id/settle-boxes', settlers, validate({ ...idParam, ...settlementSettleBoxes }), ctrl.submitSettlement);
 router.post('/:id/settle', staff, validate({ ...idParam, ...settlementSettle }), ctrl.settle);
 router.post('/:id/extend-deadline', staff, validate(idParam), ctrl.extendDeadline);
+// Take the last deadline change back — the rep's 96 hours included.
+router.post('/:id/undo-deadline', staff, validate(idParam), ctrl.undoDeadlineChange);
 // The rep activates their own +96h extension (no approval); staff may too.
 router.post('/:id/self-extend', settlers, validate(idParam), ctrl.selfExtend);
 router.post('/refresh-overdue', requireAdmin, ctrl.refreshOverdue);

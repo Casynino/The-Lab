@@ -33,6 +33,17 @@ const dailyRateFor = (s) => (s && s.selfExtendedAt ? EXTENDED_PENALTY_PER_DAY : 
 const returnFailureRateFor = (s) => (s && s.selfExtendedAt ? EXTENDED_RETURN_FAILURE_PENALTY : RETURN_FAILURE_PENALTY);
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+// When the fine clock starts. Normally the deadline itself — but when The Lab
+// takes back time it gave by mistake, the deadline moves into the past, and
+// billing the rep for days he was told he had would be inventing debt. The
+// undo stamps penaltyFrom with the moment it happened, and the clock starts
+// there instead.
+function fineClockStart(s) {
+  const deadline = new Date(s.deadlineAt).getTime();
+  const from = s.penaltyFrom ? new Date(s.penaltyFrom).getTime() : 0;
+  return Math.max(deadline, from);
+}
+
 // Penalty-days owed for an overdue settlement: 1 the instant the deadline passes,
 // then +1 every 24h. (deadlineAt <= now is guaranteed by the caller.)
 function penaltyDaysDue(deadlineAt, now) {
@@ -57,7 +68,20 @@ async function applyDuePenalties() {
     const pendingReturns = await prisma.return.count({ where: { settlementId: s.id, status: 'PENDING' } });
     if (pendingReturns > 0) continue;
 
-    const due = penaltyDaysDue(s.deadlineAt, now);
+    // Read the order again before pricing anything. The list above is a
+    // snapshot, and between it and this line The Lab may have taken back an
+    // extension — which changes the rate, the clock and whether a fine is owed
+    // at all. A fine written from the snapshot would be priced against a
+    // deadline that no longer exists.
+    const fresh = await prisma.settlement.findUnique({
+      where: { id: s.id },
+      select: { status: true, deadlineAt: true, penaltyFrom: true, selfExtendedAt: true, settlementNumber: true },
+    });
+    if (!fresh || fresh.status === 'SETTLED') continue;
+    Object.assign(s, fresh);
+    const clock = fineClockStart(s);
+    if (clock > now) continue; // time taken back today is not charged today
+    const due = penaltyDaysDue(clock, now);
     // Count EVERY daily row including WAIVED ones: a forgiven fine is still a
     // charged penalty-day, so forgiveness never causes a re-charge. Rows with
     // daysOverdue = 0 are return-expiry delay fines, not daily late-fines.
@@ -278,6 +302,7 @@ async function listPenalties({ salesRepId, settlementId, page = 1, limit = 20, i
 }
 
 module.exports = {
+  fineClockStart,
   applyDuePenalties,
   penaltyBreakdownForRep,
   totalPenaltiesForRep,

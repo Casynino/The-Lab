@@ -20,7 +20,45 @@ const SELF_EXTENSION_HOURS = 96;
 
 const INCLUDE = {
   salesRep: { include: { user: { select: { id: true, name: true } } } },
+  // Whether any fine has been charged against this order: an undo may not
+  // touch a deadline that money has already been taken for.
+  _count: { select: { penalties: true } },
 };
+
+// How far the last change moved the deadline, and which change it was.
+//
+// The undo subtracts this rather than restoring the old date, because a return
+// that sat waiting on The Lab pushes the deadline forward in between, and the
+// rep is promised never to be fined for those hours. Restoring the old date
+// swallowed them.
+//
+// Orders extended before this was built carry no record, so the rep's 96 hours
+// are read from the fields that have always been written — otherwise the owner
+// could not take back the extension that made him ask for this.
+function undoShiftSeconds(s) {
+  if (s.deadlineShiftSeconds != null) return s.deadlineShiftSeconds;
+  if (s.deadlineBefore) return Math.round((new Date(s.deadlineAt) - new Date(s.deadlineBefore)) / 1000);
+  // Extended before this was built. The rep's 96 hours can only be read back
+  // when they are still the last thing that moved the deadline — if the gap is
+  // no longer exactly 96 hours, something else moved it since and subtracting
+  // 96 would land on a date that never existed.
+  if (s.selfExtendedAt && s.preExtensionDeadline) {
+    const gap = new Date(s.deadlineAt) - new Date(s.preExtensionDeadline);
+    if (Math.abs(gap - SELF_EXTENSION_HOURS * 3600 * 1000) < 60_000) return SELF_EXTENSION_HOURS * 3600;
+  }
+  return null;
+}
+
+function undoTarget(s) {
+  const shift = undoShiftSeconds(s);
+  return shift == null ? null : new Date(new Date(s.deadlineAt).getTime() - shift * 1000);
+}
+
+function undoKind(s) {
+  if (undoShiftSeconds(s) == null) return null;
+  if (s.deadlineChangeKind) return s.deadlineChangeKind;
+  return s.selfExtendedAt ? 'SELF_EXTENSION' : 'ADMIN_EXTENSION';
+}
 
 // Effective status: stored SETTLED wins; otherwise OVERDUE once past deadline.
 function effectiveStatus(s) {
@@ -66,6 +104,17 @@ function decorate(s) {
     // before the deadline passes — an extension is extra time, not an escape
     // from fines already running.
     canSelfExtend: !settled && !extensionUsed && status !== 'OVERDUE',
+    // What taking back the last deadline change would do, worked out here so
+    // every screen tells the same story.
+    // Not once a fine has been charged: the ledger decides what is owed, and
+    // moving the deadline under it would re-price days already paid for.
+    canUndoDeadline: !settled && Boolean(undoTarget(s)) && (s._count?.penalties ?? 0) === 0,
+    undoDeadlineTo: undoTarget(s),
+    undoDeadlineKind: undoKind(s),
+    finesCharged: s._count?.penalties ?? null,
+    // When the daily fine may start, which is later than the deadline on an
+    // order whose extra time was taken back.
+    finesFrom: s.penaltyFrom && new Date(s.penaltyFrom) > new Date(s.deadlineAt) ? s.penaltyFrom : null,
     penaltyPerDay: penalty.dailyRateFor(s),
     returnFailurePenalty: penalty.returnFailureRateFor(s),
   };
@@ -892,6 +941,14 @@ async function selfExtend(id, actor) {
       preExtensionDeadline: previous,
       selfExtendedAt: new Date(),
       selfExtendedById: actor ? actor.id : null,
+      // What it replaced, so The Lab can take the time back if it was a
+      // mistake — the fine rate and the rep's one use come back with it.
+      deadlineBefore: previous,
+      deadlineChangedAt: new Date(),
+      deadlineChangedById: actor ? actor.id : null,
+      deadlineChangeKind: 'SELF_EXTENSION',
+      deadlineShiftSeconds: SELF_EXTENSION_HOURS * 3600,
+      penaltyFrom: null,
       // Re-arm the 24h/6h/1h reminders against the new deadline.
       reminderStage: 0,
     },
@@ -905,6 +962,7 @@ async function selfExtend(id, actor) {
     notification.notifyUser(repUserId, {
       type: 'GENERAL',
       severity: 'WARNING',
+      dedupeSalt: String(new Date(updated.selfExtendedAt).getTime()),
       title: `Order ${updated.settlementNumber} extended to ${when}`,
       message: `You activated the ${SELF_EXTENSION_HOURS}-hour extension on order ${updated.settlementNumber}. New deadline: ${when} (EAT). No fine until then — but after it, the late fine is ${formatCurrency(penalty.EXTENDED_PENALTY_PER_DAY)} per day, and a return not completed within 24 hours costs ${formatCurrency(penalty.EXTENDED_RETURN_FAILURE_PENALTY)}.`,
       entityType: 'Settlement',
@@ -938,7 +996,7 @@ async function selfExtend(id, actor) {
 // Extend (or set) the deadline for an open order. Admins use this when a rep
 // needs more time. If the order is OVERDUE it reverts to OPEN/PARTIAL once
 // the new deadline is in the future.
-async function extendDeadline(id, { deadlineAt, additionalHours }) {
+async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
   const s = await prisma.settlement.findUnique({ where: { id } });
   if (!s) throw ApiError.notFound('Settlement not found');
   if (s.status === 'SETTLED') throw ApiError.badRequest('This order is already closed');
@@ -963,8 +1021,20 @@ async function extendDeadline(id, { deadlineAt, additionalHours }) {
 
   const updated = await prisma.settlement.update({
     where: { id },
-    // Re-arm reminders for the new window (24h/6h/1h fire again).
-    data: { deadlineAt: newDeadline, status: newStatus, reminderStage: 0 },
+    data: {
+      deadlineAt: newDeadline,
+      status: newStatus,
+      // Re-arm reminders for the new window (24h/6h/1h fire again).
+      reminderStage: 0,
+      // What this replaced, so a date given by mistake can be taken back.
+      deadlineBefore: new Date(s.deadlineAt),
+      deadlineChangedAt: new Date(),
+      deadlineChangedById: actor ? actor.id : null,
+      deadlineChangeKind: 'ADMIN_EXTENSION',
+      deadlineShiftSeconds: Math.round((newDeadline - new Date(s.deadlineAt)) / 1000),
+      // A fresh deadline is a fresh fine clock.
+      penaltyFrom: null,
+    },
     include: INCLUDE,
   });
 
@@ -987,6 +1057,132 @@ async function extendDeadline(id, { deadlineAt, additionalHours }) {
   return decorate(updated);
 }
 
+// Take back the last thing that moved the deadline — one step, the last one.
+//
+// Time given by mistake used to be permanent. The rep's own 96 hours could not
+// be undone at all, and they carry a doubled daily fine, so a wrong tap cost
+// The Lab the fine rate as well as the days. This puts the deadline back where
+// it was, and when what it undoes is the rep's extension it also gives back
+// the normal fine rate and the one use — the order returns to the deal it was
+// on before.
+//
+// The restored deadline may already have passed, and then the order is overdue
+// again from that moment, exactly as it would have been. The caller is told
+// so before it happens; it is not softened here.
+async function undoDeadlineChange(id, actor) {
+  const s = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE });
+  if (!s) throw ApiError.notFound('Order not found');
+  const shift = undoShiftSeconds(s);
+  if (shift == null) throw ApiError.badRequest('Nothing to undo — this order\'s deadline has not been changed');
+  if (effectiveStatus(s) === 'SETTLED') throw ApiError.badRequest('This order is already closed');
+
+  const kind = undoKind(s);
+  const undoingSelfExtension = kind === 'SELF_EXTENSION';
+
+  // Not once money has been taken. Every fine on this order was priced and
+  // numbered against the deadline as it stood — the extended rate doubles the
+  // daily fine and the failed-return fine, and the sweep counts the rows it
+  // has already written. Moving the deadline under that ledger re-prices days
+  // the rep has already paid for, in one direction or the other. So the undo
+  // stops here and the deadline is set by hand instead, leaving the fines to
+  // be waived one by one, which is how forgiving a fine already works.
+  const fines = await prisma.settlementPenalty.count({ where: { settlementId: id } });
+  if (fines > 0) {
+    throw ApiError.badRequest(
+      `This order already has ${fines} fine${fines !== 1 ? 's' : ''} charged against its deadline. Taking the time back would change what the rep owes for days already billed. Set a new deadline instead, and waive any fine that should not stand.`
+    );
+  }
+
+  const restored = new Date(new Date(s.deadlineAt).getTime() - shift * 1000);
+  const now = new Date();
+  // Time given to an order that was ALREADY overdue is not taken back here.
+  // The fine clock would have to charge the days before the change and forgive
+  // the days after it, and one stamp cannot say both. Those orders get a new
+  // deadline by hand instead.
+  const givenAt = s.deadlineChangedAt || s.selfExtendedAt;
+  if (givenAt && restored < new Date(givenAt)) {
+    throw ApiError.badRequest('This order was already overdue when that time was given. Set a new deadline instead.');
+  }
+  const overdueNow = restored <= now;
+  const status = overdueNow
+    ? 'OVERDUE'
+    : s.status === 'OVERDUE'
+      ? (toNumber(s.settledValue) > 0 || toNumber(s.returnedValue) > 0 ? 'PARTIAL' : 'OPEN')
+      : s.status;
+
+  // Claim the row on the state it was read in: a settlement approved between
+  // the read and the write must not be dragged back out of SETTLED.
+  // Claim on the exact state that was read — status included, so a settlement
+  // approved in between is neither dragged back nor quietly re-written.
+  const claim = await prisma.settlement.updateMany({
+    // `penalties: none` is the rule itself, held at the moment of writing: a
+    // fine landing between the count above and this line would otherwise be
+    // left priced against a deadline that no longer exists.
+    where: { id, status: s.status, deadlineAt: s.deadlineAt, penalties: { none: {} } },
+    data: {
+      deadlineAt: restored,
+      status,
+      // The deadline is in the past again, so no "due in 24 hours" reminder is
+      // owed; a restored deadline still ahead re-arms them.
+      reminderStage: overdueNow ? 3 : 0,
+      // Time taken back today is not charged for the days it covered: the
+      // fine clock starts now, not at the restored deadline.
+      penaltyFrom: overdueNow ? now : null,
+      deadlineBefore: null,
+      deadlineChangedAt: null,
+      deadlineChangedById: null,
+      deadlineChangeKind: null,
+      deadlineShiftSeconds: null,
+      // The rep's 96 hours go back on the shelf, with the normal fine rate.
+      ...(undoingSelfExtension
+        ? { selfExtendedAt: null, selfExtendedById: null, preExtensionDeadline: null }
+        : {}),
+    },
+  });
+  if (claim.count === 0) {
+    throw ApiError.badRequest('This order changed while you were looking at it — open it again and check the deadline and its fines');
+  }
+
+  const updated = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE });
+  const dec = decorate(updated);
+  // What it undid, for the audit line and for the caller to show.
+  dec.undone = {
+    kind,
+    from: s.deadlineAt,
+    to: restored,
+    hours: round2(shift / 3600),
+    // Cancelling the extension hands it back, whatever state the order is in:
+    // the rep may take it again as soon as the order is not overdue.
+    extensionReturned: undoingSelfExtension,
+    overdueNow,
+  };
+
+  const when = dayjs(restored).utc().add(3, 'hour').format('D MMM YYYY, HH:mm');
+  const penalty = require('./penalty.service');
+  const repUserId = updated.salesRep?.user?.id;
+  if (repUserId) {
+    // Only promise back what the rep actually gets: an order that is overdue
+    // again cannot take the extension, whoever cancelled it.
+    const back = undoingSelfExtension
+      ? ` The ${SELF_EXTENSION_HOURS}-hour extension is cancelled and the late fine is back to ${formatCurrency(penalty.PENALTY_PER_DAY)} a day. The extension is yours again — you can take it whenever this order is not overdue.`
+      : '';
+    notification.notifyUser(repUserId, {
+      type: 'GENERAL',
+      severity: 'WARNING',
+      title: `Order ${updated.settlementNumber} deadline back to ${when}`,
+      message: `The Lab moved the deadline on order ${updated.settlementNumber} back to ${when} (EAT).${back}${
+        overdueNow
+          ? ` That time has already passed, so the order is overdue now — the daily fine runs from today rather than from ${when}, and a return waiting for our approval pauses it. Settle or return to stop it.`
+          : ''
+      }`,
+      entityType: 'Settlement',
+      entityId: updated.id,
+      dedupeSalt: String(now.getTime()),
+    }).catch(() => {});
+  }
+
+  return dec;
+}
 
 // ── "How are we doing" — settlement performance over time ────────────────────
 //
@@ -1163,4 +1359,6 @@ module.exports = {
   analytics,
   decorate,
   extendDeadline,
+  undoDeadlineChange,
+  decorate, // the shape every screen reads — see the undo/extension fields
 };

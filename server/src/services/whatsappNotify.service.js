@@ -469,7 +469,9 @@ async function extensionTaken(settlement, { newDeadline, rate }) {
     status: 'No fine until the new deadline',
   });
   return queue('EXTENSION_TAKEN', {
-    dedupeKey: `extension:${settlement.id}`,
+    // The extension can be cancelled and taken again, so the key carries the
+    // moment it was taken — otherwise the second one never reaches the owner.
+    dedupeKey: `extension:${settlement.id}:${settlement.selfExtendedAt ? new Date(settlement.selfExtendedAt).getTime() : 'x'}`,
     refType: 'Settlement',
     refId: settlement.id,
     text,
@@ -697,7 +699,11 @@ async function mirrorToRep(userId, data) {
       message: data.message,
       severity: data.severity || 'INFO',
       // Dedupe on the linked entity so a retried in-app notify never double-texts.
-      dedupeKey: data.entityId ? `rep:${rep.id}:${data.entityType || 'x'}:${data.entityId}:${data.title}` : null,
+      // dedupeSalt lets a caller send the same words twice on purpose — an
+      // extension taken again after The Lab cancelled the first one.
+      dedupeKey: data.entityId
+        ? `rep:${rep.id}:${data.entityType || 'x'}:${data.entityId}:${data.title}${data.dedupeSalt ? `:${data.dedupeSalt}` : ''}`
+        : null,
     });
   } catch {
     return { queued: false };

@@ -1038,9 +1038,9 @@ model Supplier {
   updatedAt   DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
+  credits        SupplierCredit[]
 
   @@map("suppliers")
-  credits SupplierCredit[]
 }
 
 // Goods sent back to a supplier.
@@ -1211,6 +1211,25 @@ model Settlement {
   selfExtendedAt       DateTime?
   selfExtendedById     String?
   preExtensionDeadline DateTime? // the deadline before the extension (audit)
+
+  // The last thing that moved the deadline, kept so The Lab can take it back.
+  // Time given to a rep by mistake was permanent: the only way back was to set
+  // a date by hand, and nothing could undo the rep's own 96 hours or the
+  // doubled fine that came with them. One step of undo, the last one.
+  deadlineBefore      DateTime? // what the deadline was before that change
+  deadlineChangedAt   DateTime?
+  deadlineChangedById String?
+  deadlineChangeKind  String? // SELF_EXTENSION | ADMIN_EXTENSION
+  // How far that change moved the deadline. The undo subtracts this rather
+  // than restoring the old date, so hours a return's approval delay gave back
+  // in the meantime — hours the rep is promised never to be fined for — are
+  // not swallowed with the extension.
+  deadlineShiftSeconds Int?
+
+  // When the late-fine clock may start, if that is later than the deadline.
+  // Taking back time already spent would otherwise bill the rep for days he
+  // was told he had: the fine runs from the moment The Lab took it back.
+  penaltyFrom DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

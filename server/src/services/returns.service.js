@@ -23,6 +23,17 @@ const RETURN_INCLUDE = {
 // return: the products must have been issued on that order and the quantities
 // must not exceed what is still outstanding (issued − settled − returned).
 // `client` is either prisma or a transaction client.
+
+// How much of a return's pending window the daily fine could actually have
+// charged for. Hours before the fine clock's own start are already forgiven;
+// giving them back a second time pays the rep twice for the same wait.
+function chargeablePause(penaltyFrom, startedAt, endedAt) {
+  const from = new Date(penaltyFrom).getTime();
+  const start = Math.max(new Date(startedAt).getTime(), from);
+  const end = new Date(endedAt).getTime();
+  return Math.max(0, end - start);
+}
+
 async function validateSettlementLines(client, settlementId, salesRepId, lines, productMap) {
   const stl = await client.settlement.findUnique({
     where: { id: settlementId },
@@ -378,13 +389,25 @@ async function rejectReturn(id, actor, reason) {
   // the rep is never fined for the approval window. Prior penalties stay (the
   // order simply becomes active again and the daily fine resumes).
   if (updated.settlementId) {
-    const stl = await prisma.settlement.findUnique({ where: { id: updated.settlementId }, select: { status: true, deadlineAt: true } });
+    const stl = await prisma.settlement.findUnique({ where: { id: updated.settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true } });
     if (stl && stl.status !== 'SETTLED') {
-      const pauseMs = Math.max(0, new Date(updated.decidedAt).getTime() - new Date(updated.processedAt).getTime());
+      const pauseStart = updated.processedAt;
+      const pauseEnd = updated.decidedAt;
+      const pauseMs = Math.max(0, new Date(pauseEnd).getTime() - new Date(pauseStart).getTime());
       if (pauseMs > 0) {
         await prisma.settlement.update({
           where: { id: updated.settlementId },
-          data: { deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs) },
+          data: {
+              deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
+              // The fine clock moves with it — but only by the part of the
+              // pause it could have charged for. After The Lab takes back time
+              // it gave by mistake the clock already forgives everything before
+              // that moment, and crediting those hours again would pay the rep
+              // for them twice.
+              ...(stl.penaltyFrom
+                ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
+                : {}),
+            },
         });
       }
     }
@@ -433,13 +456,25 @@ async function cancelReturn(id, actor, { asRep = false } = {}) {
 
   // Give back the hours the return sat pending (same rule as rejection).
   if (updated.settlementId) {
-    const stl = await prisma.settlement.findUnique({ where: { id: updated.settlementId }, select: { status: true, deadlineAt: true } });
+    const stl = await prisma.settlement.findUnique({ where: { id: updated.settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true } });
     if (stl && stl.status !== 'SETTLED') {
-      const pauseMs = Math.max(0, new Date(updated.decidedAt).getTime() - new Date(updated.processedAt).getTime());
+      const pauseStart = updated.processedAt;
+      const pauseEnd = updated.decidedAt;
+      const pauseMs = Math.max(0, new Date(pauseEnd).getTime() - new Date(pauseStart).getTime());
       if (pauseMs > 0) {
         await prisma.settlement.update({
           where: { id: updated.settlementId },
-          data: { deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs) },
+          data: {
+              deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
+              // The fine clock moves with it — but only by the part of the
+              // pause it could have charged for. After The Lab takes back time
+              // it gave by mistake the clock already forgives everything before
+              // that moment, and crediting those hours again would pay the rep
+              // for them twice.
+              ...(stl.penaltyFrom
+                ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
+                : {}),
+            },
         });
       }
     }
@@ -499,14 +534,26 @@ async function expireStaleReturns() {
       });
 
       if (ret.settlementId) {
-        const stl = await tx.settlement.findUnique({ where: { id: ret.settlementId }, select: { status: true, deadlineAt: true, settlementNumber: true, selfExtendedAt: true } });
+        const stl = await tx.settlement.findUnique({ where: { id: ret.settlementId }, select: { status: true, deadlineAt: true, settlementNumber: true, selfExtendedAt: true, penaltyFrom: true } });
         if (stl && stl.status !== 'SETTLED') {
           // The paused window is given back so daily late-fines never
           // double-charge those hours — the expiry fine below covers them.
-          const pauseMs = Math.max(0, Date.now() - new Date(ret.processedAt).getTime());
+          const pauseStart = ret.processedAt;
+          const pauseEnd = new Date();
+          const pauseMs = Math.max(0, pauseEnd.getTime() - new Date(pauseStart).getTime());
           await tx.settlement.update({
             where: { id: ret.settlementId },
-            data: { deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs) },
+            data: {
+              deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
+              // The fine clock moves with it — but only by the part of the
+              // pause it could have charged for. After The Lab takes back time
+              // it gave by mistake the clock already forgives everything before
+              // that moment, and crediting those hours again would pay the rep
+              // for them twice.
+              ...(stl.penaltyFrom
+                ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
+                : {}),
+            },
           });
 
           if (ret.type === 'SALES_RETURN' && ret.salesRepId) {
