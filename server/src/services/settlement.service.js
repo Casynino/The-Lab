@@ -25,39 +25,113 @@ const INCLUDE = {
   _count: { select: { penalties: true } },
 };
 
-// What taking back the last deadline change would do.
+// Detail screens, and the undo, also need every time this order's deadline
+// moved. List screens do not, and asking for it there would pull a row per
+// change for every order on the page.
+const INCLUDE_HISTORY = {
+  ...INCLUDE,
+  deadlineChanges: { orderBy: { createdAt: 'desc' }, take: 50 },
+};
+
+// Every time this order's deadline moved, newest first.
 //
-// Where the change was recorded, the undo SUBTRACTS how far it moved the
-// deadline rather than restoring the old date, because a return that sat
-// waiting on The Lab pushes the deadline forward in between and the rep is
-// promised never to be fined for those hours.
+// Orders whose changes were made before this app recorded them have no rows,
+// and what it did keep is read back instead: a self-extension has always
+// stored the deadline the order held before it, and the one-step columns hold
+// the last change The Lab made. Anything still unaccounted for between those
+// and where the deadline stands is shown as "unrecorded" — the hours are real,
+// but the app cannot say who added them, and they may include time credited
+// back for a return that waited on us.
 //
-// Orders extended before this was built have no record — but a self-extension
-// has always stored the deadline the order held before it, and that date is
-// the "normal time" the owner wants back. If the deadline moved again after
-// the extension, going back to it also drops that later time; the screen says
-// so, and `dropsLaterTime` is what it reads.
-function undoPlan(s) {
-  const kindOf = (fallback) => s.deadlineChangeKind || fallback;
-  if (s.deadlineShiftSeconds != null) {
-    return {
-      to: new Date(new Date(s.deadlineAt).getTime() - s.deadlineShiftSeconds * 1000),
-      kind: kindOf(s.selfExtendedAt ? 'SELF_EXTENSION' : 'ADMIN_EXTENSION'),
-      dropsLaterTime: false,
-    };
+// Returns null when the caller did not ask for the history, so a list page
+// never pretends an order has none.
+function historyOf(s) {
+  if (!s.deadlineChanges) return null;
+  const rows = s.deadlineChanges.map((c) => ({
+    id: c.id,
+    kind: c.kind,
+    fromAt: c.fromAt,
+    toAt: c.toAt,
+    seconds: c.shiftSeconds,
+    hours: round2(c.shiftSeconds / 3600),
+    at: c.createdAt,
+    byName: c.byName,
+    unrecorded: c.unrecorded,
+    undoneAt: c.undoneAt,
+  }));
+  // Rows only exist for changes made since this shipped, so everything read
+  // back from the old columns happened before all of them.
+  const legacy = [];
+  const add = (kind, fromAt, toAt, madeAt, byName, unrecorded = false) => {
+    const seconds = Math.round((new Date(toAt) - new Date(fromAt)) / 1000);
+    // A minute either way is rounding, not a change. A change The Lab recorded
+    // may be negative — a deadline pulled in — and can still be taken back;
+    // but time that only shows up as a gap cannot be: a negative gap means the
+    // deadline sits EARLIER than the last change left it, and "taking that
+    // back" would hand the rep time nobody gave him.
+    if (Math.abs(seconds) < 60 || (unrecorded && seconds < 0)) return;
+    legacy.push({
+      id: null, kind, fromAt: new Date(fromAt), toAt: new Date(toAt), seconds,
+      hours: round2(seconds / 3600), at: madeAt ? new Date(madeAt) : null,
+      byName: byName || null, unrecorded, undoneAt: null,
+    });
+  };
+  if (s.selfExtendedAt && s.preExtensionDeadline && !rows.some((r) => r.kind === 'SELF_EXTENSION')) {
+    const after = new Date(new Date(s.preExtensionDeadline).getTime() + SELF_EXTENSION_HOURS * 3600 * 1000);
+    add('SELF_EXTENSION', s.preExtensionDeadline, after, s.selfExtendedAt, s.salesRep?.user?.name);
   }
-  if (s.deadlineBefore) {
-    return { to: new Date(s.deadlineBefore), kind: kindOf('ADMIN_EXTENSION'), dropsLaterTime: false };
+  // The one-step columns hold the last change made, which is the newest row
+  // once there are rows — reading them as well would count it twice.
+  if (!rows.length && s.deadlineBefore && s.deadlineChangeKind !== 'SELF_EXTENSION') {
+    const to = s.deadlineShiftSeconds != null
+      ? new Date(new Date(s.deadlineBefore).getTime() + s.deadlineShiftSeconds * 1000)
+      : new Date(s.deadlineAt);
+    add(s.deadlineChangeKind || 'ADMIN_EXTENSION', s.deadlineBefore, to, s.deadlineChangedAt, null);
   }
-  if (s.selfExtendedAt && s.preExtensionDeadline) {
-    const gap = new Date(s.deadlineAt) - new Date(s.preExtensionDeadline);
-    return {
-      to: new Date(s.preExtensionDeadline),
-      kind: 'SELF_EXTENSION',
-      dropsLaterTime: Math.abs(gap - SELF_EXTENSION_HOURS * 3600 * 1000) > 60_000,
-    };
+  // Whatever stands between the last change the app can name and the next
+  // deadline it has a record of — the oldest stored change, or today's.
+  const named = legacy.length ? legacy[legacy.length - 1].toAt : null;
+  const upTo = rows.length ? rows[rows.length - 1].fromAt : s.deadlineAt;
+  if (named) add('ADMIN_EXTENSION', named, upTo, null, null, true);
+  // Newest first: the rows already are, and the legacy chain is oldest-first.
+  return [...rows, ...legacy.reverse()];
+}
+
+// What taking back time would do — the last change on its own, or every change
+// that still stands.
+//
+// Taking them one at a time can strand the owner: an intermediate deadline
+// that has already passed makes the order overdue, the sweep fines it within
+// minutes, and a fined order refuses any further undo. So "all of it" is one
+// action, not a sequence of them.
+function undoPlan(s, { all = false, history } = {}) {
+  const changes = history === undefined ? historyOf(s) : history;
+  if (!changes) return null;
+  // Changes already taken back are past: their hours are no longer in the
+  // deadline, so they are skipped rather than stopping the count.
+  const open = [];
+  for (const c of changes) {
+    if (c.undoneAt) continue;
+    open.push(c);
+    if (!all) break;
   }
-  return null;
+  if (!open.length) return null;
+  const seconds = open.reduce((sum, c) => sum + c.seconds, 0);
+  const oldest = open[open.length - 1];
+  return {
+    entries: open,
+    kind: open.length === 1 ? open[0].kind : (open.some((c) => c.kind === 'SELF_EXTENSION') ? 'SELF_EXTENSION' : 'ADMIN_EXTENSION'),
+    // Subtract what the changes moved, so hours credited back for a slow
+    // return approval since then survive.
+    to: new Date(new Date(s.deadlineAt).getTime() - seconds * 1000),
+    seconds,
+    hours: round2(seconds / 3600),
+    // The oldest change in the run is the one that has to have been made while
+    // the order was still live.
+    at: oldest.at,
+    unrecorded: open.some((c) => c.unrecorded),
+    touchesSelfExtension: open.some((c) => c.kind === 'SELF_EXTENSION'),
+  };
 }
 
 // Effective status: stored SETTLED wins; otherwise OVERDUE once past deadline.
@@ -69,6 +143,9 @@ function effectiveStatus(s) {
 
 function decorate(s) {
   const status = effectiveStatus(s);
+  const history = historyOf(s);
+  const last = undoPlan(s, { history });
+  const every = undoPlan(s, { history, all: true });
   // Time tracking only applies to LIVE orders. Once an order is settled it's a
   // finalized state — no countdown, no overdue, no "approaching". This is the
   // single source of truth every screen reads from.
@@ -104,15 +181,23 @@ function decorate(s) {
     // before the deadline passes — an extension is extra time, not an escape
     // from fines already running.
     canSelfExtend: !settled && !extensionUsed && status !== 'OVERDUE',
-    // What taking back the last deadline change would do, worked out here so
-    // every screen tells the same story.
+    // What taking back time would do, worked out here so every screen tells
+    // the same story.
     // Not once a fine has been charged: the ledger decides what is owed, and
     // moving the deadline under it would re-price days already paid for.
-    canUndoDeadline: !settled && Boolean(undoPlan(s)) && (s._count?.penalties ?? 0) === 0,
-    undoDeadlineTo: undoPlan(s)?.to || null,
-    undoDeadlineKind: undoPlan(s)?.kind || null,
-    // True when going back also drops time added after that change.
-    undoDropsLaterTime: undoPlan(s)?.dropsLaterTime || false,
+    canUndoDeadline: !settled && Boolean(last) && (s._count?.penalties ?? 0) === 0,
+    undoDeadlineTo: last?.to || null,
+    undoDeadlineKind: last?.kind || null,
+    // True when the app cannot say who added that time or exactly what it was.
+    undoDropsLaterTime: last?.unrecorded || false,
+    // Taking back everything that still stands, when more than one change does.
+    // Offered because undoing them one at a time can strand the order: the
+    // deadline in between may already have passed, and a fine landing on it
+    // refuses every further undo.
+    undoAllCount: every && every.entries.length > 1 ? every.entries.length : 0,
+    undoAllDeadlineTo: every && every.entries.length > 1 ? every.to : null,
+    // Every change, newest first, for the list on the order.
+    deadlineHistory: history,
     finesCharged: s._count?.penalties ?? null,
     // When the daily fine may start, which is later than the deadline on an
     // order whose extra time was taken back.
@@ -344,7 +429,7 @@ const SALES_INCLUDE = {
 async function get(id) {
   const s = await prisma.settlement.findUnique({
     where: { id },
-    include: { ...INCLUDE, sales: SALES_INCLUDE },
+    include: { ...INCLUDE_HISTORY, sales: SALES_INCLUDE },
   });
   if (!s) throw ApiError.notFound('Settlement not found');
   const decorated = decorate(s);
@@ -482,7 +567,7 @@ async function settleBoxesTx(tx, { settlementId, productId, packagingUnitId, box
   await tx.settlement.update({ where: { id: settlementId }, data: { settledValue: newSettled } });
   await recomputeStatus(tx, settlementId);
 
-  const updated = await tx.settlement.findUnique({ where: { id: settlementId }, include: { ...INCLUDE, sales: SALES_INCLUDE } });
+  const updated = await tx.settlement.findUnique({ where: { id: settlementId }, include: { ...INCLUDE_HISTORY, sales: SALES_INCLUDE } });
   const dec = decorate(updated);
   dec.order = await orderBreakdown(updated, tx);
   return { sale, settlement: dec };
@@ -607,7 +692,7 @@ async function addStockToRep(salesRepId, payload, actor) {
         mode = 'created';
       }
 
-      const updated = await tx.settlement.findUnique({ where: { id: settlementId }, include: { ...INCLUDE, sales: SALES_INCLUDE } });
+      const updated = await tx.settlement.findUnique({ where: { id: settlementId }, include: { ...INCLUDE_HISTORY, sales: SALES_INCLUDE } });
       const dec = decorate(updated);
       dec.order = await orderBreakdown(updated, tx);
       return { mode, settlement: dec, rep, productName: product.name, boxes, addedValue, settlementNumber };
@@ -650,7 +735,7 @@ async function settle(id, actor, { notes } = {}) {
   const updated = await prisma.settlement.update({
     where: { id },
     data: { status: 'SETTLED', settledAt: new Date(), notes: notes || s.notes },
-    include: INCLUDE,
+    include: INCLUDE_HISTORY,
   });
 
   notification.notifyAdmins({
@@ -908,7 +993,7 @@ async function summary() {
 // Programme, where the daily late fine doubles and a failed return costs more.
 // Once only, and only while the order is still live and not yet overdue.
 async function selfExtend(id, actor) {
-  const s = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE });
+  const s = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY });
   if (!s) throw ApiError.notFound('Order not found');
 
   // The extension is the REP'S to spend, and only on their own order. It can be
@@ -936,17 +1021,19 @@ async function selfExtend(id, actor) {
   const previous = new Date(s.deadlineAt);
   const newDeadline = dayjs(previous).add(SELF_EXTENSION_HOURS, 'hour').toDate();
 
-  const updated = await prisma.settlement.update({
+  const takenAt = new Date();
+  const [updated] = await prisma.$transaction([
+    prisma.settlement.update({
     where: { id },
     data: {
       deadlineAt: newDeadline,
       preExtensionDeadline: previous,
-      selfExtendedAt: new Date(),
+      selfExtendedAt: takenAt,
       selfExtendedById: actor ? actor.id : null,
       // What it replaced, so The Lab can take the time back if it was a
       // mistake — the fine rate and the rep's one use come back with it.
       deadlineBefore: previous,
-      deadlineChangedAt: new Date(),
+      deadlineChangedAt: takenAt,
       deadlineChangedById: actor ? actor.id : null,
       deadlineChangeKind: 'SELF_EXTENSION',
       deadlineShiftSeconds: SELF_EXTENSION_HOURS * 3600,
@@ -954,8 +1041,21 @@ async function selfExtend(id, actor) {
       // Re-arm the 24h/6h/1h reminders against the new deadline.
       reminderStage: 0,
     },
-    include: INCLUDE,
-  });
+    include: INCLUDE_HISTORY,
+  }),
+    prisma.settlementDeadlineChange.create({
+      data: {
+        settlementId: id,
+        kind: 'SELF_EXTENSION',
+        fromAt: previous,
+        toAt: newDeadline,
+        shiftSeconds: SELF_EXTENSION_HOURS * 3600,
+        byUserId: actor ? actor.id : null,
+        byName: s.salesRep?.user?.name || null,
+        createdAt: takenAt,
+      },
+    }),
+  ]);
 
   const penalty = require('./penalty.service');
   const when = dayjs(newDeadline).utc().add(3, 'hour').format('D MMM YYYY, HH:mm');
@@ -992,7 +1092,9 @@ async function selfExtend(id, actor) {
     }));
   } catch { /* WhatsApp is optional — never block the extension on it */ }
 
-  return decorate(updated);
+  // Read again: the row above was written alongside this extension, so the
+  // history on the reply would otherwise be one change short.
+  return decorate(await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY }));
 }
 
 // Extend (or set) the deadline for an open order. Admins use this when a rep
@@ -1021,7 +1123,10 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
     newStatus = toNumber(s.settledValue) > 0 || toNumber(s.returnedValue) > 0 ? 'PARTIAL' : 'OPEN';
   }
 
-  const updated = await prisma.settlement.update({
+  const changedAt = new Date();
+  const shiftSeconds = Math.round((newDeadline - new Date(s.deadlineAt)) / 1000);
+  const [updated] = await prisma.$transaction([
+    prisma.settlement.update({
     where: { id },
     data: {
       deadlineAt: newDeadline,
@@ -1030,15 +1135,28 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
       reminderStage: 0,
       // What this replaced, so a date given by mistake can be taken back.
       deadlineBefore: new Date(s.deadlineAt),
-      deadlineChangedAt: new Date(),
+      deadlineChangedAt: changedAt,
       deadlineChangedById: actor ? actor.id : null,
       deadlineChangeKind: 'ADMIN_EXTENSION',
-      deadlineShiftSeconds: Math.round((newDeadline - new Date(s.deadlineAt)) / 1000),
+      deadlineShiftSeconds: shiftSeconds,
       // A fresh deadline is a fresh fine clock.
       penaltyFrom: null,
     },
-    include: INCLUDE,
-  });
+    include: INCLUDE_HISTORY,
+  }),
+    prisma.settlementDeadlineChange.create({
+      data: {
+        settlementId: id,
+        kind: 'ADMIN_EXTENSION',
+        fromAt: new Date(s.deadlineAt),
+        toAt: newDeadline,
+        shiftSeconds: shiftSeconds,
+        byUserId: actor ? actor.id : null,
+        byName: actor?.name || null,
+        createdAt: changedAt,
+      },
+    }),
+  ]);
 
   // Tell the rep — in-app AND (via the mirror) on their WhatsApp. The new
   // deadline sits in the TITLE so each extension is a distinct message
@@ -1056,30 +1174,35 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
     }).catch(() => {});
   }
 
-  return decorate(updated);
+  return decorate(await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY }));
 }
 
-// Take back the last thing that moved the deadline — one step, the last one.
+// Take back time that was given by mistake — the last change, or every change
+// that still stands.
 //
-// Time given by mistake used to be permanent. The rep's own 96 hours could not
-// be undone at all, and they carry a doubled daily fine, so a wrong tap cost
-// The Lab the fine rate as well as the days. This puts the deadline back where
-// it was, and when what it undoes is the rep's extension it also gives back
-// the normal fine rate and the one use — the order returns to the deal it was
-// on before.
+// Time given used to be permanent. The rep's own 96 hours could not be undone
+// at all, and they carry a doubled daily fine, so a wrong tap cost The Lab the
+// fine rate as well as the days. This puts the deadline back where it was, and
+// when what it undoes includes the rep's extension it also gives back the
+// normal fine rate and the one use — the order returns to the deal it was on.
+//
+// `all` takes back the whole run of changes in one go. One at a time is not
+// always possible: the deadline in between may have passed already, and the
+// first fine to land on it blocks every remaining undo, leaving the owner
+// stuck halfway. Taking the lot is one decision, one write.
 //
 // The restored deadline may already have passed, and then the order is overdue
 // again from that moment, exactly as it would have been. The caller is told
 // so before it happens; it is not softened here.
-async function undoDeadlineChange(id, actor) {
-  const s = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE });
+async function undoDeadlineChange(id, actor, { all = false } = {}) {
+  const s = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY });
   if (!s) throw ApiError.notFound('Order not found');
-  const plan = undoPlan(s);
+  const plan = undoPlan(s, { all });
   if (!plan) throw ApiError.badRequest('Nothing to undo — this order\'s deadline has not been changed');
   if (effectiveStatus(s) === 'SETTLED') throw ApiError.badRequest('This order is already closed');
 
   const { kind } = plan;
-  const undoingSelfExtension = kind === 'SELF_EXTENSION';
+  const undoingSelfExtension = plan.touchesSelfExtension;
 
   // Not once money has been taken. Every fine on this order was priced and
   // numbered against the deadline as it stood — the extended rate doubles the
@@ -1101,7 +1224,7 @@ async function undoDeadlineChange(id, actor) {
   // The fine clock would have to charge the days before the change and forgive
   // the days after it, and one stamp cannot say both. Those orders get a new
   // deadline by hand instead.
-  const givenAt = s.deadlineChangedAt || s.selfExtendedAt;
+  const givenAt = plan.at || s.deadlineChangedAt || s.selfExtendedAt;
   if (givenAt && restored < new Date(givenAt)) {
     throw ApiError.badRequest('This order was already overdue when that time was given. Set a new deadline instead.');
   }
@@ -1112,48 +1235,84 @@ async function undoDeadlineChange(id, actor) {
       ? (toNumber(s.settledValue) > 0 || toNumber(s.returnedValue) > 0 ? 'PARTIAL' : 'OPEN')
       : s.status;
 
-  // Claim the row on the state it was read in: a settlement approved between
-  // the read and the write must not be dragged back out of SETTLED.
-  // Claim on the exact state that was read — status included, so a settlement
-  // approved in between is neither dragged back nor quietly re-written.
-  const claim = await prisma.settlement.updateMany({
-    // `penalties: none` is the rule itself, held at the moment of writing: a
-    // fine landing between the count above and this line would otherwise be
-    // left priced against a deadline that no longer exists.
-    where: { id, status: s.status, deadlineAt: s.deadlineAt, penalties: { none: {} } },
-    data: {
-      deadlineAt: restored,
-      status,
-      // The deadline is in the past again, so no "due in 24 hours" reminder is
-      // owed; a restored deadline still ahead re-arms them.
-      reminderStage: overdueNow ? 3 : 0,
-      // Time taken back today is not charged for the days it covered: the
-      // fine clock starts now, not at the restored deadline.
-      penaltyFrom: overdueNow ? now : null,
-      deadlineBefore: null,
-      deadlineChangedAt: null,
-      deadlineChangedById: null,
-      deadlineChangeKind: null,
-      deadlineShiftSeconds: null,
-      // The rep's 96 hours go back on the shelf, with the normal fine rate.
-      ...(undoingSelfExtension
-        ? { selfExtendedAt: null, selfExtendedById: null, preExtensionDeadline: null }
-        : {}),
-    },
+  // The deadline and the history move together, or neither moves: a write that
+  // shifted the deadline but failed to mark the change taken back would let
+  // the same hours be subtracted a second time.
+  const recorded = plan.entries.filter((c) => c.id);
+  const synthesized = plan.entries.filter((c) => !c.id);
+  const result = await prisma.$transaction(async (tx) => {
+    // Claim the row on the exact state it was read in — status and deadline
+    // included, so a settlement approved in between is neither dragged back
+    // nor quietly re-written.
+    const claim = await tx.settlement.updateMany({
+      // `penalties: none` is the rule itself, held at the moment of writing: a
+      // fine landing between the count above and this line would otherwise be
+      // left priced against a deadline that no longer exists.
+      where: { id, status: s.status, deadlineAt: s.deadlineAt, penalties: { none: {} } },
+      data: {
+        deadlineAt: restored,
+        status,
+        // The deadline is in the past again, so no "due in 24 hours" reminder
+        // is owed; a restored deadline still ahead re-arms them.
+        reminderStage: overdueNow ? 3 : 0,
+        // Time taken back today is not charged for the days it covered: the
+        // fine clock starts now, not at the restored deadline.
+        penaltyFrom: overdueNow ? now : null,
+        deadlineBefore: null,
+        deadlineChangedAt: null,
+        deadlineChangedById: null,
+        deadlineChangeKind: null,
+        deadlineShiftSeconds: null,
+        // The rep's 96 hours go back on the shelf, with the normal fine rate.
+        ...(undoingSelfExtension
+          ? { selfExtendedAt: null, selfExtendedById: null, preExtensionDeadline: null }
+          : {}),
+      },
+    });
+    if (claim.count === 0) return null;
+
+    // Mark each change taken back. A change this app never recorded — an order
+    // extended before it kept a history — is written down now, already undone,
+    // so the order's history shows what happened instead of a gap.
+    if (recorded.length) {
+      await tx.settlementDeadlineChange.updateMany({
+        where: { id: { in: recorded.map((c) => c.id) } },
+        data: { undoneAt: now, undoneById: actor ? actor.id : null },
+      });
+    }
+    for (const c of synthesized) {
+      await tx.settlementDeadlineChange.create({
+        data: {
+          settlementId: id,
+          kind: c.kind,
+          fromAt: c.fromAt,
+          toAt: c.toAt,
+          shiftSeconds: c.seconds,
+          byUserId: c.kind === 'SELF_EXTENSION' ? s.selfExtendedById : null,
+          byName: c.byName,
+          unrecorded: c.unrecorded,
+          createdAt: c.at || undefined,
+          undoneAt: now,
+          undoneById: actor ? actor.id : null,
+        },
+      });
+    }
+    return true;
   });
-  if (claim.count === 0) {
+  if (!result) {
     throw ApiError.badRequest('This order changed while you were looking at it — open it again and check the deadline and its fines');
   }
 
-  const updated = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE });
+  const updated = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY });
   const dec = decorate(updated);
   // What it undid, for the audit line and for the caller to show.
   dec.undone = {
     kind,
+    changes: plan.entries.length,
     from: s.deadlineAt,
     to: restored,
-    hours: round2((new Date(s.deadlineAt) - restored) / 3_600_000),
-    droppedLaterTime: plan.dropsLaterTime,
+    hours: round2(plan.seconds / 3600),
+    droppedLaterTime: plan.unrecorded,
     // Cancelling the extension hands it back, whatever state the order is in:
     // the rep may take it again as soon as the order is not overdue.
     extensionReturned: undoingSelfExtension,

@@ -356,6 +356,55 @@ function RecordReturnModal({ order, onClose, onDone }) {
   );
 }
 
+// "+4 days", "+5 days 6 h", "−21 h" — a span of hours as a person says it.
+// Rounded to the hour BEFORE it is split, or 47.8 hours reads "+1 day 24 h".
+function spanOfHours(h) {
+  const sign = h < 0 ? '−' : '+';
+  const abs = Math.abs(Number(h) || 0);
+  if (abs > 0 && abs < 1) return `${sign}${Math.max(1, Math.round(abs * 60))} min`;
+  const total = Math.round(abs);
+  const days = Math.floor(total / 24);
+  const rest = total % 24;
+  const parts = [];
+  if (days) parts.push(`${days} day${days !== 1 ? 's' : ''}`);
+  if (rest || !days) parts.push(`${rest} h`);
+  return sign + parts.join(' ');
+}
+
+// Every lot of time an order was given, newest first. The owner asked for this
+// after an order was extended twice and only one of them could be taken back.
+function DeadlineHistory({ order }) {
+  if (!order.deadlineHistory?.length) return null;
+  return (
+    <div className="mt-2.5 border-t border-white/[0.06] pt-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Time added to this order</div>
+      <ul className="mt-1.5 space-y-1.5">
+        {order.deadlineHistory.map((c, i) => (
+          <li key={c.id || `synth-${i}`} className="text-[11px] leading-snug">
+            <div className={c.undoneAt ? 'text-faint' : 'text-muted'}>
+              <span className={`font-semibold ${c.undoneAt ? 'text-faint line-through' : 'text-foreground'}`}>
+                {spanOfHours(c.hours)}
+              </span>
+              {' · '}
+              {c.kind === 'SELF_EXTENSION'
+                ? `${c.byName || 'The rep'} — their own ${order.extensionHours || 96} hours`
+                : c.byName
+                  ? `${c.byName} — deadline extended`
+                  : 'Deadline extended'}
+              {c.at ? ` · ${formatDateTime(c.at)}` : ''}
+            </div>
+            <div className="text-faint">
+              {formatDateTime(c.fromAt)} → {formatDateTime(c.toAt)}
+              {c.unrecorded && ' · added before the app kept a record'}
+              {c.undoneAt && ` · taken back ${formatDateTime(c.undoneAt)}`}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 // --- Extend deadline (staff / admin only) -----------------------------------
 // The rep grants themselves +96h. Deliberately spells out the trade-off before
 // they commit — more time, but a doubled late fine and a costlier failed return.
@@ -407,24 +456,43 @@ function SelfExtendModal({ order, onClose, onDone }) {
   );
 }
 
-// Time given by mistake, taken back. One step: whatever last moved the
-// deadline — The Lab's own extension, or the rep's 96 hours — goes back to
-// what it was. The screen says what that costs the rep before it happens,
-// because cancelling their extension hands back their one use and their
-// normal fine rate, and a restored deadline that has already passed makes the
-// order overdue the moment it is done.
+// Time given by mistake, taken back — the last lot, or every lot that still
+// stands. The screen says what that costs the rep before it happens, because
+// cancelling their extension hands back their one use and their normal fine
+// rate, and a restored deadline that has already passed makes the order
+// overdue the moment it is done.
+//
+// Why "all of it" is offered: undoing one lot at a time can strand the order
+// halfway. If the deadline in between has already passed the order goes
+// overdue, the first daily fine lands on it, and a fined order refuses any
+// further undo — the earlier lot could then never be taken back. So when that
+// is where one step would land, taking the lot is what the screen suggests.
 function UndoDeadlineModal({ order, onClose, onDone }) {
+  const lastTo = order.undoDeadlineTo ? new Date(order.undoDeadlineTo) : null;
+  const allTo = order.undoAllDeadlineTo ? new Date(order.undoAllDeadlineTo) : null;
+  const canTakeAll = order.undoAllCount > 1 && allTo;
+  const stepStrands = canTakeAll && lastTo && lastTo <= new Date();
+  const [scope, setScope] = useState(stepStrands ? 'all' : 'last');
+  const taking = scope === 'all' && canTakeAll ? 'all' : 'last';
+
   const undo = useMutation({
-    mutationFn: () => api.post(`/settlements/${order.id}/undo-deadline`),
+    mutationFn: () => api.post(`/settlements/${order.id}/undo-deadline`, { all: taking === 'all' }),
     onSuccess: () => { toast.success('Deadline put back'); onDone(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
-  const wasSelfExtension = order.undoDeadlineKind === 'SELF_EXTENSION';
-  const back = order.undoDeadlineTo ? new Date(order.undoDeadlineTo) : null;
+
+  const standing = (order.deadlineHistory || []).filter((c) => !c.undoneAt);
+  const taken = taking === 'all' ? standing : standing.slice(0, 1);
+  // Cancelling the rep's own extension is what changes their fine rate, so the
+  // warning follows what is actually being taken back, not the newest change.
+  const wasSelfExtension = taken.some((c) => c.kind === 'SELF_EXTENSION');
+  const back = taking === 'all' ? allTo : lastTo;
   const alreadyPast = back && back <= new Date();
+  const dropsLaterTime = taken.some((c) => c.unrecorded);
+  const title = wasSelfExtension ? 'Cancel extension' : 'Undo deadline change';
 
   return (
-    <Modal open onClose={onClose} title={`${wasSelfExtension ? 'Cancel extension' : 'Undo deadline change'} · ${order.settlementNumber}`}
+    <Modal open onClose={onClose} title={`${title} · ${order.settlementNumber}`}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Leave it</Button>
         <Button variant="danger" loading={undo.isPending} onClick={() => undo.mutate()}>
@@ -433,6 +501,41 @@ function UndoDeadlineModal({ order, onClose, onDone }) {
       </>}
     >
       <div className="space-y-4 text-sm">
+        {canTakeAll && (
+          <div className="space-y-2">
+            {[
+              { key: 'last', label: 'Only the last lot of time', to: lastTo, note: standing[0] ? `takes off ${spanOfHours(standing[0].hours).replace(/^[+−]/, '')}` : null },
+              { key: 'all', label: `All the extra time (${order.undoAllCount} lots)`, to: allTo, note: `takes off ${spanOfHours(standing.reduce((t, c) => t + (Number(c.hours) || 0), 0)).replace(/^[+−]/, '')} — the deadline before any of it` },
+            ].map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setScope(opt.key)}
+                className={`flex w-full items-start gap-2.5 rounded-xl border p-3 text-left transition ${
+                  scope === opt.key ? 'border-brand-500 bg-brand-500/10' : 'border-border bg-elevated hover:border-white/20'
+                }`}
+              >
+                <span className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${scope === opt.key ? 'border-brand-500' : 'border-white/30'}`}>
+                  {scope === opt.key && <span className="h-2 w-2 rounded-full bg-brand-500" />}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium text-foreground">{opt.label}</span>
+                  <span className="block text-xs text-muted">
+                    Deadline becomes {formatDateTime(opt.to)}{opt.note ? ` · ${opt.note}` : ''}
+                  </span>
+                </span>
+              </button>
+            ))}
+            {stepStrands && (
+              <p className="text-xs text-faint">
+                Taking only the last lot leaves the order overdue at {formatDateTime(lastTo)}. The first daily fine lands
+                on that, and once a fine is charged the rest of the time can no longer be taken back — so all of it is
+                selected for you.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="rounded-xl border border-border bg-elevated p-3">
           <div className="flex justify-between"><span className="text-muted">Deadline now</span><span className="font-medium">{formatDateTime(order.deadlineAt)}</span></div>
           <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
@@ -454,12 +557,12 @@ function UndoDeadlineModal({ order, onClose, onDone }) {
           </div>
         )}
 
-        {order.undoDropsLaterTime && (
+        {dropsLaterTime && (
           <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-300">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <span className="text-xs">
-              The deadline was moved again after that extension, and this order was extended before the app kept a record of it.
-              Going back to {back ? formatDateTime(back) : 'the earlier deadline'} removes that later time as well.
+              Some of this time was added before the app kept a record of it, so it cannot say who gave it — and the hours
+              may include time credited back for a return that waited on us.
             </span>
           </div>
         )}
@@ -475,7 +578,7 @@ function UndoDeadlineModal({ order, onClose, onDone }) {
         )}
 
         <p className="text-xs text-faint">
-          This takes back the last change to the deadline. The rep is told, and it goes in the audit log.
+          The rep is told what changed, and it goes in the audit log.
         </p>
       </div>
     </Modal>
@@ -992,17 +1095,13 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 </div>
               )}
 
-              {order.extensionUsed && order.preExtensionDeadline && (
-                <p className="mt-2.5 text-[11px] leading-snug text-faint">
-                  Original deadline {formatDateTime(order.preExtensionDeadline)}, extended by {order.extensionHours}h
-                  {order.selfExtendedAt ? ` on ${formatDateTime(order.selfExtendedAt)}` : ''}.
-                </p>
-              )}
+              <DeadlineHistory order={order} />
               {/* The Lab's own note. A rep has no use for a countdown of the
                   time that might be taken off his order. */}
               {staff && order.canUndoDeadline && (
                 <p className="mt-1 text-[11px] leading-snug text-faint">
-                  This can be taken back — the deadline would return to {formatDateTime(order.undoDeadlineTo)}.
+                  This can be taken back — the last lot returns the deadline to {formatDateTime(order.undoDeadlineTo)}
+                  {order.undoAllCount > 1 ? `, or all ${order.undoAllCount} lots return it to ${formatDateTime(order.undoAllDeadlineTo)}` : ''}.
                 </p>
               )}
               {/* And why it cannot, when it cannot: the button simply going

@@ -1216,10 +1216,10 @@ model Settlement {
   // Time given to a rep by mistake was permanent: the only way back was to set
   // a date by hand, and nothing could undo the rep's own 96 hours or the
   // doubled fine that came with them. One step of undo, the last one.
-  deadlineBefore      DateTime? // what the deadline was before that change
-  deadlineChangedAt   DateTime?
-  deadlineChangedById String?
-  deadlineChangeKind  String? // SELF_EXTENSION | ADMIN_EXTENSION
+  deadlineBefore       DateTime? // what the deadline was before that change
+  deadlineChangedAt    DateTime?
+  deadlineChangedById  String?
+  deadlineChangeKind   String? // SELF_EXTENSION | ADMIN_EXTENSION
   // How far that change moved the deadline. The undo subtracts this rather
   // than restoring the old date, so hours a return's approval delay gave back
   // in the meantime — hours the rep is promised never to be fined for — are
@@ -1234,10 +1234,11 @@ model Settlement {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  payments  SettlementPayment[]
-  sales     Sale[]              @relation("OrderSales")
-  returns   Return[]            @relation("OrderReturns")
-  penalties SettlementPenalty[]
+  payments        SettlementPayment[]
+  sales           Sale[]                     @relation("OrderSales")
+  returns         Return[]                   @relation("OrderReturns")
+  penalties       SettlementPenalty[]
+  deadlineChanges SettlementDeadlineChange[]
 
   @@index([salesRepId])
   @@index([status])
@@ -1307,6 +1308,35 @@ model SettlementPayment {
   @@index([settlementId])
   @@index([productId])
   @@map("settlement_payments")
+}
+
+// Every time an order's deadline moved, and who moved it.
+//
+// Only the last change used to be remembered, so an order given time twice
+// could only be put right once — which is exactly what happened. This is also
+// what the owner reads: how much time each person added, and when.
+model SettlementDeadlineChange {
+  id           String     @id @default(cuid())
+  settlementId String
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  kind         String // SELF_EXTENSION | ADMIN_EXTENSION
+  fromAt       DateTime // the deadline before this change
+  toAt         DateTime // and after it
+  shiftSeconds Int // toAt - fromAt; the undo subtracts this
+  byUserId     String?
+  byName       String? // who did it, as they were named then
+  // True for time this app found already on an order but never recorded — the
+  // history of an order extended before it kept one. Its hours may include
+  // time credited back for a slow return approval, so the screen says so.
+  unrecorded   Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  // Taken back by The Lab. The row stays: history is not rewritten.
+  undoneAt   DateTime?
+  undoneById String?
+
+  @@index([settlementId, createdAt])
+  @@map("settlement_deadline_changes")
 }
 
 // Penalty applied each day a settlement stays overdue (past 72h deadline).

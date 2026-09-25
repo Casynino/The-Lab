@@ -121,11 +121,13 @@ const extendDeadline = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
-// POST /settlements/:id/undo-deadline — take back the last deadline change,
-// including the rep's own 96 hours. The audit line says what it put back and
-// what it took away, because the rep's fine rate changes with it.
+// POST /settlements/:id/undo-deadline — take back deadline time, including the
+// rep's own 96 hours. `all` takes back every change that still stands rather
+// than only the last one. The audit line says what it put back and what it
+// took away, because the rep's fine rate changes with it.
 const undoDeadlineChange = asyncHandler(async (req, res) => {
-  const result = await settlement.undoDeadlineChange(req.params.id, req.user);
+  const all = req.body?.all === true || req.body?.all === 'true';
+  const result = await settlement.undoDeadlineChange(req.params.id, req.user, { all });
   // The service reports what it undid — the audit line reads it from there, so
   // it names the right change even on orders extended before this shipped.
   const { undone } = result;
@@ -135,7 +137,7 @@ const undoDeadlineChange = asyncHandler(async (req, res) => {
     action: 'UNDO_DEADLINE',
     entityType: 'Settlement',
     entityId: req.params.id,
-    oldValues: { deadlineAt: undone.from, kind: undone.kind, hours: undone.hours },
+    oldValues: { deadlineAt: undone.from, kind: undone.kind, hours: undone.hours, changes: undone.changes },
     newValues: {
       kind: 'UNDO_DEADLINE_CHANGE',
       settlementNumber: result.settlementNumber,
