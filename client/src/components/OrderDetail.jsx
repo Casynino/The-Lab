@@ -454,6 +454,16 @@ function UndoDeadlineModal({ order, onClose, onDone }) {
           </div>
         )}
 
+        {order.undoDropsLaterTime && (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-300">
+            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="text-xs">
+              The deadline was moved again after that extension, and this order was extended before the app kept a record of it.
+              Going back to {back ? formatDateTime(back) : 'the earlier deadline'} removes that later time as well.
+            </span>
+          </div>
+        )}
+
         {alreadyPast && (
           <div className="flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-rose-300">
             <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />

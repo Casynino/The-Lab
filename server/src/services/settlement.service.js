@@ -25,39 +25,39 @@ const INCLUDE = {
   _count: { select: { penalties: true } },
 };
 
-// How far the last change moved the deadline, and which change it was.
+// What taking back the last deadline change would do.
 //
-// The undo subtracts this rather than restoring the old date, because a return
-// that sat waiting on The Lab pushes the deadline forward in between, and the
-// rep is promised never to be fined for those hours. Restoring the old date
-// swallowed them.
+// Where the change was recorded, the undo SUBTRACTS how far it moved the
+// deadline rather than restoring the old date, because a return that sat
+// waiting on The Lab pushes the deadline forward in between and the rep is
+// promised never to be fined for those hours.
 //
-// Orders extended before this was built carry no record, so the rep's 96 hours
-// are read from the fields that have always been written — otherwise the owner
-// could not take back the extension that made him ask for this.
-function undoShiftSeconds(s) {
-  if (s.deadlineShiftSeconds != null) return s.deadlineShiftSeconds;
-  if (s.deadlineBefore) return Math.round((new Date(s.deadlineAt) - new Date(s.deadlineBefore)) / 1000);
-  // Extended before this was built. The rep's 96 hours can only be read back
-  // when they are still the last thing that moved the deadline — if the gap is
-  // no longer exactly 96 hours, something else moved it since and subtracting
-  // 96 would land on a date that never existed.
+// Orders extended before this was built have no record — but a self-extension
+// has always stored the deadline the order held before it, and that date is
+// the "normal time" the owner wants back. If the deadline moved again after
+// the extension, going back to it also drops that later time; the screen says
+// so, and `dropsLaterTime` is what it reads.
+function undoPlan(s) {
+  const kindOf = (fallback) => s.deadlineChangeKind || fallback;
+  if (s.deadlineShiftSeconds != null) {
+    return {
+      to: new Date(new Date(s.deadlineAt).getTime() - s.deadlineShiftSeconds * 1000),
+      kind: kindOf(s.selfExtendedAt ? 'SELF_EXTENSION' : 'ADMIN_EXTENSION'),
+      dropsLaterTime: false,
+    };
+  }
+  if (s.deadlineBefore) {
+    return { to: new Date(s.deadlineBefore), kind: kindOf('ADMIN_EXTENSION'), dropsLaterTime: false };
+  }
   if (s.selfExtendedAt && s.preExtensionDeadline) {
     const gap = new Date(s.deadlineAt) - new Date(s.preExtensionDeadline);
-    if (Math.abs(gap - SELF_EXTENSION_HOURS * 3600 * 1000) < 60_000) return SELF_EXTENSION_HOURS * 3600;
+    return {
+      to: new Date(s.preExtensionDeadline),
+      kind: 'SELF_EXTENSION',
+      dropsLaterTime: Math.abs(gap - SELF_EXTENSION_HOURS * 3600 * 1000) > 60_000,
+    };
   }
   return null;
-}
-
-function undoTarget(s) {
-  const shift = undoShiftSeconds(s);
-  return shift == null ? null : new Date(new Date(s.deadlineAt).getTime() - shift * 1000);
-}
-
-function undoKind(s) {
-  if (undoShiftSeconds(s) == null) return null;
-  if (s.deadlineChangeKind) return s.deadlineChangeKind;
-  return s.selfExtendedAt ? 'SELF_EXTENSION' : 'ADMIN_EXTENSION';
 }
 
 // Effective status: stored SETTLED wins; otherwise OVERDUE once past deadline.
@@ -108,9 +108,11 @@ function decorate(s) {
     // every screen tells the same story.
     // Not once a fine has been charged: the ledger decides what is owed, and
     // moving the deadline under it would re-price days already paid for.
-    canUndoDeadline: !settled && Boolean(undoTarget(s)) && (s._count?.penalties ?? 0) === 0,
-    undoDeadlineTo: undoTarget(s),
-    undoDeadlineKind: undoKind(s),
+    canUndoDeadline: !settled && Boolean(undoPlan(s)) && (s._count?.penalties ?? 0) === 0,
+    undoDeadlineTo: undoPlan(s)?.to || null,
+    undoDeadlineKind: undoPlan(s)?.kind || null,
+    // True when going back also drops time added after that change.
+    undoDropsLaterTime: undoPlan(s)?.dropsLaterTime || false,
     finesCharged: s._count?.penalties ?? null,
     // When the daily fine may start, which is later than the deadline on an
     // order whose extra time was taken back.
@@ -1072,11 +1074,11 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
 async function undoDeadlineChange(id, actor) {
   const s = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE });
   if (!s) throw ApiError.notFound('Order not found');
-  const shift = undoShiftSeconds(s);
-  if (shift == null) throw ApiError.badRequest('Nothing to undo — this order\'s deadline has not been changed');
+  const plan = undoPlan(s);
+  if (!plan) throw ApiError.badRequest('Nothing to undo — this order\'s deadline has not been changed');
   if (effectiveStatus(s) === 'SETTLED') throw ApiError.badRequest('This order is already closed');
 
-  const kind = undoKind(s);
+  const { kind } = plan;
   const undoingSelfExtension = kind === 'SELF_EXTENSION';
 
   // Not once money has been taken. Every fine on this order was priced and
@@ -1093,7 +1095,7 @@ async function undoDeadlineChange(id, actor) {
     );
   }
 
-  const restored = new Date(new Date(s.deadlineAt).getTime() - shift * 1000);
+  const restored = new Date(plan.to);
   const now = new Date();
   // Time given to an order that was ALREADY overdue is not taken back here.
   // The fine clock would have to charge the days before the change and forgive
@@ -1150,7 +1152,8 @@ async function undoDeadlineChange(id, actor) {
     kind,
     from: s.deadlineAt,
     to: restored,
-    hours: round2(shift / 3600),
+    hours: round2((new Date(s.deadlineAt) - restored) / 3_600_000),
+    droppedLaterTime: plan.dropsLaterTime,
     // Cancelling the extension hands it back, whatever state the order is in:
     // the rep may take it again as soon as the order is not overdue.
     extensionReturned: undoingSelfExtension,

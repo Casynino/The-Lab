@@ -182,12 +182,14 @@ test('hours a return spent waiting on The Lab survive the undo', async () => {
 
 test('undoing The Lab\'s own extension leaves the rep\'s extension alone', async () => {
   const takenAt = hours(-30);
+  const deadline = hours(200);
+  const wasBefore = new Date(at(deadline) - 194 * HOUR);
   row = order({
-    deadlineAt: hours(200),
+    deadlineAt: deadline,
     selfExtendedAt: takenAt,
     selfExtendedById: 'user-1',
     preExtensionDeadline: hours(-90),
-    deadlineBefore: hours(6),
+    deadlineBefore: wasBefore,
     deadlineChangedAt: now(),
     deadlineChangedById: 'admin-1',
     deadlineChangeKind: 'ADMIN_EXTENSION',
@@ -196,7 +198,7 @@ test('undoing The Lab\'s own extension leaves the rep\'s extension alone', async
 
   const out = await settlement.undoDeadlineChange('stl-1', { id: 'admin-1' });
 
-  assert.equal(at(out.deadlineAt), at(hours(6)));
+  assert.equal(at(out.deadlineAt), at(wasBefore));
   assert.equal(at(out.selfExtendedAt), at(takenAt));
   assert.equal(out.extensionUsed, true);
   assert.equal(out.penaltyPerDay, penalty.EXTENDED_PENALTY_PER_DAY);
@@ -224,8 +226,9 @@ test('time given to an order that was ALREADY overdue is not taken back here', a
   // The fine clock cannot charge the days before the change and forgive the
   // days after it at the same time, so this one is refused out loud.
   const was = hours(-50); // the deadline had already passed...
+  const deadline = hours(46);
   row = order({
-    deadlineAt: hours(46),
+    deadlineAt: deadline,
     deadlineBefore: was,
     deadlineChangedAt: hours(-2), // ...when the time was given
     deadlineChangeKind: 'ADMIN_EXTENSION',
@@ -235,58 +238,53 @@ test('time given to an order that was ALREADY overdue is not taken back here', a
     () => settlement.undoDeadlineChange('stl-1', { id: 'admin-1' }),
     (e) => /already overdue when that time was given/i.test(e.message),
   );
-  assert.equal(at(row.deadlineAt), at(hours(46))); // nothing moved
+  assert.equal(at(row.deadlineAt), at(deadline)); // nothing moved
 });
 
-test('a legacy order whose deadline moved again after the extension is left alone', async () => {
-  // 96 hours cannot be read back once something else has moved the deadline:
-  // subtracting them would land on a date that never existed.
+test('a legacy order whose deadline moved again still goes back to the time before the extension', async () => {
+  // The owner's own case: the rep took 96 hours before the deadline, then more
+  // time was added on top, and none of it was recorded. The date the order held
+  // before the extension is known, so that is what it goes back to — and the
+  // screen is told that the later time goes with it.
+  const wasBefore = hours(-14);            // the deadline the extension replaced
   row = order({
-    deadlineAt: hours(200),
-    selfExtendedAt: now(),
-    preExtensionDeadline: hours(-2), // gap is no longer 96h
-  });
-  assert.equal(settlement.decorate(row).canUndoDeadline, false);
-  await assert.rejects(
-    () => settlement.undoDeadlineChange('stl-1', { id: 'admin-1' }),
-    (e) => /nothing to undo/i.test(e.message),
-  );
-});
-
-test('an order extended before this existed can still have its extension cancelled', async () => {
-  // No recorded shift: the columns were added after the rep took the 96 hours.
-  const was = hours(-2);
-  row = order({
-    deadlineAt: new Date(at(was) + SELF_HOURS * HOUR),
-    selfExtendedAt: new Date(at(was) - 3 * HOUR),
+    deadlineAt: hours(220),                // pushed far out afterwards
+    selfExtendedAt: new Date(at(wasBefore) - 3 * HOUR),
     selfExtendedById: 'user-1',
-    preExtensionDeadline: was,
+    preExtensionDeadline: wasBefore,
   });
+
   const dec = settlement.decorate(row);
   assert.equal(dec.canUndoDeadline, true);
   assert.equal(dec.undoDeadlineKind, 'SELF_EXTENSION');
-  assert.equal(at(dec.undoDeadlineTo), at(was));
+  assert.equal(at(dec.undoDeadlineTo), at(wasBefore));
+  assert.equal(dec.undoDropsLaterTime, true);
 
   const out = await settlement.undoDeadlineChange('stl-1', { id: 'admin-1' });
-  assert.equal(at(out.deadlineAt), at(was));
+  assert.equal(at(out.deadlineAt), at(wasBefore));
+  assert.equal(out.status, 'OVERDUE');
   assert.equal(out.extensionUsed, false);
   assert.equal(out.penaltyPerDay, penalty.PENALTY_PER_DAY);
-  assert.equal(out.canUndoDeadline, false);
+  assert.ok(out.penaltyFrom, 'the fine clock starts at the cancellation, not 14 hours ago');
+  assert.equal(penalty.penaltyDaysDue(penalty.fineClockStart(out), Date.now()), 1);
+  assert.equal(out.undone.droppedLaterTime, true);
 });
 
 test('an overdue order whose restored deadline is still ahead comes back to life', async () => {
+  const deadline = hours(-1);
+  const wasBefore = new Date(at(deadline) + 21 * HOUR);
   row = order({
     status: 'OVERDUE',
     settledValue: 100,
-    deadlineAt: hours(-1),
-    deadlineBefore: hours(20),
+    deadlineAt: deadline,
+    deadlineBefore: wasBefore,
     deadlineChangeKind: 'ADMIN_EXTENSION',
     deadlineShiftSeconds: -21 * 3600, // the deadline had been pulled IN
   });
 
   const out = await settlement.undoDeadlineChange('stl-1', { id: 'admin-1' });
 
-  assert.equal(at(out.deadlineAt), at(hours(20)));
+  assert.equal(at(out.deadlineAt), at(wasBefore));
   assert.equal(out.status, 'PARTIAL'); // something was settled, so not back to OPEN
 });
 
@@ -310,9 +308,10 @@ test('an order settled while the dialog was open is not dragged back', async () 
 });
 
 test('there is nothing to undo twice, and nothing to undo on an untouched order', async () => {
+  const deadline = hours(96);
   row = order({
-    deadlineAt: hours(96),
-    deadlineBefore: hours(10),
+    deadlineAt: deadline,
+    deadlineBefore: new Date(at(deadline) - 86 * HOUR),
     deadlineChangeKind: 'ADMIN_EXTENSION',
     deadlineShiftSeconds: 86 * 3600,
   });
