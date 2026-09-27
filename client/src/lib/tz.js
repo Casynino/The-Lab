@@ -19,3 +19,9 @@ export function tzGreeting() {
 export function tzDateLabel(opts = {}) {
   return new Date().toLocaleDateString('en', { timeZone: TZ, ...opts });
 }
+
+// A given date as Tanzania sees it — "21 Sep" by default. Used for the week's
+// own dates, which the server works out in EAT and sends as timestamps.
+export function eatDay(value, opts = { day: 'numeric', month: 'short' }) {
+  return new Date(value).toLocaleDateString('en-GB', { timeZone: TZ, ...opts });
+}

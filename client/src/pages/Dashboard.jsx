@@ -38,7 +38,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import { TrendChart, BarChartCard, DonutChart } from '@/components/charts';
-import { tzGreeting, tzDateLabel } from '@/lib/tz';
+import { tzGreeting, tzDateLabel, eatDay } from '@/lib/tz';
 import {
   StatCard,
   Card,
@@ -196,13 +196,36 @@ function ReviewWithdrawals({ items, onClose }) {
   );
 }
 
+// Today · This week · This month. One control, used in two places on the page
+// and driving both, so the figures under it are never from different windows.
+function PeriodTabs({ value, onChange, options }) {
+  return (
+    <div className="inline-flex shrink-0 rounded-xl bg-elevated p-0.5 ring-1 ring-white/[0.07]">
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          onClick={() => onChange(o.key)}
+          className={clsx(
+            'rounded-[10px] px-3 py-1.5 text-xs font-semibold transition',
+            value === o.key ? 'bg-brand-500 text-slate-950' : 'text-muted hover:text-foreground',
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [attentionFilter, setAttentionFilter] = useState('All');
+  // Today, this week, this month — one choice for the whole page, changeable
+  // from the totals strip or from the brand cards. It opens on the week: the
+  // month is the figure that was always there, and the week is the one an
+  // owner has to wait for otherwise.
+  const [period, setPeriod] = useState('week');
   const [reviewing, setReviewing] = useState(null); // pending commission requests
-  // The actual month by name, so "this month" can never be mistaken for
-  // "everything". Tanzania is UTC+3 with no DST, so the shift is fixed.
-  const monthLabel = new Date(Date.now() + 3 * 3600_000)
-    .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data, isLoading, isError } = useQuery({
@@ -214,7 +237,32 @@ export default function Dashboard() {
   if (isLoading) return <PageSpinner label="Building your command center…" />;
   if (isError || !data) return <EmptyState title="Couldn't load the dashboard" message="Please try again shortly." icon={AlertTriangle} />;
 
-  const { accounts, totalFunds, today, month, brands, reps, attention, inventory, charts} = data;
+  const { accounts, totalFunds, today, week, month, brands, reps, attention, inventory, charts} = data;
+  // The same three windows everywhere on this page: the same figures, the same
+  // names for them, whether they are being read as a total or brand by brand.
+  const periods = {
+    today: {
+      key: 'today', label: 'Today', heading: 'Today',
+      when: tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long' }),
+      revenue: today.revenue, grossProfit: today.grossProfit, boxes: today.boxesSold ?? 0,
+      suffix: 'Today', available: true,
+    },
+    week: {
+      key: 'week', label: 'This week', heading: 'This week',
+      when: week ? `${eatDay(week.start)} – ${eatDay(week.end)}` : 'Monday to Sunday',
+      revenue: week?.revenue ?? 0, grossProfit: week?.grossProfit ?? 0, boxes: week?.boxes ?? 0,
+      suffix: 'Week', available: Boolean(week),
+    },
+    month: {
+      key: 'month', label: 'This month', heading: `This month · ${tzDateLabel({ month: 'long' })}`,
+      when: tzDateLabel({ month: 'long', year: 'numeric' }),
+      revenue: month.revenue, grossProfit: month.grossProfit, boxes: month.boxes,
+      suffix: 'Month', available: true,
+    },
+  };
+  // A window the server could not read is not offered as a tab and never
+  // shown as a row of zeros: the month, which is read separately, stands in.
+  const shown = periods[period].available ? periods[period] : periods.month;
   // Only accounts actually holding money belong in "where it sits". The index
   // is carried along so each keeps its own colour when another empties. The
   // Commission account is not one of them: it is the record of what the owner
@@ -579,42 +627,47 @@ export default function Dashboard() {
         <StatCard compact label="Cash flow" value={formatCurrency(today.netCash)} icon={today.netCash >= 0 ? ArrowDownLeft : ArrowUpRight} tone={today.netCash >= 0 ? 'emerald' : 'rose'} hint={`in ${formatCurrency(today.moneyIn)} · out ${formatCurrency(today.moneyOut)}`} onClick={() => navigate('/finance?tab=cashflow')} />
       </div>
 
-      {/* ── This month ──
-          The month's revenue, profit and volume were a line of grey text at the
-          very bottom of the page, under everything. It is the question an owner
-          opens the app to answer, so it sits under the hero, and the margin —
-          which was not shown at all — is the figure that says whether the
-          revenue above it was worth earning. */}
+      {/* ── The running total: today, this week, or this month ──
+          It was the month and only the month, at the very bottom of the page.
+          The month is the question an owner opens the app to answer — but not
+          the only one: the week is what says whether the money is coming in
+          now, and waiting for month end to find out is too late. All three sit
+          under the hero, one tap apart, on the same figures. */}
       <div className="mb-5">
-        <div className="mb-2 flex items-baseline justify-between gap-3">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
-              This month · {tzDateLabel({ month: 'long' })}
-            </h2>
-            <p className="text-xs text-faint">The running total today is measured against.</p>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{shown.heading}</h2>
+            <p className="text-xs text-faint">
+              {shown.key === 'today'
+                ? 'Settled so far today.'
+                : `What has been collected ${shown.key === 'week' ? 'this week' : 'this month'} · ${shown.when}.`}
+            </p>
           </div>
-          <button type="button" onClick={() => navigate('/finance')}
-            className="shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
-            Open Finance →
-          </button>
+          <div className="flex items-center gap-3">
+            <PeriodTabs value={period} onChange={setPeriod} options={Object.values(periods).filter((o) => o.available)} />
+            <button type="button" onClick={() => navigate('/finance')}
+              className="shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
+              Open Finance →
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.06] sm:grid-cols-3">
           {(() => {
-            const margin = month.revenue > 0 ? (month.grossProfit / month.revenue) * 100 : null;
+            const margin = shown.revenue > 0 ? (shown.grossProfit / shown.revenue) * 100 : null;
             const cells = [
               {
-                label: 'Revenue', value: formatCurrency(month.revenue),
-                sub: `${formatNumber(month.boxes)} boxes settled`, tone: 'text-foreground',
+                label: 'Revenue', value: formatCurrency(shown.revenue),
+                sub: `${formatNumber(shown.boxes)} boxes settled`, tone: 'text-foreground',
               },
               {
-                label: 'Gross profit', value: formatCurrency(month.grossProfit),
+                label: 'Gross profit', value: formatCurrency(shown.grossProfit),
                 sub: margin == null ? 'no sales yet' : `${margin.toFixed(1)}% margin`,
-                tone: month.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-400',
+                tone: shown.grossProfit >= 0 ? 'text-emerald-300' : 'text-rose-400',
               },
               {
-                label: 'Boxes sold', value: formatNumber(month.boxes),
-                sub: month.revenue > 0 ? `${formatCurrency(Math.round(month.revenue / Math.max(1, month.boxes)))} a box` : 'nothing settled yet',
+                label: 'Boxes sold', value: formatNumber(shown.boxes),
+                sub: shown.revenue > 0 ? `${formatCurrency(Math.round(shown.revenue / Math.max(1, shown.boxes)))} a box` : 'nothing settled yet',
                 tone: 'text-foreground',
               },
             ];
@@ -795,13 +848,18 @@ export default function Dashboard() {
               compared against Finance's all-time view and looked wrong. They
               are not wrong — they are THIS MONTH, and the heading now says so
               loudly enough that the comparison is never made by accident. */}
-          <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2>
-            <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-300">
-              {monthLabel}
-            </span>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2>
+              <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-300">
+                {shown.when}
+              </span>
+            </div>
+            <PeriodTabs value={period} onChange={setPeriod} options={Object.values(periods).filter((o) => o.available)} />
             <p className="w-full text-xs text-faint">
-              Sales made this month only — not money in an account, and not the all-time figures on the Finance page.
+              Sales made {shown.key === 'today' ? 'today' : shown.key === 'week' ? 'this week' : 'this month'} only — not
+              money in an account, and not the all-time figures on the Finance page. The stock figures below are what the
+              brand holds right now.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -812,11 +870,11 @@ export default function Dashboard() {
                   <div className="mb-3 flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 rounded-full ${t.dot}`} />
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${t.badge}`}>{b.name}</span>
-                    <span className="ml-auto text-[11px] font-medium text-faint">{monthLabel}</span>
+                    <span className="ml-auto text-[11px] font-medium text-faint">{shown.label}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
-                    <Mini label="Revenue" value={formatCurrency(b.revenueMonth)} sub={`${formatNumber(b.boxesSoldMonth)} boxes sold`} />
-                    <Mini label="Gross profit" value={formatCurrency(b.grossProfitMonth)} sub={`${b.marginMonth}% margin`} />
+                    <Mini label="Revenue" value={formatCurrency(b[`revenue${shown.suffix}`])} sub={`${formatNumber(b[`boxesSold${shown.suffix}`])} boxes sold`} />
+                    <Mini label="Gross profit" value={formatCurrency(b[`grossProfit${shown.suffix}`])} sub={`${b[`margin${shown.suffix}`]}% margin`} />
                     <Mini label="Inventory value" value={formatCurrency(b.inventoryValue)} />
                     <Mini label="In warehouse" value={`${formatNumber(b.warehouseBoxes)} boxes`} />
                     <Mini label="With reps" value={`${formatNumber(b.repBoxes)} boxes`} />

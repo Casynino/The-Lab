@@ -380,9 +380,12 @@ async function command() {
     topProductsByRevenue(monthR).catch(() => []),
   ]).then(([daily, byRegion, byRep, topProducts]) => ({ daily, byRegion, byRep, topProducts }));
 
-  const [fin, profMonth, bd, stl, low, val, repsRows, repBal, commAll, supplierRows, products, pendCounts, pendingWithdrawals, salesTodayRows, salesMonthRows, activeStl, retTodayAgg, retSubmittedToday, retSubmittedTodayBoxes] = await Promise.all([
+  const [fin, profMonth, periods, bd, stl, low, val, repsRows, repBal, commAll, supplierRows, products, pendCounts, pendingWithdrawals, salesTodayRows, salesMonthRows, activeStl, retTodayAgg, retSubmittedToday, retSubmittedTodayBoxes] = await Promise.all([
     finance.overview('today'),
     reports.profitOverview('month'),
+    // Today, this week and this month in one read, so every brand card can be
+    // switched between them without another trip.
+    reports.profitByPeriods(['today', 'week', 'month']).catch(() => null),
     brandBreakdown(),
     settlement.summary(),
     reorderSvc.lowStock(),
@@ -426,11 +429,28 @@ async function command() {
     if (!cur || pr.revenue > cur.revenue) topByBrand.set(b, { name: pr.name, revenue: pr.revenue, boxes: pr.boxes });
   }
   const profBrand = new Map(profMonth.byBrand.map((b) => [b.brandId, b]));
+  // The same brand, over each window. An owner asked to see today and the week
+  // beside the month so he does not have to wait for month end to know where a
+  // brand stands.
+  const brandIn = (period, brandId) => {
+    const row = periods?.[period]?.byBrand?.find((x) => x.brandId === brandId);
+    return row || { revenue: 0, profit: 0, margin: 0, boxes: 0 };
+  };
   const brands = bd.brands.map((b) => {
     const pm = profBrand.get(b.brandId) || { revenue: 0, profit: 0, margin: 0, boxes: 0 };
+    const today = brandIn('today', b.brandId);
+    const week = brandIn('week', b.brandId);
     return {
       brandId: b.brandId,
       name: b.name,
+      revenueToday: today.revenue,
+      grossProfitToday: today.profit,
+      marginToday: today.margin,
+      boxesSoldToday: today.boxes,
+      revenueWeek: week.revenue,
+      grossProfitWeek: week.profit,
+      marginWeek: week.margin,
+      boxesSoldWeek: week.boxes,
       revenueMonth: pm.revenue,
       grossProfitMonth: pm.profit,
       marginMonth: pm.margin,
@@ -499,6 +519,17 @@ async function command() {
       netCash: fin.flow.today.net,
       boxesSold: fin.boxesSold ?? 0,
     },
+    // This week, Monday to Sunday in Tanzania time. Same source as the month
+    // beside it, so the two are always the same kind of figure.
+    week: periods?.week
+      ? {
+        revenue: periods.week.revenue,
+        grossProfit: periods.week.profit,
+        boxes: periods.week.boxes,
+        start: periods.week.range.start,
+        end: periods.week.range.end,
+      }
+      : null,
     month: { revenue: profMonth.totals.revenue, grossProfit: profMonth.totals.profit, boxes: profMonth.totals.boxes },
     brands,
     reps,

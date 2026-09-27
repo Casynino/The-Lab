@@ -332,6 +332,99 @@ async function clampToEpoch(range) {
   return range.start < epoch ? { ...range, start: epoch } : range;
 }
 
+// What one sold line was worth, and what it cost. Every figure on the
+// dashboard and in the reports comes through here, so "revenue this week" and
+// "revenue this month" can never mean two different things.
+//
+// Revenue is net of the sale-level discount, allocated to each line by its
+// share of the subtotal — lineTotal alone is pre-discount, so summing it would
+// report money the customer never owed. Cost is the cost frozen when the box
+// sold (SaleItem.unitCost); rows that predate cost capture carry 0 and fall
+// back to today's purchase price.
+function lineFinancials(it, product) {
+  const saleDiscount = toNumber(it.sale?.discount);
+  const saleSubtotal = toNumber(it.sale?.subtotal);
+  const gross = toNumber(it.lineTotal);
+  const revenue = saleDiscount > 0 && saleSubtotal > 0
+    ? round2(gross - saleDiscount * (gross / saleSubtotal))
+    : gross;
+  const unitCost = toNumber(it.unitCost);
+  const cost = (it.baseQuantity || 0) * (unitCost > 0 ? unitCost : toNumber(product?.purchasePrice));
+  return { revenue, cost, boxes: it.baseQuantity || 0 };
+}
+
+// The same P&L over several windows at once — today, this week, this month —
+// read in ONE pass over the widest of them. Three separate profitOverview
+// calls would each re-read the sales and re-value the whole warehouse, on a
+// dashboard that refreshes every 30 seconds.
+//
+// Commission and stock valuation are deliberately left out: these are the
+// headline revenue/profit/boxes figures, and the full picture is still one
+// call to profitOverview.
+async function profitByPeriods(periods = ['today', 'week', 'month']) {
+  const epoch = await financeEpoch();
+  const ranges = {};
+  for (const period of periods) {
+    let range = resolveRange({ period });
+    if (epoch && range.start < epoch) range = { ...range, start: epoch };
+    ranges[period] = range;
+  }
+  const list = Object.values(ranges);
+  // This week can begin in the month before it — a Monday that falls on the
+  // 29th — so the read starts at the earliest of the windows, not the month's.
+  const from = new Date(Math.min(...list.map((r) => r.start.getTime())));
+  const to = new Date(Math.max(...list.map((r) => r.end.getTime())));
+
+  const [items, products] = await Promise.all([
+    prisma.saleItem.findMany({
+      where: { sale: { is: { ...NON_CANCELLED, soldAt: { gte: from, lte: to } } } },
+      select: {
+        baseQuantity: true,
+        lineTotal: true,
+        unitCost: true,
+        productId: true,
+        sale: { select: { soldAt: true, discount: true, subtotal: true } },
+      },
+    }),
+    prisma.product.findMany({ select: { id: true, purchasePrice: true, brand: { select: { id: true, name: true } } } }),
+  ]);
+  const pMap = new Map(products.map((p) => [p.id, p]));
+
+  const blank = () => ({ revenue: 0, cost: 0, boxes: 0, byBrand: new Map() });
+  const buckets = new Map(periods.map((period) => [period, blank()]));
+  for (const it of items) {
+    const p = pMap.get(it.productId);
+    if (!p) continue;
+    const { revenue, cost, boxes } = lineFinancials(it, p);
+    const soldAt = new Date(it.sale.soldAt).getTime();
+    for (const period of periods) {
+      const r = ranges[period];
+      if (soldAt < r.start.getTime() || soldAt > r.end.getTime()) continue;
+      const b = buckets.get(period);
+      b.revenue += revenue; b.cost += cost; b.boxes += boxes;
+      const bId = p.brand?.id || 'none';
+      const row = b.byBrand.get(bId) || { brandId: bId, name: p.brand?.name || '—', revenue: 0, cost: 0, boxes: 0 };
+      row.revenue += revenue; row.cost += cost; row.boxes += boxes;
+      b.byBrand.set(bId, row);
+    }
+  }
+  const shape = (o) => {
+    const revenue = round2(o.revenue);
+    const profit = round2(revenue - round2(o.cost));
+    return { revenue, profit, boxes: o.boxes, margin: revenue > 0 ? round2((profit / revenue) * 100) : 0 };
+  };
+  const out = {};
+  for (const period of periods) {
+    const b = buckets.get(period);
+    out[period] = {
+      ...shape(b),
+      range: { start: ranges[period].start, end: ranges[period].end },
+      byBrand: [...b.byBrand.values()].map((r) => ({ brandId: r.brandId, name: r.name, ...shape(r) })),
+    };
+  }
+  return out;
+}
+
 // Accepts a period string ('today'|'week'|'month'|'year'|'all') or an options
 // object { period, from, to } for custom date ranges. All ranges are clamped
 // to the finance epoch — pre-epoch sales never count toward profit figures.
@@ -411,21 +504,8 @@ async function profitOverview(opts = 'month') {
   for (const it of items) {
     const p = pMap.get(it.productId);
     if (!p) continue;
-    // Revenue net of the sale-level discount, allocated to each line by its
-    // share of the subtotal. lineTotal alone is pre-discount, so summing it
-    // would report money the customer never owed.
-    const saleDiscount = toNumber(it.sale?.discount);
-    const saleSubtotal = toNumber(it.sale?.subtotal);
-    const gross = toNumber(it.lineTotal);
-    const rev = saleDiscount > 0 && saleSubtotal > 0
-      ? round2(gross - saleDiscount * (gross / saleSubtotal))
-      : gross;
-    // COGS at the cost frozen when the box sold (SaleItem.unitCost) — the same
-    // basis every other report uses. Pricing history at the CURRENT purchase
-    // price silently rewrote past profit on every import. Old rows that
-    // predate cost capture carry 0 and fall back to today's price.
-    const unitCost = toNumber(it.unitCost);
-    const c = it.baseQuantity * (unitCost > 0 ? unitCost : toNumber(p.purchasePrice));
+    // Revenue net of discount, cost frozen at the sale — see lineFinancials.
+    const { revenue: rev, cost: c } = lineFinancials(it, p);
     // Commission accrues the moment a box settles, priced by the ORDER's date
     // — so it is a real cost of these very boxes, not of some later payout.
     // Direct warehouse sales have no settlement and no commission.
@@ -549,6 +629,8 @@ module.exports = {
   salesRepPerformance,
   profitReport,
   profitOverview,
+  profitByPeriods,
+  lineFinancials,
   financeEpoch,
   inventoryMovementReport,
   debtReport,
