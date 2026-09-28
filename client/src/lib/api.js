@@ -57,18 +57,34 @@ api.interceptors.response.use(
         return Promise.reject(e);
       }
     }
+    // One line in the console for anything that fails, so a screenshot of the
+    // toast is never the only evidence there is.
+    if (error?.response) {
+      // eslint-disable-next-line no-console
+      console.warn('[api]', original?.method?.toUpperCase(), original?.url, '->', status, error.response.data);
+    }
     return Promise.reject(error);
   },
 );
 
 // Normalize an axios error into a readable message.
 export function apiError(error, fallback = 'Something went wrong') {
-  return (
-    error?.response?.data?.error?.message ||
-    error?.response?.data?.message ||
-    error?.message ||
-    fallback
-  );
+  const said = error?.response?.data?.error?.message || error?.response?.data?.message;
+  if (said) return said;
+
+  const status = error?.response?.status;
+  // Every refusal the app itself makes carries a sentence saying why. A 401 or
+  // 403 WITHOUT one never came from the app: something in front of it — the
+  // network, or the host — turned the request away before it arrived. The
+  // difference matters to whoever is looking at the screen: nothing they typed
+  // is wrong, nothing was saved, and trying again is the right next move.
+  if (status === 401 || status === 403) {
+    return `Blocked before it reached the app (${status}). Nothing was saved. Try again — if it keeps happening it is the network or the host turning it away, not your figures.`;
+  }
+  if (!error?.response && (error?.message === 'Network Error' || error?.code === 'ERR_NETWORK')) {
+    return 'No connection to the app. Check the internet and try again.';
+  }
+  return status ? `${fallback} (${status})` : (error?.message || fallback);
 }
 
 // Unwrap the standard { success, data, meta } envelope.
