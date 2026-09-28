@@ -1,3 +1,4 @@
+import { STEADY } from '@/lib/polling';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -458,7 +459,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
   const { data, isLoading } = useQuery({
     queryKey: ['finance', 'overview', period],
     queryFn: async () => unwrap(await api.get('/finance/overview', { params: { period } })).data,
-    refetchInterval: 60_000,
+    refetchInterval: STEADY,
   });
   const { data: cf } = useQuery({
     queryKey: ['finance', 'cashflow', 'all'],

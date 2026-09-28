@@ -1,3 +1,4 @@
+import { STEADY } from '@/lib/polling';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -101,7 +102,7 @@ export default function RepDashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', 'me'],
     queryFn: async () => unwrap(await api.get('/dashboard/me')).data,
-    refetchInterval: 60_000,
+    refetchInterval: STEADY,
   });
 
   if (isLoading) return <PageSpinner />;

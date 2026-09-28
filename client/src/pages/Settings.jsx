@@ -1,3 +1,4 @@
+import { SLOW } from '@/lib/polling';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -57,7 +58,7 @@ function WhatsAppPanel({ settings }) {
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ['whatsapp-history'],
     queryFn: async () => unwrap(await api.get('/settings/whatsapp/history?limit=25')).data,
-    refetchInterval: 30000,
+    refetchInterval: SLOW,
   });
 
   const test = useMutation({

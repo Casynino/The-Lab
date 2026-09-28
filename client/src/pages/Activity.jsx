@@ -1,3 +1,4 @@
+import { LIVE } from '@/lib/polling';
 import { useQuery } from '@tanstack/react-query';
 import {
   ShoppingCart, HandCoins, ClipboardList, Coins, Timer, Boxes, Activity as ActivityIcon,
@@ -19,7 +20,7 @@ export default function Activity() {
   const { data, isLoading } = useQuery({
     queryKey: ['activity'],
     queryFn: async () => unwrap(await api.get('/activity', { params: { limit: 50 } })).data,
-    refetchInterval: 15_000, // near real-time
+    refetchInterval: LIVE,
   });
 
   return (

@@ -1,3 +1,4 @@
+import { LIVE } from '@/lib/polling';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -433,12 +434,12 @@ export default function Returns() {
   const { data: summary } = useQuery({
     queryKey: ['returns', 'summary'],
     queryFn: async () => unwrap(await api.get('/returns/summary')).data,
-    refetchInterval: 30_000,
+    refetchInterval: LIVE,
   });
   const { data, isLoading } = useQuery({
     queryKey: ['returns', { type: typeFilter }],
     queryFn: async () => unwrap(await api.get('/returns', { params: { limit: 100, type: typeFilter || undefined } })),
-    refetchInterval: 30_000,
+    refetchInterval: LIVE,
   });
 
   const approve = useMutation({

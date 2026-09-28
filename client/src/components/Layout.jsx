@@ -1,3 +1,4 @@
+import { LIVE, STEADY } from '@/lib/polling';
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -194,7 +195,7 @@ export default function Layout() {
   const { data: unread = 0 } = useQuery({
     queryKey: ['notifications', 'unread'],
     queryFn: async () => unwrap(await api.get('/notifications/unread-count')).data.unread,
-    refetchInterval: 30_000,
+    refetchInterval: STEADY,
   });
 
   // Pending-action counts for the sidebar badges (staff/admin only). Each item
@@ -203,14 +204,14 @@ export default function Layout() {
     queryKey: ['dashboard', 'pending-actions'],
     queryFn: async () => unwrap(await api.get('/dashboard/pending-actions')).data,
     enabled: hasRole(ROLES.WAREHOUSE_STAFF),
-    refetchInterval: 30_000,
+    refetchInterval: STEADY,
   });
 
   const { data: recentNotes = [] } = useQuery({
     queryKey: ['notifications', 'recent'],
     queryFn: async () => unwrap(await api.get('/notifications', { params: { limit: 6, page: 1 } })).data,
     enabled: bellOpen,
-    refetchInterval: bellOpen ? 30_000 : false,
+    refetchInterval: bellOpen ? LIVE : false,
   });
 
   const markAllRead = useMutation({

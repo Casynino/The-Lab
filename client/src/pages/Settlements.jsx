@@ -1,3 +1,4 @@
+import { LIVE, STEADY } from '@/lib/polling';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
@@ -132,7 +133,7 @@ function RepSettlements({ viewing, setViewing }) {
   const { data, isLoading } = useQuery({
     queryKey: ['settlements', 'rep-all'],
     queryFn: async () => unwrap(await api.get('/settlements', { params: { limit: 100 } })),
-    refetchInterval: 60_000,
+    refetchInterval: STEADY,
   });
 
   if (isLoading) return <PageSpinner />;
@@ -203,7 +204,7 @@ function PendingApprovals({ onReview }) {
   const { data: pending = [] } = useQuery({
     queryKey: ['settlements', 'pending-approvals'],
     queryFn: async () => unwrap(await api.get('/settlements/pending-approvals')).data,
-    refetchInterval: 30_000,
+    refetchInterval: LIVE,
   });
 
   const refresh = () => {
@@ -296,7 +297,7 @@ function StaffSettlements({ viewing, setViewing }) {
   const { data: summary } = useQuery({
     queryKey: ['settlements', 'summary'],
     queryFn: async () => unwrap(await api.get('/settlements/summary')).data,
-    refetchInterval: 60_000,
+    refetchInterval: STEADY,
   });
 
   const { data, isLoading } = useQuery({

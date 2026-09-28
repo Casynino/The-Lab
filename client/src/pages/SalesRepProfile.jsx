@@ -1,3 +1,4 @@
+import { STEADY } from '@/lib/polling';
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -585,7 +586,7 @@ export default function SalesRepProfile() {
     queryFn: async () => unwrap(await api.get(`/sales-reps/${id}/profile`, {
       params: period === 'all' ? {} : { period },
     })).data,
-    refetchInterval: 60_000,
+    refetchInterval: STEADY,
     keepPreviousData: true,
   });
   // This rep's payouts, so the admin and the rep are looking at one list. Not

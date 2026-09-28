@@ -1,3 +1,4 @@
+import { STEADY } from '@/lib/polling';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -231,7 +232,7 @@ export default function Dashboard() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['dashboard', 'command'],
     queryFn: async () => unwrap(await api.get('/dashboard/command')).data,
-    refetchInterval: 30_000, // live business status
+    refetchInterval: STEADY, // live business status
   });
 
   if (isLoading) return <PageSpinner label="Building your command center…" />;

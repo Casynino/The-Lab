@@ -1,6 +1,9 @@
 import axios from 'axios';
+import { queryClient } from '@/lib/queryClient';
 
 const TOKEN_KEY = 'haostock.accessToken';
+// When this tab last reloaded itself to answer the host's security challenge.
+const CHALLENGE_KEY = 'haostock.challengeReload';
 const REFRESH_KEY = 'haostock.refreshToken';
 
 export const tokenStore = {
@@ -57,6 +60,28 @@ api.interceptors.response.use(
         return Promise.reject(e);
       }
     }
+    // The host's firewall challenges a whole address when it sees too many
+    // requests from it — and everyone here is behind one address. A browser
+    // answers that challenge by loading a page; a request made in the
+    // background cannot, so it comes back 403 with nothing in it and the app
+    // simply stops working until the challenge lifts, ten minutes later.
+    //
+    // One reload answers it and everything works again. Only for a plain read,
+    // never while something is being saved, never more than once every five
+    // minutes, and never in a tab nobody is looking at — a reload in the
+    // middle of typing costs more than the wait.
+    if (status === 403 && error.response?.headers?.['x-vercel-mitigated'] === 'challenge') {
+      const isRead = (original?.method || 'get').toLowerCase() === 'get';
+      try {
+        const last = Number(sessionStorage.getItem(CHALLENGE_KEY) || 0);
+        if (isRead && queryClient.isMutating() === 0 && document.visibilityState === 'visible'
+            && Date.now() - last > 5 * 60_000) {
+          sessionStorage.setItem(CHALLENGE_KEY, String(Date.now()));
+          window.location.reload();
+        }
+      } catch { /* private window: no memory of the last one, so leave it alone */ }
+    }
+
     // One line in the console for anything that fails, so a screenshot of the
     // toast is never the only evidence there is.
     if (error?.response) {

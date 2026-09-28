@@ -1,3 +1,4 @@
+import { LIVE, STEADY } from '@/lib/polling';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
@@ -72,7 +73,7 @@ function CartOrderSheet({ onClose, existing }) {
   const { data: availableIds = [], isLoading: availLoading } = useQuery({
     queryKey: ['stock-requests', 'available-products'],
     queryFn: async () => unwrap(await api.get('/stock-requests/available-products')).data,
-    refetchInterval: 60_000,
+    refetchInterval: STEADY,
   });
   const [cart, setCart] = useState(() =>
     existing ? Object.fromEntries(existing.items.map((i) => [i.productId, i.quantityRequested])) : {},
@@ -472,7 +473,7 @@ function RepRequestsView({ onView }) {
   const { data, isLoading } = useQuery({
     queryKey: ['stock-requests', 'rep-all'],
     queryFn: async () => unwrap(await api.get('/stock-requests', { params: { limit: 100 } })),
-    refetchInterval: 60_000,
+    refetchInterval: STEADY,
   });
 
   if (isLoading) return <PageSpinner />;
@@ -535,7 +536,7 @@ function PendingRequestApprovals({ onReview }) {
   const { data } = useQuery({
     queryKey: ['stock-requests', 'pending-approvals'],
     queryFn: async () => unwrap(await api.get('/stock-requests', { params: { status: 'PENDING', limit: 50 } })),
-    refetchInterval: 30_000,
+    refetchInterval: LIVE,
   });
   const pending = data?.data || [];
 
