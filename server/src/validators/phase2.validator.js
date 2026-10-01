@@ -42,6 +42,15 @@ const poCreate = {
     orderedAt: dateStr,
     expectedArrival: dateStr,
     notes: z.string().max(1000).optional().nullable(),
+    // Stock paid for as it was bought. Without this a cash purchase could only
+    // be recorded as a debt and paid off afterwards, in whatever month that
+    // happened to be.
+    payment: z.object({
+      accountId: id,
+      amount: money.optional(),
+      occurredAt: dateStr,
+      notes: z.string().max(1000).optional().nullable(),
+    }).optional(),
   }),
 };
 const poUpdate = {

@@ -452,10 +452,13 @@ function resolveOccurredAt(v) {
   return new Date(v);
 }
 
-async function recordTransaction(data, actor) {
+// `client` lets a caller record the money INSIDE its own transaction — a stock
+// purchase paid in cash at the counter is one event, and a purchase that saved
+// while its payment did not is the bug this prevents.
+async function recordTransaction(data, actor, client = prisma) {
   const amount = round2(toNumber(data.amount));
   if (!(amount > 0)) throw ApiError.badRequest('Amount must be greater than zero');
-  const account = await prisma.businessAccount.findUnique({ where: { id: data.accountId } });
+  const account = await client.businessAccount.findUnique({ where: { id: data.accountId } });
   if (!account || !account.isActive) throw ApiError.badRequest('Select a valid account');
   // The commission account holds the record of rep payouts and nothing else.
   // An expense, an income or the owner's own money filed there would print a
@@ -463,8 +466,8 @@ async function recordTransaction(data, actor) {
   if (account.type === COMMISSION_TYPE && data.type !== 'COMMISSION_PAYMENT') {
     throw ApiError.badRequest('The Commission account only holds the record of rep commission. Choose the account the money actually moved through.');
   }
-  const txnNumber = await nextDocNumber(prisma.financeTransaction, 'txnNumber', 'FTX');
-  return prisma.financeTransaction.create({
+  const txnNumber = await nextDocNumber(client.financeTransaction, 'txnNumber', 'FTX');
+  return client.financeTransaction.create({
     data: {
       txnNumber,
       accountId: data.accountId,

@@ -85,6 +85,49 @@ async function createPurchaseOrder(payload, actor) {
         items: { create: lines },
       },
     });
+
+    // Paid at the counter, not owed.
+    //
+    // A purchase used to be a debt and nothing else: the only way to say it
+    // was paid was a separate payment afterwards, dated the day somebody
+    // remembered. Stock bought with the cash in the drawer then sat under
+    // "owed to suppliers" for weeks, and the money left the books in a month
+    // it was never spent in. So the payment is part of the purchase, recorded
+    // in the same transaction — both land, or neither does.
+    const pay = payload.payment;
+    if (pay && pay.accountId) {
+      const amount = pay.amount != null ? round2(toNumber(pay.amount)) : totalCost;
+      if (amount > 0) {
+        if (amount > totalCost + 0.001) {
+          throw ApiError.badRequest(
+            `This purchase is ${formatCurrency(totalCost)} — a payment of ${formatCurrency(amount)} is more than it cost.`,
+          );
+        }
+        const supplier = await tx.supplier.findUnique({ where: { id: payload.supplierId }, select: { name: true, brandId: true } });
+        const finance = require('./finance.service'); // lazy: avoids an import cycle
+        await finance.recordTransaction(
+          {
+            accountId: pay.accountId,
+            direction: 'OUT',
+            type: 'STOCK_PURCHASE',
+            amount,
+            brandId: supplier?.brandId || null,
+            category: 'Stock Purchase',
+            description: `${poNumber} — ${supplier?.name || 'supplier'}`,
+            reference: poNumber,
+            refType: 'PurchaseOrder',
+            refId: po.id,
+            notes: pay.notes || null,
+            // The day the money actually moved: the payment's own date, or the
+            // day the order was placed. Not the day it was typed in.
+            occurredAt: pay.occurredAt || payload.orderedAt || undefined,
+          },
+          actor,
+          tx,
+        );
+      }
+    }
+
     return tx.purchaseOrder.findUnique({ where: { id: po.id }, include: PO_INCLUDE });
   });
 }

@@ -13,6 +13,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useBrands } from '@/lib/hooks';
 import ReportsPage from '@/pages/Reports';
 import CommissionsPage from '@/pages/Commissions';
+import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
 import { DonutChart, BarChartCard, TrendChart } from '@/components/charts';
 import {
@@ -1863,10 +1864,14 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
   const accounts = wallets(all);
   const [accountId, setAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
   const [amount, setAmount] = useState(String(order.outstanding || ''));
+  // Money that moved weeks ago belongs in the week it moved. Without this the
+  // payment landed on the day it was typed, which put a September purchase's
+  // cash into October and left both months wrong.
+  const [occurredAt, setOccurredAt] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
   const pay = useMutation({
     mutationFn: () => api.post('/finance/supplier-payments', {
-      purchaseOrderId: order.id, accountId, amount: Number(amount), notes: notes.trim() || undefined,
+      purchaseOrderId: order.id, accountId, amount: Number(amount), occurredAt, notes: notes.trim() || undefined,
     }),
     onSuccess: () => { toast.success('Supplier payment recorded'); onDone(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
@@ -1883,11 +1888,17 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
         <Field label="Amount (TZS)" required error={amt > order.outstanding + 0.001 ? 'More than what is outstanding' : undefined}>
           <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
-        <Field label="Paid from account" required>
-          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
-          </Select>
-        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Paid from account" required>
+            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
+            </Select>
+          </Field>
+          <Field label="Date paid" hint="The day the money actually left">
+            <Input type="date" value={occurredAt} max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setOccurredAt(e.target.value)} />
+          </Field>
+        </div>
         <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
       </div>
     </Modal>
@@ -1935,13 +1946,21 @@ function PayBalanceModal({ supplier, outstanding, accounts: all, onClose, onDone
 // Record receiving stock from a supplier: creates + receives the purchase in
 // one step — inventory goes up, the supplier's balance (what you owe) goes up.
 // No payment happens here; pay later in installments.
-function NewPurchaseModal({ supplier, onClose, onDone }) {
+function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
   const { data: products = [] } = useProducts();
+  const accounts = wallets(all);
   const [lines, setLines] = useState([{ productId: '', quantity: '', unitCost: '' }]);
   const [shippingCost, setShippingCost] = useState('');
   const [otherCost, setOtherCost] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState('');
+  // Stock bought with the cash in the drawer used to be recorded as a debt and
+  // nothing else, and the money then left the books on whatever day somebody
+  // came back to pay it off. So the form asks here, while the person who paid
+  // is still the one typing.
+  const [paidNow, setPaidNow] = useState(false);
+  const [payAccountId, setPayAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
+  const [payAmount, setPayAmount] = useState('');
 
   const patch = (i, p) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...p } : l)));
   const pickProduct = (i, productId) => {
@@ -1954,7 +1973,11 @@ function NewPurchaseModal({ supplier, onClose, onDone }) {
   const goods = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0), 0);
   const total = goods + (Number(shippingCost) || 0) + (Number(otherCost) || 0);
   const validLines = lines.filter((l) => l.productId && Number(l.quantity) > 0 && Number(l.unitCost) >= 0);
-  const valid = validLines.length > 0;
+  // Empty means the whole bill — the common case, and it follows the total as
+  // the lines change instead of going stale at whatever it was first.
+  const paying = payAmount === '' ? total : Number(payAmount) || 0;
+  const overpaid = paidNow && paying > total + 0.001;
+  const valid = validLines.length > 0 && (!paidNow || (payAccountId && paying > 0 && !overpaid));
 
   const save = useMutation({
     mutationFn: async () => {
@@ -1967,12 +1990,22 @@ function NewPurchaseModal({ supplier, onClose, onDone }) {
         supplierId: supplier.id, currency: 'TZS', items,
         shippingCost: Number(shippingCost) || 0, otherCost: Number(otherCost) || 0,
         orderedAt: new Date(`${date}T12:00:00`).toISOString(), notes: notes.trim() || undefined,
+        // Paid as it was bought: the money leaves the account on the purchase
+        // date, not the day this was typed in.
+        payment: paidNow ? { accountId: payAccountId, amount: paying, occurredAt: date } : undefined,
       })).data;
       await api.post(`/purchase-orders/${po.id}/receive`, { actualArrival: new Date(`${date}T12:00:00`).toISOString() });
       return po;
     },
     onSuccess: (po) => {
-      toast.success(`Purchase ${po.poNumber} received — stock added, you now owe ${supplier.name} ${formatCurrency(total)} more`);
+      const left = round2ui(total - (paidNow ? paying : 0));
+      toast.success(
+        !paidNow
+          ? `Purchase ${po.poNumber} received — stock added, you now owe ${supplier.name} ${formatCurrency(total)} more`
+          : left > 0
+            ? `Purchase ${po.poNumber} received — ${formatCurrency(paying)} paid, ${formatCurrency(left)} still owed to ${supplier.name}`
+            : `Purchase ${po.poNumber} received and paid in full — nothing owed to ${supplier.name} for it`,
+      );
       onDone(); onClose();
     },
     onError: (e) => toast.error(apiError(e)),
@@ -1987,7 +2020,8 @@ function NewPurchaseModal({ supplier, onClose, onDone }) {
       </>}>
       <div className="space-y-4">
         <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
-          Records stock received from {supplier.name}: inventory increases and the amount you owe them increases. No money moves now — pay later from any account.
+          Records stock received from {supplier.name}: inventory increases, and so does what you owe them — unless you say below that you
+          paid for it, in which case the money leaves the account you choose, dated the purchase date.
         </p>
         <div className="space-y-2">
           {lines.map((l, i) => (
@@ -2011,6 +2045,53 @@ function NewPurchaseModal({ supplier, onClose, onDone }) {
         <div className="grid grid-cols-2 gap-3">
           <Field label="Purchase date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           <Field label="Notes"><Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" /></Field>
+        </div>
+
+        {/* Paid, or owed. The question is asked here because this is where the
+            person who handed over the money is standing. */}
+        <div className={clsx('rounded-xl border p-3 transition', paidNow ? 'border-brand-500/40 bg-brand-500/[0.07]' : 'border-border bg-elevated')}>
+          <label className="flex cursor-pointer items-start gap-2.5">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500"
+              checked={paidNow}
+              onChange={(e) => setPaidNow(e.target.checked)}
+              disabled={!accounts.length}
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">I paid for this</span>
+              <span className="block text-xs text-muted">
+                {accounts.length
+                  ? `Money out on ${formatDate(date)}. Leave it unticked if ${supplier.name} is being paid later.`
+                  : 'No account to pay from — add one under Accounts first.'}
+              </span>
+            </span>
+          </label>
+
+          {paidNow && (
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Paid from account" required>
+                <Select value={payAccountId} onChange={(e) => setPayAccountId(e.target.value)}>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
+                </Select>
+              </Field>
+              <Field
+                label="Amount paid (TZS)"
+                error={overpaid ? 'More than this purchase cost'
+                  : (payAmount !== '' && paying <= 0) ? 'Untick "I paid for this" if nothing was paid'
+                    : undefined}
+              >
+                <NumberInput min="0" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder={String(total || 0)} />
+              </Field>
+              <p className="sm:col-span-2 text-xs text-faint">
+                {overpaid
+                  ? `This purchase is ${formatCurrency(total)}.`
+                  : paying >= total - 0.001
+                    ? `Paid in full — nothing will be owed for this purchase.`
+                    : `${formatCurrency(round2ui(total - paying))} will stay owed to ${supplier.name}.`}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </Modal>
@@ -2122,7 +2203,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
       </Modal>
       {paying && <PaySupplierModal order={paying} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
       {payingBalance && s && <PayBalanceModal supplier={s} outstanding={data.totals.outstanding} accounts={accounts} onClose={() => setPayingBalance(false)} onDone={refresh} />}
-      {purchasing && s && <NewPurchaseModal supplier={s} onClose={() => setPurchasing(false)} onDone={refresh} />}
+      {purchasing && s && <NewPurchaseModal supplier={s} accounts={accounts} onClose={() => setPurchasing(false)} onDone={refresh} />}
       {returning && s && <ReturnGoodsModal supplier={s} outstanding={data.totals.outstanding} onClose={() => setReturning(false)} onDone={refresh} />}
     </>
   );
