@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { UserPlus, Pencil, Power } from 'lucide-react';
+import { UserPlus, Pencil, Power, Trash2 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useWarehouses, useDebounce } from '@/lib/hooks';
 import { ROLE_LABELS } from '@/lib/constants';
+import { useAuth } from '@/context/AuthContext';
 import { formatDateTime } from '@/lib/format';
 import { TZ_REGIONS } from '@/lib/regions';
 import {
@@ -97,6 +98,51 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
   );
 }
 
+// Deleting an account for good. Typing the email is the confirmation: it is
+// the one thing nobody types by accident, and it is on screen above the box.
+//
+// The server decides what is allowed — your own account, the last
+// administrator, and a rep still holding boxes are all refused there — so this
+// screen's job is to say plainly what is about to disappear.
+function DeleteUserModal({ user, onClose, onDone }) {
+  const [typed, setTyped] = useState('');
+  const del = useMutation({
+    mutationFn: () => api.delete(`/users/${user.id}`, { data: { purge: true, confirm: user.email } }),
+    onSuccess: (res) => {
+      const d = res?.data?.data || {};
+      toast.success(d.salesRepCode ? `${user.name} and rep ${d.salesRepCode} deleted` : `${user.name} deleted`);
+      onDone(); onClose();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+  const ready = typed.trim().toLowerCase() === String(user.email || '').toLowerCase();
+
+  return (
+    <Modal open onClose={onClose} title={`Delete ${user.name}`}
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="danger" disabled={!ready} loading={del.isPending} onClick={() => del.mutate()}>
+          <Trash2 className="h-4 w-4" /> Delete for good
+        </Button>
+      </>}>
+      <div className="space-y-4 text-sm">
+        <p className="text-muted">
+          This removes the account itself, not just its access: <b className="text-foreground">{user.email}</b> will be gone from
+          this list and cannot sign in again.
+        </p>
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+          If this person is a sales rep, their orders, sales, returns, penalties and commission go with them, and their stock
+          line disappears. Boxes they are still holding block the delete until those are settled or returned. The audit log keeps
+          a record that the account existed.
+        </div>
+        <Field label={`Type ${user.email} to confirm`} required>
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={user.email} autoFocus />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Users() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
@@ -116,6 +162,9 @@ export default function Users() {
     onSuccess: () => { toast.success('Updated'); qc.invalidateQueries({ queryKey: ['users'] }); },
     onError: (e) => toast.error(apiError(e)),
   });
+  // Removing an account for good, rather than parking it as Inactive.
+  const { user: me } = useAuth();
+  const [deleting, setDeleting] = useState(null);
 
   return (
     <div>
@@ -145,8 +194,13 @@ export default function Users() {
                     </TD>
                     <TD>
                       <div className="flex justify-end gap-1">
-                        <button className="btn-ghost px-2 py-1" onClick={() => setModal({ open: true, editing: u })}><Pencil className="h-4 w-4" /></button>
-                        <button className="btn-ghost px-2 py-1 text-rose-600" onClick={() => toggle.mutate(u)}><Power className="h-4 w-4" /></button>
+                        <button title="Edit" className="btn-ghost px-2 py-1" onClick={() => setModal({ open: true, editing: u })}><Pencil className="h-4 w-4" /></button>
+                        <button title={u.isActive ? 'Suspend' : 'Activate'} className="btn-ghost px-2 py-1 text-rose-600" onClick={() => toggle.mutate(u)}><Power className="h-4 w-4" /></button>
+                        {/* Your own account is never offered — the server refuses
+                            it too, but the button should not be there to click. */}
+                        {u.id !== me?.id && (
+                          <button title="Delete for good" className="btn-ghost px-2 py-1 text-rose-600" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4" /></button>
+                        )}
                       </div>
                     </TD>
                   </TR>
@@ -157,6 +211,14 @@ export default function Users() {
           </>
         )}
       </Card>
+
+      {deleting && (
+        <DeleteUserModal
+          user={deleting}
+          onClose={() => setDeleting(null)}
+          onDone={() => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['sales-reps'] }); }}
+        />
+      )}
 
       {modal.open && <UserModal open={modal.open} editing={modal.editing} roles={roles} warehouses={warehouses} onClose={() => setModal({ open: false, editing: null })} />}
     </div>

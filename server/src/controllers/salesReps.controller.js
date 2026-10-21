@@ -661,36 +661,16 @@ const whatsappTest = asyncHandler(async (req, res) => {
   return ok(res, result);
 });
 
-const remove = asyncHandler(async (req, res) => {
-  const movements = await prisma.inventoryTransaction.count({ where: { salesRepId: req.params.id } });
-  if (movements > 0) {
-    const rep = await prisma.salesRepresentative.update({ where: { id: req.params.id }, data: { isActive: false } });
-    await audit.record(req, { action: 'DEACTIVATE', entityType: 'SalesRepresentative', entityId: rep.id });
-    return ok(res, { ...rep, deactivated: true, reason: 'has inventory history' });
-  }
-  await prisma.salesRepresentative.delete({ where: { id: req.params.id } });
-  await audit.record(req, { action: 'DELETE', entityType: 'SalesRepresentative', entityId: req.params.id });
-  return ok(res, { id: req.params.id, deleted: true });
-});
-
-// DANGER: wipe ALL business activity for a rep (used to reset a test account),
-// keeping the rep + user account intact. Deletes settlements, sales, returns,
-// stock requests, transfers, withdrawals, penalties, stock counts, the rep's
-// inventory ledger entries, and notifications — then rebuilds caches. Warehouse-
-// side ledger entries are left untouched, so warehouse stock does NOT change.
-const resetData = asyncHandler(async (req, res) => {
-  const repId = req.params.id;
-  const rep = await prisma.salesRepresentative.findUnique({
-    where: { id: repId },
-    include: { user: { select: { id: true } } },
-  });
-  if (!rep) throw ApiError.notFound('Sales representative not found');
-  // Safety: caller must echo the rep code (e.g. "REP-001") to confirm.
-  if (req.body.confirm !== rep.code) {
-    throw ApiError.badRequest(`To confirm, send { "confirm": "${rep.code}" }`);
-  }
-
-  const summary = await prisma.$transaction(async (tx) => {
+// Everything a rep accumulated, removed in one transaction: settlements and
+// the sales under them, returns, penalties, submissions, stock requests,
+// transfers, withdrawals, stock counts, the rep's own ledger entries and their
+// notifications. Shared by "reset this rep's data" and by deleting a rep for
+// good, so those two can never drift apart.
+//
+// Rep-side ledger only: warehouse entries stay exactly as they are, so the
+// warehouse count never moves because somebody removed a person.
+async function wipeRepActivity(repId, userId) {
+  return prisma.$transaction(async (tx) => {
     const settlements = await tx.settlement.findMany({ where: { salesRepId: repId }, select: { id: true } });
     const settlementIds = settlements.map((s) => s.id);
     const transfers = await tx.stockTransfer.findMany({ where: { OR: [{ toRepId: repId }, { fromRepId: repId }] }, select: { id: true } });
@@ -724,7 +704,7 @@ const resetData = asyncHandler(async (req, res) => {
     await tx.stockCount.deleteMany({ where: { salesRepId: repId } });
 
     // Notifications: the rep's own + any admin alerts pointing at deleted records.
-    await tx.notification.deleteMany({ where: { OR: [{ userId: rep.user.id }, { entityId: { in: entityIds } }] } });
+    await tx.notification.deleteMany({ where: { OR: [{ userId: userId || undefined }, { entityId: { in: entityIds } }] } });
 
     return {
       settlements: settlementIds.length,
@@ -736,6 +716,125 @@ const resetData = asyncHandler(async (req, res) => {
       inventoryTransactions: invDel.count,
     };
   }, { timeout: 120000 });
+}
+
+// What deleting this rep would destroy, and whether it is allowed at all.
+// The owner's rule: a rep may be removed once their boxes are back. Boxes still
+// out are the one thing a deletion must never swallow — those are goods the
+// business is owed, and with the rep gone there is nobody to chase.
+async function deletionCheck(repId) {
+  const rep = await prisma.salesRepresentative.findUnique({
+    where: { id: repId },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
+  if (!rep) throw ApiError.notFound('Sales representative not found');
+
+  const [held, settlements, sales, returns, withdrawals, commission] = await Promise.all([
+    // Boxes the rep is holding right now, read from the ledger itself.
+    prisma.inventoryTransaction.aggregate({ where: { salesRepId: repId }, _sum: { baseQuantity: true } }),
+    prisma.settlement.count({ where: { salesRepId: repId } }),
+    prisma.sale.aggregate({ where: { salesRepId: repId }, _count: { _all: true }, _sum: { total: true } }),
+    prisma.return.count({ where: { salesRepId: repId } }),
+    prisma.commissionWithdrawal.aggregate({ where: { salesRepId: repId, status: 'PAID' }, _sum: { amount: true } }),
+    require('../services/commission.service').computeForRep(repId).catch(() => null),
+  ]);
+
+  const boxesHeld = held._sum.baseQuantity || 0;
+  return {
+    rep,
+    boxesHeld,
+    canDelete: boxesHeld <= 0,
+    blockedReason: boxesHeld > 0
+      ? `${rep.user?.name || rep.code} is still holding ${boxesHeld} box${boxesHeld === 1 ? '' : 'es'}. Take the boxes back — settle them or record a return — and the rep can then be deleted.`
+      : null,
+    willDestroy: {
+      settlements,
+      sales: sales._count?._all || 0,
+      salesValue: round2(toNumber(sales._sum?.total)),
+      returns,
+      commissionEarned: round2(toNumber(commission?.earned)),
+      commissionAvailable: round2(toNumber(commission?.available)),
+      commissionPaidOut: round2(toNumber(withdrawals._sum?.amount)),
+    },
+  };
+}
+
+// GET /sales-reps/:id/deletion-check — what the delete screen shows BEFORE the
+// owner commits: whether it is allowed, and exactly what goes with it.
+const deletionPreview = asyncHandler(async (req, res) => {
+  const { rep, boxesHeld, canDelete, blockedReason, willDestroy } = await deletionCheck(req.params.id);
+  return ok(res, { id: rep.id, code: rep.code, name: rep.user?.name || null, boxesHeld, canDelete, blockedReason, willDestroy });
+});
+
+// DELETE /sales-reps/:id
+//
+// Two outcomes, by design:
+//   • no `purge` → the rep is suspended if they have any history (what the old
+//     button did), or hard-deleted when there is nothing attached to them.
+//   • `purge: true` + `confirm: "<REP CODE>"` → their business records go too,
+//     and the rep and their login are removed for good. This is what the owner
+//     wanted: a rep who was created by mistake leaves no trace.
+//
+// Either way the stock guard comes first, and the audit entry survives the
+// deletion — it is the only record that the rep ever existed.
+const remove = asyncHandler(async (req, res) => {
+  const repId = req.params.id;
+  const purge = req.body?.purge === true || req.body?.purge === 'true';
+  const { rep, boxesHeld, canDelete, blockedReason, willDestroy } = await deletionCheck(repId);
+  if (!canDelete) throw ApiError.badRequest(blockedReason);
+
+  if (!purge) {
+    const movements = await prisma.inventoryTransaction.count({ where: { salesRepId: repId } });
+    if (movements > 0) {
+      const updated = await prisma.salesRepresentative.update({ where: { id: repId }, data: { isActive: false } });
+      await audit.record(req, { action: 'DEACTIVATE', entityType: 'SalesRepresentative', entityId: repId });
+      return ok(res, { ...updated, deactivated: true, reason: 'has inventory history' });
+    }
+    await prisma.salesRepresentative.delete({ where: { id: repId } });
+    await audit.record(req, { action: 'DELETE', entityType: 'SalesRepresentative', entityId: repId });
+    return ok(res, { id: repId, deleted: true });
+  }
+
+  // Typing the rep's own code is the confirmation — the same guard the reset
+  // has always used, so a mis-click can never erase a rep.
+  if (req.body?.confirm !== rep.code) {
+    throw ApiError.badRequest(`To delete ${rep.code} and everything recorded against it, send { "confirm": "${rep.code}" }`);
+  }
+
+  const summary = await wipeRepActivity(repId, rep.user?.id);
+  await prisma.salesRepresentative.delete({ where: { id: repId } });
+  // The login goes with the rep: "deleted" has to mean they cannot sign in.
+  if (rep.user?.id) await prisma.user.delete({ where: { id: rep.user.id } }).catch(() => {});
+  await inventory.recomputeAllCaches();
+
+  await audit.record(req, {
+    action: 'DELETE',
+    entityType: 'SalesRepresentative',
+    entityId: repId,
+    oldValues: { code: rep.code, name: rep.user?.name || null, email: rep.user?.email || null, boxesHeld },
+    newValues: { purged: true, ...summary, ...willDestroy },
+  });
+  return ok(res, { id: repId, code: rep.code, deleted: true, purged: true, ...summary });
+});
+
+// DANGER: wipe ALL business activity for a rep (used to reset a test account),
+// keeping the rep + user account intact. Deletes settlements, sales, returns,
+// stock requests, transfers, withdrawals, penalties, stock counts, the rep's
+// inventory ledger entries, and notifications — then rebuilds caches. Warehouse-
+// side ledger entries are left untouched, so warehouse stock does NOT change.
+const resetData = asyncHandler(async (req, res) => {
+  const repId = req.params.id;
+  const rep = await prisma.salesRepresentative.findUnique({
+    where: { id: repId },
+    include: { user: { select: { id: true } } },
+  });
+  if (!rep) throw ApiError.notFound('Sales representative not found');
+  // Safety: caller must echo the rep code (e.g. "REP-001") to confirm.
+  if (req.body.confirm !== rep.code) {
+    throw ApiError.badRequest(`To confirm, send { "confirm": "${rep.code}" }`);
+  }
+
+  const summary = await wipeRepActivity(repId, rep.user?.id);
 
   // Rebuild stock caches from the remaining ledger (rep -> 0, warehouse same).
   // Done AFTER the transaction — recomputeAllCaches opens its own transaction
@@ -780,4 +879,4 @@ const addStock = asyncHandler(async (req, res) => {
   return created(res, { settlement: result.settlement, mode: result.mode, boxes: result.boxes, addedValue: result.addedValue });
 });
 
-module.exports = { list, get, getProfile, getStock, getReconciliation, create, update, remove, resetData, addStock, whatsappTest };
+module.exports = { list, get, getProfile, getStock, getReconciliation, create, update, remove, deletionPreview, resetData, addStock, whatsappTest, wipeRepActivity };

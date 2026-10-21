@@ -115,7 +115,49 @@ const remove = asyncHandler(async (req, res) => {
     if (activeAdmins <= 1) throw ApiError.badRequest('Cannot remove the last active administrator');
   }
 
-  // Deactivate (preserves audit trails and ledger actor references).
+  // Removing an account for good, rather than parking it as Inactive. An
+  // account created by mistake should leave no trace — a suspended row still
+  // shows in the list, still owns its rep, and still has to be explained.
+  //
+  // Guarded above: never your own account, never the last administrator. And a
+  // user who is a sales rep goes through the rep's own rule — boxes back
+  // first — because deleting the person must never bury stock they are
+  // holding. The audit entry outlives the row and is the record that they
+  // existed at all.
+  const purge = req.body?.purge === true || req.body?.purge === 'true';
+  if (purge) {
+    if (req.body?.confirm !== user.email) {
+      throw ApiError.badRequest(`To delete ${user.name} for good, send { "confirm": "${user.email}" }`);
+    }
+    const rep = await prisma.salesRepresentative.findFirst({ where: { userId: user.id }, select: { id: true, code: true } });
+    let repSummary = null;
+    if (rep) {
+      const held = await prisma.inventoryTransaction.aggregate({ where: { salesRepId: rep.id }, _sum: { baseQuantity: true } });
+      const boxes = held._sum.baseQuantity || 0;
+      if (boxes > 0) {
+        throw ApiError.badRequest(
+          `${user.name} is a sales rep (${rep.code}) still holding ${boxes} box${boxes === 1 ? '' : 'es'}. Settle or return those boxes first, then the account can be deleted.`,
+        );
+      }
+      const reps = require('./salesReps.controller');
+      repSummary = await reps.wipeRepActivity(rep.id, user.id);
+      await prisma.salesRepresentative.delete({ where: { id: rep.id } });
+      await require('../services/inventory.service').recomputeAllCaches();
+    }
+    await prisma.notification.deleteMany({ where: { userId: user.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+    await audit.record(req, {
+      action: 'DELETE',
+      entityType: 'User',
+      entityId: req.params.id,
+      oldValues: { name: user.name, email: user.email, role: user.role.name, salesRepCode: rep?.code || null },
+      newValues: { purged: true, ...(repSummary || {}) },
+    });
+    return ok(res, { id: req.params.id, deleted: true, purged: true, salesRepCode: rep?.code || null, ...(repSummary || {}) });
+  }
+
+  // Default stays as it was: deactivate, preserving audit trails and ledger
+  // actor references.
   const updated = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: false }, select: PUBLIC_SELECT });
   await audit.record(req, { action: 'DEACTIVATE', entityType: 'User', entityId: req.params.id });
   return ok(res, { ...updated, deactivated: true });
