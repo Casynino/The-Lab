@@ -123,6 +123,9 @@ const BRAND_CHIP = {
 };
 
 function Balances() {
+  // The product the owner opened up: every location and its whole movement
+  // history. The cards can only ever show three places.
+  const [openProduct, setOpenProduct] = useState(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [brand, setBrand] = useState('');
@@ -282,9 +285,12 @@ function Balances() {
                 OK: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/25',
               };
               return (
-                <div
+                <button
                   key={r.productId}
-                  className="animate-rise flex h-full flex-col rounded-2xl border border-white/[0.07] bg-surface p-4 transition duration-200 hover:border-white/15"
+                  type="button"
+                  onClick={() => setOpenProduct(r)}
+                  title="Open this product — every place it is, and its movement"
+                  className="animate-rise flex h-full cursor-pointer flex-col rounded-2xl border border-white/[0.07] bg-surface p-4 text-left transition duration-200 hover:border-brand-500/40 hover:bg-elevated focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
                   style={{ animationDelay: `${i * 30}ms` }}
                 >
                   {/* Brand and code first and small; the name is the heading. */}
@@ -361,17 +367,24 @@ function Balances() {
                           {Array.from({ length: pad }).map((_, k) => (
                             <div key={`pad-${k}`} className="h-[17px]" aria-hidden="true" />
                           ))}
-                          <div className="pt-0.5 text-[10px] text-faint">
-                            {rest > 0 ? `+${rest} more · ` : ''}{r.locations.length} place{r.locations.length !== 1 ? 's' : ''}
+                          <div className="flex items-center justify-between gap-2 pt-0.5">
+                            <span className="text-[10px] text-faint">
+                              {r.locations.length} place{r.locations.length !== 1 ? 's' : ''}
+                            </span>
+                            <span className="text-[10px] font-semibold text-brand-500">
+                              {rest > 0 ? `+${rest} more · see all` : 'see movement'}
+                            </span>
                           </div>
                         </>
                       );
                     })()}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
+          {openProduct && <ProductStockModal row={openProduct} onClose={() => setOpenProduct(null)} />}
+
           <div className="mt-4">
             <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
           </div>
@@ -421,6 +434,120 @@ function Movements() {
         </>
       )}
     </Card>
+  );
+}
+
+// One product, opened up: every place its boxes are sitting right now, and
+// every movement that put them there.
+//
+// The cards can only ever show three locations — "+2 more" was the answer to
+// "which rep has my stock" being cut off mid-sentence. This is where the rest
+// of it lives, so nobody has to go and cross-read the ledger filtered by hand.
+function ProductStockModal({ row, onClose }) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useQuery({
+    queryKey: ['inventory', 'movements', { productId: row.productId, page }],
+    queryFn: async () => unwrap(await api.get('/inventory/movements', {
+      params: { productId: row.productId, page, limit: 15 },
+    })),
+  });
+
+  const sorted = [...(row.locations || [])].sort((a, b) => {
+    if ((a.type === 'WAREHOUSE') !== (b.type === 'WAREHOUSE')) return a.type === 'WAREHOUSE' ? -1 : 1;
+    return b.baseQuantity - a.baseQuantity;
+  });
+  const unit = pluralizeUnit(row.baseUnitName);
+  // The row carries its locations, not a ready-made split — same sum the card
+  // draws its bar from.
+  const inStore = sorted.filter((l) => l.type === 'WAREHOUSE').reduce((a, l) => a + l.baseQuantity, 0);
+  const withReps = row.totalBase - inStore;
+
+  return (
+    <Modal open onClose={onClose} size="lg" title={row.name}
+      footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
+      <div className="space-y-5">
+        {/* What it is worth and how it splits, before the detail. */}
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.06] sm:grid-cols-4">
+          {[
+            ['On hand', `${formatNumber(row.totalBase)} ${unit}`],
+            ['In the store', formatNumber(inStore)],
+            ['With reps', formatNumber(withReps)],
+            ['Stock value', formatCurrency(row.value)],
+          ].map(([label, value]) => (
+            <div key={label} className="bg-surface px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">{label}</p>
+              <p className="mt-0.5 text-sm font-bold tabular-nums text-foreground">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Every place, not the first three. */}
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+            Where these {unit} are · {sorted.length} place{sorted.length !== 1 ? 's' : ''}
+          </h4>
+          <div className="overflow-hidden rounded-xl border border-white/[0.08]">
+            <div className="divide-y divide-white/[0.06]">
+              {sorted.map((loc, i) => {
+                const pct = row.totalBase > 0 ? Math.round((loc.baseQuantity / row.totalBase) * 100) : 0;
+                return (
+                  <div key={i} className="flex items-center gap-3 bg-surface px-3 py-2">
+                    {loc.type === 'WAREHOUSE'
+                      ? <Warehouse className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+                      : <Truck className="h-3.5 w-3.5 shrink-0 text-violet-400" />}
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">{loc.name}</span>
+                    <span className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.07] sm:block">
+                      <span className={`block h-full rounded-full ${loc.type === 'WAREHOUSE' ? 'bg-brand-500' : 'bg-violet-500/80'}`}
+                        style={{ width: `${Math.max(3, pct)}%` }} />
+                    </span>
+                    <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-faint">{pct}%</span>
+                    <span className="w-14 shrink-0 text-right text-sm font-bold tabular-nums text-foreground">
+                      {formatNumber(loc.baseQuantity)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* And how they got there. */}
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+            Movement of these {unit}
+            {data?.meta?.total != null && <span className="ml-1 font-normal text-faint">· {formatNumber(data.meta.total)} recorded</span>}
+          </h4>
+          {isLoading ? <PageSpinner /> : !data?.data?.length ? (
+            <EmptyState title="No movement recorded for this product yet" icon={Boxes} />
+          ) : (
+            <>
+              <Table>
+                <THead><TR><TH>When</TH><TH>What happened</TH><TH className="text-right">Change</TH><TH>Where</TH><TH>By</TH></TR></THead>
+                <TBody>
+                  {data.data.map((m) => {
+                    const meta = MOVEMENT_META[m.type] || { label: m.type, cls: 'bg-elevated' };
+                    return (
+                      <TR key={m.id}>
+                        <TD className="whitespace-nowrap text-faint">{formatDateTime(m.occurredAt)}</TD>
+                        <TD><Badge className={meta.cls}>{meta.label}</Badge></TD>
+                        <TD className={`text-right font-semibold tabular-nums ${m.baseQuantity < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                          {m.baseQuantity > 0 ? '+' : ''}{formatNumber(m.baseQuantity)}
+                        </TD>
+                        <TD className="text-muted">
+                          {m.locationType === 'WAREHOUSE' ? m.warehouse?.name : m.salesRep?.user?.name || '—'}
+                        </TD>
+                        <TD className="text-faint">{m.user?.name || '—'}</TD>
+                      </TR>
+                    );
+                  })}
+                </TBody>
+              </Table>
+              <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
+            </>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
