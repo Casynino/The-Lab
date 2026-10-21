@@ -543,17 +543,12 @@ function AddStockModal({ repId, repName, onClose }) {
   );
 }
 
-// Removing a rep for good.
+// Removing a rep for good. One press, one question — no code to type.
 //
-// The owner's rule is the guard: a rep may be deleted once their boxes are
-// back. Until then the delete is refused outright — boxes still out are goods
-// the business is owed, and with the rep gone there is nobody to chase them.
-//
-// What it destroys is read from the server before anything is offered, because
-// "delete this person" quietly means "delete their orders, sales, returns,
-// penalties and commission" and nobody should discover that afterwards.
+// The owner's rule is still the guard: boxes back first. Until then the dialog
+// says how many are out and offers nothing, because boxes still out are goods
+// the business is owed and a deleted rep cannot be chased.
 function DeleteRepModal({ rep, onClose, onDone }) {
-  const [typed, setTyped] = useState('');
   const { data: check, isLoading } = useQuery({
     queryKey: ['sales-reps', rep.id, 'deletion-check'],
     queryFn: async () => unwrap(await api.get(`/sales-reps/${rep.id}/deletion-check`)).data,
@@ -565,67 +560,32 @@ function DeleteRepModal({ rep, onClose, onDone }) {
   });
 
   const d = check?.willDestroy || {};
-  const ready = check?.canDelete && typed.trim().toUpperCase() === String(rep.code || '').toUpperCase();
-  const rows = [
-    ['Orders (settlements)', formatNumber(d.settlements || 0)],
-    ['Sales recorded', `${formatNumber(d.sales || 0)} · ${formatCurrency(d.salesValue || 0)}`],
-    ['Returns', formatNumber(d.returns || 0)],
-    ['Commission earned', formatCurrency(d.commissionEarned || 0)],
-    ['Commission still owed to them', formatCurrency(d.commissionAvailable || 0)],
-    ['Commission already paid out', formatCurrency(d.commissionPaidOut || 0)],
-  ];
+  const owed = d.commissionAvailable || 0;
 
   return (
-    <Modal open onClose={onClose} size="lg" title={`Delete ${rep.name} · ${rep.code}`}
+    <Modal open onClose={onClose} title={`Delete ${rep.name}?`}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button variant="danger" disabled={!ready} loading={del.isPending} onClick={() => del.mutate()}>
-          <Trash2 className="h-4 w-4" /> Delete this rep
-        </Button>
+        {check?.canDelete && (
+          <Button variant="danger" loading={del.isPending} onClick={() => del.mutate()} autoFocus>
+            <Trash2 className="h-4 w-4" /> Delete
+          </Button>
+        )}
       </>}>
-      {isLoading ? <PageSpinner /> : (
-        <div className="space-y-4 text-sm">
-          {!check?.canDelete ? (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
-              <Boxes className="mt-0.5 h-4 w-4 shrink-0" />
-              <span className="text-xs">{check?.blockedReason}</span>
-            </div>
-          ) : (
-            <p className="text-muted">
-              The boxes are back — {rep.name} holds none — so this rep can be removed. Their login goes too: they will not be
-              able to sign in again.
-            </p>
-          )}
-
-          <div className="overflow-hidden rounded-xl border border-white/[0.08]">
-            <div className="border-b border-white/[0.08] bg-elevated px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
-              What goes with them
-            </div>
-            <div className="divide-y divide-white/[0.06]">
-              {rows.map(([label, value]) => (
-                <div key={label} className="flex items-baseline justify-between gap-3 bg-surface px-4 py-2">
-                  <span className="text-xs text-muted">{label}</span>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {d.commissionAvailable > 0 && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
-              {formatCurrency(d.commissionAvailable)} is still owed to {rep.name}. Deleting them writes that off — pay it first
-              if it is genuinely theirs.
-            </div>
-          )}
-          <p className="text-xs text-faint">
-            Past sales leave the books with them, so revenue and profit for those periods will fall. The audit log keeps a
-            record that this rep existed and who removed them.
+      {isLoading ? <PageSpinner /> : !check?.canDelete ? (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
+          <Boxes className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="text-xs">{check?.blockedReason}</span>
+        </div>
+      ) : (
+        <div className="space-y-2 text-sm">
+          <p className="text-muted">
+            {rep.name} ({rep.code}) is removed for good, with {formatNumber(d.settlements || 0)} order
+            {(d.settlements || 0) === 1 ? '' : 's'}, {formatNumber(d.sales || 0)} sale{(d.sales || 0) === 1 ? '' : 's'} worth{' '}
+            {formatCurrency(d.salesValue || 0)}, and their commission. Their login goes too.
           </p>
-
-          {check?.canDelete && (
-            <Field label={`Type ${rep.code} to confirm`} required>
-              <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={rep.code} autoFocus />
-            </Field>
+          {owed > 0 && (
+            <p className="text-xs text-rose-300">{formatCurrency(owed)} is still owed to them — deleting writes that off.</p>
           )}
         </div>
       )}

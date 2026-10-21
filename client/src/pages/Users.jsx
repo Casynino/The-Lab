@@ -98,14 +98,11 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
   );
 }
 
-// Deleting an account for good. Typing the email is the confirmation: it is
-// the one thing nobody types by accident, and it is on screen above the box.
-//
-// The server decides what is allowed — your own account, the last
-// administrator, and a rep still holding boxes are all refused there — so this
-// screen's job is to say plainly what is about to disappear.
+// Deleting an account for good. One press, one question, done — the owner
+// asked for exactly that and nothing more. The confirmation the API wants is
+// sent for him; it guards the endpoint against anything calling it directly,
+// not against the person who just pressed the button.
 function DeleteUserModal({ user, onClose, onDone }) {
-  const [typed, setTyped] = useState('');
   const del = useMutation({
     mutationFn: () => api.delete(`/users/${user.id}`, { data: { purge: true, confirm: user.email } }),
     onSuccess: (res) => {
@@ -115,30 +112,19 @@ function DeleteUserModal({ user, onClose, onDone }) {
     },
     onError: (e) => toast.error(apiError(e)),
   });
-  const ready = typed.trim().toLowerCase() === String(user.email || '').toLowerCase();
 
   return (
-    <Modal open onClose={onClose} title={`Delete ${user.name}`}
+    <Modal open onClose={onClose} title={`Delete ${user.name}?`}
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button variant="danger" disabled={!ready} loading={del.isPending} onClick={() => del.mutate()}>
-          <Trash2 className="h-4 w-4" /> Delete for good
+        <Button variant="danger" loading={del.isPending} onClick={() => del.mutate()} autoFocus>
+          <Trash2 className="h-4 w-4" /> Delete
         </Button>
       </>}>
-      <div className="space-y-4 text-sm">
-        <p className="text-muted">
-          This removes the account itself, not just its access: <b className="text-foreground">{user.email}</b> will be gone from
-          this list and cannot sign in again.
-        </p>
-        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
-          If this person is a sales rep, their orders, sales, returns, penalties and commission go with them, and their stock
-          line disappears. Boxes they are still holding block the delete until those are settled or returned. The audit log keeps
-          a record that the account existed.
-        </div>
-        <Field label={`Type ${user.email} to confirm`} required>
-          <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={user.email} autoFocus />
-        </Field>
-      </div>
+      <p className="text-sm text-muted">
+        {user.name} is removed for good and cannot sign in again. If they are a sales rep, their orders, sales, returns and
+        commission go too — boxes still in their hands will stop it.
+      </p>
     </Modal>
   );
 }
