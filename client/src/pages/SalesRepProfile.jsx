@@ -549,13 +549,24 @@ function AddStockModal({ repId, repName, onClose }) {
 // says how many are out and offers nothing, because boxes still out are goods
 // the business is owed and a deleted rep cannot be chased.
 function DeleteRepModal({ rep, onClose, onDone }) {
+  const qc = useQueryClient();
   const { data: check, isLoading } = useQuery({
     queryKey: ['sales-reps', rep.id, 'deletion-check'],
     queryFn: async () => unwrap(await api.get(`/sales-reps/${rep.id}/deletion-check`)).data,
   });
   const del = useMutation({
     mutationFn: () => api.delete(`/sales-reps/${rep.id}`, { data: { purge: true, confirm: rep.code } }),
-    onSuccess: () => { toast.success(`${rep.name} deleted`); onDone(); onClose(); },
+    onSuccess: () => {
+      toast.success(`${rep.name} deleted`);
+      // Drop this rep's own cached profile and refetch everything that lists
+      // reps, so the card is gone the moment the page changes — nobody should
+      // have to reload to find out whether a delete worked.
+      qc.removeQueries({ queryKey: ['sales-reps', rep.id] });
+      qc.invalidateQueries({ queryKey: ['sales-reps'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      onDone(); onClose();
+    },
     onError: (e) => toast.error(apiError(e)),
   });
 

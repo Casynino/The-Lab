@@ -202,7 +202,11 @@ export default function Users() {
         <DeleteUserModal
           user={deleting}
           onClose={() => setDeleting(null)}
-          onDone={() => { qc.invalidateQueries({ queryKey: ['users'] }); qc.invalidateQueries({ queryKey: ['sales-reps'] }); }}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: ['users'] });
+            qc.invalidateQueries({ queryKey: ['sales-reps'] });
+            qc.invalidateQueries({ queryKey: ['dashboard'] });
+          }}
         />
       )}
 
