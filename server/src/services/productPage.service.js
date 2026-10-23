@@ -278,7 +278,13 @@ function upgrade(raw, { append = true } = {}) {
 // scan that shows the wrong Pepa is recoverable; a scan that shows nothing is
 // a dead code on a hundred thousand cartons.
 function forPath(content, path) {
-  const want = String(path || DEFAULT_PATH).replace(/^\/+|\/+$/g, '') || DEFAULT_PATH;
+  // Lower-cased on the way in. The codes are PRINTED in capitals — a QR has a
+  // cheaper mode for capitals and digits, which is free millimetres on a box —
+  // so every real scan arrives as /P or /P2. Matching those case-sensitively
+  // meant no product matched, the fallback showed every box at once, and two
+  // codes read as one. Found by scanning a carton, which is the only test that
+  // counts.
+  const want = String(path || DEFAULT_PATH).trim().toLowerCase().replace(/^\/+|\/+$/g, '') || DEFAULT_PATH;
   const mine = content.products.filter((pr) => (PRODUCT_PATH[pr.key] || DEFAULT_PATH) === want);
   return mine.length ? { ...content, products: mine } : content;
 }

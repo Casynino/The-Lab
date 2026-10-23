@@ -285,3 +285,28 @@ test('a count the owner typed himself is never overwritten', async () => {
   const two = (await page.readContent()).products.find((p) => p.key === 'ndogo77');
   assert.equal(two.facts.find((f) => f.label === 'Papers per booklet').value, '32');
 });
+
+// ── The codes are printed in CAPITALS ────────────────────────────────────────
+// A QR has a cheaper mode for capitals and digits, so the address on every
+// carton reads HTTPS://…/P and HTTPS://…/P2. Matching those case-sensitively
+// made both codes fall through to "show everything", and a scan of either box
+// listed both of them. This is the case the real world actually sends.
+test('a scan in capitals shows one box, the way a scan in lower case does', async () => {
+  store.row = null;
+  const c = await page.getContent();
+  for (const [path, want] of [['P', NDOGO], ['P2', ['ndogo77:Pepa Ndogo Kubwa']],
+                              ['/P/', NDOGO], ['/P2/', ['ndogo77:Pepa Ndogo Kubwa']]]) {
+    assert.deepEqual(keys(page.forPath(c, path)), want, `path ${path}`);
+  }
+});
+
+test('the capital path never prints the other box', async () => {
+  store.row = null;
+  const c = await page.getContent();
+  const big = page.renderHtml(page.forPath(c, 'P2'), { host: 'x', path: 'P2' });
+  assert.match(big, /77 × 44 mm/);
+  assert.doesNotMatch(big, /70 × 36/);
+  const small = page.renderHtml(page.forPath(c, 'P'), { host: 'x', path: 'P' });
+  assert.match(small, /70 × 36 mm/);
+  assert.doesNotMatch(small, /77 × 44/);
+});
