@@ -38,7 +38,10 @@ function upperUrl(u) {
   return String(u || '').trim().toUpperCase();
 }
 
-function QRPanel({ defaultUrl }) {
+// One panel per printed code. Each size carries its own: the 70 x 36 carton
+// points at /p, the 76 x 44 at /p2, and a carton must only ever describe the
+// box it is printed on.
+function QRPanel({ defaultUrl, title = 'The code for the printer', subtitle = 'One code, printed the same on every box' }) {
   const [url, setUrl] = useState(defaultUrl || '');
   const [codeMm, setCodeMm] = useState(12);
   const [svg, setSvg] = useState('');
@@ -96,8 +99,12 @@ function QRPanel({ defaultUrl }) {
       .replace(`viewBox="0 0 ${box} ${box}"`, `viewBox="0 0 ${box} ${box}"`);
   }
 
+  // The file names itself after the page it opens, so two codes never get
+  // mixed up on the way to the printer.
+  const slug = (String(url).match(/\/([a-z0-9]+)\/?$/i) || [, 'p'])[1].toLowerCase();
+
   function downloadSvg() {
-    blobDownload(`pepa-qr-${codeMm}mm.svg`, new Blob([printSvg()], { type: 'image/svg+xml' }));
+    blobDownload(`pepa-qr-${slug}-${codeMm}mm.svg`, new Blob([printSvg()], { type: 'image/svg+xml' }));
   }
 
   // 600 dpi, for a printer who insists on raster. The SVG is the better file
@@ -109,15 +116,12 @@ function QRPanel({ defaultUrl }) {
       errorCorrectionLevel: 'M', margin: QUIET, width: px,
       color: { dark: '#000000', light: '#ffffff' },
     });
-    canvas.toBlob((b) => blobDownload(`pepa-qr-${codeMm}mm-600dpi.png`, b), 'image/png');
+    canvas.toBlob((b) => blobDownload(`pepa-qr-${slug}-${codeMm}mm-600dpi.png`, b), 'image/png');
   }
 
   return (
     <Card>
-      <CardHeader
-        title="The code for the printer"
-        subtitle="One code, printed the same on every box"
-      />
+      <CardHeader title={title} subtitle={subtitle} />
       <CardBody className="space-y-5">
         <Field
           label="Address the code opens"
@@ -322,7 +326,16 @@ export default function ProductLabel() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
-          <QRPanel defaultUrl={saved.url} />
+          {/* One code per product page. The server lists them, so another size
+              appears here on its own. */}
+          {(saved.pages?.length ? saved.pages : [{ path: 'p', label: 'The page', url: saved.url }]).map((pg) => (
+            <QRPanel
+              key={pg.path}
+              defaultUrl={pg.url}
+              title={`The code for ${pg.label}`}
+              subtitle={`Printed on the ${pg.label} carton · opens /${pg.path}`}
+            />
+          ))}
 
           <Card>
             <CardHeader title="The product" subtitle="These words appear on the page, exactly as typed" />

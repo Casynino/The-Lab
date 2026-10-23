@@ -17,7 +17,10 @@ const get = asyncHandler(async (req, res) => {
   // The URL that will be printed. Host is taken from the request so a preview
   // on localhost shows localhost and production shows production.
   const host = req.get('host') || String(env.appUrl).replace(/^https?:\/\//, '');
-  return ok(res, { content, defaults: page.DEFAULTS, url: `https://${host}/p` });
+  // One entry per printed code, so the editor can draw them all without
+  // knowing which sizes exist.
+  const pages = page.pagePaths(content).map((pg) => ({ ...pg, url: `https://${host}/${pg.path}` }));
+  return ok(res, { content, defaults: page.DEFAULTS, url: `https://${host}/p`, pages });
 });
 
 const save = asyncHandler(async (req, res) => {

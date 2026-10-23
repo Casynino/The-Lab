@@ -239,6 +239,20 @@ function forPath(content, path) {
   return mine.length ? { ...content, products: mine } : content;
 }
 
+// Every page there is a QR code for, in printing order: the path it answers on
+// and the box it describes. The editor draws one code per entry, so another
+// size needs a product and a PRODUCT_PATH entry and nothing else.
+function pagePaths(content) {
+  const seen = new Map();
+  for (const pr of (content && content.products) || []) {
+    const path = PRODUCT_PATH[pr.key] || DEFAULT_PATH;
+    if (!seen.has(path)) seen.set(path, { path, label: pr.name, keys: [pr.key] });
+    else seen.get(path).keys.push(pr.key);
+  }
+  if (!seen.size) seen.set(DEFAULT_PATH, { path: DEFAULT_PATH, label: 'The page', keys: [] });
+  return [...seen.values()];
+}
+
 // The editor's read. It throws on a database error or an unreadable row: had
 // it fallen back to the defaults like the page does, the editor would show
 // them as if saved, and the next Save would overwrite the real content.
@@ -470,6 +484,6 @@ ${host && ASSETS[SHOWCASE] ? `<meta property="og:image" content="${esc(`https://
 
 module.exports = {
   SETTING_KEY, DEFAULTS, CONTENT_VERSION, getContent, readContent, saveContent, renderHtml, shape, upgrade,
-  forPath, PRODUCT_PATH, DEFAULT_PATH,
+  forPath, pagePaths, PRODUCT_PATH, DEFAULT_PATH,
   appUrl: env.appUrl,
 };

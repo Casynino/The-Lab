@@ -45,6 +45,22 @@
       "destination": "/api/index"
     },
     {
+      "source": "/p2",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/P2",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/p2/",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/P2/",
+      "destination": "/api/index"
+    },
+    {
       "source": "/pepa/(.*)",
       "destination": "/api/index"
     },
