@@ -263,3 +263,25 @@ test('a second-box card the owner deleted does not come back', async () => {
   // ...and its page then falls back rather than going blank.
   assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo:Pepa Ndogo']);
 });
+
+test('the second box carries the counts its own artwork prints', async () => {
+  // "50 LEAVES" on the lid, "50 PER BOX" on the side wall, 50 BOOKLETS on the
+  // pattern — the same reading the 70 x 36 box's figures came from.
+  store.row = null;
+  const two = page.forPath(await page.getContent(), 'p2').products[0];
+  const fact = (l) => two.facts.find((f) => f.label === l).value;
+  assert.equal(fact('Papers per booklet'), '50');
+  assert.equal(fact('Booklets per box'), '50');
+  assert.equal(fact('Papers per box'), '2,500');
+  const html = page.renderHtml(page.forPath(await page.getContent(), 'p2'), { host: 'x', path: 'p2' });
+  assert.match(html, /2,500/);
+});
+
+test('a count the owner typed himself is never overwritten', async () => {
+  seed({ v: 6, products: [
+    { key: 'ndogo', name: 'Pepa Ndogo' },
+    { key: 'ndogo77', name: 'Pepa Ndogo Kubwa', facts: [{ label: 'Papers per booklet', value: '32' }] },
+  ] });
+  const two = (await page.readContent()).products.find((p) => p.key === 'ndogo77');
+  assert.equal(two.facts.find((f) => f.label === 'Papers per booklet').value, '32');
+});

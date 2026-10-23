@@ -53,8 +53,9 @@ const DEFAULT_PATH = 'p';
 // v2 added product keys; v3 took the King Size Slim box back off this page;
 // v4 reworded Pepa Ndogo's note; v5 added the second box, which has a QR and a
 // page of its own; v6 corrected that box to 77 x 44, the size its own die
-// pattern carries. See upgrade().
-const CONTENT_VERSION = 6;
+// pattern carries; v7 filled that box's counts, which its own artwork states.
+// See upgrade().
+const CONTENT_VERSION = 7;
 const NDOGO_NOTE = 'Brown • Slow burn Unfiltered';
 
 // The frozen fallback. These are also the starting values in the editor.
@@ -106,12 +107,13 @@ const DEFAULTS = {
         { label: 'Colour', value: 'Brown' },
         { label: 'Size', value: '77 × 44 mm' },
         { label: 'Type', value: 'Slow burn Unfiltered' },
-        // Straight off the die pattern: "50 BOOKLETS", paper 77 x 44 mm. How
-        // many leaves are in each booklet is not on the pattern, so it and the
-        // total stay blank until the artwork states them.
-        { label: 'Papers per booklet', value: '' },
+        // Straight off the documents, the same way the 70 x 36 box's figures
+        // were read: the artwork prints "50 LEAVES" on the lid and "50 PER BOX"
+        // on the side wall, and the die pattern's own block says 50 BOOKLETS.
+        // Fifty fifties is the total.
+        { label: 'Papers per booklet', value: '50' },
         { label: 'Booklets per box', value: '50' },
-        { label: 'Papers per box', value: '' },
+        { label: 'Papers per box', value: '2,500' },
       ],
     },
   ],
@@ -243,6 +245,22 @@ function upgrade(raw, { append = true } = {}) {
         pr.facts = pr.facts.map((f) => (f && sameName(f.label, 'Size') && sameName(f.value, '76 × 44 mm')
           ? { ...f, value: '77 × 44 mm' } : f));
       }
+    }
+  }
+
+  // v6 left the second box's counts blank because the pattern alone does not
+  // state them. Its artwork does — "50 LEAVES", "50 PER BOX" — so they are
+  // filled in, but only where they are still empty: a figure typed by hand is
+  // the owner reading his own box, and it wins.
+  if (from < 7) {
+    const second = DEFAULTS.products.find((d) => d.key === 'ndogo77');
+    for (const pr of kept) {
+      if (pr.key !== 'ndogo77' || !Array.isArray(pr.facts)) continue;
+      pr.facts = pr.facts.map((f) => {
+        if (!f || String(f.value || '').trim()) return f;
+        const filled = second.facts.find((x) => sameName(x.label, f.label));
+        return filled && filled.value ? { ...f, value: filled.value } : f;
+      });
     }
   }
 
