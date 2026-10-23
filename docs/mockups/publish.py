@@ -11,10 +11,15 @@ SP, REPO = sys.argv[1], sys.argv[2]
 PUB = os.path.join(REPO, "client", "public", "pepa")
 os.makedirs(PUB, exist_ok=True)
 WIDTHS = (700, 1000)
+# One entry per picture on any page. The manifest is rewritten whole on every
+# run, so every picture a page still points at must be rendered in the same run
+# — leaving one out takes it off its page.
 ALT = {
     "hero": "Pepa Ndogo 70 × 36 box",
     "open": "Pepa Ndogo box open as a display, with booklets",
     "pair": "Pepa Ndogo box, front and back, with two booklets",
+    "kubwa-hero": "Pepa Ndogo Kubwa 77 × 44 box",
+    "kubwa-back": "Pepa Ndogo Kubwa box, the information panel with its own code",
 }
 def write(img, name, width, ext, **kw):
     tmp = os.path.join(PUB, f".tmp.{ext}")

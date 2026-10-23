@@ -36,11 +36,21 @@ const SETTING_KEY = 'public.productPage';
 // The King Size Slim box gets its own QR and page. All three pictures sit
 // together under the product, not one above it (owner, 17 Sep 2026). The
 // first is still what a forwarded WhatsApp link shows.
+// The picture a shared link shows. It used to be this one constant, which was
+// right while there was one page — on a second page it would put the 70 x 36
+// box in the preview of the 77 x 44 box's link, which is the same confusion the
+// separate codes exist to end. Each page shows its own first picture, falling
+// back to this one only when a page has none.
 const SHOWCASE = 'hero';
+const showcaseFor = (c) => c.products
+  .map((p) => (PRODUCT_IMAGES[p.key] || [])[0])
+  .find((n) => n && ASSETS[n]) || SHOWCASE;
 const PRODUCT_IMAGES = {
   ndogo: ['hero', 'open', 'pair'],
-  // ndogo76's box is still being drawn; a product with no pictures renders as
-  // text, which is better than a scan landing on nothing.
+  // Rendered from the artwork supplied for this carton, fitted to its own
+  // 81 x 126 x 55 panels. Representative, not final: re-render them when the
+  // artwork is redrawn for this box rather than borrowed from the wider one.
+  ndogo77: ['kubwa-hero', 'kubwa-back'],
 };
 
 // Which page each product belongs to, and therefore which QR code reaches it.
@@ -436,9 +446,9 @@ function renderHtml(c, { host, path = DEFAULT_PATH } = {}) {
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(`${c.maker} is the only distributor. Wholesale: ${phones.map((p) => p.display).join(' · ')}`)}">
 ${host ? `<meta property="og:url" content="${esc(`https://${host}/${String(path).replace(/^\/+/, '')}`)}">` : ''}
-${host && ASSETS[SHOWCASE] ? `<meta property="og:image" content="${esc(`https://${host}${ASSETS[SHOWCASE].jpg[ASSETS[SHOWCASE].jpg.length - 1].src}`)}">
-<meta property="og:image:width" content="${Number(ASSETS[SHOWCASE].w)}">
-<meta property="og:image:height" content="${Number(ASSETS[SHOWCASE].h)}">` : ''}
+${host && ASSETS[showcaseFor(c)] ? `<meta property="og:image" content="${esc(`https://${host}${ASSETS[showcaseFor(c)].jpg[ASSETS[showcaseFor(c)].jpg.length - 1].src}`)}">
+<meta property="og:image:width" content="${Number(ASSETS[showcaseFor(c)].w)}">
+<meta property="og:image:height" content="${Number(ASSETS[showcaseFor(c)].h)}">` : ''}
 <meta name="robots" content="index, follow">
 <style>
   *{box-sizing:border-box;margin:0;padding:0}

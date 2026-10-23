@@ -175,7 +175,7 @@ test('the editor read fails loudly; the public page still serves', async () => {
 
 test('all three pictures sit together under Pepa Ndogo, none above it', async () => {
   seed(V1_ROW);
-  const html = page.renderHtml(await page.readContent(), { host: 'x' });
+  const html = page.renderHtml(onP(await page.readContent()), { host: 'x', path: 'p' });
   assert.equal(html.indexOf('<picture>') > html.indexOf('<h3>Pepa Ndogo</h3>'), true);
   assert.deepEqual(pictures(html), ALL_PICTURES);
   const first = html.split('<picture>')[1];
@@ -215,14 +215,17 @@ test('the 70 x 36 page is untouched by the second box', async () => {
   assert.deepEqual(pictures(html), ALL_PICTURES);      // its own three, as before
 });
 
-test('the second box\'s page stands up without pictures, and says only what the box says', async () => {
+test('the second box\'s page shows its own box, and says only what the box says', async () => {
   store.row = null;
   const html = page.renderHtml(page.forPath(await page.getContent(), 'p2'), { host: 'x', path: 'p2' });
   assert.match(html, /Pepa Ndogo Kubwa/);
   assert.match(html, /77 × 44 mm/);
   assert.match(html, /Slow burn Unfiltered/);
   assert.doesNotMatch(html, /70 × 36/);
-  assert.deepEqual(pictures(html), []);                 // the die is still being drawn
+  // Its own pictures, and none of the other box\'s — including the one a
+  // shared link previews.
+  assert.deepEqual(pictures(html), ['kubwa-hero', 'kubwa-back']);
+  assert.match(html, /og:image" content="[^"]*kubwa-hero/)
   // Counts are left blank until the die shows them: blank facts never print.
   assert.doesNotMatch(html, /Papers per box<\/dt><dd><\/dd>/);
   assert.match(html, /haodealtz@gmail\.com|0788/);      // it is still a Pepa page
