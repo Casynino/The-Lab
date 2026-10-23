@@ -593,8 +593,10 @@ def all_deck(designs):
 # QR code on the carton describes, so it stands alone here; a second entry turns
 # the comparison pages back on without any other change.
 DESIGNS = [
-    dict(dir="d1", slug="pepa-ndogo-70x36", label="Pepa Ndogo — 70 × 36", zh="小盒 70 × 36",
-         small_file="70×36刀版 -1.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色--1.pdf"),
+    # One artwork, two cartons. The deck titles come from the box, so the design
+    # label stays the brand rather than naming one of its boxes.
+    dict(dir="d1", slug="pepa", label="Pepa", zh="Pepa",
+         small_file="70×36刀版 -1.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色-- 4.pdf"),
 ]
 
 # A deck is only written for what the workspace actually holds. Working on one
