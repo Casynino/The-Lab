@@ -50,7 +50,9 @@ const PRODUCT_IMAGES = {
   // Rendered from the artwork supplied for this carton, fitted to its own
   // 81 x 126 x 55 panels. Representative, not final: re-render them when the
   // artwork is redrawn for this box rather than borrowed from the wider one.
-  ndogo77: ['kubwa-hero', 'kubwa-back'],
+  // The booklets carry the Pepa booklet cover, which is the same for both
+  // sizes and carries no size and no code of its own.
+  ndogo77: ['kubwa-hero', 'kubwa-back', 'kubwa-booklets'],
 };
 
 // Which page each product belongs to, and therefore which QR code reaches it.

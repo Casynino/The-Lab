@@ -20,6 +20,7 @@ ALT = {
     "pair": "Pepa Ndogo box, front and back, with two booklets",
     "kubwa-hero": "Pepa Ndogo Kubwa 77 × 44 box",
     "kubwa-back": "Pepa Ndogo Kubwa box, the information panel with its own code",
+    "kubwa-booklets": "Pepa Ndogo Kubwa box with two booklets of its papers",
 }
 def write(img, name, width, ext, **kw):
     tmp = os.path.join(PUB, f".tmp.{ext}")

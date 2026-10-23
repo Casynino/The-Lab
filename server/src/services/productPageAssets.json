@@ -143,5 +143,34 @@
     ],
     "w": 1000,
     "h": 833
+  },
+  "kubwa-booklets": {
+    "alt": "Pepa Ndogo Kubwa box with two booklets of its papers",
+    "webp": [
+      {
+        "w": 700,
+        "src": "/pepa/kubwa-booklets-700.e1d361f955.webp",
+        "bytes": 23036
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/kubwa-booklets-1000.5ba1e55a6b.webp",
+        "bytes": 39340
+      }
+    ],
+    "jpg": [
+      {
+        "w": 700,
+        "src": "/pepa/kubwa-booklets-700.e25a3fbc47.jpg",
+        "bytes": 32388
+      },
+      {
+        "w": 1000,
+        "src": "/pepa/kubwa-booklets-1000.31c1aa06fd.jpg",
+        "bytes": 57702
+      }
+    ],
+    "w": 1000,
+    "h": 833
   }
 }

@@ -224,7 +224,7 @@ test('the second box\'s page shows its own box, and says only what the box says'
   assert.doesNotMatch(html, /70 × 36/);
   // Its own pictures, and none of the other box\'s — including the one a
   // shared link previews.
-  assert.deepEqual(pictures(html), ['kubwa-hero', 'kubwa-back']);
+  assert.deepEqual(pictures(html), ['kubwa-hero', 'kubwa-back', 'kubwa-booklets']);
   assert.match(html, /og:image" content="[^"]*kubwa-hero/)
   // Counts are left blank until the die shows them: blank facts never print.
   assert.doesNotMatch(html, /Papers per box<\/dt><dd><\/dd>/);

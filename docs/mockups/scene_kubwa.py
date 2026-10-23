@@ -70,6 +70,29 @@ def box(pos=(0, 0, 0), yaw=0, layer=0):
     }
     return r3d.box_quads(BOX_W, BOX_H, BOX_D, tex, pos=pos, yaw=yaw, sheen=0.12, layer=layer)
 
+# A booklet of 77 x 44 papers. The leaves fold in half across the 44, so the
+# booklet is about 80 x 26 mm, and 5 mm thick for fifty of them.
+#
+# Its cover is the supplied Pepa booklet artwork. The same cover serves both
+# sizes: it carries the brand and the fifty-leaf count this box also holds, and
+# no size and no code of its own, so nothing on it belongs to the other box.
+# It is fitted to these proportions, which squeezes it by a few per cent, the
+# same as the box faces above.
+BK_L, BK_T, BK_W = 80, 5, 26
+
+def fit(name, w_mm, h_mm):
+    """A supplied face at a panel's exact proportions, whole, nothing cropped."""
+    im = Image.open(F + name + ".png").convert("RGB")
+    return im.resize((int(w_mm * K), int(h_mm * K)), Image.LANCZOS)
+
+def booklet(pos, yaw, layer=7):
+    edge = (214, 194, 166)
+    tex = {"top": fit("bk70_front", BK_L, BK_W), "front": fit("bk70_spine", BK_L, BK_T),
+           "left": edge, "right": edge}
+    return r3d.box_quads(BK_L, BK_T, BK_W, tex, pos=pos, yaw=yaw, sheen=0.08, layer=layer)
+
+BK_SH = lambda pos, yaw: (-BK_L / 2, BK_L / 2, -BK_W / 2, BK_W / 2, BK_T, pos, yaw, 0.85)
+
 SH = lambda pos=(0, 0, 0), yaw=0, s=1.0: (-BOX_W / 2, BOX_W / 2, -BOX_D / 2, BOX_D / 2, BOX_H, pos, yaw, s)
 
 def shoot(q, sh, target, dist, az, el, fov, size, pad=0.07):
@@ -80,11 +103,21 @@ def shoot(q, sh, target, dist, az, el, fov, size, pad=0.07):
 # Low elevations on purpose: the long landscape walls are the faces that fit
 # this carton honestly, and the lid — cropped from a wider sheet — reads as
 # pattern rather than as sliced lettering.
+# The box with the booklets that come out of it, so a scan shows what is
+# actually bought — the same thing the 70 x 36 page shows.
+bp1, by1 = (-28, 0, BOX_D / 2 + 33), 8
+bp2, by2 = (30, 0, BOX_D / 2 + 50), -10
+
 scenes = {
     # Closed, three-quarters: what a shopkeeper sees on the counter.
     "kubwa-hero": shoot(box(), [SH()], (0, 26, 0), 520, 38, 16, 28, (1200, 1000)),
     # The information panel, which carries this box's own code.
     "kubwa-back": shoot(box(), [SH()], (0, 26, 0), 520, 206, 14, 28, (1200, 1000)),
+    # The box and its booklets.
+    "kubwa-booklets": shoot(
+        box() + booklet(bp1, by1) + booklet(bp2, by2, layer=8),
+        [SH(), BK_SH(bp1, by1), BK_SH(bp2, by2)],
+        (0, 24, 54), 660, 16, 18, 30, (1200, 1000), pad=0.04),
 }
 for name, img in scenes.items():
     img.save(os.path.join(OUT, name + "-full.png"), optimize=True)
