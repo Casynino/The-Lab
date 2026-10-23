@@ -1,5 +1,5 @@
 """One presentation sheet per box: a large hero, then the supporting shots."""
-import sys
+import sys, os
 from PIL import Image, ImageDraw, ImageFont
 W = sys.argv[1]; O = W + "/out/"
 PT = 300 / 72.0
@@ -37,7 +37,10 @@ sheet("Pepa 70 × 36 — small box", "Pepa Ndogo · 74 × 155 × 48 mm · 50 boo
       "small-open-display", "Open as a display, with booklets",
       [("small-front", "Front"), ("small-back", "Back"), ("small-with-booklets", "With booklets"), ("small-top", "Top, seen from the front")],
       O + "Pepa-small-box-sheet.png")
-sheet("Pepa King Size Slim — big box", "112 × 126 × 55 mm display box · 50 booklets of 108 × 44 mm papers · final design",
-      "big-open-display", "Open as a display, with a booklet",
-      [("big-front", "Closed — front"), ("big-back", "Closed — back, info panel"), ("big-top", "Lid from above")],
-      O + "Pepa-big-box-sheet.png")
+# Only if that box was rendered at all: with the 70 x 36 alone in the
+# workspace, its sheet is the whole job.
+if os.path.exists(O + "Pepa-big-open-display.png"):
+    sheet("Pepa King Size Slim — big box", "112 × 126 × 55 mm display box · 50 booklets of 108 × 44 mm papers · final design",
+          "big-open-display", "Open as a display, with a booklet",
+          [("big-front", "Closed — front"), ("big-back", "Closed — back, info panel"), ("big-top", "Lid from above")],
+          O + "Pepa-big-box-sheet.png")

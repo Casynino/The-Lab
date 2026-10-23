@@ -589,15 +589,32 @@ def all_deck(designs):
     note_block(d, M, y, PW - 2 * M, "Both boxes", "两盒通用", SHARED_NOTES)
     deck.save(os.path.join(OUT, "Pepa-all-designs.pdf"))
 
+# The design going to print. The 70 x 36 box ships first and is the product the
+# QR code on the carton describes, so it stands alone here; a second entry turns
+# the comparison pages back on without any other change.
 DESIGNS = [
-    dict(dir="d1", slug="design-1-blue", label="Design 1 — blue cloak", zh="设计一·蓝披风",
-         small_file="70×36刀版 0 2.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色-- 3.pdf"),
-    dict(dir="d2", slug="design-2-red", label="Design 2 — red robe", zh="设计二·红袍",
-         small_file="70×36刀版 -02-.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色--1.pdf"),
+    dict(dir="d1", slug="pepa-ndogo-70x36", label="Pepa Ndogo — 70 × 36", zh="小盒 70 × 36",
+         small_file="70×36刀版 -1.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色--1.pdf"),
 ]
 
+# A deck is only written for what the workspace actually holds. Working on one
+# box of one design — which is what shipping one product looks like — should
+# produce that box's PDF, not a stack trace.
+def rendered(design, box):
+    return os.path.exists(os.path.join(W, design["dir"], "out", f"Pepa-{box['key']}-front.png"))
+
 if __name__ == "__main__":
-    for design in DESIGNS:
+    designs = [d for d in DESIGNS if os.path.isdir(os.path.join(W, d["dir"]))]
+    if not designs:
+        raise SystemExit(f"no design folders in {W} — expected one of: " + ", ".join(d["dir"] for d in DESIGNS))
+    pairs = [(d, b) for d in designs for b in (SMALL, KSS) if rendered(d, b)]
+    for design, box in pairs:
+        box_deck(design, box)
+    for design in designs:
         for box in (SMALL, KSS):
-            box_deck(design, box)
-    all_deck(DESIGNS)
+            if (design, box) not in pairs:
+                print(f"skipped {design['slug']} {box['key']}: no renders in {design['dir']}/out")
+    # Side-by-side pages need every box of every design; one design has nothing
+    # to compare itself with.
+    if len(designs) > 1 and len(pairs) == len(designs) * 2:
+        all_deck(designs)

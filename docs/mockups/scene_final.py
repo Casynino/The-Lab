@@ -6,10 +6,17 @@ import sys, os
 W = sys.argv[1]; sys.path.insert(0, W)
 from PIL import Image, ImageDraw, ImageFont
 import r3d
-import scene_kss as K
 F = W + "/f/"; OUT = W + "/out/"
 T = lambda n: Image.open(F + n + ".png")
 os.makedirs(OUT, exist_ok=True)
+
+# The King Size Slim box is optional: with only the 70 x 36 sheet rendered —
+# the box that ships first — its textures do not exist, and scene_kss cannot
+# even be imported, since it opens them as it loads. The small box's shots
+# stand on their own.
+KSS = os.path.exists(F + "t_kss_front.png")
+if KSS:
+    import scene_kss as K
 
 def pack(pos=(0, 0, 0), yaw=0, layer=0):
     tex = {"front": T("t_n70_front"), "back": T("t_n70_back"), "left": T("t_n70_left"),
@@ -23,9 +30,10 @@ def booklet70(pos=(0, 0, 0), yaw=0, layer=0):
 
 PACK_SH = lambda pos=(0, 0, 0), yaw=0, s=1.0: (-37, 37, -24, 24, 155, pos, yaw, s)
 BK70_SH = lambda pos, yaw: (-36.5, 36.5, -11.25, 11.25, 5, pos, yaw, 0.8)
-KSS_SH = lambda pos=(0, 0, 0), yaw=0, s=1.0: (-K.w, K.w, -K.d, K.d, K.H, pos, yaw, s)
-LID_SH = (-K.w, K.w, -K.d - 1, -K.d + 2, K.H + K.FOLD, (0, 0, 0), 0, 0.5)
-TAB_SH = (K.TAB_X[0], K.TAB_X[1], -K.d - 1, -K.d + 2, K.H + K.FOLD + K.TAB_H, (0, 0, 0), 0, 0.4)
+if KSS:
+    KSS_SH = lambda pos=(0, 0, 0), yaw=0, s=1.0: (-K.w, K.w, -K.d, K.d, K.H, pos, yaw, s)
+    LID_SH = (-K.w, K.w, -K.d - 1, -K.d + 2, K.H + K.FOLD, (0, 0, 0), 0, 0.5)
+    TAB_SH = (K.TAB_X[0], K.TAB_X[1], -K.d - 1, -K.d + 2, K.H + K.FOLD + K.TAB_H, (0, 0, 0), 0, 0.4)
 KEY, SHADOW = (-0.5, 0.9, 0.6), (-0.30, 1.7, 0.45)
 
 def shoot(q, shadows, target, dist, az, el, fov, size, pad=0.07, turn_light=False):
@@ -49,16 +57,17 @@ shots["small-with-booklets"] = shoot(q, [PACK_SH(aP, aY), PACK_SH(bP, bY), BK70_
                                      (4, 74, 26), 700, 14, 16, 30, (1700, 1500), pad=0.05)
 
 # ── big box ──────────────────────────────────────────────────────────────────
-q = K.closed_box()
-shots["big-front"] = shoot(q, [KSS_SH()], (0, 26, 0), 520, 34, 32, 28, (1700, 1350))
-shots["big-back"] = shoot(q, [KSS_SH()], (0, 26, 0), 520, 214, 20, 28, (1700, 1350), turn_light=True)
-shots["big-top"] = shoot(q, [KSS_SH()], (0, 30, 0), 520, 18, 66, 28, (1500, 1500))
-bp, by = (K.w + 68, 0, 52), -14
-q = K.open_box() + K.booklet(bp, by)
-shots["big-open-display"] = shoot(q, [KSS_SH(), LID_SH, TAB_SH, (-55, 55, -13, 13, 4.3, bp, by, 0.85)],
-                                  (34, 62, -8), 720, 24, 25, 30, (1600, 1500), pad=0.05)
-q = K.booklet((0, 0, 0), 0)
-shots["big-booklet"] = shoot(q, [(-55, 55, -13, 13, 4.3, (0, 0, 0), 0, 0.85)], (0, 2, 0), 300, 12, 40, 26, (1600, 900), pad=0.08)
+if KSS:
+    q = K.closed_box()
+    shots["big-front"] = shoot(q, [KSS_SH()], (0, 26, 0), 520, 34, 32, 28, (1700, 1350))
+    shots["big-back"] = shoot(q, [KSS_SH()], (0, 26, 0), 520, 214, 20, 28, (1700, 1350), turn_light=True)
+    shots["big-top"] = shoot(q, [KSS_SH()], (0, 30, 0), 520, 18, 66, 28, (1500, 1500))
+    bp, by = (K.w + 68, 0, 52), -14
+    q = K.open_box() + K.booklet(bp, by)
+    shots["big-open-display"] = shoot(q, [KSS_SH(), LID_SH, TAB_SH, (-55, 55, -13, 13, 4.3, bp, by, 0.85)],
+                                      (34, 62, -8), 720, 24, 25, 30, (1600, 1500), pad=0.05)
+    q = K.booklet((0, 0, 0), 0)
+    shots["big-booklet"] = shoot(q, [(-55, 55, -13, 13, 4.3, (0, 0, 0), 0, 0.85)], (0, 2, 0), 300, 12, 40, 26, (1600, 900), pad=0.08)
 
 for name, img in shots.items():
     img.save(OUT + f"Pepa-{name}.png", optimize=True)
@@ -94,9 +103,10 @@ for az, el, label in views:
 grid(frames, "Pepa 70 × 36 — every angle", "Small box · 74 × 155 × 48 mm · final design", 820, 1000, 3,
      OUT + "Pepa-small-every-angle.png")
 
-views = [(az, 24, f"{az}°") for az in range(0, 360, 45)] + [(25, 66, "From above")]
-q = K.closed_box(); frames = []
-for az, el, label in views:
-    frames.append((label, shoot(q, [KSS_SH()], (0, 26 if el < 40 else 30, 0), 470, az, el, 28, (1000, 820), turn_light=True)))
-grid(frames, "Pepa King Size Slim — every angle", "Big box · 112 × 126 × 55 mm · final design", 1000, 820, 3,
-     OUT + "Pepa-big-every-angle.png")
+if KSS:
+    views = [(az, 24, f"{az}°") for az in range(0, 360, 45)] + [(25, 66, "From above")]
+    q = K.closed_box(); frames = []
+    for az, el, label in views:
+        frames.append((label, shoot(q, [KSS_SH()], (0, 26 if el < 40 else 30, 0), 470, az, el, 28, (1000, 820), turn_light=True)))
+    grid(frames, "Pepa King Size Slim — every angle", "Big box · 112 × 126 × 55 mm · final design", 1000, 820, 3,
+         OUT + "Pepa-big-every-angle.png")

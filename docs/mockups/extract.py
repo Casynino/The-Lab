@@ -40,19 +40,25 @@ cut(n, 118.2,  18.5, 192.2,  66.5, "n70_bottom")
 cut(n,  70.3,  66.5, 118.2, 221.5, "n70_left", 180)
 cut(n, 192.2,  66.5, 240.2, 221.5, "n70_right", 180)
 
-k = Image.open(os.path.join(W, "kss2/p-1.png")).convert("RGB")
-for name, (a, z) in {"kss_left": (36.7, 162.7), "kss_front": (162.7, 274.7),
-                     "kss_right": (274.7, 400.7), "kss_back": (400.7, 512.7)}.items():
-    cut(k, a, 220.2, z, 275.3, name)
-cut(k, 400.7, 94.2, 512.7, 220.2, "kss_lid", 180)
-cut(k, 400.7, 54.2, 512.7,  94.2, "kss_flap", 180)
+# The King Size Slim sheet is optional: when only the 70 x 36 box is being
+# worked on — the product that ships first — its renders simply are not there,
+# and cutting its faces is skipped rather than crashing the run.
+KSS = os.path.exists(os.path.join(W, "kss2/p-1.png"))
+if KSS:
+    k = Image.open(os.path.join(W, "kss2/p-1.png")).convert("RGB")
+    for name, (a, z) in {"kss_left": (36.7, 162.7), "kss_front": (162.7, 274.7),
+                         "kss_right": (274.7, 400.7), "kss_back": (400.7, 512.7)}.items():
+        cut(k, a, 220.2, z, 275.3, name)
+    cut(k, 400.7, 94.2, 512.7, 220.2, "kss_lid", 180)
+    cut(k, 400.7, 54.2, 512.7,  94.2, "kss_flap", 180)
 
-b = Image.open(os.path.join(W, "kss2/p-2.png")).convert("RGB")
-bx0, bx1 = P(68.3), P(178.4)
-b.crop((bx0+I, P(159.7)+I, bx1-I, P(185.7)-I)).save(os.path.join(F, "bk_front.png"))
-b.crop((bx0+I, P(129.5)+I, bx1-I, P(155.4)-I)).rotate(180).save(os.path.join(F, "bk_back.png"))
-b.crop((bx0+I, P(155.4)+1, bx1-I, P(159.7)-1)).save(os.path.join(F, "bk_spine.png"))
-b.crop((bx0+I, P(100.1)+I, bx1-I, P(125.6)-I)).save(os.path.join(F, "bk_inner.png"))
+if KSS:
+    b = Image.open(os.path.join(W, "kss2/p-2.png")).convert("RGB")
+    bx0, bx1 = P(68.3), P(178.4)
+    b.crop((bx0+I, P(159.7)+I, bx1-I, P(185.7)-I)).save(os.path.join(F, "bk_front.png"))
+    b.crop((bx0+I, P(129.5)+I, bx1-I, P(155.4)-I)).rotate(180).save(os.path.join(F, "bk_back.png"))
+    b.crop((bx0+I, P(155.4)+1, bx1-I, P(159.7)-1)).save(os.path.join(F, "bk_spine.png"))
+    b.crop((bx0+I, P(100.1)+I, bx1-I, P(125.6)-I)).save(os.path.join(F, "bk_inner.png"))
 x0, x1 = P(25.6), P(98.6)
 n.crop((x0+I, P(317.7)+I, x1-I, P(340.4)-I)).save(os.path.join(F, "bk70_front.png"))
 n.crop((x0+I, P(290.6)+I, x1-I, P(312.7)-I)).rotate(180).save(os.path.join(F, "bk70_back.png"))

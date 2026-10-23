@@ -2,7 +2,7 @@
 transparency, and the printer's blue cut/fold guide lines become a quiet seam
 so they read as a crease in the board rather than an annotation."""
 from PIL import Image, ImageDraw
-import sys
+import sys, os
 SP = sys.argv[1]; F = SP + "/f/"
 MARK = (255, 0, 255)
 
@@ -129,21 +129,31 @@ def erase_folds(img):
                 p[i, j] = p[src, j]
     return im, len(marks)
 
-kf, _ = erase_folds(Image.open(F+"kss_front.png"))
-cut_hole(kf, [(kf.width//2, 1), (kf.width//2, 6)]).save(F+"t_kss_front.png")
+# The King Size Slim box is optional here, the same as in extract.py: with only
+# the 70 x 36 sheet rendered — the box that ships first — its faces were never
+# cut, and there is nothing of it to clean up.
+KSS = os.path.exists(F + "kss_front.png")
+if KSS:
+    kf, _ = erase_folds(Image.open(F+"kss_front.png"))
+    cut_hole(kf, [(kf.width//2, 1), (kf.width//2, 6)]).save(F+"t_kss_front.png")
 
-fl, _ = erase_folds(Image.open(F+"kss_flap.png"))
-w, h = fl.size
-cut_hole(fl, [(1, h-2), (w-2, h-2), (4, h-4), (w-5, h-4)]).save(F+"t_kss_flap.png")
+    fl, _ = erase_folds(Image.open(F+"kss_flap.png"))
+    w, h = fl.size
+    cut_hole(fl, [(1, h-2), (w-2, h-2), (4, h-4), (w-5, h-4)]).save(F+"t_kss_flap.png")
 
-for n in ("n70_front", "n70_top", "n70_bottom", "n70_back", "n70_left", "n70_right",
-          "kss_lid", "kss_left", "kss_right", "kss_back"):
+faces = ["n70_front", "n70_top", "n70_bottom", "n70_back", "n70_left", "n70_right"]
+if KSS:
+    faces += ["kss_lid", "kss_left", "kss_right", "kss_back"]
+for n in tuple(faces):
     im, k = erase_folds(Image.open(F+n+".png"))
     if k: print(f"  {n}: erased {k} fold line(s)")
     seam(im).save(F+"t_"+n+".png")
 
 # Booklet faces go through the same clean-up, keeping their own names.
-for n in ("bk_front", "bk_back", "bk_spine", "bk70_front", "bk70_back", "bk70_spine"):
+booklets = ["bk70_front", "bk70_back", "bk70_spine"]
+if KSS:
+    booklets = ["bk_front", "bk_back", "bk_spine"] + booklets
+for n in tuple(booklets):
     im, k = erase_folds(Image.open(F+n+".png"))
     if k: print(f"  {n}: erased {k} fold line(s)")
     seam(im).save(F+n+".png")
