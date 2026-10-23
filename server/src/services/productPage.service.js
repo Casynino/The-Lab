@@ -47,13 +47,14 @@ const PRODUCT_IMAGES = {
 // The code already printed on the 70 x 36 carton points at /p and must keep
 // showing that box alone; the 76 x 44 carton carries a code for /p2. A product
 // with no entry here appears on /p, the page that has always existed.
-const PRODUCT_PATH = { ndogo: 'p', ndogo76: 'p2' };
+const PRODUCT_PATH = { ndogo: 'p', ndogo77: 'p2' };
 const DEFAULT_PATH = 'p';
 
 // v2 added product keys; v3 took the King Size Slim box back off this page;
-// v4 reworded Pepa Ndogo's note; v5 added the 76 x 44 box, which has a QR and
-// a page of its own. See upgrade().
-const CONTENT_VERSION = 5;
+// v4 reworded Pepa Ndogo's note; v5 added the second box, which has a QR and a
+// page of its own; v6 corrected that box to 77 x 44, the size its own die
+// pattern carries. See upgrade().
+const CONTENT_VERSION = 6;
 const NDOGO_NOTE = 'Brown • Slow burn Unfiltered';
 
 // The frozen fallback. These are also the starting values in the editor.
@@ -85,24 +86,31 @@ const DEFAULTS = {
       ],
     },
     {
-      // The second size, unfiltered like the first. Its own QR code and its own
-      // page, so a carton only ever describes the box it is printed on.
+      // The second size, unfiltered like the first, in a hook-bottom carton.
+      // Its own QR code and its own page, so a carton only ever describes the
+      // box it is printed on — and so the two pages do not read alike, which
+      // is the whole point of printing two codes.
       //
-      // Only what the box itself will say is filled in: the counts are left
-      // blank on purpose until the die-line shows them, because a figure
-      // printed on a carton cannot be corrected afterwards. The editor shows
-      // the empty rows; the page simply leaves them out.
-      key: 'ndogo76',
-      name: 'Pepa Ndogo 76 × 44',
-      note: NDOGO_NOTE,
-      intro: 'The larger Pepa Ndogo sheet, made from the same quality raw materials and '
-        + 'designed for the same slow, smooth and even burn.',
+      // 77 x 44 is what the die pattern itself is named for. The counts stay
+      // blank until that pattern shows them: a figure printed on a carton
+      // cannot be corrected afterwards. The editor shows the empty rows; the
+      // page simply leaves them out.
+      key: 'ndogo77',
+      name: 'Pepa Ndogo Kubwa',
+      note: 'Brown • Slow burn Unfiltered • 77 × 44',
+      // No mention of the other box's size: a customer scanning this carton
+      // should read about this box and nothing else.
+      intro: 'The wider Pepa Ndogo sheet, 77 × 44 mm, for a longer roll — from the same '
+        + 'unrefined paper and the same slow, even burn.',
       facts: [
         { label: 'Colour', value: 'Brown' },
-        { label: 'Size', value: '76 × 44 mm' },
+        { label: 'Size', value: '77 × 44 mm' },
         { label: 'Type', value: 'Slow burn Unfiltered' },
+        // Straight off the die pattern: "50 BOOKLETS", paper 77 x 44 mm. How
+        // many leaves are in each booklet is not on the pattern, so it and the
+        // total stay blank until the artwork states them.
         { label: 'Papers per booklet', value: '' },
-        { label: 'Booklets per box', value: '' },
+        { label: 'Booklets per box', value: '50' },
         { label: 'Papers per box', value: '' },
       ],
     },
@@ -220,6 +228,24 @@ function upgrade(raw, { append = true } = {}) {
       if (p.key === 'ndogo' && /^\s*brown\s*[·•.-]\s*unfiltered\s*$/i.test(String(p.note || ''))) p.note = NDOGO_NOTE;
     }
   }
+  // v5 shipped the second box as "76 x 44", the size the owner first gave.
+  // Its own die pattern is 77 x 44, so the card is corrected rather than a
+  // third one appearing — and only where the wording is still the one this
+  // file wrote. Anything typed by hand is left exactly as typed.
+  if (from < 6) {
+    const second = DEFAULTS.products.find((d) => d.key === 'ndogo77');
+    for (const pr of kept) {
+      if (pr.key !== 'ndogo76') continue;
+      pr.key = 'ndogo77';
+      if (sameName(pr.name, 'Pepa Ndogo 76 × 44')) pr.name = second.name;
+      if (/^\s*brown\s*[·•]\s*slow burn unfiltered\s*$/i.test(String(pr.note || ''))) pr.note = second.note;
+      if (Array.isArray(pr.facts)) {
+        pr.facts = pr.facts.map((f) => (f && sameName(f.label, 'Size') && sameName(f.value, '76 × 44 mm')
+          ? { ...f, value: '77 × 44 mm' } : f));
+      }
+    }
+  }
+
   for (const d of DEFAULTS.products) {
     if (append && !kept.some((p) => p.key === d.key || sameName(p.name, d.name))) kept.push(d);
   }

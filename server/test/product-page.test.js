@@ -32,7 +32,7 @@ const pictures = (html) => [...html.matchAll(/<img class="shot" src="\/pepa\/([a
 const NDOGO = ['ndogo:Pepa Ndogo'];
 // The settings row carries every product; which of them a page shows is
 // forPath's job, tested separately below.
-const BOTH = ['ndogo:Pepa Ndogo', 'ndogo76:Pepa Ndogo 76 × 44'];
+const BOTH = ['ndogo:Pepa Ndogo', 'ndogo77:Pepa Ndogo Kubwa'];
 // What the 70 x 36 carton's code reaches — the assertion most of these tests
 // are really making.
 const onP = (c) => page.forPath(c, 'p');
@@ -155,7 +155,7 @@ test('Type becomes "Slow burn Unfiltered" only where a v1 row said exactly "Unfi
 
 test('an empty "Add a paper" card does not confuse the upgrade', () => {
   assert.deepEqual(keys(page.shape(page.upgrade({ products: [{ name: 'Pepa Brown' }, { name: '', facts: [] }] }))),
-    ['ndogo:Pepa Brown', 'ndogo76:Pepa Ndogo 76 × 44']);
+    ['ndogo:Pepa Brown', 'ndogo77:Pepa Ndogo Kubwa']);
 });
 
 test('no key is ever given to two products', () => {
@@ -204,7 +204,7 @@ test('each page shows its own box, and only its own', async () => {
   store.row = null;
   const c = await page.getContent();
   assert.deepEqual(keys(page.forPath(c, 'p')), ['ndogo:Pepa Ndogo']);
-  assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo76:Pepa Ndogo 76 × 44']);
+  assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo77:Pepa Ndogo Kubwa']);
 });
 
 test('the 70 x 36 page is untouched by the second box', async () => {
@@ -215,11 +215,11 @@ test('the 70 x 36 page is untouched by the second box', async () => {
   assert.deepEqual(pictures(html), ALL_PICTURES);      // its own three, as before
 });
 
-test('the 76 x 44 page stands up without pictures, and says only what the box says', async () => {
+test('the second box\'s page stands up without pictures, and says only what the box says', async () => {
   store.row = null;
   const html = page.renderHtml(page.forPath(await page.getContent(), 'p2'), { host: 'x', path: 'p2' });
-  assert.match(html, /Pepa Ndogo 76 × 44/);
-  assert.match(html, /76 × 44 mm/);
+  assert.match(html, /Pepa Ndogo Kubwa/);
+  assert.match(html, /77 × 44 mm/);
   assert.match(html, /Slow burn Unfiltered/);
   assert.doesNotMatch(html, /70 × 36/);
   assert.deepEqual(pictures(html), []);                 // the die is still being drawn
@@ -235,7 +235,7 @@ test('a scan never lands on an empty page', async () => {
   const c = await page.getContent();
   assert.deepEqual(keys(page.forPath(c, 'p9')), BOTH);
   assert.deepEqual(keys(page.forPath(c, '')), ['ndogo:Pepa Ndogo']);   // empty means the original page
-  const stripped = { ...c, products: c.products.filter((p) => p.key !== 'ndogo76') };
+  const stripped = { ...c, products: c.products.filter((p) => p.key !== 'ndogo77') };
   assert.deepEqual(keys(page.forPath(stripped, 'p2')), ['ndogo:Pepa Ndogo']);
 });
 
@@ -251,11 +251,11 @@ test('each page names itself in the link preview', async () => {
 test('a saved row that predates the second box gains it', async () => {
   seed(V2_ROW);                                   // a production row from before this change
   const c = await page.readContent();
-  assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo76:Pepa Ndogo 76 × 44']);
+  assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo77:Pepa Ndogo Kubwa']);
   assert.equal(c.products[0].intro, 'Edited in v2');   // and keeps what the owner typed
 });
 
-test('a 76 x 44 card the owner deleted does not come back', async () => {
+test('a second-box card the owner deleted does not come back', async () => {
   seed({ ...clone(V2_ROW), v: page.CONTENT_VERSION, products: [{ key: 'ndogo', name: 'Pepa Ndogo' }] });
   await page.saveContent({ v: page.CONTENT_VERSION, products: [{ key: 'ndogo', name: 'Pepa Ndogo' }] }, 'admin');
   const c = await page.readContent();
