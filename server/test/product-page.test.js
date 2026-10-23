@@ -313,3 +313,78 @@ test('the capital path never prints the other box', async () => {
   assert.match(small, /70 × 36 mm/);
   assert.doesNotMatch(small, /77 × 44/);
 });
+
+// ── Pictures a box carries ───────────────────────────────────────────────────
+// Pictures used to be bolted to a product key in code, so the editor could see
+// them and change nothing. A box can now carry its own list, chosen from what
+// the release published. The point of these tests is the safety that the old
+// arrangement gave for free: the editor stores NAMES, never addresses, and
+// nothing it can send puts the page in front of a file that is not there.
+test('a box shows the pictures it was given, in the order it was given them', async () => {
+  const row = clone(page.DEFAULTS);
+  row.products[1].images = ['kubwa-booklets', 'kubwa-hero'];
+  seed(row);
+  const c = await page.getContent();
+  assert.deepEqual(page.picturesFor(c.products[1]), ['kubwa-booklets', 'kubwa-hero']);
+  const html = page.renderHtml(page.forPath(c, 'p2'), { host: 'x', path: 'p2' });
+  assert.deepEqual(pictures(html), ['kubwa-booklets', 'kubwa-hero']);
+  // The link preview follows the box's own first picture, not the release's.
+  assert.match(html, /og:image" content="[^"]*kubwa-booklets/);
+});
+
+test('a picture this release never published is dropped, not printed', async () => {
+  const row = clone(page.DEFAULTS);
+  // A name from an older release, a typo, and an address typed by hand.
+  row.products[0].images = ['hero', 'kss-front', '/pepa/anything.jpg', 'pair'];
+  seed(row);
+  const c = await page.getContent();
+  // shape() drops them on the way in, so nothing unprintable is ever stored.
+  assert.deepEqual(c.products[0].images, ['hero', 'pair']);
+  assert.deepEqual(pictures(page.renderHtml(onP(c), { host: 'x' })), ['hero', 'pair']);
+});
+
+test('a box that has never been touched shows the set this release rendered', async () => {
+  store.row = null;
+  const c = await page.getContent();
+  assert.equal('images' in c.products[0], false);
+  assert.deepEqual(page.picturesFor(c.products[0]), ALL_PICTURES);
+  assert.deepEqual(pictures(page.renderHtml(onP(c), { host: 'x' })), ALL_PICTURES);
+});
+
+test('a tab that knows nothing about pictures cannot wipe them', async () => {
+  // Exactly what an editor loaded before this feature sends back: products
+  // with no images field at all. It must leave the standard set in place.
+  const stale = clone(page.DEFAULTS);
+  for (const p of stale.products) delete p.images;
+  seed(page.DEFAULTS);
+  const saved = await page.saveContent(stale, null);
+  assert.equal('images' in saved.products[0], false);
+  assert.deepEqual(page.picturesFor(saved.products[0]), ALL_PICTURES);
+});
+
+test('a box can be left with no pictures on purpose', async () => {
+  const row = clone(page.DEFAULTS);
+  row.products[0].images = [];
+  seed(row);
+  const c = await page.getContent();
+  assert.deepEqual(page.picturesFor(c.products[0]), []);
+  const html = page.renderHtml(onP(c), { host: 'x' });
+  assert.deepEqual(pictures(html), []);
+  assert.match(html, /Pepa Ndogo/);              // still a page, just no picture
+});
+
+test('the editor is offered every published picture, and which box it is for', async () => {
+  const cat = page.pictureCatalog();
+  const assets = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'src', 'services', 'productPageAssets.json')));
+  assert.deepEqual(cat.map((x) => x.name).sort(), Object.keys(assets).sort());
+  for (const x of cat) {
+    assert.match(x.src, /^\/pepa\/[a-z0-9.-]+\.webp$/);
+    assert.ok(x.alt && x.w && x.h, `${x.name} needs an alt and a size`);
+  }
+  assert.equal(cat.find((x) => x.name === 'kubwa-booklets').renderedFor, 'ndogo77');
+  assert.equal(cat.find((x) => x.name === 'hero').renderedFor, 'ndogo');
+  // Every default a box falls back to is a picture that actually exists.
+  for (const names of Object.values(page.defaultPictures())) {
+    for (const n of names) assert.ok(assets[n], `default picture ${n} is not published`);
+  }
+});

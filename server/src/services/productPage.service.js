@@ -43,7 +43,7 @@ const SETTING_KEY = 'public.productPage';
 // back to this one only when a page has none.
 const SHOWCASE = 'hero';
 const showcaseFor = (c) => c.products
-  .map((p) => (PRODUCT_IMAGES[p.key] || [])[0])
+  .map((p) => picturesFor(p)[0])
   .find((n) => n && ASSETS[n]) || SHOWCASE;
 const PRODUCT_IMAGES = {
   ndogo: ['hero', 'open', 'pair'],
@@ -54,6 +54,47 @@ const PRODUCT_IMAGES = {
   // sizes and carries no size and no code of its own.
   ndogo77: ['kubwa-hero', 'kubwa-back', 'kubwa-booklets'],
 };
+
+// Which pictures one box actually shows, and in which order. The editor may
+// pick from the set this release published and arrange them; a box nobody has
+// touched shows the set rendered for it above.
+//
+// Rule 1 of this file still holds: the editor chooses NAMES from the manifest,
+// never addresses. A name that is not in the manifest is dropped here and in
+// shape(), so neither a stale editor tab nor a hand-edited settings row can
+// point the page at a file that does not exist.
+function picturesFor(p) {
+  const chosen = p && Array.isArray(p.images) ? p.images : null;
+  const list = chosen || PRODUCT_IMAGES[(p && p.key) || ''] || [];
+  return list.filter((n) => ASSETS[n]);
+}
+
+// Everything the editor needs to show the pictures as pictures: the name it
+// saves, what the picture shows, a thumbnail to draw, and which box it was
+// rendered for — so putting one box's picture on another is a visible choice
+// rather than an accident.
+function pictureCatalog() {
+  const renderedFor = {};
+  for (const [key, names] of Object.entries(PRODUCT_IMAGES)) {
+    for (const n of names) if (!renderedFor[n]) renderedFor[n] = key;
+  }
+  return Object.entries(ASSETS).map(([name, a]) => ({
+    name,
+    alt: a.alt,
+    // The 700 px WebP: plenty for a thumbnail, and already on the CDN.
+    src: a.webp[0].src,
+    w: a.w,
+    h: a.h,
+    renderedFor: renderedFor[name] || '',
+  }));
+}
+
+// What each box shows when its own list has never been set. The editor offers
+// this as "the standard set", which is how a box gets back to shipping with
+// whatever a later release renders for it.
+const defaultPictures = () => Object.fromEntries(
+  Object.entries(PRODUCT_IMAGES).map(([k, v]) => [k, v.filter((n) => ASSETS[n])]),
+);
 
 // Which page each product belongs to, and therefore which QR code reaches it.
 // The code already printed on the 70 x 36 carton points at /p and must keep
@@ -187,6 +228,13 @@ function shape(raw) {
         facts: (Array.isArray(p.facts) ? p.facts : [])
           .filter((f) => f && String(f.label || '').trim())
           .map((f) => ({ label: String(f.label).trim(), value: String(f.value || '').trim() })),
+        // Absent means "whatever this release renders for this box", which is
+        // what a tab loaded before pictures became editable still sends. Only
+        // a list that is actually there is stored, and only names the manifest
+        // knows survive — see picturesFor.
+        ...(Array.isArray(p.images)
+          ? { images: [...new Set(p.images.filter((n) => typeof n === 'string' && ASSETS[n]))].slice(0, 12) }
+          : {}),
       })),
     phones: (Array.isArray(c.phones) ? c.phones : DEFAULTS.phones)
       .map((p) => String(p || '').replace(/[^\d+]/g, ''))
@@ -405,7 +453,7 @@ function renderHtml(c, { host, path = DEFAULT_PATH } = {}) {
   const waMsg = encodeURIComponent(c.waText);
 
   // The first picture on the page loads straight away; the rest may wait.
-  const firstPicture = c.products.map((p) => (PRODUCT_IMAGES[p.key] || [])[0]).find(Boolean);
+  const firstPicture = c.products.map((p) => picturesFor(p)[0]).find(Boolean);
 
   // Only facts that actually have a value reach the page.
   const withValues = c.products.map((p) => ({ ...p, facts: p.facts.filter((f) => f.value) }));
@@ -414,7 +462,7 @@ function renderHtml(c, { host, path = DEFAULT_PATH } = {}) {
       <section class="item">
         <h3>${esc(p.name)}</h3>
         ${p.note ? `<p class="note">${esc(p.note)}</p>` : ''}
-        ${(PRODUCT_IMAGES[p.key] || []).map((n) => picture(n, { eager: n === firstPicture })).join('')}
+        ${picturesFor(p).map((n) => picture(n, { eager: n === firstPicture })).join('')}
         ${p.intro ? `<p class="intro">${esc(p.intro)}</p>` : ''}
         ${p.facts.length ? `<dl>${p.facts.map((f) => `
           <div><dt>${esc(f.label)}</dt><dd>${esc(f.value)}</dd></div>`).join('')}
@@ -546,6 +594,6 @@ ${host && ASSETS[showcaseFor(c)] ? `<meta property="og:image" content="${esc(`ht
 
 module.exports = {
   SETTING_KEY, DEFAULTS, CONTENT_VERSION, getContent, readContent, saveContent, renderHtml, shape, upgrade,
-  forPath, pagePaths, PRODUCT_PATH, DEFAULT_PATH,
+  forPath, pagePaths, PRODUCT_PATH, DEFAULT_PATH, picturesFor, pictureCatalog, defaultPictures,
   appUrl: env.appUrl,
 };

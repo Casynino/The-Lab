@@ -34,7 +34,9 @@ export default defineConfig({
       // In production vercel.json rewrites /p to the same function.
       // Anchored: a bare '/p' key is a prefix match and would also swallow
       // /pepa/* pictures, which Vite serves itself from client/public.
-      '^/[pP]/?(\\?.*)?$': {
+      // The digit covers the second box's page, /p2, and whatever number a
+      // later box takes — the editor previews each box on its own page.
+      '^/[pP][0-9]*/?(\\?.*)?$': {
         target: process.env.VITE_PROXY_TARGET || 'http://localhost:4000',
         changeOrigin: true,
       },

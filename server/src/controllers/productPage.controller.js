@@ -20,7 +20,18 @@ const get = asyncHandler(async (req, res) => {
   // One entry per printed code, so the editor can draw them all without
   // knowing which sizes exist.
   const pages = page.pagePaths(content).map((pg) => ({ ...pg, url: `https://${host}/${pg.path}` }));
-  return ok(res, { content, defaults: page.DEFAULTS, url: `https://${host}/p`, pages });
+  // The pictures this release published, so the editor can show each box's
+  // own and offer the rest. Addresses are never typed in the editor — it
+  // sends back names from this list, which is what keeps a Save from being
+  // able to point the page at a file that does not exist.
+  return ok(res, {
+    content,
+    defaults: page.DEFAULTS,
+    url: `https://${host}/p`,
+    pages,
+    pictures: page.pictureCatalog(),
+    defaultPictures: page.defaultPictures(),
+  });
 });
 
 const save = asyncHandler(async (req, res) => {
