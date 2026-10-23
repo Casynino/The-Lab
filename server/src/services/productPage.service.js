@@ -39,11 +39,21 @@ const SETTING_KEY = 'public.productPage';
 const SHOWCASE = 'hero';
 const PRODUCT_IMAGES = {
   ndogo: ['hero', 'open', 'pair'],
+  // ndogo76's box is still being drawn; a product with no pictures renders as
+  // text, which is better than a scan landing on nothing.
 };
 
+// Which page each product belongs to, and therefore which QR code reaches it.
+// The code already printed on the 70 x 36 carton points at /p and must keep
+// showing that box alone; the 76 x 44 carton carries a code for /p2. A product
+// with no entry here appears on /p, the page that has always existed.
+const PRODUCT_PATH = { ndogo: 'p', ndogo76: 'p2' };
+const DEFAULT_PATH = 'p';
+
 // v2 added product keys; v3 took the King Size Slim box back off this page;
-// v4 reworded Pepa Ndogo's note. See upgrade().
-const CONTENT_VERSION = 4;
+// v4 reworded Pepa Ndogo's note; v5 added the 76 x 44 box, which has a QR and
+// a page of its own. See upgrade().
+const CONTENT_VERSION = 5;
 const NDOGO_NOTE = 'Brown • Slow burn Unfiltered';
 
 // The frozen fallback. These are also the starting values in the editor.
@@ -72,6 +82,28 @@ const DEFAULTS = {
         { label: 'Papers per booklet', value: '50' },
         { label: 'Booklets per box', value: '50' },
         { label: 'Papers per box', value: '2,500' },
+      ],
+    },
+    {
+      // The second size, unfiltered like the first. Its own QR code and its own
+      // page, so a carton only ever describes the box it is printed on.
+      //
+      // Only what the box itself will say is filled in: the counts are left
+      // blank on purpose until the die-line shows them, because a figure
+      // printed on a carton cannot be corrected afterwards. The editor shows
+      // the empty rows; the page simply leaves them out.
+      key: 'ndogo76',
+      name: 'Pepa Ndogo 76 × 44',
+      note: NDOGO_NOTE,
+      intro: 'The larger Pepa Ndogo sheet, made from the same quality raw materials and '
+        + 'designed for the same slow, smooth and even burn.',
+      facts: [
+        { label: 'Colour', value: 'Brown' },
+        { label: 'Size', value: '76 × 44 mm' },
+        { label: 'Type', value: 'Slow burn Unfiltered' },
+        { label: 'Papers per booklet', value: '' },
+        { label: 'Booklets per box', value: '' },
+        { label: 'Papers per box', value: '' },
       ],
     },
   ],
@@ -194,6 +226,19 @@ function upgrade(raw, { append = true } = {}) {
   return { ...raw, v: CONTENT_VERSION, products: kept };
 }
 
+// One page's worth of the content: the products whose QR code points at this
+// path, and nothing else. A carton should describe the box it is printed on.
+//
+// If the path has no products — a code printed before its product was set up —
+// the page falls back to everything rather than rendering an empty shell. A
+// scan that shows the wrong Pepa is recoverable; a scan that shows nothing is
+// a dead code on a hundred thousand cartons.
+function forPath(content, path) {
+  const want = String(path || DEFAULT_PATH).replace(/^\/+|\/+$/g, '') || DEFAULT_PATH;
+  const mine = content.products.filter((pr) => (PRODUCT_PATH[pr.key] || DEFAULT_PATH) === want);
+  return mine.length ? { ...content, products: mine } : content;
+}
+
 // The editor's read. It throws on a database error or an unreadable row: had
 // it fallen back to the defaults like the page does, the editor would show
 // them as if saved, and the next Save would overwrite the real content.
@@ -279,7 +324,7 @@ function picture(name, { eager = false } = {}) {
     + `${eager ? ' fetchpriority="high"' : ' loading="lazy"'}></picture>`;
 }
 
-function renderHtml(c, { host } = {}) {
+function renderHtml(c, { host, path = DEFAULT_PATH } = {}) {
   const phones = c.phones.map(phoneParts);
   const waMsg = encodeURIComponent(c.waText);
 
@@ -326,7 +371,7 @@ function renderHtml(c, { host } = {}) {
 <meta property="og:type" content="website">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(`${c.maker} is the only distributor. Wholesale: ${phones.map((p) => p.display).join(' · ')}`)}">
-${host ? `<meta property="og:url" content="${esc(`https://${host}/p`)}">` : ''}
+${host ? `<meta property="og:url" content="${esc(`https://${host}/${String(path).replace(/^\/+/, '')}`)}">` : ''}
 ${host && ASSETS[SHOWCASE] ? `<meta property="og:image" content="${esc(`https://${host}${ASSETS[SHOWCASE].jpg[ASSETS[SHOWCASE].jpg.length - 1].src}`)}">
 <meta property="og:image:width" content="${Number(ASSETS[SHOWCASE].w)}">
 <meta property="og:image:height" content="${Number(ASSETS[SHOWCASE].h)}">` : ''}
@@ -425,5 +470,6 @@ ${host && ASSETS[SHOWCASE] ? `<meta property="og:image" content="${esc(`https://
 
 module.exports = {
   SETTING_KEY, DEFAULTS, CONTENT_VERSION, getContent, readContent, saveContent, renderHtml, shape, upgrade,
+  forPath, PRODUCT_PATH, DEFAULT_PATH,
   appUrl: env.appUrl,
 };

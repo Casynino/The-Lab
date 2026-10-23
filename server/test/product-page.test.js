@@ -30,6 +30,12 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const keys = (c) => c.products.map((p) => `${p.key}:${p.name}`);
 const pictures = (html) => [...html.matchAll(/<img class="shot" src="\/pepa\/([a-z-]+)-/g)].map((m) => m[1]);
 const NDOGO = ['ndogo:Pepa Ndogo'];
+// The settings row carries every product; which of them a page shows is
+// forPath's job, tested separately below.
+const BOTH = ['ndogo:Pepa Ndogo', 'ndogo76:Pepa Ndogo 76 × 44'];
+// What the 70 x 36 carton's code reaches — the assertion most of these tests
+// are really making.
+const onP = (c) => page.forPath(c, 'p');
 const ALL_PICTURES = ['hero', 'open', 'pair'];
 
 // A row as the v1 editor saved it: no version, no keys, a hero image field,
@@ -56,14 +62,15 @@ const seed = (content) => { store.fail = false; store.row = { key: page.SETTING_
 test('with no saved row the page carries Pepa Ndogo only', async () => {
   store.row = null;
   const c = await page.readContent();
-  assert.deepEqual(keys(c), NDOGO);
+  assert.deepEqual(keys(c), BOTH);
+  assert.deepEqual(keys(onP(c)), NDOGO);   // the 70 x 36 page is unchanged
   assert.equal(c.v, page.CONTENT_VERSION);
 });
 
 test('a v1 row gains its key, keeps its own wording, and gets Slow burn Unfiltered', async () => {
   seed(V1_ROW);
   const c = await page.readContent();
-  assert.deepEqual(keys(c), NDOGO);
+  assert.deepEqual(keys(c), BOTH);
   assert.equal(c.products[0].facts[2].label, 'Papers per booklet');
   assert.equal(c.products[0].facts[1].value, 'Slow burn Unfiltered');
   assert.equal('heroImage' in c, false);
@@ -72,13 +79,14 @@ test('a v1 row gains its key, keeps its own wording, and gets Slow burn Unfilter
 test('a v2 row loses the King Size Slim box and keeps its Ndogo edits', async () => {
   seed(V2_ROW);
   const c = await page.readContent();
-  assert.deepEqual(keys(c), NDOGO);
+  assert.deepEqual(keys(c), BOTH);
+  assert.deepEqual(keys(onP(c)), NDOGO);
   assert.equal(c.products[0].intro, 'Edited in v2');
 });
 
 test('the page shows no King Size Slim, only the small box pictures', async () => {
   seed(V2_ROW);
-  const html = page.renderHtml(await page.readContent(), { host: 'x' });
+  const html = page.renderHtml(onP(await page.readContent()), { host: 'x' });
   assert.deepEqual(pictures(html), ALL_PICTURES);
   assert.doesNotMatch(html, /King Size|108 × 44|kss-/);
 });
@@ -87,9 +95,9 @@ test('an editor tab loaded under v1 cannot save a keyless row', async () => {
   seed(V1_ROW);
   await page.saveContent({ ...clone(V1_ROW), products: [{ ...V1_ROW.products[0], intro: 'Edited' }] }, 'admin');
   const c = await page.readContent();
-  assert.deepEqual(keys(c), NDOGO);
+  assert.deepEqual(keys(c), BOTH);
   assert.equal(c.products[0].intro, 'Edited');
-  assert.deepEqual(pictures(page.renderHtml(c, { host: 'x' })), ALL_PICTURES);
+  assert.deepEqual(pictures(page.renderHtml(onP(c), { host: 'x' })), ALL_PICTURES);
 });
 
 test('an editor tab loaded under v2 cannot put King Size Slim back', async () => {
@@ -98,7 +106,8 @@ test('an editor tab loaded under v2 cannot put King Size Slim back', async () =>
   staleV2Form.products[0].intro = 'Saved from an old tab';
   await page.saveContent(staleV2Form, 'admin');
   const c = await page.readContent();
-  assert.deepEqual(keys(c), NDOGO);
+  assert.deepEqual(keys(c), BOTH);          // the 76 x 44 box is appended, King Size is not
+  assert.deepEqual(keys(onP(c)), NDOGO);
   assert.equal(c.products[0].intro, 'Saved from an old tab');
   assert.equal(JSON.parse(store.row.value).v, page.CONTENT_VERSION);
 });
@@ -145,7 +154,8 @@ test('Type becomes "Slow burn Unfiltered" only where a v1 row said exactly "Unfi
 });
 
 test('an empty "Add a paper" card does not confuse the upgrade', () => {
-  assert.deepEqual(keys(page.shape(page.upgrade({ products: [{ name: 'Pepa Brown' }, { name: '', facts: [] }] }))), ['ndogo:Pepa Brown']);
+  assert.deepEqual(keys(page.shape(page.upgrade({ products: [{ name: 'Pepa Brown' }, { name: '', facts: [] }] }))),
+    ['ndogo:Pepa Brown', 'ndogo76:Pepa Ndogo 76 × 44']);
 });
 
 test('no key is ever given to two products', () => {
@@ -156,10 +166,11 @@ test('no key is ever given to two products', () => {
 test('the editor read fails loudly; the public page still serves', async () => {
   store.fail = true;
   await assert.rejects(() => page.readContent(), /db down/);
-  assert.deepEqual(keys(await page.getContent()), NDOGO);
+  assert.deepEqual(keys(await page.getContent()), BOTH);
+  assert.deepEqual(keys(onP(await page.getContent())), NDOGO);
   seed(V1_ROW); store.row.value = '{not json';
   await assert.rejects(() => page.readContent());
-  assert.equal((await page.getContent()).products.length, 1);
+  assert.equal((await page.getContent()).products.length, 2);
 });
 
 test('all three pictures sit together under Pepa Ndogo, none above it', async () => {
@@ -181,4 +192,74 @@ test('the page references only pictures that ship, and carries no script', async
   assert.match(html, /og:image" content="https:\/\/the-haolab\.vercel\.app\/pepa\/hero-1000\.[0-9a-f]{10}\.jpg"/);
   assert.doesNotMatch(html, /<script/i);
   assert.equal(html.includes('pepa-box.jpg'), false);
+});
+
+// ── One carton, one box ──────────────────────────────────────────────────────
+// Each size carries its own QR code: /p on the 70 x 36 carton, /p2 on the
+// 76 x 44. A scan must show the box it was printed on and not the other one —
+// and a code can never be recalled once it is on a hundred thousand cartons,
+// so the fallbacks matter as much as the happy path.
+
+test('each page shows its own box, and only its own', async () => {
+  store.row = null;
+  const c = await page.getContent();
+  assert.deepEqual(keys(page.forPath(c, 'p')), ['ndogo:Pepa Ndogo']);
+  assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo76:Pepa Ndogo 76 × 44']);
+});
+
+test('the 70 x 36 page is untouched by the second box', async () => {
+  store.row = null;
+  const html = page.renderHtml(page.forPath(await page.getContent(), 'p'), { host: 'x', path: 'p' });
+  assert.match(html, /70 × 36 mm/);
+  assert.doesNotMatch(html, /76 × 44/);
+  assert.deepEqual(pictures(html), ALL_PICTURES);      // its own three, as before
+});
+
+test('the 76 x 44 page stands up without pictures, and says only what the box says', async () => {
+  store.row = null;
+  const html = page.renderHtml(page.forPath(await page.getContent(), 'p2'), { host: 'x', path: 'p2' });
+  assert.match(html, /Pepa Ndogo 76 × 44/);
+  assert.match(html, /76 × 44 mm/);
+  assert.match(html, /Slow burn Unfiltered/);
+  assert.doesNotMatch(html, /70 × 36/);
+  assert.deepEqual(pictures(html), []);                 // the die is still being drawn
+  // Counts are left blank until the die shows them: blank facts never print.
+  assert.doesNotMatch(html, /Papers per box<\/dt><dd><\/dd>/);
+  assert.match(html, /haodealtz@gmail\.com|0788/);      // it is still a Pepa page
+});
+
+test('a scan never lands on an empty page', async () => {
+  // A code printed for a product that was later deleted, or a path nobody has
+  // set up yet: show everything rather than a shell with no product in it.
+  store.row = null;
+  const c = await page.getContent();
+  assert.deepEqual(keys(page.forPath(c, 'p9')), BOTH);
+  assert.deepEqual(keys(page.forPath(c, '')), ['ndogo:Pepa Ndogo']);   // empty means the original page
+  const stripped = { ...c, products: c.products.filter((p) => p.key !== 'ndogo76') };
+  assert.deepEqual(keys(page.forPath(stripped, 'p2')), ['ndogo:Pepa Ndogo']);
+});
+
+test('each page names itself in the link preview', async () => {
+  store.row = null;
+  const c = await page.getContent();
+  for (const [path, want] of [['p', 'https://h/p'], ['p2', 'https://h/p2']]) {
+    const html = page.renderHtml(page.forPath(c, path), { host: 'h', path });
+    assert.match(html, new RegExp(`og:url" content="${want.replace(/\//g, '\\/')}"`));
+  }
+});
+
+test('a saved row that predates the second box gains it', async () => {
+  seed(V2_ROW);                                   // a production row from before this change
+  const c = await page.readContent();
+  assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo76:Pepa Ndogo 76 × 44']);
+  assert.equal(c.products[0].intro, 'Edited in v2');   // and keeps what the owner typed
+});
+
+test('a 76 x 44 card the owner deleted does not come back', async () => {
+  seed({ ...clone(V2_ROW), v: page.CONTENT_VERSION, products: [{ key: 'ndogo', name: 'Pepa Ndogo' }] });
+  await page.saveContent({ v: page.CONTENT_VERSION, products: [{ key: 'ndogo', name: 'Pepa Ndogo' }] }, 'admin');
+  const c = await page.readContent();
+  assert.deepEqual(keys(c), ['ndogo:Pepa Ndogo']);
+  // ...and its page then falls back rather than going blank.
+  assert.deepEqual(keys(page.forPath(c, 'p2')), ['ndogo:Pepa Ndogo']);
 });

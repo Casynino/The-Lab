@@ -54,7 +54,9 @@ if (!env.isProd) {
 // rate limiter deliberately: Tanzanian mobile networks put a whole market
 // street behind a handful of IP addresses, and a limiter tuned for an API
 // would lock all of them out of a page printed on the product.
-app.use('/p', require('./routes/productPage.routes'));
+// One mount per printed code: /p is the 70 x 36 carton, /p2 the 76 x 44. Same
+// router — it works out which box to show from the path it was mounted at.
+app.use(['/p', '/p2'], require('./routes/productPage.routes'));
 
 // Global rate limiter (auth endpoints add a stricter one of their own).
 app.use(
