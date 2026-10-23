@@ -41,7 +41,7 @@ function upperUrl(u) {
 // One panel per printed code. Each size carries its own: the 70 x 36 carton
 // points at /p, the 76 x 44 at /p2, and a carton must only ever describe the
 // box it is printed on.
-function QRPanel({ defaultUrl, title = 'The code for the printer', subtitle = 'One code, printed the same on every box' }) {
+function QRPanel({ defaultUrl, title = 'The code for the printer', subtitle = 'One code, printed the same on every box', flat = false }) {
   const [url, setUrl] = useState(defaultUrl || '');
   const [codeMm, setCodeMm] = useState(12);
   const [svg, setSvg] = useState('');
@@ -119,10 +119,24 @@ function QRPanel({ defaultUrl, title = 'The code for the printer', subtitle = 'O
     canvas.toBlob((b) => blobDownload(`pepa-qr-${slug}-${codeMm}mm-600dpi.png`, b), 'image/png');
   }
 
+  // `flat` drops the card frame so the panel can live inside the paper it
+  // belongs to: the owner reads one box at a time, and a code listed away from
+  // its product is a code waiting to be printed on the wrong box.
+  const Frame = flat ? 'div' : Card;
+  const Head = flat
+    ? () => (
+      <div className="mb-4 border-t border-border pt-4">
+        <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+        <p className="text-xs text-muted">{subtitle}</p>
+      </div>
+    )
+    : () => <CardHeader title={title} subtitle={subtitle} />;
+  const Body = flat ? 'div' : CardBody;
+
   return (
-    <Card>
-      <CardHeader title={title} subtitle={subtitle} />
-      <CardBody className="space-y-5">
+    <Frame>
+      <Head />
+      <Body className="space-y-5">
         <Field
           label="Address the code opens"
           hint="Once a carton run is printed, this can never change."
@@ -222,8 +236,8 @@ function QRPanel({ defaultUrl, title = 'The code for the printer', subtitle = 'O
           the check. A copied code sends the customer to your own page.
         </p>
         <canvas ref={canvasRef} className="hidden" />
-      </CardBody>
-    </Card>
+      </Body>
+    </Frame>
   );
 }
 
@@ -326,19 +340,8 @@ export default function ProductLabel() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-6">
-          {/* One code per product page. The server lists them, so another size
-              appears here on its own. */}
-          {(saved.pages?.length ? saved.pages : [{ path: 'p', label: 'The page', url: saved.url }]).map((pg) => (
-            <QRPanel
-              key={pg.path}
-              defaultUrl={pg.url}
-              title={`The code for ${pg.label}`}
-              subtitle={`Printed on the ${pg.label} carton · opens /${pg.path}`}
-            />
-          ))}
-
           <Card>
-            <CardHeader title="The product" subtitle="These words appear on the page, exactly as typed" />
+            <CardHeader title="The brand" subtitle="Shown at the top of every page, above whichever box was scanned" />
             <CardBody className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Name"><Input value={form.name} onChange={(e) => set({ name: e.target.value })} /></Field>
@@ -360,8 +363,8 @@ export default function ProductLabel() {
 
           <Card>
             <CardHeader
-              title="The papers"
-              subtitle="One code covers all of them — add a size here and it appears on the same page, no reprint"
+              title="The boxes"
+              subtitle="One box, one code, one page — each box below carries the code printed on it"
               action={(
                 <Button
                   variant="secondary"
@@ -397,6 +400,28 @@ export default function ProductLabel() {
                     onChange={(e) => setProduct(i, { intro: e.target.value })}
                   />
                   <FactRows facts={p.facts} onChange={(facts) => setProduct(i, { facts })} />
+
+                  {/* The code that is printed on THIS box, under the box it
+                      belongs to. A code listed away from its product is a code
+                      waiting to be printed on the wrong one. */}
+                  {(() => {
+                    const pg = (saved.pages || []).find((x) => (x.keys || []).includes(p.key));
+                    if (!pg) {
+                      return (
+                        <p className="border-t border-border pt-4 text-xs text-muted">
+                          This box has no code yet. Save, then reload, and its code appears here.
+                        </p>
+                      );
+                    }
+                    return (
+                      <QRPanel
+                        flat
+                        defaultUrl={pg.url}
+                        title={`The code printed on this box`}
+                        subtitle={`Scanning it opens /${pg.path} — this box only`}
+                      />
+                    );
+                  })()}
                 </div>
               ))}
               {blanks > 0 && (
