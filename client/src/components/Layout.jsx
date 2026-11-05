@@ -393,7 +393,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-x-clip p-4 lg:p-6">
+        <main className="flex-1 overflow-x-clip p-3 sm:p-4 lg:p-6">
           {/* Cap width on ultra-wide monitors so content stays readable & centered. */}
           <motion.div
             key={location.pathname}

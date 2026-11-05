@@ -307,14 +307,18 @@ export default function Dashboard() {
         <div className="pointer-events-none absolute -bottom-28 right-0 h-72 w-72 rounded-full bg-cyan-300/12 blur-3xl" aria-hidden="true" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" aria-hidden="true" />
 
-        <div className="relative grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-center lg:gap-10 lg:p-7">
+        {/* On a phone this banner was half the screen: a headline figure, two
+            pills, a greeting, a section label, a bar and the rows. The number
+            and where it sits are what the owner opens the app for; the rest is
+            kept for the desktop, where there is room for it. */}
+        <div className="relative grid gap-4 p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-center lg:gap-10 lg:p-7">
           {/* The money, first. */}
           <div className="min-w-0">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-300/90">Money you can use right now</p>
-            <p className="mt-2 text-4xl font-bold leading-none tracking-tight text-white sm:text-5xl">
+            <p className="mt-1.5 text-[30px] font-bold leading-none tracking-tight text-white sm:mt-2 sm:text-5xl">
               {formatCurrency(totalFunds)}
             </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 sm:mt-3">
               {/* This is the NET move in the balance above it, so it has to be
                   worded as one. It read "TSh 449,000 out today" on a day when
                   624,000 went out and 175,000 came in — 449,000 never left
@@ -334,12 +338,13 @@ export default function Dashboard() {
                   : <>{formatCurrency(Math.abs(today.netCash))} {today.netCash > 0 ? 'up' : 'down'} today</>}
               </span>
               {today.boxesSold > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80">
+                // Also the first tile of Today's business, a screen below.
+                <span className="hidden items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80 sm:inline-flex">
                   <Boxes className="h-3 w-3" /> {formatNumber(today.boxesSold)} boxes sold today
                 </span>
               )}
             </div>
-            <p className="mt-4 text-sm text-white/55">
+            <p className="mt-4 hidden text-sm text-white/55 sm:block">
               {tzGreeting()}, {firstName} · {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
           </div>
@@ -350,14 +355,14 @@ export default function Dashboard() {
               so the others do not shuffle when one empties. */}
           <div className="min-w-0">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Where it sits</p>
+              <p className="hidden text-[11px] font-bold uppercase tracking-[0.2em] text-white/45 sm:block">Where it sits</p>
               <button onClick={() => navigate('/finance?tab=accounts')}
                 className="cursor-pointer text-[11px] font-semibold text-brand-300 transition hover:text-brand-200">
                 Open accounts →
               </button>
             </div>
             {totalFunds > 0 && (
-              <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-white/10">
+              <div className="mt-2 hidden h-1.5 w-full overflow-hidden rounded-full bg-white/10 sm:mt-3 sm:flex sm:h-2">
                 {heroAccounts.map((a) => (
                   <div key={a.id} className={HERO_BAR[a._i % HERO_BAR.length]}
                     style={{ width: `${Math.max(0, (a.balance / totalFunds) * 100)}%` }} />
@@ -368,16 +373,16 @@ export default function Dashboard() {
                 and made three small panels compete with the headline; the bar
                 above already carries the proportions, so these only have to
                 name them. Hairline dividers, one line each, numbers aligned. */}
-            <div className="mt-4 divide-y divide-white/10">
+            <div className="mt-2 divide-y divide-white/10 sm:mt-4">
               {heroAccounts.map((a) => {
                 const i = a._i;
                 const Icon = ACCOUNT_ICON[a.type] || Wallet;
                 const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
                 return (
                   <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                    className="group flex w-full cursor-pointer items-center gap-3 py-2.5 text-left transition duration-200 hover:opacity-80">
-                    <span className={clsx('h-2.5 w-2.5 shrink-0 rounded-full', HERO_DOT[i % HERO_DOT.length])} />
-                    <Icon className="h-4 w-4 shrink-0 text-white/45" />
+                    className="group flex w-full cursor-pointer items-center gap-2.5 py-2 text-left transition duration-200 hover:opacity-80 sm:gap-3 sm:py-2.5">
+                    <span className={clsx('h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5', HERO_DOT[i % HERO_DOT.length])} />
+                    <Icon className="hidden h-4 w-4 shrink-0 text-white/45 sm:block" />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/75">{a.name}</span>
                     <span className={clsx('shrink-0 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
                       {formatCurrency(a.balance)}
@@ -398,7 +403,10 @@ export default function Dashboard() {
           Eight identical grey buttons make you read all eight. Tinting them by
           what they touch — approvals, money, stock — lets the eye find the one
           it wants without reading, and the colours match the rest of the page. */}
-      <div className="mb-5 flex flex-wrap gap-2">
+      {/* Two even columns on a phone. Wrapping pills of different widths left
+          seven buttons in a staircase that was hard to aim at and taller than
+          it needed to be. */}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-5 sm:flex sm:flex-wrap">
         {QUICK.map((q) => {
           const TINT = {
             approve: 'border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20',
@@ -413,12 +421,12 @@ export default function Dashboard() {
               type="button"
               onClick={() => navigate(q.to)}
               className={clsx(
-                'relative inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition duration-200',
+                'relative inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium transition duration-200 sm:px-3.5 sm:text-sm',
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
                 TINT[kind],
               )}
             >
-              <q.icon className="h-4 w-4" /> {q.label}
+              <q.icon className="h-4 w-4 shrink-0" /> <span className="text-left leading-tight">{q.label}</span>
               {q.badge > 0 && (
                 <span className="ml-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{q.badge}</span>
               )}

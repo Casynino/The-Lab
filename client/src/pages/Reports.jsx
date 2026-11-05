@@ -110,7 +110,7 @@ export default function Reports({ embedded = false }) {
         </PageHeader>
       )}
 
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className="mb-4 tab-row">
         {TABS.map((t) => (
           <button key={t.key} onClick={() => setTab(t.key)} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === t.key ? 'bg-brand-600 text-slate-950' : 'bg-surface text-muted hover:bg-elevated'}`}>{t.label}</button>
         ))}

@@ -169,3 +169,53 @@
        new build is on its way. */
   }
 }
+
+/* ── On a phone ──────────────────────────────────────────────────────────────
+   This admin was drawn for a desktop and then stacked. On a 390 px screen that
+   left a banner half a screen tall, headings bigger than the figures under
+   them, and money clipped inside its own card: the owner's phone showed
+   "TSh 10,241,50(" on Finance and "TSh 6,068,50(" on Settlements.
+
+   One phone type scale, set here rather than edited into forty files, so every
+   figure in the app shrinks with the screen and stays inside its card. `sm:`
+   and up are untouched — the desktop was never the problem.
+
+   Deliberately OUTSIDE @layer: these have to win against the utility they
+   override, and source order is what decides that. Keep this block last. */
+@media (max-width: 639.98px) {
+  .text-5xl { font-size: 1.75rem; line-height: 1.1; }
+  .text-4xl { font-size: 1.5rem; line-height: 1.15; }
+  .text-3xl { font-size: 1.3125rem; line-height: 1.2; }
+  .text-2xl { font-size: 1rem; line-height: 1.25; }
+  .text-xl { font-size: 1.0625rem; line-height: 1.3; }
+
+  /* A figure may wrap, but never mid-digit and never cut off: "TSh 11,691,00"
+     with the last 0 on the next line is as bad as losing it. Breaking is
+     allowed at the space after the currency and nowhere else, and the scale
+     above is set so that even eight figures rarely reach that. */
+  .tabular-nums { word-break: keep-all; overflow-wrap: break-word; }
+
+  /* Rows, cards and buttons, tighter. A phone has the width of one column and
+     should spend it on the content, not on padding. */
+  .th { padding: 0.5rem 0.75rem; }
+  .td { padding: 0.625rem 0.75rem; }
+  .btn { padding: 0.5rem 0.75rem; font-size: 0.8125rem; }
+  .card { border-radius: 0.875rem; }
+  .card-tile { padding: 0.875rem; border-radius: 0.875rem; }
+}
+
+/* A row of tabs or filters is a row, not a paragraph of pills. On a phone it
+   scrolls sideways under the thumb; from sm it wraps as before. Ten Finance
+   tabs took four lines and pushed the page itself off the first screen. */
+.tab-row {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tab-row::-webkit-scrollbar { display: none; }
+.tab-row > * { flex: 0 0 auto; }
+@media (min-width: 640px) {
+  .tab-row { flex-wrap: wrap; overflow-x: visible; }
+}

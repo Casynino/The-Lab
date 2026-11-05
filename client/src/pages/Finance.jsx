@@ -2475,7 +2475,7 @@ export default function Finance() {
         </div>
       </PageHeader>
 
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 tab-row">
         {TABS.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k

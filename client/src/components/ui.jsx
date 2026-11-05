@@ -514,10 +514,13 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
 // --- Page header ------------------------------------------------------------
 export function PageHeader({ title, subtitle, children }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 className="text-xl font-bold text-foreground sm:text-2xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+    <div className="mb-4 flex flex-col gap-2 sm:mb-6 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <div className="min-w-0">
+        <h1 className="truncate text-lg font-bold text-foreground sm:text-2xl">{title}</h1>
+        {/* The subtitle is a sentence explaining the page to somebody seeing it
+            for the first time. On a phone it is three lines of something the
+            owner already knows, above the thing he opened the page for. */}
+        {subtitle && <p className="mt-1 hidden text-sm text-muted sm:block">{subtitle}</p>}
       </div>
       {children && <div className="flex flex-wrap items-center gap-2">{children}</div>}
     </div>
@@ -543,7 +546,7 @@ export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onCli
       transition={{ duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }}
       whileHover={onClick ? { y: -4 } : { y: -2 }}
       onClick={onClick}
-      className={clsx('card relative overflow-hidden', compact ? 'p-3.5' : 'p-5', onClick && 'cursor-pointer')}
+      className={clsx('card relative overflow-hidden', compact ? 'p-3' : 'p-3.5 sm:p-5', onClick && 'cursor-pointer')}
     >
       {/* Soft corner glow in the tone colour. */}
       <div
@@ -554,14 +557,14 @@ export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onCli
       <div className="relative flex items-start justify-between gap-3">
         <span className={clsx('font-medium text-muted', compact ? 'text-xs' : 'text-sm')}>{label}</span>
         {Icon && (
-          <span className={clsx('rounded-lg bg-gradient-to-br shadow-md', compact ? 'p-1.5' : 'rounded-xl p-2.5', t.badge, t.dark ? 'text-slate-950' : 'text-white')}>
-            <Icon className={compact ? 'h-3.5 w-3.5' : 'h-5 w-5'} />
+          <span className={clsx('shrink-0 rounded-lg bg-gradient-to-br shadow-md', compact ? 'p-1.5' : 'p-1.5 sm:rounded-xl sm:p-2.5', t.badge, t.dark ? 'text-slate-950' : 'text-white')}>
+            <Icon className={clsx(compact ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 sm:h-5 sm:w-5')} />
           </span>
         )}
       </div>
       <div className={clsx(
         'relative min-w-0 break-words font-bold leading-snug tracking-tight text-foreground',
-        compact ? 'mt-1.5 text-base xl:text-lg' : 'mt-3 text-lg sm:text-xl xl:text-2xl',
+        compact ? 'mt-1.5 text-base xl:text-lg' : 'mt-2 text-base sm:mt-3 sm:text-xl xl:text-2xl',
       )}>{value}</div>
       {hint && <div className={clsx('relative text-faint', compact ? 'mt-0.5 text-[11px]' : 'mt-1 text-xs')}>{hint}</div>}
     </motion.div>
