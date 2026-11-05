@@ -193,7 +193,7 @@
      with the last 0 on the next line is as bad as losing it. Breaking is
      allowed at the space after the currency and nowhere else, and the scale
      above is set so that even eight figures rarely reach that. */
-  .tabular-nums { word-break: keep-all; overflow-wrap: break-word; }
+  .tabular-nums { word-break: normal; overflow-wrap: normal; }
 
   /* Rows, cards and buttons, tighter. A phone has the width of one column and
      should spend it on the content, not on padding. */

@@ -314,7 +314,7 @@ export default function Dashboard() {
         <div className="relative grid gap-4 p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-center lg:gap-10 lg:p-7">
           {/* The money, first. */}
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-brand-300/90">Money you can use right now</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-300/90 sm:text-[11px] sm:tracking-[0.2em]">Money you can use right now</p>
             <p className="mt-1.5 text-[30px] font-bold leading-none tracking-tight text-white sm:mt-2 sm:text-5xl">
               {formatCurrency(totalFunds)}
             </p>
@@ -354,15 +354,34 @@ export default function Dashboard() {
               is left out; its colour stays reserved by its original position
               so the others do not shuffle when one empties. */}
           <div className="min-w-0">
+            {/* On a phone the pockets are one strip, not a panel. Three full
+                rows with an icon, a name, a balance and a share turned the
+                banner into most of the screen; the strip answers the same
+                question — where is it — in a line and a half, and taps
+                through to the same page. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:hidden">
+              {heroAccounts.map((a) => (
+                <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
+                  className="flex min-w-0 cursor-pointer items-center gap-1.5 text-left">
+                  <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', HERO_DOT[a._i % HERO_DOT.length])} />
+                  <span className="truncate text-[11px] text-white/50">{a.name}</span>
+                  <span className={clsx('text-xs font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white/90')}>
+                    {formatCurrency(a.balance)}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="hidden sm:block">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="hidden text-[11px] font-bold uppercase tracking-[0.2em] text-white/45 sm:block">Where it sits</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Where it sits</p>
               <button onClick={() => navigate('/finance?tab=accounts')}
                 className="cursor-pointer text-[11px] font-semibold text-brand-300 transition hover:text-brand-200">
                 Open accounts →
               </button>
             </div>
             {totalFunds > 0 && (
-              <div className="mt-2 hidden h-1.5 w-full overflow-hidden rounded-full bg-white/10 sm:mt-3 sm:flex sm:h-2">
+              <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-white/10">
                 {heroAccounts.map((a) => (
                   <div key={a.id} className={HERO_BAR[a._i % HERO_BAR.length]}
                     style={{ width: `${Math.max(0, (a.balance / totalFunds) * 100)}%` }} />
@@ -373,16 +392,16 @@ export default function Dashboard() {
                 and made three small panels compete with the headline; the bar
                 above already carries the proportions, so these only have to
                 name them. Hairline dividers, one line each, numbers aligned. */}
-            <div className="mt-2 divide-y divide-white/10 sm:mt-4">
+            <div className="mt-4 divide-y divide-white/10">
               {heroAccounts.map((a) => {
                 const i = a._i;
                 const Icon = ACCOUNT_ICON[a.type] || Wallet;
                 const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
                 return (
                   <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                    className="group flex w-full cursor-pointer items-center gap-2.5 py-2 text-left transition duration-200 hover:opacity-80 sm:gap-3 sm:py-2.5">
-                    <span className={clsx('h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5', HERO_DOT[i % HERO_DOT.length])} />
-                    <Icon className="hidden h-4 w-4 shrink-0 text-white/45 sm:block" />
+                    className="group flex w-full cursor-pointer items-center gap-3 py-2.5 text-left transition duration-200 hover:opacity-80">
+                    <span className={clsx('h-2.5 w-2.5 shrink-0 rounded-full', HERO_DOT[i % HERO_DOT.length])} />
+                    <Icon className="h-4 w-4 shrink-0 text-white/45" />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/75">{a.name}</span>
                     <span className={clsx('shrink-0 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
                       {formatCurrency(a.balance)}
@@ -391,6 +410,7 @@ export default function Dashboard() {
                   </button>
                 );
               })}
+            </div>
             </div>
           </div>
         </div>

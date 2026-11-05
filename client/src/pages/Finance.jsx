@@ -1145,13 +1145,16 @@ function Accounts({ onQuick }) {
   const total = held.reduce((s, a) => s + a.balance, 0);
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+      {/* Stacked on a phone. Side by side, five buttons that will not shrink
+          squeezed the heading into a 90 px column and broke the figure over
+          three lines — "TSh 2," / "520," / "000" on the owner's screen. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-faint">Total cash position</div>
           <div className="text-2xl font-black text-brand-400 tabular-nums">{formatCurrency(total)}</div>
-          <div className="text-[11px] text-faint">What your accounts are holding right now.</div>
+          <div className="hidden text-[11px] text-faint sm:block">What your accounts are holding right now.</div>
         </div>
-        <div className="flex gap-2">
+        <div className="tab-row sm:flex sm:gap-2">
           <Button variant="secondary" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-4 w-4" /> Transfer</Button>
           <Button variant="secondary" onClick={() => setCorrectOpen(true)}><Scale className="h-4 w-4" /> Correct balance</Button>
           <Button variant="secondary" onClick={() => onQuick('income')}><ArrowDownLeft className="h-4 w-4" /> Income</Button>
