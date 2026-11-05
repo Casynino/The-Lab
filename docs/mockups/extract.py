@@ -21,6 +21,13 @@ wall; tuck flap 54.2-94.2. Booklet (110 x 26 x 4): cover folds at 100.1 /
 70 x 36 booklet (73 x 22.5 x 5): the small drawing in the corner of the 70 x 36
 sheet, 25.6-98.6 mm across; back cover 290.6-312.7 (printed upside down),
 spine 312.7-317.7, front cover 317.7-340.4.
+
+Pepa Ndogo Kubwa, 77 x 44 (carton 81 x 126 x 55, hook bottom): walls
+126 / 81 / 126 / 81 at the folds below, between 233.30 and 287.74 mm down the
+sheet; the lid is 126 mm tall off the back wall, with its tuck flap above it.
+The lid, and the booklet's back cover, print upside down, as a lid hinged at
+the back does. Its booklet (80 x 26.2 x 4.15) is on page 2, 88.98-169.07 mm
+across: back cover 123.15-149.15, spine 149.15-153.30, front 153.30-179.50.
 """
 import sys, os
 from PIL import Image
@@ -63,4 +70,24 @@ x0, x1 = P(25.6), P(98.6)
 n.crop((x0+I, P(317.7)+I, x1-I, P(340.4)-I)).save(os.path.join(F, "bk70_front.png"))
 n.crop((x0+I, P(290.6)+I, x1-I, P(312.7)-I)).rotate(180).save(os.path.join(F, "bk70_back.png"))
 n.crop((x0+I, P(312.7)+1, x1-I, P(317.7)-1)).save(os.path.join(F, "bk70_spine.png"))
+
+# The 77 x 44 box. Its pictures used to be built from the King Size artwork
+# fitted to these narrower panels, because this die arrived without artwork on
+# it. It has its own now — a different Maasai, its own information panel, its
+# own booklet — so nothing of this box is borrowed any more.
+N77 = os.path.exists(os.path.join(W, "n77/p-1.png"))
+if N77:
+    s = Image.open(os.path.join(W, "n77/p-1.png")).convert("RGB")
+    XS = [79.21, 205.19, 286.22, 412.20, 493.23]      # wall folds, left to right
+    WT, WB = 233.30, 287.74                           # the wall band
+    for name, i in (("n77_left", 0), ("n77_front", 1), ("n77_right", 2), ("n77_back", 3)):
+        cut(s, XS[i], WT, XS[i + 1], WB, name)
+    cut(s, XS[3], 107.27, XS[4], WT, "n77_lid", 180)
+    cut(s, XS[3],  67.39, XS[4], 107.27, "n77_flap", 180)
+
+    b = Image.open(os.path.join(W, "n77/p-2.png")).convert("RGB")
+    bx0, bx1 = P(88.98), P(169.07)
+    b.crop((bx0+I, P(153.30)+I, bx1-I, P(179.50)-I)).save(os.path.join(F, "bk77_front.png"))
+    b.crop((bx0+I, P(123.15)+I, bx1-I, P(149.15)-I)).rotate(180).save(os.path.join(F, "bk77_back.png"))
+    b.crop((bx0+I, P(149.15)+1, bx1-I, P(153.30)-1)).save(os.path.join(F, "bk77_spine.png"))
 print("faces written to", F)

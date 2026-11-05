@@ -91,25 +91,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-hero-700.0725c99a39.webp",
-        "bytes": 33930
+        "src": "/pepa/kubwa-hero-700.d562574160.webp",
+        "bytes": 28590
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-hero-1000.8738849574.webp",
-        "bytes": 57976
+        "src": "/pepa/kubwa-hero-1000.fa4edf2d23.webp",
+        "bytes": 48240
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-hero-700.ae04d586f6.jpg",
-        "bytes": 45884
+        "src": "/pepa/kubwa-hero-700.3257b8d492.jpg",
+        "bytes": 41662
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-hero-1000.4de433859f.jpg",
-        "bytes": 81139
+        "src": "/pepa/kubwa-hero-1000.f8fa8f686a.jpg",
+        "bytes": 72164
       }
     ],
     "w": 1000,
@@ -120,25 +120,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-back-700.37fd3b643c.webp",
-        "bytes": 23536
+        "src": "/pepa/kubwa-back-700.9d1432db4d.webp",
+        "bytes": 31396
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-back-1000.de8d0da732.webp",
-        "bytes": 40432
+        "src": "/pepa/kubwa-back-1000.fad76071e7.webp",
+        "bytes": 53272
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-back-700.88d32acd3f.jpg",
-        "bytes": 33682
+        "src": "/pepa/kubwa-back-700.44c9e657f6.jpg",
+        "bytes": 43709
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-back-1000.00b07d2ebb.jpg",
-        "bytes": 58898
+        "src": "/pepa/kubwa-back-1000.07c6e8ceca.jpg",
+        "bytes": 76065
       }
     ],
     "w": 1000,
@@ -149,25 +149,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-booklets-700.e1d361f955.webp",
-        "bytes": 23036
+        "src": "/pepa/kubwa-booklets-700.80eec36138.webp",
+        "bytes": 28576
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-booklets-1000.5ba1e55a6b.webp",
-        "bytes": 39340
+        "src": "/pepa/kubwa-booklets-1000.447926ecbe.webp",
+        "bytes": 48640
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-booklets-700.e25a3fbc47.jpg",
-        "bytes": 32388
+        "src": "/pepa/kubwa-booklets-700.9cf2b32755.jpg",
+        "bytes": 40643
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-booklets-1000.31c1aa06fd.jpg",
-        "bytes": 57702
+        "src": "/pepa/kubwa-booklets-1000.4ed892fc33.jpg",
+        "bytes": 70731
       }
     ],
     "w": 1000,

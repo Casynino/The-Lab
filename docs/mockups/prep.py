@@ -144,6 +144,13 @@ if KSS:
 faces = ["n70_front", "n70_top", "n70_bottom", "n70_back", "n70_left", "n70_right"]
 if KSS:
     faces += ["kss_lid", "kss_left", "kss_right", "kss_back"]
+# The 77 x 44 box, when its own die has been rendered. Its front panel carries
+# the thumb notch, which has to become a real hole rather than a white bite.
+N77 = os.path.exists(F + "n77_front.png")
+if N77:
+    nf, _ = erase_folds(Image.open(F + "n77_front.png"))
+    cut_hole(nf, [(nf.width // 2, 1), (nf.width // 2, 6)]).save(F + "t_n77_front.png")
+    faces += ["n77_left", "n77_right", "n77_back", "n77_lid", "n77_flap"]
 for n in tuple(faces):
     im, k = erase_folds(Image.open(F+n+".png"))
     if k: print(f"  {n}: erased {k} fold line(s)")
@@ -153,6 +160,8 @@ for n in tuple(faces):
 booklets = ["bk70_front", "bk70_back", "bk70_spine"]
 if KSS:
     booklets = ["bk_front", "bk_back", "bk_spine"] + booklets
+if N77:
+    booklets += ["bk77_front", "bk77_back", "bk77_spine"]
 for n in tuple(booklets):
     im, k = erase_folds(Image.open(F+n+".png"))
     if k: print(f"  {n}: erased {k} fold line(s)")

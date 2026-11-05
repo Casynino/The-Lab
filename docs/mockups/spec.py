@@ -282,6 +282,47 @@ KSS = dict(
     ],
 )
 
+KUBWA_SIZE_TEXT = "81 × 126 × 55 mm (width × depth × height)"
+
+# Pepa Ndogo Kubwa, the 77 x 44. Every figure measured off its own die at
+# 300 dpi: the wall band, the four wall folds, the lid and its tuck flap, the
+# glue flap and the hook bottom.
+KUBWA = dict(
+    key="kubwa", folder="n77", sheet_page=1,
+    name="Pepa Ndogo Kubwa — 77 × 44 box", short="77 × 44 box", zh="大盒 77 × 44 mm",
+    box=(81, 55, 126), size_text=KUBWA_SIZE_TEXT,
+    sheet=(446, 289), scale=0.62,
+    # No display render: how this carton stands open is the one thing its die
+    # does not settle (see the notes), so the cover shows it with its booklets
+    # instead of a display nobody has confirmed.
+    hero="with-booklets", display=False,
+    panels=[
+        ("Front panel", "Pepa, QR, half-round thumb notch", "正面板", 205.19, 233.30, 286.22, 287.74, "81 × 54 mm"),
+        ("Back panel", "information panel and QR; the lid hinges off it", "背面板", 412.20, 233.30, 493.23, 287.74, "81 × 54 mm"),
+        ("Side panel", "scene, 50 LEAVES, 50 PER BOX, Pepa", "侧面板", 79.21, 233.30, 205.19, 287.74, "126 × 54 mm"),
+        ("Side panel", "scene, 50 LEAVES, 50 PER BOX, Pepa", "侧面板", 286.22, 233.30, 412.20, 287.74, "126 × 54 mm"),
+        ("Lid", "50 LEAVES, Pepa, scene; folded across its middle", "盒盖", 412.20, 107.27, 493.23, 233.30, "81 × 126 mm"),
+        ("Lid tuck flap", "tucks inside the front panel", "盒盖插舌", 412.20, 67.39, 493.23, 107.27, "81 × 40 mm"),
+        ("Glue flap", "glued to the side panel", "粘口", 64.18, 233.30, 79.08, 287.74, "15 × 54 mm"),
+        ("Hook bottom", "four flaps, paste areas marked on the die", "勾底", 79.21, 287.74, 493.23, 339.51, "414 × 51 mm"),
+    ],
+    tear=(79.21, 233.30, 412.20),
+    facts=[
+        ("Assembled box", "成盒尺寸", KUBWA_SIZE_TEXT),
+        ("Paper size", "纸张尺寸", "77 × 44 mm, brown, slow burn"),
+        ("Leaves per booklet", "每本张数", "50 printed on the art (die sheet allows up to 60)"),
+        ("Booklets per box", "每盒本数", "50"),
+        ("Papers per box", "每盒张数", "2,500"),
+        ("Booklet", "内册尺寸", "80 × 26.2 × 4.15 mm, on page 2 of the same file"),
+        ("Wall band", "围板高度", "54.44 mm; walls 126 · 81 · 126 · 81 mm round the box"),
+        ("Flat sheet", "展开尺寸", "the die measures 446 × 289 mm on a 549 × 436 mm file"),
+        ("QR codes", "二维码",
+         "Front panel, back panel and booklet. All three read "
+         "HTTPS://HAO-STOCK.VERCEL.APP/P2 — see the checks at the end"),
+    ],
+    opening=[],
+)
+
 def sheet_image(design, box):
     src = os.path.join(W, design["dir"], box["folder"], f"p-{box['sheet_page']}.png")
     return Image.open(src).convert("RGB")
@@ -376,11 +417,12 @@ def cover_page(deck, design, box):
     d.text((M + d.textlength(design["label"], font=F(12, True)) + round(3 * MM), y + round(0.6 * MM)),
            design["zh"], font=Z(9.5), fill=SOFT)
     y += round(12 * DPI / 72 * 1.8)
-    hero = fit(shot(design, box, "open-display"), PW - 2 * M, round(105 * MM))
+    hero = fit(shot(design, box, box.get("hero", "open-display")), PW - 2 * M, round(105 * MM))
     img.paste(hero, (M + (PW - 2 * M - hero.width) // 2, y))
     y += hero.height + round(4 * MM)
-    y = caption(d, M, y, "The box as it is meant to stand on the counter",
-                "开盒后作为柜台展示盒的状态")
+    y = caption(d, M, y, *(("The box as it is meant to stand on the counter",
+                            "开盒后作为柜台展示盒的状态") if box.get("display", True)
+                           else ("The box with the booklets it holds", "盒体与所装内册")))
     y += round(4 * MM)
     y = table(d, M, y, box["facts"], PW - 2 * M)
     y += round(3 * MM)
@@ -461,6 +503,14 @@ def booklet_page(deck, design, box):
                 ("Flat", "展开", "73 × 93 mm blank on the box sheet; end flaps reach 103 mm across"),
                 ("Leaves", "张数", "50 leaves of 70 × 36 mm paper"),
                 ("Printed", "印刷内容", "Scene, 50 LEAVES, NATURAL UNREFINED ROLLING PAPERS, Pepa, QR")]
+    elif box["key"] == "kubwa":
+        src = Image.open(os.path.join(W, design["dir"], "n77", "p-2.png")).convert("RGB")
+        crop = (84.0, 78.0, 174.0, 184.0)
+        rows = [("Assembled", "成品", "80 × 26.2 × 4.15 mm, as the die block states"),
+                ("Cover panels", "封面各折段",
+                 "9 / 3.5 / 25.3 / 3.9 / 26.0 / 4.15 / 26.2 mm across the folds, tuck flap first"),
+                ("Leaves", "张数", "50 leaves of 77 × 44 mm paper (die sheet allows up to 60)"),
+                ("Printed", "印刷内容", "Scene, 50 LEAVES, NATURAL UNREFINED ROLLING PAPERS, Pepa, QR")]
     else:
         src = Image.open(os.path.join(W, design["dir"], "kss2", "p-2.png")).convert("RGB")
         crop = (56.0, 85.5, 191.0, 188.0)
@@ -479,7 +529,8 @@ def booklet_page(deck, design, box):
     y += round(3 * MM)
     y = table(d, M, y, rows, PW - 2 * M)
     y += round(4 * MM)
-    im = fit(shot(design, box, "booklet" if box["key"] == "big" else "with-booklets"), PW - 2 * M, round(70 * MM))
+    im = fit(shot(design, box, "with-booklets" if box["key"] == "small" else "booklet"),
+             PW - 2 * M, round(70 * MM))
     img.paste(im, (M + (PW - 2 * M - im.width) // 2, y))
 
 # ── what the factory has to be told ──────────────────────────────────────────
@@ -487,12 +538,14 @@ SHARED_NOTES = [
     ("No bleed anywhere on this file: the artwork stops exactly on the cut. Extend it 3 mm past "
      "every outer cut, or a 1 mm drift on the guillotine shows as a white edge on the box.",
      "本文件未留出血：图案正好止于裁切线。所有外轮廓裁切线处图案需向外延伸 3 mm 出血，否则裁切误差 1 mm 就会在盒边留出白边。"),
-    ("None of the QR codes has a quiet zone: the white stops within a module of the code. Add 4 "
-     "modules of white around each — about 3 mm on the box, about 1.3 mm on the booklet. Every code "
-     "on these files was scanned and carries HTTPS://THE-HAOLAB.VERCEL.APP/P (upper case, as a QR "
-     "in alphanumeric mode requires), which opens https://the-haolab.vercel.app/p.",
-     "各二维码均无静区：白底在码边缘即止。请在每个码四周补足 4 个模块宽的空白 —— 盒面约 3 mm，内册约 1.3 mm。"
-     "本文件所有二维码均已扫描校验，内容为 HTTPS://THE-HAOLAB.VERCEL.APP/P（大写，符合二维码字母数字模式要求），可打开 https://the-haolab.vercel.app/p。"),
+    ("No QR code on these files has a proper quiet zone: the white stops within a module of the "
+     "code. Add 4 modules of white around each — about 3 mm on a box panel, about 1.3 mm on a "
+     "booklet. Every code was scanned before this deck was written; the address each one carries "
+     "is listed under that box's own checks. The capitals are deliberate and must not be tidied: "
+     "a QR has a cheaper mode for capitals and digits, and addresses are not case-sensitive.",
+     "本文件各二维码均无足够静区：白底在码边缘即止。请在每个码四周补足 4 个模块宽的空白 —— 盒面约 3 mm，"
+     "内册约 1.3 mm。所有二维码在编写本文件前均已扫描校验，各盒所含网址见该盒专有确认事项。"
+     "大写为刻意设定，请勿改为小写：二维码对大写字母与数字有更省空间的编码模式，且网址不区分大小写。"),
     ("On both booklets the Pepa logo, the 50 and the QR sit under 2 mm from a crease — some under "
      "1 mm. Move them 2–3 mm clear before the run, so a fold does not press through the artwork. "
      "The boxes themselves are fine on this.",
@@ -525,6 +578,38 @@ BOX_NOTES = {
          "Confirm them in writing before the run.",
          "本文件没有工艺说明框：纸板、颜色、表面处理均未注明，开机前请书面确认。"),
     ],
+    "kubwa": [
+        ("Every QR code on this file reads HTTPS://HAO-STOCK.VERCEL.APP/P2. The 70 × 36 box "
+         "prints HTTPS://THE-HAOLAB.VERCEL.APP/P. We scanned this one: it does open this box's "
+         "own page, because hao-stock.vercel.app is another address for the same site. But the "
+         "two boxes will not carry the same brand address, and an address printed on a carton "
+         "cannot be changed afterwards. Please confirm which one is to be printed before the run.",
+         "本文件所有二维码内容为 HTTPS://HAO-STOCK.VERCEL.APP/P2，而 70 × 36 小盒印的是 "
+         "HTTPS://THE-HAOLAB.VERCEL.APP/P。我们已扫描校验：该码确实可打开本盒自己的产品页面，"
+         "因为 hao-stock.vercel.app 是同一网站的另一个域名。但两款盒子将印出不同的品牌网址，"
+         "且盒上网址印后无法更改。开机前请确认印刷哪一个。"),
+        ("At 233.30 mm — the top edge of the box — the three line types differ by panel, and "
+         "that is how the box is meant to work: the two 126 mm side panels are drawn as a "
+         "perforation, the 81 mm front panel as a cut either side of the thumb notch, and the "
+         "lid column as a fold, so the lid stays hinged on the back panel. Please confirm the "
+         "side panels are perforated and not simply cut.",
+         "233.30 mm 处（盒口位置）三种线型按面区分，这正是该盒的结构：两个 126 mm 侧面板画为齿线，"
+         "81 mm 正面板在半圆缺口两侧画为裁切线，盒盖一列画为压痕折线，使盒盖始终与背面板相连。"
+         "请确认侧面板为齿线（打孔）而非普通裁切。"),
+        ("The code on the back panel is 15.5 mm across — 0.62 mm per module, which is comfortable "
+         "— but its white stops 0.8 of a module from the code, and only 0.4 of a module below it. "
+         "Add 4 modules of white all round, about 2.5 mm.",
+         "背面板二维码尺寸 15.5 mm，每模块 0.62 mm，尺寸本身充裕；但码四周留白仅 0.8 个模块，"
+         "下方仅 0.4 个模块。请在四周补足 4 个模块宽的空白，约 2.5 mm。"),
+        ("The die block reads SPECIFICATIONS 50 BOOKELES; it should read 50 BOOKLETS.",
+         "刀版规格框 SPECIFICATIONS 一栏写作 50 BOOKELES，应为 50 BOOKLETS。"),
+        ("The booklet die block says 60 leaves max. That is the die's ceiling; we are running 50 "
+         "leaves, as the artwork says.",
+         "内册刀版工艺框写“60 leaves max”，那是刀版上限；我们按图案所印的 50 LEAVES 生产。"),
+        ("The legend marks the half-round thumb notch “CUT 半圆裁切可替换”. Confirm it is cut on "
+         "this run, and that nothing printed runs into it.",
+         "图例将半圆缺口标注为“CUT 半圆裁切可替换”。请确认本批次按裁切执行，且图文不压到缺口。"),
+    ],
     "big": [
         ("The back panel prints “Size: 70 × 36 mm / Type: Paper Ndogo”. That is the small box's "
          "paper. This box holds King Size Slim, 108 × 44 mm.",
@@ -555,7 +640,10 @@ def box_deck(design, box):
     cover_page(deck, design, box)
     faces_page(deck, design, box)
     angles_page(deck, design, box)
-    display_page(deck, design, box)
+    # A box whose display state its die does not settle gets no display page:
+    # a drawing of a fold nobody has confirmed is worse than no drawing.
+    if box.get("display", True):
+        display_page(deck, design, box)
     sizes_page(deck, design, box)
     dieline_page(deck, design, box)
     booklet_page(deck, design, box)
@@ -624,7 +712,8 @@ DESIGNS = [
     # One artwork, two cartons. The deck titles come from the box, so the design
     # label stays the brand rather than naming one of its boxes.
     dict(dir="d1", slug="pepa", label="Pepa", zh="Pepa",
-         small_file="70×36刀版 0 3.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色-- 4.pdf"),
+         small_file="70×36刀版 0 3.pdf", kubwa_file="77x44 50入勾底 120310.pdf",
+         big_file="【7244】册子KSS本色13g无水印 OHIS棕色-- 4.pdf"),
 ]
 
 # A deck is only written for what the workspace actually holds. Working on one
@@ -637,11 +726,11 @@ if __name__ == "__main__":
     designs = [d for d in DESIGNS if os.path.isdir(os.path.join(W, d["dir"]))]
     if not designs:
         raise SystemExit(f"no design folders in {W} — expected one of: " + ", ".join(d["dir"] for d in DESIGNS))
-    pairs = [(d, b) for d in designs for b in (SMALL, KSS) if rendered(d, b)]
+    pairs = [(d, b) for d in designs for b in (SMALL, KUBWA, KSS) if rendered(d, b)]
     for design, box in pairs:
         box_deck(design, box)
     for design in designs:
-        for box in (SMALL, KSS):
+        for box in (SMALL, KUBWA, KSS):
             if (design, box) not in pairs:
                 print(f"skipped {design['slug']} {box['key']}: no renders in {design['dir']}/out")
     # Side-by-side pages need every box of every design; one design has nothing
