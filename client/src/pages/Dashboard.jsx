@@ -18,6 +18,7 @@ import {
   Smartphone,
   PiggyBank,
   ClipboardList,
+  ArrowLeftRight,
   Undo2,
   Factory,
   PackageX,
@@ -276,14 +277,17 @@ export default function Dashboard() {
     attention.stockRequests + attention.settlements + attention.returns +
     attention.overdueSettlements + attention.lowStock.count + attention.outOfStock;
 
+  // `short` is the tile's word on a phone. "Approve requests" in an 80 px
+  // tile wraps to three lines and the row stops being a row.
   const QUICK = [
-    { label: 'Approve requests', icon: ClipboardList, to: '/stock-requests', badge: attention.stockRequests },
-    { label: 'Approve settlements', icon: Timer, to: '/settlements', badge: attention.settlements },
-    { label: 'Approve returns', icon: Undo2, to: '/returns', badge: attention.returns },
-    { label: 'Record sale', icon: ShoppingCart, to: '/sales' },
-    { label: 'Record expense', icon: Receipt, to: '/finance?tab=expenses' },
-    { label: 'Purchase stock', icon: Factory, to: '/finance?tab=suppliers' },
-    { label: 'Adjust stock', icon: SlidersHorizontal, to: '/inventory' },
+    { label: 'Approve requests', short: 'Requests', kind: 'approve', icon: ClipboardList, to: '/stock-requests', badge: attention.stockRequests },
+    { label: 'Approve settlements', short: 'Settle', kind: 'approve', icon: Timer, to: '/settlements', badge: attention.settlements },
+    { label: 'Approve returns', short: 'Returns', kind: 'approve', icon: Undo2, to: '/returns', badge: attention.returns },
+    { label: 'Record sale', short: 'Sale', kind: 'money', icon: ShoppingCart, to: '/sales' },
+    { label: 'Record expense', short: 'Expense', kind: 'money', icon: Receipt, to: '/finance?tab=expenses' },
+    { label: 'Purchase stock', short: 'Purchase', kind: 'stock', icon: Factory, to: '/finance?tab=suppliers' },
+    { label: 'Adjust stock', short: 'Adjust', kind: 'stock', icon: SlidersHorizontal, to: '/inventory' },
+    { label: 'Move stock', short: 'Transfer', kind: 'stock', icon: ArrowLeftRight, to: '/transfers' },
   ];
 
   return (
@@ -423,32 +427,53 @@ export default function Dashboard() {
           Eight identical grey buttons make you read all eight. Tinting them by
           what they touch — approvals, money, stock — lets the eye find the one
           it wants without reading, and the colours match the rest of the page. */}
-      {/* Two even columns on a phone. Wrapping pills of different widths left
-          seven buttons in a staircase that was hard to aim at and taller than
-          it needed to be. */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-5 sm:flex sm:flex-wrap">
+      {/* On a phone these are tiles on a four-column grid, the way a banking
+          app lays its actions out: one glyph, one word, every tile the same
+          size. As pills they wrapped by their own width, so eight buttons made
+          a staircase with an orphan on the last line — it looked like an
+          accident rather than a set of things you can do. From sm they are
+          the tinted pills they always were, where there is room for the whole
+          phrase. */}
+      <div className="mb-4 grid grid-cols-4 gap-2 sm:mb-5 sm:flex sm:flex-wrap sm:gap-2">
         {QUICK.map((q) => {
+          // Every tint class carries the sm: prefix. The tile's own dark
+          // surface is unprefixed, so the two never fight over which `bg-`
+          // wins — responsive variants are emitted after the base utilities,
+          // and the pill gets its colour back at every width above a phone.
           const TINT = {
-            approve: 'border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20',
-            money: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20',
-            stock: 'border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20',
+            approve: 'sm:border-sky-500/30 sm:bg-sky-500/10 sm:text-sky-300 sm:hover:bg-sky-500/20',
+            money: 'sm:border-emerald-500/30 sm:bg-emerald-500/10 sm:text-emerald-300 sm:hover:bg-emerald-500/20',
+            stock: 'sm:border-violet-500/30 sm:bg-violet-500/10 sm:text-violet-300 sm:hover:bg-violet-500/20',
           };
-          const kind = q.label.startsWith('Approve') ? 'approve'
-            : /sale|expense/i.test(q.label) ? 'money' : 'stock';
+          const GLYPH = {
+            approve: 'bg-sky-500/15 text-sky-300',
+            money: 'bg-emerald-500/15 text-emerald-300',
+            stock: 'bg-violet-500/15 text-violet-300',
+          };
           return (
             <button
               key={q.label}
               type="button"
               onClick={() => navigate(q.to)}
+              title={q.label}
               className={clsx(
-                'relative inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium transition duration-200 sm:px-3.5 sm:text-sm',
-                'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
-                TINT[kind],
+                'relative cursor-pointer transition duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
+                // phone: a tile
+                'flex flex-col items-center gap-1.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-1 py-2.5 active:scale-95',
+                // desktop: the pill it has always been
+                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-xl sm:px-3.5 sm:py-2 sm:text-sm sm:font-medium sm:active:scale-100',
+                TINT[q.kind],
               )}
             >
-              <q.icon className="h-4 w-4 shrink-0" /> <span className="text-left leading-tight">{q.label}</span>
+              <span className={clsx('flex h-9 w-9 items-center justify-center rounded-xl sm:h-auto sm:w-auto sm:rounded-none sm:!bg-transparent', GLYPH[q.kind])}>
+                <q.icon className="h-[18px] w-[18px] sm:h-4 sm:w-4" />
+              </span>
+              <span className="w-full truncate text-center text-[11px] font-medium leading-none text-white/70 sm:w-auto sm:text-left sm:text-sm sm:leading-tight sm:text-inherit">
+                <span className="sm:hidden">{q.short}</span>
+                <span className="hidden sm:inline">{q.label}</span>
+              </span>
               {q.badge > 0 && (
-                <span className="ml-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{q.badge}</span>
+                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white sm:static sm:ml-0.5">{q.badge}</span>
               )}
             </button>
           );
