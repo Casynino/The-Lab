@@ -13,7 +13,7 @@ spec decks follow: nothing is typed from memory.
     python3 pattern_brief.py <workspace>
 
 Reads  <workspace>/n77/p-1.png   (pdftoppm -r 300 of the pattern)
-       <workspace>/out/Pepa-QR-76x44.png  (the code this box must carry)
+       <workspace>/out/Pepa-QR-77x44.png  (the code this box must carry, from qr.js)
 Writes <workspace>/pdf/Pepa-77x44-pattern-brief.pdf
 """
 import sys, os
@@ -53,7 +53,7 @@ GEOM = [
 PRINT_TEXT = [
     ("Colour", "Brown"),
     ("Size", "77 × 44 mm"),
-    ("Type", "Paper Ndogo Kubwa (Unfiltered)"),
+    ("Type", "Paper Ndogo Kubwa"),
     ("Feature", "Slow Burn"),
 ]
 
@@ -83,7 +83,7 @@ ty = text(d, (M + round(5 * MM), ty), "此盒必须使用自己的二维码。",
 y += box_h + round(6 * MM)
 
 # the code itself, printed on the page at its true minimum size
-qr_path = os.path.join(W, "out", "Pepa-QR-76x44.png")
+qr_path = os.path.join(W, "out", "Pepa-QR-77x44.png")
 if os.path.exists(qr_path):
     side = round(28 * MM)
     qr = Image.open(qr_path).convert("RGB").resize((side, side), Image.NEAREST)

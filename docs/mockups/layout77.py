@@ -14,7 +14,7 @@ and the wording, which is what sends a box to print wrong.
 
 Reads  <workspace>/n77/p-1.png      the pattern at 300 dpi
        <workspace>/f/kss_*.png      the artwork's faces, already cut
-       <workspace>/out/Pepa-QR-77x44.png
+       <workspace>/out/Pepa-QR-77x44.png  (from qr.js)
 Writes <workspace>/out/Pepa-77x44-layout.png
        <workspace>/pdf/Pepa-77x44-layout-proof.pdf
 """
@@ -104,7 +104,7 @@ if os.path.exists(qr_path):
 tx = bx0 + pad + P(3)
 ty = by0 + P(12)
 for label, value in (("Colour:", "Brown"), ("Size:", "77 × 44 mm"),
-                     ("Type:", "Paper Ndogo Kubwa (Unfiltered)"), ("Feature:", "Slow Burn")):
+                     ("Type:", "Paper Ndogo Kubwa"), ("Feature:", "Slow Burn")):
     d.text((tx, ty), label, font=font(6, True), fill=(32, 28, 24))
     d.text((tx + P(13), ty), value, font=font(6), fill=(32, 28, 24))
     ty += P(6)

@@ -4,25 +4,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/hero-700.0277501c56.webp",
-        "bytes": 32026
+        "src": "/pepa/hero-700.c13e470276.webp",
+        "bytes": 32046
       },
       {
         "w": 1000,
-        "src": "/pepa/hero-1000.92d5a53e38.webp",
-        "bytes": 52842
+        "src": "/pepa/hero-1000.03929e7888.webp",
+        "bytes": 52822
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/hero-700.8d46a0344f.jpg",
-        "bytes": 49367
+        "src": "/pepa/hero-700.3f7eec6122.jpg",
+        "bytes": 49330
       },
       {
         "w": 1000,
-        "src": "/pepa/hero-1000.d158822756.jpg",
-        "bytes": 85186
+        "src": "/pepa/hero-1000.de4345e85f.jpg",
+        "bytes": 85100
       }
     ],
     "w": 1000,
@@ -62,25 +62,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/pair-700.735aa1d16b.webp",
-        "bytes": 29232
+        "src": "/pepa/pair-700.dad6d36d34.webp",
+        "bytes": 29226
       },
       {
         "w": 1000,
-        "src": "/pepa/pair-1000.e14b21f493.webp",
-        "bytes": 51450
+        "src": "/pepa/pair-1000.30692a635b.webp",
+        "bytes": 51432
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/pair-700.2609b80df6.jpg",
-        "bytes": 44369
+        "src": "/pepa/pair-700.818828670f.jpg",
+        "bytes": 44340
       },
       {
         "w": 1000,
-        "src": "/pepa/pair-1000.1329bdd494.jpg",
-        "bytes": 78260
+        "src": "/pepa/pair-1000.e2b939beef.jpg",
+        "bytes": 78176
       }
     ],
     "w": 1000,
@@ -120,25 +120,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-back-700.19d6557fb1.webp",
-        "bytes": 23774
+        "src": "/pepa/kubwa-back-700.37fd3b643c.webp",
+        "bytes": 23536
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-back-1000.b6de34948c.webp",
-        "bytes": 40886
+        "src": "/pepa/kubwa-back-1000.de8d0da732.webp",
+        "bytes": 40432
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-back-700.b5b11ed71c.jpg",
-        "bytes": 34012
+        "src": "/pepa/kubwa-back-700.88d32acd3f.jpg",
+        "bytes": 33682
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-back-1000.7b465f7de9.jpg",
-        "bytes": 59459
+        "src": "/pepa/kubwa-back-1000.00b07d2ebb.jpg",
+        "bytes": 58898
       }
     ],
     "w": 1000,

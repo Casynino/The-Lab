@@ -36,7 +36,13 @@ def fill(face, w_mm, h_mm):
                     (im.width - w) // 2 + w, (im.height - h) // 2 + h))
 
 def info_panel(w_mm, h_mm, qr_path):
-    """This box's own information panel: its figures, and its own code."""
+    """This box's own information panel: its figures, and its own code.
+
+    The wording follows the 70 x 36 box's final die-line (`70×36刀版 0 3.pdf`,
+    25 Oct 2026), whose only change from the revision before it was dropping
+    "(Unfiltered)" from the Type line. This panel is lettered here rather than
+    supplied, so it follows the house wording rather than inventing its own.
+    """
     base = fill("kss_back", w_mm, h_mm)
     board = base.getpixel((base.width // 2, int(base.height * 0.1)))
     panel = Image.new("RGB", base.size, board)
@@ -48,7 +54,7 @@ def info_panel(w_mm, h_mm, qr_path):
         panel.paste(qr, (panel.width - pad - side, (panel.height - side) // 2))
     y = int(12 * K)
     for label, value in (("Colour:", "Brown"), ("Size:", "77 × 44 mm"),
-                         ("Type:", "Paper Ndogo Kubwa (Unfiltered)"), ("Feature:", "Slow Burn")):
+                         ("Type:", "Paper Ndogo Kubwa"), ("Feature:", "Slow Burn")):
         d.text((pad + int(3 * K), y), label, font=font(6, True), fill=(32, 28, 24))
         d.text((pad + int(16 * K), y), value, font=font(6), fill=(32, 28, 24))
         y += int(6 * K)

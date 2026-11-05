@@ -160,18 +160,42 @@ def caption(d, x, y, en, zh=None, w=None):
         y += round(8.5 * DPI / 72 * 1.5)
     return y
 
-def note_block(d, x, y, w, title, zh, items):
+# Content has to stop above the footer rule, which sits 7 mm up from the
+# bottom margin with the die-line name under it.
+FOOT_LIMIT = PH - M - round(10 * MM)
+
+def _band(d, x, y, w, title, zh):
     d.rectangle([x, y, x + w, y + round(9 * MM)], fill=PANEL)
     d.text((x + round(3 * MM), y + round(2 * MM)), title, font=F(12, True), fill=ACCENT)
     d.text((x + round(3 * MM) + d.textlength(title, font=F(12, True)) + round(3 * MM),
             y + round(2.6 * MM)), zh, font=Z(9), fill=SOFT)
-    y += round(12 * MM)
+    return y + round(12 * MM)
+
+def note_h(d, en, zhl, w):
+    """How tall one note will be, before a single line of it is drawn."""
+    inner = w - round(5 * MM)
+    fe, fz = mixed(10, en), Z(8.5)
+    return (len(wrap(d, en, fe, inner)) * round(fe.size * 1.35)
+            + len(wrap(d, zhl, fz, inner)) * round(fz.size * 1.5)
+            + round(3 * MM))
+
+def note_block(d, x, y, w, title, zh, items, deck=None, heading=None, zh_heading=None):
+    """A ruled list of notes. Returns the draw it ended on and the new y.
+
+    Given a deck, a list longer than what is left of the page carries on over
+    the next one. Without that, the last note of the factory copy printed on
+    top of the footer — and the note it ate was a question for the supplier.
+    """
+    y = _band(d, x, y, w, title, zh)
     for en, zhl in items:
+        if deck is not None and y + note_h(d, en, zhl, w) > FOOT_LIMIT:
+            _img, d, y = deck.page(heading, zh_heading)
+            y = _band(d, x, y, w, title + " (continued)", zh + "（续）")
         d.ellipse([x + round(1 * MM), y + round(1.6 * MM), x + round(2.6 * MM), y + round(3.2 * MM)], fill=ACCENT)
         yy = para(d, (x + round(5 * MM), y), en, mixed(10, en), INK, w - round(5 * MM))
         yy = para(d, (x + round(5 * MM), yy), zhl, Z(8.5), SOFT, w - round(5 * MM), leading=1.5)
         y = yy + round(3 * MM)
-    return y
+    return d, y
 
 # ── what each box is, measured off its own die ───────────────────────────────
 K = 300 / 25.4                      # the die-lines are rendered at 300 dpi
@@ -473,11 +497,9 @@ SHARED_NOTES = [
      "1 mm. Move them 2–3 mm clear before the run, so a fold does not press through the artwork. "
      "The boxes themselves are fine on this.",
      "两款内册上的 Pepa 标志、“50”及二维码距压痕线均不足 2 mm，部分不足 1 mm。开机前请调整至 2–3 mm，避免折线压到图文。盒体本身无此问题。"),
-    ("The two booklets use the same illustration and the same words in different layouts, and "
-     "neither prints its paper size. They are 73 mm and 110 mm long, so they can be told apart on "
-     "a shelf but not in a box of loose stock. Print the paper size on each booklet.",
-     "两种规格的内册使用相同插画与文案，仅排版不同，且都未印纸张尺寸。两者长度为 73 mm 与 110 mm，货架上可分辨，"
-     "散装时无法分辨。建议在内册上加印纸张尺寸。"),
+    ("Neither booklet prints its paper size, and the two Pepa sizes are close enough that loose "
+     "stock of them cannot be told apart. Print the paper size on each booklet.",
+     "两种内册均未印纸张尺寸，且两种 Pepa 规格尺寸接近，散装时无法分辨。建议在内册上加印纸张尺寸。"),
     ("“50 PER BOX” means 50 booklets, not 50 papers. Consider “50 BOOKLETS PER BOX”.",
      "“50 PER BOX”指 50 本内册，而非 50 张纸。建议改为“50 BOOKLETS PER BOX”。"),
     ("The brand owner, Hǎo-Labs, is not printed anywhere on the box or the booklet. Add it if it "
@@ -520,10 +542,13 @@ BOX_NOTES = {
 }
 
 def notes_page(deck, design, box):
-    img, d, y = deck.page("Before printing — please check", "印前确认事项")
-    y = note_block(d, M, y, PW - 2 * M, "On this box", "本盒专有", BOX_NOTES[box["key"]])
+    head, zh = "Before printing — please check", "印前确认事项"
+    img, d, y = deck.page(head, zh)
+    d, y = note_block(d, M, y, PW - 2 * M, "On this box", "本盒专有", BOX_NOTES[box["key"]],
+                      deck=deck, heading=head, zh_heading=zh)
     y += round(4 * MM)
-    y = note_block(d, M, y, PW - 2 * M, "On both boxes", "两盒通用", SHARED_NOTES)
+    d, y = note_block(d, M, y, PW - 2 * M, "On both boxes", "两盒通用", SHARED_NOTES,
+                      deck=deck, heading=head, zh_heading=zh)
 
 def box_deck(design, box):
     deck = Deck("Pepa", f"{box['name']} · {design['label']}", design[box["key"] + "_file"])
@@ -580,13 +605,16 @@ def all_deck(designs):
                          "两款设计盒型一致：以下参数通用")
             table(d, M, yy + round(2 * MM), box["facts"][:5], PW - 2 * M)
     img, d, y = deck.page("Before printing — please check", "印前确认事项")
-    y = note_block(d, M, y, PW - 2 * M, "70 × 36 box", "小盒", BOX_NOTES["small"])
+    d, y = note_block(d, M, y, PW - 2 * M, "70 × 36 box", "小盒", BOX_NOTES["small"],
+                      deck=deck, heading="Before printing — per box", zh_heading="印前确认事项／分盒")
     y += round(3 * MM)
-    note_block(d, M, y, PW - 2 * M, "King Size Slim", "大盒", BOX_NOTES["big"])
+    note_block(d, M, y, PW - 2 * M, "King Size Slim", "大盒", BOX_NOTES["big"],
+               deck=deck, heading="Before printing — per box", zh_heading="印前确认事项／分盒")
     # The shared checks are the ones the factory reads most; they get a page of
     # their own here rather than a slice of the list.
     img, d, y = deck.page("Before printing — both boxes", "印前确认事项／两盒通用")
-    note_block(d, M, y, PW - 2 * M, "Both boxes", "两盒通用", SHARED_NOTES)
+    note_block(d, M, y, PW - 2 * M, "Both boxes", "两盒通用", SHARED_NOTES,
+               deck=deck, heading="Before printing — both boxes", zh_heading="印前确认事项／两盒通用")
     deck.save(os.path.join(OUT, "Pepa-all-designs.pdf"))
 
 # The design going to print. The 70 x 36 box ships first and is the product the
@@ -596,7 +624,7 @@ DESIGNS = [
     # One artwork, two cartons. The deck titles come from the box, so the design
     # label stays the brand rather than naming one of its boxes.
     dict(dir="d1", slug="pepa", label="Pepa", zh="Pepa",
-         small_file="70×36刀版 -1.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色-- 4.pdf"),
+         small_file="70×36刀版 0 3.pdf", big_file="【7244】册子KSS本色13g无水印 OHIS棕色-- 4.pdf"),
 ]
 
 # A deck is only written for what the workspace actually holds. Working on one
