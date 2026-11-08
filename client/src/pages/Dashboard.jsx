@@ -609,18 +609,12 @@ export default function Dashboard() {
           // surface is unprefixed, so the two never fight over which `bg-`
           // wins — responsive variants are emitted after the base utilities,
           // and the pill gets its colour back at every width above a phone.
-          const TINT = {
-            sky: 'sm:border-sky-500/30 sm:bg-sky-500/10 sm:text-sky-300 sm:hover:bg-sky-500/20',
-            amber: 'sm:border-amber-500/30 sm:bg-amber-500/10 sm:text-amber-300 sm:hover:bg-amber-500/20',
-            rose: 'sm:border-rose-500/30 sm:bg-rose-500/10 sm:text-rose-300 sm:hover:bg-rose-500/20',
-            emerald: 'sm:border-emerald-500/30 sm:bg-emerald-500/10 sm:text-emerald-300 sm:hover:bg-emerald-500/20',
-            orange: 'sm:border-orange-500/30 sm:bg-orange-500/10 sm:text-orange-300 sm:hover:bg-orange-500/20',
-            violet: 'sm:border-violet-500/30 sm:bg-violet-500/10 sm:text-violet-300 sm:hover:bg-violet-500/20',
-          };
-          // Colour only. The icon used to sit in a tinted rounded box inside a
-          // bordered tile — two shapes around a shape, eight of them in a grid.
-          // Bare line icons in one row read as a toolbar instead of a wall.
-          const GLYPH = {
+          // One colour per action, and it lives on the GLYPH — never on the
+          // pill. Six pills each washed in their own tint made a paint chart;
+          // a plain dark pill with a coloured mark on it is the same
+          // information, read in a glance, and it is what Target Express's
+          // own row does. The phone shows the mark alone.
+          const TONE = {
             sky: 'text-sky-400',
             amber: 'text-amber-400',
             rose: 'text-rose-400',
@@ -638,12 +632,11 @@ export default function Dashboard() {
                 'cursor-pointer transition duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
                 // phone: a bare icon over its word, in one scrolling line
                 'flex min-w-0 flex-col items-center gap-1.5 rounded-xl py-1.5 active:scale-95',
-                // desktop: the tinted pill it has always been
-                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:px-4 sm:py-2 sm:text-sm sm:font-semibold sm:active:scale-100',
-                TINT[q.kind],
+                // desktop: a plain dark pill, its chrome the same for all six
+                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:border-white/10 sm:bg-white/[0.04] sm:px-4 sm:py-2 sm:text-sm sm:font-medium sm:text-zinc-200 sm:hover:border-white/20 sm:hover:bg-white/[0.07] sm:active:scale-100',
               )}
             >
-              <span className={clsx('relative flex items-center justify-center sm:!text-inherit', GLYPH[q.kind])}>
+              <span className={clsx('relative flex items-center justify-center', TONE[q.kind])}>
                 <q.icon className="h-[22px] w-[22px] sm:h-4 sm:w-4" strokeWidth={1.6} />
                 {q.badge > 0 && (
                   <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white sm:hidden">{q.badge}</span>

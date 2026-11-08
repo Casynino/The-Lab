@@ -37,6 +37,15 @@ const FOCUS = 'outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60
 /** The room the page leaves for the floating panel, open and folded. */
 const ROOM = { open: '15.5rem', rail: '5.9rem' };
 
+/* The job title under the name in the banner, which is not the same thing as
+   the permission the account holds. The owner reads Director (MD) there;
+   every screen that is ABOUT permissions — the foot of the sidebar, the
+   account menu, the Users table — still says Administrator, because that is
+   what the account can do. Target Express draws the same distinction in its
+   page-banner (jobTitle). */
+const BANNER_TITLE = { ADMIN: 'Director (MD)' };
+const bannerTitle = (role) => BANNER_TITLE[role] || ROLE_LABELS[role] || role;
+
 function readStore(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -283,7 +292,13 @@ function GlassSidebar({
             }
             const GroupIcon = ICONS[s.icon] || Package;
             const here = s.items.some((item) => item.to === current);
-            const isOpen = folds.opened[s.key] ?? here;
+            // On a phone the drawer is opened because somebody wants to GO
+            // somewhere, so it shows the pages rather than the headings above
+            // them. Folded, seven headings left two thirds of a full-height
+            // panel empty and it read as a short card stranded at the top.
+            // Open, the list fills the panel and scrolls — which is what a
+            // menu is for. Folding one by hand still sticks, per device.
+            const isOpen = folds.opened[s.key] ?? (sheet || here);
             const pending = s.items.reduce((n, item) => n + (counts[item.badge] || 0), 0);
             return (
               <div key={s.key} className="mt-0.5">
@@ -366,7 +381,7 @@ function GlassSidebar({
     </div>
   );
 
-  if (mode === 'sheet') return <div className="glass-panel glass-drawer flex max-h-[calc(100dvh-1.5rem)] flex-col">{full}</div>;
+  if (mode === 'sheet') return <div className="glass-panel glass-drawer flex h-full flex-col">{full}</div>;
 
   return (
     <aside
@@ -512,7 +527,7 @@ function Banner({ user, unread, onBell }) {
           <span aria-hidden className="hidden h-px w-10 shrink-0 bg-brand-400/60 sm:block" />
         </h1>
         <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.32em] text-brand-400 sm:mt-2 sm:text-[11px]">
-          {ROLE_LABELS[user?.role] || user?.role}
+          {bannerTitle(user?.role)}
         </p>
         <p className="mt-1 text-xs text-white/65 sm:mt-1.5 sm:text-sm">
           {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
@@ -687,7 +702,7 @@ export default function Layout() {
             initial={{ x: -24, opacity: 0.6 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="absolute left-3 top-3 max-h-[calc(100dvh-1.5rem)] w-[14.75rem] max-w-[78vw]"
+            className="absolute inset-y-3 left-3 w-[14.75rem] max-w-[78vw]"
           >
             <GlassSidebar mode="sheet" {...shared} onNavigate={() => setDrawer(null)} autoFocusSearch={drawer === 'search'} />
           </motion.div>
