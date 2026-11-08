@@ -494,7 +494,10 @@ function Banner({ user, unread, onBell }) {
       {/* The cartons at the side: softly on a phone, clearer on a computer. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 w-[45%] opacity-35 sm:w-[34%] sm:opacity-60 lg:w-[30%] lg:opacity-80"
+        /* A phone has room for the name or for the cartons, not both: the
+           window is narrower there and the picture quieter, so the second
+           carton never cuts through the words. A desk shows the shelf. */
+        className="pointer-events-none absolute inset-y-0 right-0 w-[40%] opacity-40 sm:w-[38%] sm:opacity-75 lg:w-[34%] lg:opacity-95"
         style={{ WebkitMaskImage: 'linear-gradient(to left,#000 20%,transparent)', maskImage: 'linear-gradient(to left,#000 20%,transparent)' }}
       >
         <img src="/banner.webp" alt="" className="h-full w-full object-cover" />
