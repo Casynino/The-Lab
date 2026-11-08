@@ -1,4 +1,5 @@
 import { LIVE, STEADY } from '@/lib/polling';
+import { InstallPrompt, InstallButton } from '@/components/InstallApp';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -10,7 +11,7 @@ import {
   ClipboardCheck, UserCog, Repeat, BarChart3, ScrollText, ShieldCheck, Settings,
   Bell, Menu, X, LogOut, ChevronDown, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Loader2,
   Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt,
-  Wallet, Wrench, QrCode, Search,
+  Wallet, Wrench, QrCode, Search, Smartphone,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NAV, NAV_GROUPS, ROLE_LABELS, ROLES } from '@/lib/constants';
@@ -449,6 +450,12 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
             <Bell className="h-3.5 w-3.5" /><span className="flex-1">Notifications</span><CountPill count={unread} />
           </button>
           <button className={item} onClick={() => { setOpen(false); onPassword(); }}><Lock className="h-3.5 w-3.5" /> Change password</button>
+          {/* Draws nothing on a computer, or once it is on the home screen. */}
+          <InstallButton render={(openSheet) => (
+            <button className={item} onClick={() => { setOpen(false); openSheet(); }}>
+              <Smartphone className="h-3.5 w-3.5" /> Get the app
+            </button>
+          )} />
           <div className="my-1 border-t border-border" />
           <button className={clsx(item, 'text-rose-400 hover:bg-rose-500/10 hover:text-rose-300')} onClick={onSignOut}>
             <LogOut className="h-3.5 w-3.5" /> Sign out
@@ -705,7 +712,7 @@ export default function Layout() {
   ].filter((t) => items.some((i) => i.to === t.to));
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <GlassSidebar mode="desktop" {...shared} collapsed={collapsed} onCollapsedChange={setFold} />
 
       {/* The phone's drawer */}
@@ -730,7 +737,7 @@ export default function Layout() {
         <div className="lg:pl-[var(--sidebar-room)]">
           {/* On a phone the menu and the bell have to stay reachable, so they
               sit in a small bar of their own above everything. */}
-          <div className="sticky top-0 z-30 px-3 pt-3 lg:hidden">
+          <div className="sticky top-0 z-30 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] lg:hidden">
             <div className="glass flex h-12 items-center gap-1 rounded-2xl border px-2">
               <button className="cursor-pointer rounded-xl p-2 text-muted hover:bg-white/[0.06] hover:text-white" onClick={() => setDrawer('menu')} aria-label="Menu">
                 <Menu className="h-5 w-5" />
@@ -749,7 +756,7 @@ export default function Layout() {
             </div>
           </div>
 
-          <main className="overflow-x-clip p-3 pb-24 sm:p-4 lg:p-6 lg:pb-8">
+          <main className="overflow-x-clip p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-4 lg:p-6 lg:pb-8">
             {/* 1400px was a cap for a laptop. On the owner's own screen it
                 left a hand's width of empty page between the rail and the
                 banner, and the same again on the right — the panel looked
@@ -805,6 +812,10 @@ export default function Layout() {
       </nav>
 
       {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
+
+      {/* Offered once, a moment after a phone's browser reaches the app: a tab
+          keeps its address bar, and only an installed app is full screen. */}
+      <InstallPrompt />
     </div>
   );
 }

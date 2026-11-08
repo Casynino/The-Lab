@@ -25,6 +25,19 @@ window.addEventListener('load', () => sessionStorage.removeItem('chunkReloadAtte
 
 watchForNewVersion();
 
+/* The service worker that lets a phone install the app and run it full screen,
+   with no address bar. It caches nothing — see client/public/sw.js. A browser
+   without service workers, or a page opened over plain http on a LAN address,
+   simply skips this; the iPhone route does not need it at all. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* nothing to do: the app works exactly as before, it just cannot be
+         installed from this browser's menu. */
+    });
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

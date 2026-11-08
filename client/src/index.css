@@ -18,12 +18,22 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    /* The three things that give a web page away on a phone, whatever the
+       phone: the grey flash under a finger, the quarter-second wait while the
+       browser decides a tap was not a double-tap-to-zoom, and the white
+       rubber-band at the end of a list. An installed app has none of them, so
+       neither does this one. */
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    overscroll-behavior-y: none;
+    background-color: #0a0a0b;
   }
   body {
     @apply bg-background text-foreground antialiased;
     /* A stray wide element must scroll inside its own container (tables do),
        never widen the page — kills the mobile zoom-out/pan effect. */
     overflow-x: clip;
+    overscroll-behavior-y: none;
     font-family: 'Inter', system-ui, sans-serif;
     /* Near-black backdrop with faint lime/emerald glows for depth. */
     background-color: #0a0a0b;
