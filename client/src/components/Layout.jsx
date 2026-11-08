@@ -643,6 +643,17 @@ export default function Layout() {
 
   const items = NAV.filter((n) => (n.exact ? n.roles.includes(user?.role) : hasRole(...n.roles)));
 
+  /* The banner belongs to the home page, not to the shell. Target Express puts
+     it inside each desk's hero (components/app/desk-hero, warehouse-hero, the
+     executive dashboard) and gives every other page a plain title instead — a
+     name, a job title and today's date say nothing useful above a table of
+     orders, and they cost a hundred and fifty pixels of the screen on every
+     one of them. Every page in here already carries its own PageHeader. */
+  const atHome = location.pathname === '/';
+
+  // The bell hangs off the banner, so leaving home takes its anchor with it.
+  useEffect(() => { setBellOpen(false); }, [location.pathname]);
+
   const setFold = (next) => { writeStore(SIDEBAR_KEY, next); setCollapsed(next); };
 
   const { data: unread = 0 } = useQuery({
@@ -746,7 +757,7 @@ export default function Layout() {
                 screen and still stops text running away on an ultra-wide. */}
             <div className="mx-auto w-full max-w-[1920px]">
               <div className="relative">
-                <Banner user={user} unread={unread} onBell={() => setBellOpen((v) => !v)} />
+                {atHome && <Banner user={user} unread={unread} onBell={() => setBellOpen((v) => !v)} />}
                 {bellOpen && (
                   <BellPanel
                     position="max-lg:fixed max-lg:inset-x-3 max-lg:top-[4.25rem] max-lg:w-auto lg:left-3 lg:top-14"
