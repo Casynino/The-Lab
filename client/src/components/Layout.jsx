@@ -31,7 +31,7 @@ const ICONS = {
    it open (8 Nov 2026). */
 const SIDEBAR_KEY = 'lab.sidebar.collapsed';
 const FOLD_KEY = 'lab.sidebar.folds';
-const LABEL = 'px-4 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.18em] g-dim';
+const LABEL = 'pb-1 text-[10.5px] font-semibold uppercase tracking-[0.18em] g-dim';
 const FOCUS = 'outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60';
 
 /** The room the page leaves for the floating panel, open and folded. */
@@ -108,6 +108,10 @@ function GlassSidebar({
   const current = activeTo(items, pathname);
   const folds = useFolds(sections, current);
   const rail = mode === 'desktop' && collapsed;
+  // The phone's drawer is read close up and has no room to spare, so it runs
+  // tighter than the panel on a desk — smaller rows, smaller glyphs, less air
+  // around everything. The desk panel is untouched by any of this.
+  const sheet = mode === 'sheet';
 
   const [query, setQuery] = useState('');
   const searchRef = useRef(null);
@@ -168,14 +172,14 @@ function GlassSidebar({
 
   const brand = (compact) => (
     <NavLink to="/" onClick={onNavigate} data-hint="The Lab"
-      className={clsx('flex min-w-0 items-center gap-3 rounded-full', FOCUS)}>
-      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 ring-2 ring-brand-500/40">
-        <Boxes className="h-[18px] w-[18px] text-slate-950" />
+      className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
+      <span className={clsx('grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 ring-2 ring-brand-500/40', sheet ? 'size-9' : 'size-10')}>
+        <Boxes className={clsx('text-slate-950', sheet ? 'size-4' : 'h-[18px] w-[18px]')} />
       </span>
       {compact ? null : (
         <span className="min-w-0 leading-tight">
-          <span className="block truncate text-sm font-semibold tracking-tight g-strong">The Lab</span>
-          <span className="mt-0.5 block truncate text-xs g-soft">Hao Stock</span>
+          <span className={clsx('block truncate font-semibold tracking-tight g-strong', sheet ? 'text-[13px]' : 'text-sm')}>The Lab</span>
+          <span className={clsx('mt-0.5 block truncate g-soft', sheet ? 'text-[11px]' : 'text-xs')}>Hao Stock</span>
         </span>
       )}
     </NavLink>
@@ -192,14 +196,15 @@ function GlassSidebar({
           onClick={onNavigate}
           aria-current={active ? 'page' : undefined}
           className={clsx(
-            'relative flex items-center gap-3 rounded-lg text-[13px]',
+            'relative flex items-center rounded-lg',
             FOCUS,
-            child ? 'px-3 py-1.5' : 'px-3 py-2',
-            mode === 'sheet' && (child ? 'min-h-9' : 'min-h-10'),
+            sheet
+              ? clsx('gap-2.5 px-2.5 text-[12.5px]', child ? 'min-h-7 py-1' : 'min-h-8 py-1.5')
+              : clsx('gap-3 text-[13px]', child ? 'px-3 py-1.5' : 'px-3 py-2'),
             active ? 'glass-active font-medium g-strong' : 'glass-row g-text g-hover',
           )}
         >
-          <Icon className={clsx('shrink-0', child ? 'size-4' : 'h-[18px] w-[18px]', active ? 'g-lime' : 'g-icon')} />
+          <Icon className={clsx('shrink-0', child ? (sheet ? 'size-[15px]' : 'size-4') : (sheet ? 'size-4' : 'h-[18px] w-[18px]'), active ? 'g-lime' : 'g-icon')} />
           <span className="min-w-0 flex-1 truncate">{item.label}</span>
           {where ? <span className="shrink-0 text-[11px] g-soft">{where}</span> : <CountPill count={count} />}
         </NavLink>
@@ -214,7 +219,7 @@ function GlassSidebar({
 
   const full = (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-2 px-4 pb-3 pr-7 pt-4">
+      <div className={clsx('flex items-center justify-between gap-2', sheet ? 'px-3 pb-2 pr-6 pt-3' : 'px-4 pb-2.5 pr-7 pt-3.5')}>
         {brand(false)}
         {mode === 'sheet' ? (
           <button type="button" onClick={onNavigate}
@@ -225,9 +230,9 @@ function GlassSidebar({
         ) : null}
       </div>
 
-      <div className="px-3 pb-1.5">
-        <label className="glass-field flex items-center gap-2.5 px-3.5 py-2 text-sm g-soft">
-          <Search className="size-4 shrink-0" />
+      <div className={clsx('pb-1.5', sheet ? 'px-2.5' : 'px-3')}>
+        <label className={clsx('glass-field flex items-center gap-2.5 g-soft', sheet ? 'px-2.5 py-1.5 text-[13px]' : 'px-3.5 py-2 text-sm')}>
+          <Search className={clsx('shrink-0', sheet ? 'size-[15px]' : 'size-4')} />
           <input
             ref={searchRef}
             value={query}
@@ -244,7 +249,7 @@ function GlassSidebar({
             }}
             placeholder="Search pages"
             aria-label="Search pages"
-            className="g-input g-strong min-w-0 flex-1 bg-transparent text-sm outline-none"
+            className={clsx('g-input g-strong min-w-0 flex-1 bg-transparent outline-none', sheet ? 'text-[13px]' : 'text-sm')}
           />
           {query ? (
             <button type="button" onClick={() => { setQuery(''); searchRef.current?.focus(); }}
@@ -271,7 +276,7 @@ function GlassSidebar({
             if (!s.label) {
               return (
                 <div key={s.key} className={clsx(i > 0 && 'mt-2')}>
-                  {heading ? <p className={clsx(LABEL, 'pt-3')}>{heading}</p> : null}
+                  {heading ? <p className={clsx(LABEL, sheet ? 'px-3 pt-2.5' : 'px-4 pt-3')}>{heading}</p> : null}
                   <ul className="space-y-0.5">{s.items.map((item) => row(item))}</ul>
                 </div>
               );
@@ -282,19 +287,19 @@ function GlassSidebar({
             const pending = s.items.reduce((n, item) => n + (counts[item.badge] || 0), 0);
             return (
               <div key={s.key} className="mt-0.5">
-                {heading ? <p className={clsx(LABEL, 'pt-4')}>{heading}</p> : null}
+                {heading ? <p className={clsx(LABEL, sheet ? 'px-3 pt-3' : 'px-4 pt-4')}>{heading}</p> : null}
                 <button
                   type="button"
                   onClick={() => folds.set(s.key, !isOpen)}
                   aria-expanded={isOpen}
                   className={clsx(
-                    'glass-row g-hover flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium',
+                    'glass-row g-hover flex w-full items-center rounded-lg text-left font-medium',
                     FOCUS,
-                    mode === 'sheet' && 'min-h-10',
+                    sheet ? 'min-h-8 gap-2.5 px-2.5 py-1.5 text-[12.5px]' : 'gap-3 px-3 py-2 text-[13px]',
                     here ? 'g-strong' : 'g-text',
                   )}
                 >
-                  <GroupIcon className={clsx('h-[18px] w-[18px] shrink-0', here ? 'g-lime' : 'g-icon')} />
+                  <GroupIcon className={clsx('shrink-0', sheet ? 'size-4' : 'h-[18px] w-[18px]', here ? 'g-lime' : 'g-icon')} />
                   <span className="min-w-0 flex-1 truncate">{s.label}</span>
                   {!isOpen && <CountPill count={pending} />}
                   <ChevronDown className={clsx('g-icon h-[15px] w-[15px] shrink-0 transition-transform duration-200', isOpen && 'rotate-180')} />
@@ -361,7 +366,7 @@ function GlassSidebar({
     </div>
   );
 
-  if (mode === 'sheet') return <div className="glass-panel glass-drawer h-full">{full}</div>;
+  if (mode === 'sheet') return <div className="glass-panel glass-drawer flex max-h-[calc(100dvh-1.5rem)] flex-col">{full}</div>;
 
   return (
     <aside
@@ -442,7 +447,7 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
         onClick={() => setOpen((v) => !v)}
         className={clsx('glass-row flex w-full cursor-pointer items-center gap-3 rounded-full text-left', FOCUS, rail ? 'justify-center p-1' : 'px-2 py-2')}
       >
-        <span className="relative grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500/25 to-emerald-700/30 text-xs font-semibold text-brand-200 ring-1 ring-white/20">
+        <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#2b3b20] to-[#141d0e] text-xs font-semibold text-brand-200 ring-1 ring-white/20">
           {initials(user?.name)}
           {unread > 0 && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-[#12150f]" />}
         </span>
@@ -682,7 +687,7 @@ export default function Layout() {
             initial={{ x: -24, opacity: 0.6 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="absolute inset-y-3 left-3 w-[82vw] max-w-[17rem]"
+            className="absolute left-3 top-3 max-h-[calc(100dvh-1.5rem)] w-[14.75rem] max-w-[78vw]"
           >
             <GlassSidebar mode="sheet" {...shared} onNavigate={() => setDrawer(null)} autoFocusSearch={drawer === 'search'} />
           </motion.div>
@@ -716,7 +721,12 @@ export default function Layout() {
           </div>
 
           <main className="overflow-x-clip p-3 pb-24 sm:p-4 lg:p-6 lg:pb-8">
-            <div className="mx-auto w-full max-w-[1400px]">
+            {/* 1400px was a cap for a laptop. On the owner's own screen it
+                left a hand's width of empty page between the rail and the
+                banner, and the same again on the right — the panel looked
+                marooned. Target Express caps at 1920, which fills a wide
+                screen and still stops text running away on an ultra-wide. */}
+            <div className="mx-auto w-full max-w-[1920px]">
               <div className="relative">
                 <Banner user={user} unread={unread} onBell={() => setBellOpen((v) => !v)} />
                 {bellOpen && (

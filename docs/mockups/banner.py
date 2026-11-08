@@ -17,7 +17,7 @@ import glob, os, math
 PUB = os.path.join(os.path.dirname(__file__), "..", "..", "client", "public")
 PUB = os.path.normpath(PUB)
 
-W, H = 1080, 360
+W, H = 1440, 380
 
 
 def pick(pattern):
@@ -54,7 +54,7 @@ glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
 gp = glow.load()
 for x in range(0, W, 2):
     for y in range(0, H, 2):
-        d = math.hypot((x - 620) / 460, (y - 110) / 300)
+        d = math.hypot((x - 800) / 560, (y - 120) / 320)
         a = max(0, int(120 * (1 - d)))
         if a:
             for dx in (0, 1):
@@ -81,9 +81,9 @@ def place(img, h, cx, cy, dim=0.0):
 hero = key_out(pick("hero-1000.*.webp") or pick("hero-700.*.webp"))
 book = key_out(pick("kubwa-booklets-1000.*.webp") or pick("kubwa-booklets-700.*.webp"))
 
-place(book, 170, 250, 250, dim=0.34)   # behind, further off
-place(hero, 296, 520, 182, dim=0.06)   # the tall carton, the hero of it
-place(book, 212, 850, 236, dim=0.02)   # the open box and its booklets
+place(book, 232, 250, 266, dim=0.34)   # behind, further off
+place(hero, 348, 660, 188, dim=0.05)   # the tall carton, the hero of it
+place(book, 272, 1130, 250, dim=0.02)  # the open box and its booklets
 
 out = Image.alpha_composite(base, shelf)
 
@@ -91,8 +91,8 @@ out = Image.alpha_composite(base, shelf)
 # dark to end on rather than a cut.
 edge = Image.new("L", (W, H), 255)
 ep = edge.load()
-for x in range(240):
-    v = int(255 * (x / 240) ** 1.4)
+for x in range(200):
+    v = int(255 * (x / 200) ** 1.4)
     for y in range(H):
         ep[x, y] = v
 dark = Image.new("RGBA", (W, H), (7, 16, 13, 255))

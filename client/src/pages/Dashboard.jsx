@@ -574,6 +574,10 @@ export default function Dashboard() {
 
   // `short` is the tile's word on a phone. "Approve requests" in an 80 px
   // tile wraps to three lines and the row stops being a row.
+  // Six, not eight. Adjusting stock and moving it between stores are
+  // corrections and housekeeping — they live on Inventory and Transfers, where
+  // the person doing them already is. What stays here is the day itself: the
+  // three approvals a rep's boxes need, and the three ways money moves.
   const QUICK = [
     { label: 'Approve requests', short: 'Requests', kind: 'sky', icon: ClipboardList, to: '/stock-requests', badge: attention.stockRequests },
     { label: 'Approve settlements', short: 'Settle', kind: 'amber', icon: Timer, to: '/settlements', badge: attention.settlements },
@@ -581,8 +585,6 @@ export default function Dashboard() {
     { label: 'Record sale', short: 'Sale', kind: 'emerald', icon: ShoppingCart, to: '/sales' },
     { label: 'Record expense', short: 'Expense', kind: 'orange', icon: Receipt, to: '/finance?tab=expenses' },
     { label: 'Purchase stock', short: 'Purchase', kind: 'violet', icon: Factory, to: '/finance?tab=suppliers' },
-    { label: 'Adjust stock', short: 'Adjust', kind: 'cyan', icon: SlidersHorizontal, to: '/inventory' },
-    { label: 'Move stock', short: 'Transfer', kind: 'indigo', icon: ArrowLeftRight, to: '/transfers' },
   ];
 
   return (
@@ -601,7 +603,7 @@ export default function Dashboard() {
           accident rather than a set of things you can do. From sm they are
           the tinted pills they always were, where there is room for the whole
           phrase. */}
-      <div className="tab-row mb-4 gap-0.5 sm:mb-5 sm:gap-2">
+      <div className="mb-4 grid grid-cols-6 gap-0.5 sm:mb-5 sm:flex sm:flex-wrap sm:gap-2">
         {QUICK.map((q) => {
           // Every tint class carries the sm: prefix. The tile's own dark
           // surface is unprefixed, so the two never fight over which `bg-`
@@ -614,8 +616,6 @@ export default function Dashboard() {
             emerald: 'sm:border-emerald-500/30 sm:bg-emerald-500/10 sm:text-emerald-300 sm:hover:bg-emerald-500/20',
             orange: 'sm:border-orange-500/30 sm:bg-orange-500/10 sm:text-orange-300 sm:hover:bg-orange-500/20',
             violet: 'sm:border-violet-500/30 sm:bg-violet-500/10 sm:text-violet-300 sm:hover:bg-violet-500/20',
-            cyan: 'sm:border-cyan-500/30 sm:bg-cyan-500/10 sm:text-cyan-300 sm:hover:bg-cyan-500/20',
-            indigo: 'sm:border-indigo-500/30 sm:bg-indigo-500/10 sm:text-indigo-300 sm:hover:bg-indigo-500/20',
           };
           // Colour only. The icon used to sit in a tinted rounded box inside a
           // bordered tile — two shapes around a shape, eight of them in a grid.
@@ -627,8 +627,6 @@ export default function Dashboard() {
             emerald: 'text-emerald-400',
             orange: 'text-orange-400',
             violet: 'text-violet-400',
-            cyan: 'text-cyan-400',
-            indigo: 'text-indigo-400',
           };
           return (
             <button
@@ -639,14 +637,14 @@ export default function Dashboard() {
               className={clsx(
                 'cursor-pointer transition duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
                 // phone: a bare icon over its word, in one scrolling line
-                'flex basis-[4.1rem] flex-col items-center gap-1.5 rounded-xl py-1.5 active:scale-95',
+                'flex min-w-0 flex-col items-center gap-1.5 rounded-xl py-1.5 active:scale-95',
                 // desktop: the tinted pill it has always been
-                'sm:basis-auto sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:px-4 sm:py-2 sm:text-sm sm:font-semibold sm:active:scale-100',
+                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:px-4 sm:py-2 sm:text-sm sm:font-semibold sm:active:scale-100',
                 TINT[q.kind],
               )}
             >
               <span className={clsx('relative flex items-center justify-center sm:!text-inherit', GLYPH[q.kind])}>
-                <q.icon className="h-6 w-6 sm:h-4 sm:w-4" strokeWidth={1.75} />
+                <q.icon className="h-[22px] w-[22px] sm:h-4 sm:w-4" strokeWidth={1.6} />
                 {q.badge > 0 && (
                   <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white sm:hidden">{q.badge}</span>
                 )}
