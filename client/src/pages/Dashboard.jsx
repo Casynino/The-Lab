@@ -601,7 +601,7 @@ export default function Dashboard() {
           accident rather than a set of things you can do. From sm they are
           the tinted pills they always were, where there is room for the whole
           phrase. */}
-      <div className="mb-4 grid grid-cols-4 gap-2 sm:mb-5 sm:flex sm:flex-wrap sm:gap-2">
+      <div className="tab-row mb-4 gap-0.5 sm:mb-5 sm:gap-2">
         {QUICK.map((q) => {
           // Every tint class carries the sm: prefix. The tile's own dark
           // surface is unprefixed, so the two never fight over which `bg-`
@@ -617,15 +617,18 @@ export default function Dashboard() {
             cyan: 'sm:border-cyan-500/30 sm:bg-cyan-500/10 sm:text-cyan-300 sm:hover:bg-cyan-500/20',
             indigo: 'sm:border-indigo-500/30 sm:bg-indigo-500/10 sm:text-indigo-300 sm:hover:bg-indigo-500/20',
           };
+          // Colour only. The icon used to sit in a tinted rounded box inside a
+          // bordered tile — two shapes around a shape, eight of them in a grid.
+          // Bare line icons in one row read as a toolbar instead of a wall.
           const GLYPH = {
-            sky: 'bg-sky-500/15 text-sky-300',
-            amber: 'bg-amber-500/15 text-amber-300',
-            rose: 'bg-rose-500/15 text-rose-300',
-            emerald: 'bg-emerald-500/15 text-emerald-300',
-            orange: 'bg-orange-500/15 text-orange-300',
-            violet: 'bg-violet-500/15 text-violet-300',
-            cyan: 'bg-cyan-500/15 text-cyan-300',
-            indigo: 'bg-indigo-500/15 text-indigo-300',
+            sky: 'text-sky-400',
+            amber: 'text-amber-400',
+            rose: 'text-rose-400',
+            emerald: 'text-emerald-400',
+            orange: 'text-orange-400',
+            violet: 'text-violet-400',
+            cyan: 'text-cyan-400',
+            indigo: 'text-indigo-400',
           };
           return (
             <button
@@ -634,23 +637,26 @@ export default function Dashboard() {
               onClick={() => navigate(q.to)}
               title={q.label}
               className={clsx(
-                'relative cursor-pointer transition duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
-                // phone: a tile
-                'flex flex-col items-center gap-1.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-1 py-2.5 active:scale-95',
-                // desktop: the pill it has always been
-                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:px-4 sm:py-2 sm:text-sm sm:font-semibold sm:active:scale-100',
+                'cursor-pointer transition duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
+                // phone: a bare icon over its word, in one scrolling line
+                'flex basis-[4.1rem] flex-col items-center gap-1.5 rounded-xl py-1.5 active:scale-95',
+                // desktop: the tinted pill it has always been
+                'sm:basis-auto sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:px-4 sm:py-2 sm:text-sm sm:font-semibold sm:active:scale-100',
                 TINT[q.kind],
               )}
             >
-              <span className={clsx('flex h-9 w-9 items-center justify-center rounded-xl sm:h-auto sm:w-auto sm:rounded-none sm:!bg-transparent', GLYPH[q.kind])}>
-                <q.icon className="h-[18px] w-[18px] sm:h-4 sm:w-4" />
+              <span className={clsx('relative flex items-center justify-center sm:!text-inherit', GLYPH[q.kind])}>
+                <q.icon className="h-6 w-6 sm:h-4 sm:w-4" strokeWidth={1.75} />
+                {q.badge > 0 && (
+                  <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white sm:hidden">{q.badge}</span>
+                )}
               </span>
-              <span className="w-full truncate text-center text-[11px] font-medium leading-none text-white/70 sm:w-auto sm:text-left sm:text-sm sm:leading-tight sm:text-inherit">
+              <span className="w-full truncate text-center text-[11px] font-medium leading-none text-zinc-200 sm:w-auto sm:text-left sm:text-sm sm:leading-tight sm:text-inherit">
                 <span className="sm:hidden">{q.short}</span>
                 <span className="hidden sm:inline">{q.label}</span>
               </span>
               {q.badge > 0 && (
-                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white sm:static sm:ml-0.5">{q.badge}</span>
+                <span className="hidden h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white sm:ml-0.5 sm:flex">{q.badge}</span>
               )}
             </button>
           );
@@ -802,25 +808,32 @@ export default function Dashboard() {
       })()}
 
       {/* ── The money ──────────────────────────────────────────────────────
-             This used to be a tall green banner at the very top: the figure,
-             two chips, a greeting, a section label, a bar and three rows. The
-             banner above it already says who is signed in and what day it is,
-             so this is now a card like any other — the total on the left with
-             the pockets it sits in, the day's movement on the right — and it
-             sits under the attention list, because what needs deciding comes
-             before what is simply true. ── */}
-      <div className="card mb-4 overflow-hidden sm:mb-5">
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-          <h2 className="text-base font-semibold text-foreground">The money</h2>
-          <div className="flex items-center gap-2">
-            {/* This is the NET move in the balance, so it has to be worded as
-                one. It read "TSh 449,000 out today" on a day when 624,000 went
-                out and 175,000 came in. Both gross figures are in the payload,
-                so they carry the detail on hover. */}
+             One band, not a panel. It carried a second column of today's
+             movement — money in, money out, net, boxes sold — which is the
+             same four figures the tiles directly below state better, and
+             holding both made the card tall enough to push the day's business
+             off the screen. The card now answers one question, the one it is
+             named for: how much is there, and which pocket is holding it. ── */}
+      <div className="card mb-3 overflow-hidden sm:mb-4">
+        <div className="flex flex-col gap-3 p-4 sm:p-5 lg:flex-row lg:items-center lg:gap-6">
+          <div className="min-w-0 lg:w-[16rem] lg:shrink-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">In the accounts</p>
+              <button onClick={() => navigate('/finance?tab=accounts')}
+                className="cursor-pointer text-[11px] font-semibold text-brand-400 transition hover:text-brand-300 lg:hidden">
+                Open accounts →
+              </button>
+            </div>
+            <p className="mt-1 text-[26px] font-bold leading-none tracking-tight text-foreground sm:text-[32px]">
+              {formatCurrency(totalFunds)}
+            </p>
+            {/* The net move in the balance above it, worded as one. It read
+                "TSh 449,000 out today" on a day when 624,000 went out and
+                175,000 came in; both gross figures are on the tooltip. */}
             <span
               title={`In ${formatCurrency(today.moneyIn || 0)} · out ${formatCurrency(today.moneyOut || 0)}`}
               className={clsx(
-                'hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold sm:inline-flex',
+                'mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold',
                 today.netCash === 0 ? 'bg-white/[0.06] text-muted'
                   : today.netCash > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300',
               )}>
@@ -829,80 +842,47 @@ export default function Dashboard() {
                 ? 'No change today'
                 : <>{formatCurrency(Math.abs(today.netCash))} {today.netCash > 0 ? 'up' : 'down'} today</>}
             </span>
-            <button onClick={() => navigate('/finance?tab=accounts')}
-              className="cursor-pointer text-xs font-semibold text-brand-400 transition hover:text-brand-300">
-              Open accounts →
-            </button>
           </div>
-        </div>
 
-        <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          {/* Left: what there is, and which pocket holds it. An account with
-              nothing in it is not an answer to "where does it sit", so it is
-              left out; its colour stays reserved by its original position so
-              the others do not shuffle when one empties. */}
-          <div className="min-w-0 p-4 sm:p-5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">In the accounts</p>
-            <p className="mt-1.5 text-[30px] font-bold leading-none tracking-tight text-foreground sm:text-4xl">
-              {formatCurrency(totalFunds)}
-            </p>
+          {/* Where it sits: the bar carries the proportions, so each pocket
+              only has to name itself. An account holding nothing is not an
+              answer to "where does it sit", so it is left out; its colour
+              stays reserved by its original position, and the others do not
+              shuffle when one empties. */}
+          <div className="min-w-0 flex-1">
             {totalFunds > 0 && (
-              <div className="mt-4 flex h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
+              <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
                 {heroAccounts.map((a) => (
                   <div key={a.id} className={HERO_BAR[a._i % HERO_BAR.length]}
                     style={{ width: `${Math.max(0, (a.balance / totalFunds) * 100)}%` }} />
                 ))}
               </div>
             )}
-            <div className="mt-3 divide-y divide-border/70">
+            <div className="mt-2.5 grid gap-x-5 gap-y-1.5 sm:grid-cols-2">
               {heroAccounts.map((a) => {
-                const Icon = ACCOUNT_ICON[a.type] || Wallet;
                 const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
                 return (
                   <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                    className="group flex w-full cursor-pointer items-center gap-2.5 py-2 text-left transition hover:opacity-80 sm:gap-3 sm:py-2.5">
-                    <span className={clsx('h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5', HERO_DOT[a._i % HERO_DOT.length])} />
-                    <Icon className="hidden h-4 w-4 shrink-0 text-faint sm:block" />
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-muted sm:text-sm">{a.name}</span>
-                    <span className={clsx('shrink-0 text-sm font-bold tabular-nums sm:text-base', a.balance < 0 ? 'text-rose-300' : 'text-foreground')}>
+                    className="flex w-full cursor-pointer items-center gap-2 text-left transition hover:opacity-80">
+                    <span className={clsx('h-2 w-2 shrink-0 rounded-full', HERO_DOT[a._i % HERO_DOT.length])} />
+                    <span className="min-w-0 flex-1 truncate text-[13px] text-muted">{a.name}</span>
+                    <span className={clsx('shrink-0 text-[13px] font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-foreground')}>
                       {formatCurrency(a.balance)}
                     </span>
-                    <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-faint">{share}%</span>
+                    <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-faint">{share}%</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Right: what moved today. */}
-          <div className="min-w-0 border-t border-border p-4 sm:p-5 lg:border-l lg:border-t-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">Today</p>
-            <div className="mt-1 divide-y divide-border/70">
-              {[
-                { label: 'Money in today', value: formatCurrency(today.moneyIn || 0), tone: (today.moneyIn || 0) > 0 ? 'text-emerald-300' : 'text-muted' },
-                { label: 'Money out today', value: formatCurrency(today.moneyOut || 0), tone: (today.moneyOut || 0) > 0 ? 'text-rose-300' : 'text-muted' },
-                { label: 'Net cash today', value: formatCurrency(today.netCash || 0), tone: today.netCash > 0 ? 'text-emerald-300' : today.netCash < 0 ? 'text-rose-300' : 'text-muted' },
-                { label: 'Boxes sold today', value: formatNumber(today.boxesSold || 0), tone: 'text-foreground' },
-              ].map((r) => (
-                <div key={r.label} className="flex items-center justify-between gap-3 py-2.5 sm:py-3">
-                  <span className="min-w-0 truncate text-[13px] text-muted sm:text-sm">{r.label}</span>
-                  <span className={clsx('shrink-0 text-sm font-bold tabular-nums sm:text-base', r.tone)}>{r.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <button onClick={() => navigate('/finance?tab=accounts')}
+            className="hidden shrink-0 cursor-pointer text-xs font-semibold text-brand-400 transition hover:text-brand-300 lg:block">
+            Open accounts →
+          </button>
         </div>
       </div>
 
-
-      {/* ── This month, against last ────────────────────────────────────────
-             Everything from here down is the SHAPE of the business rather
-             than its state: the month set against the one before it, the
-             ratios it is run by, two years of months, the age of the boxes
-             still standing against a rep's name, and where the money goes.
-             It is read from /dashboard/analysis, which is a separate trip —
-             if that trip fails, this region is simply not here. ── */}
-      {analysis && <Analysis a={analysis} navigate={navigate} />}
 
       {/* ── Today's business (all from Finance) ──
           A figure on its own says how much and nothing about whether that is
@@ -1017,6 +997,15 @@ export default function Dashboard() {
           })()}
         </div>
       </div>
+
+      {/* ── This month, against last ────────────────────────────────────────
+             Everything from here down is the SHAPE of the business rather
+             than its state: the month set against the one before it, the
+             ratios it is run by, two years of months, the age of the boxes
+             still standing against a rep's name, and where the money goes.
+             It is read from /dashboard/analysis, which is a separate trip —
+             if that trip fails, this region is simply not here. ── */}
+      {analysis && <Analysis a={analysis} navigate={navigate} />}
 
       {/* ── Where every box is ──
           Five separate stat cards stated the same total five ways and never
