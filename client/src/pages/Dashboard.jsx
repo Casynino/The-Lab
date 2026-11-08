@@ -38,8 +38,8 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
-import { TrendChart, BarChartCard, DonutChart } from '@/components/charts';
+import { formatCurrency, formatNumber, formatPercent, formatDateTime } from '@/lib/format';
+import { TrendChart, BarChartCard, DonutChart, MonthBars } from '@/components/charts';
 import { tzDateLabel, eatDay } from '@/lib/tz';
 import {
   StatCard,
@@ -220,6 +220,292 @@ function PeriodTabs({ value, onChange, options }) {
   );
 }
 
+// ── The shape of the business ───────────────────────────────────────────────
+
+/* A month against the one before it. The arrow is the direction of the money,
+   not of the mood: expenses falling is green, revenue falling is red, and the
+   card says which it is rather than leaving the colour to say it. */
+function Delta({ pct, goodWhenDown = false }) {
+  // Growth from a base of zero — or from a loss — is not a percentage, it is
+  // an unanswerable question. The server sends null for it and the card falls
+  // back to simply stating what last month was, which is never wrong. It used
+  // to say "nothing last month", which is a lie about a month that lost money.
+  if (pct == null) return null;
+  const flat = Math.abs(pct) < 0.05;
+  const good = flat ? null : goodWhenDown ? pct < 0 : pct > 0;
+  return (
+    <span className={clsx(
+      'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
+      good === null ? 'bg-white/[0.06] text-muted' : good ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300',
+    )}>
+      {flat ? '—' : pct > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownLeft className="h-3 w-3" />}
+      {formatPercent(Math.abs(pct))}
+    </span>
+  );
+}
+
+function MonthCard({ label, icon: Icon, tone, value, delta, beforeLabel, goodWhenDown = false, note }) {
+  return (
+    <div className="card p-3.5 sm:p-4">
+      <div className="flex items-center gap-2">
+        <span className={clsx('grid h-7 w-7 shrink-0 place-items-center rounded-lg', tone)}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 truncate text-[13px] font-medium text-muted">{label}</span>
+      </div>
+      <div className="mt-2 break-words text-xl font-bold leading-tight tabular-nums text-foreground sm:text-2xl">{value}</div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <Delta pct={delta} goodWhenDown={goodWhenDown} />
+        <span className="text-[11px] text-faint">{note || `last month ${beforeLabel}`}</span>
+      </div>
+    </div>
+  );
+}
+
+/* A ratio with no denominator is not zero, it is unanswerable — so it prints
+   as a dash and says why on hover, rather than as a confident 0%. */
+function Ratio({ label, value, hint, bands }) {
+  const tone = value == null ? 'text-faint'
+    : bands === 'up' ? (value >= 0 ? 'text-emerald-300' : 'text-rose-300')
+      : bands === 'down' ? (value <= 25 ? 'text-emerald-300' : value <= 50 ? 'text-amber-300' : 'text-rose-300')
+        : value >= 30 ? 'text-emerald-300' : value >= 10 ? 'text-amber-300' : 'text-rose-300';
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border/70 py-2.5 last:border-0">
+      <span className="min-w-0 truncate text-[13px] text-muted" title={hint}>{label}</span>
+      <span className={clsx('shrink-0 text-sm font-bold tabular-nums sm:text-base', tone)}>
+        {value == null ? '—' : `${value > 0 && bands === 'up' ? '+' : ''}${formatPercent(value)}`}
+      </span>
+    </div>
+  );
+}
+
+const AGE_TONE = {
+  fresh: { bar: 'bg-emerald-500', dot: 'bg-emerald-400', text: 'text-emerald-300' },
+  week: { bar: 'bg-sky-500', dot: 'bg-sky-400', text: 'text-sky-300' },
+  fortnight: { bar: 'bg-amber-500', dot: 'bg-amber-400', text: 'text-amber-300' },
+  old: { bar: 'bg-rose-500', dot: 'bg-rose-400', text: 'text-rose-300' },
+};
+
+function Analysis({ a, navigate }) {
+  const { month, lastMonth, health, growth, trend, boxesByYear, ageing, spend, spendTotal } = a;
+  const anyTrend = trend.some((t) => t.revenue || t.moneyIn || t.moneyOut);
+  const anyYear = boxesByYear.some((b) => b.thisYear || b.lastYear);
+  // Read once, so the figure and the colour it is printed in can never be
+  // about two different numbers.
+  const netThisMonth = trend[trend.length - 1]?.net || 0;
+
+  return (
+    <>
+      <SectionHeading title={`This month · against ${lastMonth.label}`} action={{ label: 'Profit & loss', to: '/finance?tab=profit' }} navigate={navigate} />
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:mb-5 sm:gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        <MonthCard label="Revenue" icon={TrendingUp} tone="bg-sky-500/15 text-sky-300"
+          value={formatCurrency(month.revenue)} delta={growth.revenue}
+          beforeLabel={formatCurrency(lastMonth.revenue)} />
+        <MonthCard label="Gross profit" icon={Scale} tone="bg-emerald-500/15 text-emerald-300"
+          value={formatCurrency(month.grossProfit)} delta={growth.grossProfit}
+          beforeLabel={formatCurrency(lastMonth.grossProfit)} />
+        <MonthCard label="Expenses" icon={Receipt} tone="bg-orange-500/15 text-orange-300"
+          value={formatCurrency(month.expenses)} delta={growth.expenses}
+          beforeLabel={formatCurrency(lastMonth.expenses)} goodWhenDown />
+        <MonthCard label="Net profit" icon={Coins} tone="bg-violet-500/15 text-violet-300"
+          value={formatCurrency(month.netProfit)} delta={growth.netProfit}
+          beforeLabel={formatCurrency(lastMonth.netProfit)} />
+        <MonthCard label="Boxes sold" icon={Boxes} tone="bg-brand-500/15 text-brand-300"
+          value={formatNumber(month.boxes)} delta={growth.boxes}
+          beforeLabel={formatNumber(lastMonth.boxes)} />
+        {/* Not a month's figure at all, so it carries no comparison: it is
+            what is standing against a rep's name right now. */}
+        <MonthCard label="Out with reps" icon={Timer} tone="bg-rose-500/15 text-rose-300"
+          value={formatCurrency(ageing.total)}
+          note={ageing.overdueValue > 0 ? `${formatCurrency(ageing.overdueValue)} of it past the deadline` : 'all of it still inside its deadline'} />
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:mb-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+        <div className="card overflow-hidden">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-base font-semibold text-foreground">Revenue, cost and what was left</h2>
+            <p className="mt-0.5 text-xs text-muted">The last twelve months · TSh</p>
+          </div>
+          <div className="px-2 pb-2 pt-3">
+            {anyTrend ? (
+              <TrendChart data={trend} height={240} series={[
+                { key: 'revenue', name: 'Revenue', color: '#38bdf8' },
+                { key: 'cost', name: 'Cost of boxes', color: '#f43f5e' },
+                { key: 'profit', name: 'What was left', color: '#a3e635' },
+              ]} />
+            ) : (
+              <p className="px-3 py-10 text-center text-sm text-muted">Nothing sold in the last twelve months yet.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-base font-semibold text-foreground">Financial health</h2>
+            <p className="mt-0.5 text-xs text-muted">This month, read against the rules the business keeps</p>
+          </div>
+          <div className="px-4 py-1">
+            <Ratio label="Gross margin" value={health.grossMargin} hint="What is left of a shilling after the boxes it sold cost you" />
+            <Ratio label="Expense ratio" value={health.expenseRatio} bands="down" hint="How much of the month's revenue the running costs ate" />
+            <Ratio label="Net margin" value={health.netMargin} hint="What the business actually kept, after boxes and expenses" />
+            <Ratio label="Revenue growth" value={health.revenueGrowth} bands="up" hint={`Against ${lastMonth.label}`} />
+            <Ratio label="Profit growth" value={health.profitGrowth} bands="up" hint={`Against ${lastMonth.label}`} />
+            <Ratio label="Overdue share of what is out" value={health.overdueShare} bands="down" hint="How much of the money still with reps is already past its deadline" />
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:mb-5 lg:grid-cols-2">
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-foreground">Money in and out</h2>
+              <p className="mt-0.5 text-xs text-muted">What arrived against what it cost, month by month</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className={clsx('text-sm font-bold tabular-nums', netThisMonth >= 0 ? 'text-emerald-300' : 'text-rose-300')}>
+                {formatCurrency(netThisMonth)}
+              </div>
+              <div className="text-[11px] text-faint">net this month</div>
+            </div>
+          </div>
+          <div className="px-2 pb-2 pt-3">
+            {anyTrend ? (
+              <MonthBars data={trend} height={220} series={[
+                { key: 'moneyIn', name: 'Money in', color: '#10b981' },
+                { key: 'moneyOut', name: 'Money out', color: '#f43f5e' },
+              ]} />
+            ) : (
+              <p className="px-3 py-10 text-center text-sm text-muted">No money has moved through the accounts yet.</p>
+            )}
+          </div>
+        </div>
+
+        {/* The boxes that have left but not come back — as money, aged from
+            the day they were issued. The only question the settlement model
+            ever asks is where every issued box is; this is that question with
+            a clock on it. */}
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-foreground">Boxes still out with reps</h2>
+              <p className="mt-0.5 text-xs text-muted">From the day they were issued</p>
+            </div>
+            <button onClick={() => navigate('/settlements')} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-400 hover:text-brand-300">
+              Open orders →
+            </button>
+          </div>
+          <div className="p-4">
+            {ageing.total > 0 ? (
+              <>
+                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                  {ageing.buckets.filter((b) => b.value > 0).map((b) => (
+                    <div key={b.key} className={AGE_TONE[b.key].bar} style={{ width: `${b.share}%` }} />
+                  ))}
+                </div>
+                <div className="mt-3 divide-y divide-border/70">
+                  {ageing.buckets.map((b) => (
+                    <div key={b.key} className="flex items-center gap-3 py-2">
+                      <span className={clsx('h-2 w-2 shrink-0 rounded-full', AGE_TONE[b.key].dot)} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] text-foreground">{b.label}</span>
+                        <span className="block text-[11px] text-faint">{formatNumber(b.orders)} {b.orders === 1 ? 'order' : 'orders'}</span>
+                      </span>
+                      <span className={clsx('shrink-0 text-sm font-bold tabular-nums', AGE_TONE[b.key].text)}>{formatCurrency(b.value)}</span>
+                      <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-faint">{formatPercent(b.share, 0)}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[11px] text-faint">
+                  {formatCurrency(ageing.total)} issued and not yet settled or returned.
+                </p>
+              </>
+            ) : (
+              <div className="py-10 text-center">
+                <CheckCircle2 className="mx-auto h-7 w-7 text-emerald-400" />
+                <p className="mt-2 text-sm text-muted">Every issued box is accounted for.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 sm:mb-5 lg:grid-cols-2">
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-foreground">Where money is spent</h2>
+              <p className="mt-0.5 text-xs text-muted">This month's costs, largest first</p>
+            </div>
+            <span className="shrink-0 text-sm font-bold tabular-nums text-orange-300">{formatCurrency(spendTotal)}</span>
+          </div>
+          <div className="p-4">
+            {spend.length ? (
+              <div className="divide-y divide-border/70">
+                {spend.slice(0, 7).map((row) => (
+                  <div key={row.name} className="py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-[13px] text-foreground">{row.name}</span>
+                      <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{formatCurrency(row.amount)}</span>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="h-full rounded-full bg-orange-500/70" style={{ width: `${row.share}%` }} />
+                      </div>
+                      <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-faint">{formatPercent(row.share, 0)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-10 text-center text-sm text-muted">No costs recorded this month.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="card overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold text-foreground">Boxes this year against last</h2>
+              <p className="mt-0.5 text-xs text-muted">Every box sold, month by month</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="text-sm font-bold tabular-nums text-foreground">
+                {formatNumber(boxesByYear.reduce((n, b) => n + b.thisYear, 0))}
+              </div>
+              <div className="text-[11px] text-faint">this year</div>
+            </div>
+          </div>
+          <div className="px-2 pb-2 pt-3">
+            {anyYear ? (
+              <TrendChart data={boxesByYear} height={220} money={false} series={[
+                { key: 'thisYear', name: 'This year', color: '#a3e635' },
+                { key: 'lastYear', name: 'Last year', color: '#64748b' },
+              ]} />
+            ) : (
+              <p className="px-3 py-10 text-center text-sm text-muted">No boxes sold in either year yet.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* The little heading that sits above a region, with the way deeper into it. */
+function SectionHeading({ title, action, navigate }) {
+  return (
+    <div className="mb-2.5 flex items-end justify-between gap-3">
+      <h2 className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.16em] text-faint">{title}</h2>
+      {action && (
+        <button onClick={() => navigate(action.to)} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-400 hover:text-brand-300">
+          {action.label} →
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [attentionFilter, setAttentionFilter] = useState('All');
   // Today, this week, this month — one choice for the whole page, changeable
@@ -234,6 +520,16 @@ export default function Dashboard() {
     queryKey: ['dashboard', 'command'],
     queryFn: async () => unwrap(await api.get('/dashboard/command')).data,
     refetchInterval: STEADY, // live business status
+  });
+  // The shape of the business, read on its own: months, ratios, the age of the
+  // boxes still out and where the money goes. A slow pass over two years of
+  // sales must never keep the headline figures off the screen, and a failure
+  // here hides one region rather than the page.
+  const { data: analysis } = useQuery({
+    queryKey: ['dashboard', 'analysis'],
+    queryFn: async () => unwrap(await api.get('/dashboard/analysis')).data,
+    refetchInterval: STEADY * 4,
+    retry: 1,
   });
 
   if (isLoading) return <PageSpinner label="Building your command center…" />;
@@ -598,6 +894,15 @@ export default function Dashboard() {
         </div>
       </div>
 
+
+      {/* ── This month, against last ────────────────────────────────────────
+             Everything from here down is the SHAPE of the business rather
+             than its state: the month set against the one before it, the
+             ratios it is run by, two years of months, the age of the boxes
+             still standing against a rep's name, and where the money goes.
+             It is read from /dashboard/analysis, which is a separate trip —
+             if that trip fails, this region is simply not here. ── */}
+      {analysis && <Analysis a={analysis} navigate={navigate} />}
 
       {/* ── Today's business (all from Finance) ──
           A figure on its own says how much and nothing about whether that is

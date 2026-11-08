@@ -358,6 +358,221 @@ async function topProductsByRevenue(range, limit = 6) {
     .slice(0, limit);
 }
 
+// ── Analysis ─────────────────────────────────────────────────────────────────
+// The owner asked to see the SHAPE of the business, not only today's figures
+// (8 Nov 2026): this month set against last, the ratios the business is run
+// by, two years of months, how long the boxes already out have been out, and
+// where the money goes.
+//
+// Every money figure here is built with reports.lineFinancials — the same
+// function the Profit screen uses — so a month on the dashboard and the same
+// month in Finance can never print different numbers. Months before the
+// finance epoch read zero rather than part of a month nobody entered.
+const eatMonthKey = (d) => eatDayKey(d).slice(0, 7);
+
+/** Days from a moment until now, as a fraction, in whole hours. */
+const hoursSince = (d) => (Date.now() - new Date(d).getTime()) / 3600000;
+
+const AGE_BUCKETS = [
+  { key: 'fresh', label: 'Still inside 72 hours', max: 72 },
+  { key: 'week', label: '3 to 7 days out', max: 24 * 7 },
+  { key: 'fortnight', label: '8 to 14 days out', max: 24 * 14 },
+  { key: 'old', label: 'Over 14 days out', max: Infinity },
+];
+
+async function analysis() {
+  const finance = require('./finance.service'); // lazy: avoids import cycles
+  const { eatNow, eatToUtc } = require('../utils/dates');
+  const epoch = await reports.financeEpoch();
+
+  // 24 EAT months, oldest first, so this year can be set against last.
+  const months = [];
+  for (let i = 23; i >= 0; i -= 1) {
+    const m = eatNow().subtract(i, 'month');
+    months.push({
+      key: m.format('YYYY-MM'),
+      label: m.format('MMM'),
+      year: m.year(),
+      monthIndex: m.month(),
+      start: eatToUtc(m.startOf('month')).toDate(),
+      end: eatToUtc(m.endOf('month')).toDate(),
+    });
+  }
+  const thisMonth = months[23];
+  const prevMonth = months[22];
+  const windowStart = months[0].start;
+  const readFrom = epoch && epoch > windowStart ? epoch : windowStart;
+  const last12 = months.slice(12);
+
+  // EXACTLY the population finance.service's P&L counts as expenses — direction,
+  // type and the epoch clamp, and nothing else. It is tempting to add
+  // `account: { isActive: true }` here, the way flowBetween does; that filter
+  // belongs to cash flow, where Opening + In − Out has to reconcile to the
+  // ACTIVE accounts' balances. An expense is a cost of the month whoever's
+  // wallet paid it, and closing that wallet later cannot un-spend the money.
+  // Adding it here made this card's Net profit disagree with the Profit & loss
+  // screen its own link opens.
+  const expenseWhere = (start, end) => ({
+    direction: 'OUT',
+    type: 'EXPENSE',
+    occurredAt: { gte: epoch && epoch > start ? epoch : start, lte: end },
+  });
+
+  const [items, products, openOrders, spendRows, expMonth, expPrev, flows] = await Promise.all([
+    prisma.saleItem.findMany({
+      where: { sale: { is: { status: { not: 'CANCELLED' }, soldAt: { gte: readFrom } } } },
+      select: {
+        baseQuantity: true,
+        lineTotal: true,
+        unitCost: true,
+        productId: true,
+        sale: { select: { soldAt: true, discount: true, subtotal: true } },
+      },
+    }),
+    prisma.product.findMany({ select: { id: true, purchasePrice: true } }),
+    // Every box still standing against a rep's name, with the day it left.
+    prisma.settlement.findMany({
+      where: { status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } },
+      select: { id: true, issuedAt: true, deadlineAt: true, assignedValue: true, settledValue: true, returnedValue: true },
+    }),
+    prisma.financeTransaction.groupBy({
+      by: ['category'],
+      where: expenseWhere(thisMonth.start, thisMonth.end),
+      _sum: { amount: true },
+    }),
+    prisma.financeTransaction.aggregate({ where: expenseWhere(thisMonth.start, thisMonth.end), _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: expenseWhere(prevMonth.start, prevMonth.end), _sum: { amount: true } }),
+    // Money in and out, month by month. A month wholly before the epoch is
+    // not a month of zero trading — it is a month nobody recorded — but it
+    // reads as zero either way, and the chart says where the records begin.
+    Promise.all(last12.map((m) => (
+      epoch && m.end < epoch
+        ? Promise.resolve({ moneyIn: 0, moneyOut: 0, net: 0 })
+        : finance.flowBetween(epoch && epoch > m.start ? epoch : m.start, m.end)
+    ))),
+  ]);
+
+  // ── The months ──
+  const productById = new Map(products.map((p) => [p.id, p]));
+  const byMonth = new Map();
+  for (const it of items) {
+    const k = eatMonthKey(it.sale.soldAt);
+    const row = byMonth.get(k) || { revenue: 0, cost: 0, boxes: 0 };
+    const f = reports.lineFinancials(it, productById.get(it.productId));
+    row.revenue += f.revenue;
+    row.cost += f.cost;
+    row.boxes += f.boxes;
+    byMonth.set(k, row);
+  }
+  const monthFigures = (m) => {
+    const row = byMonth.get(m.key) || { revenue: 0, cost: 0, boxes: 0 };
+    const revenue = round2(row.revenue);
+    const cost = round2(row.cost);
+    return { revenue, cost, grossProfit: round2(revenue - cost), boxes: row.boxes };
+  };
+
+  const trend = last12.map((m, i) => {
+    const f = monthFigures(m);
+    return {
+      period: m.label,
+      revenue: f.revenue,
+      cost: f.cost,
+      profit: f.grossProfit,
+      boxes: f.boxes,
+      moneyIn: flows[i].moneyIn,
+      moneyOut: flows[i].moneyOut,
+      net: flows[i].net,
+    };
+  });
+
+  // This calendar year against the one before it, month for month. December
+  // of a year not yet finished reads zero, which is what it is.
+  const year = thisMonth.year;
+  const boxesByYear = [];
+  for (let i = 0; i < 12; i += 1) {
+    const now = months.find((m) => m.year === year && m.monthIndex === i);
+    const before = months.find((m) => m.year === year - 1 && m.monthIndex === i);
+    boxesByYear.push({
+      period: (now || before).label,
+      thisYear: now ? monthFigures(now).boxes : 0,
+      lastYear: before ? monthFigures(before).boxes : 0,
+    });
+  }
+
+  const m0 = monthFigures(thisMonth);
+  const m1 = monthFigures(prevMonth);
+  const expensesMonth = round2(toNumber(expMonth._sum.amount));
+  const expensesPrev = round2(toNumber(expPrev._sum.amount));
+
+  const month = { ...m0, label: thisMonth.label, expenses: expensesMonth, netProfit: round2(m0.grossProfit - expensesMonth) };
+  const lastMonth = { ...m1, label: prevMonth.label, expenses: expensesPrev, netProfit: round2(m1.grossProfit - expensesPrev) };
+
+  // ── How long the boxes already out have been out ──
+  // Outstanding is what the order still owes: issued, less what was settled,
+  // less what came back. An order whose figures already balance is finished
+  // in all but status and does not belong in a list of money at risk.
+  const buckets = AGE_BUCKETS.map((b) => ({ ...b, orders: 0, value: 0 }));
+  let outstandingTotal = 0;
+  let overdueValue = 0;
+  for (const o of openOrders) {
+    const left = round2(toNumber(o.assignedValue) - toNumber(o.settledValue) - toNumber(o.returnedValue));
+    if (left <= 0) continue;
+    outstandingTotal += left;
+    if (new Date(o.deadlineAt).getTime() < Date.now()) overdueValue += left;
+    const age = hoursSince(o.issuedAt);
+    const bucket = buckets.find((b) => age < b.max) || buckets[buckets.length - 1];
+    bucket.orders += 1;
+    bucket.value = round2(bucket.value + left);
+  }
+  outstandingTotal = round2(outstandingTotal);
+  const ageing = {
+    total: outstandingTotal,
+    overdueValue: round2(overdueValue),
+    buckets: buckets.map(({ max, ...b }) => ({
+      ...b,
+      share: outstandingTotal > 0 ? round2((b.value / outstandingTotal) * 100) : 0,
+    })),
+  };
+
+  // ── Where the money goes ──
+  const spendTotal = round2(spendRows.reduce((n, r) => n + toNumber(r._sum.amount), 0));
+  const spend = spendRows
+    .map((r) => ({
+      name: r.category || 'Uncategorised',
+      amount: round2(toNumber(r._sum.amount)),
+      share: spendTotal > 0 ? round2((toNumber(r._sum.amount) / spendTotal) * 100) : 0,
+    }))
+    .filter((r) => r.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+
+  // ── The ratios the business is run by ──
+  // A ratio with no denominator is not zero, it is unanswerable: those come
+  // back null so the screen can say so instead of printing a confident 0%.
+  const growth = (now, before) => (before > 0 ? round2(((now - before) / before) * 100) : null);
+  const share = (part, whole) => (whole > 0 ? round2((part / whole) * 100) : null);
+  const health = {
+    grossMargin: share(month.grossProfit, month.revenue),
+    expenseRatio: share(month.expenses, month.revenue),
+    netMargin: share(month.netProfit, month.revenue),
+    revenueGrowth: growth(month.revenue, lastMonth.revenue),
+    profitGrowth: growth(month.grossProfit, lastMonth.grossProfit),
+    overdueShare: share(ageing.overdueValue, ageing.total),
+  };
+  // The month cards show the same two growth figures the health list does, so
+  // they are read from here rather than worked out again on the client: two
+  // roundings of one quantity printed "7.4%" on the card and "7.5%" in the
+  // list, a few centimetres apart.
+  const growthOf = {
+    revenue: health.revenueGrowth,
+    grossProfit: health.profitGrowth,
+    expenses: growth(month.expenses, lastMonth.expenses),
+    netProfit: growth(month.netProfit, lastMonth.netProfit),
+    boxes: growth(month.boxes, lastMonth.boxes),
+  };
+
+  return { month, lastMonth, health, growth: growthOf, trend, boxesByYear, ageing, spend, spendTotal, epoch };
+}
+
 // ── Command center ───────────────────────────────────────────────────────────
 // One composed payload for the admin dashboard: where the money is, today's
 // business (all from Finance), per-brand performance, rep performance, what
@@ -581,4 +796,4 @@ async function command() {
   };
 }
 
-module.exports = { overview, recentActivity, outstandingRepStock, paymentsCollected, brandBreakdown, command };
+module.exports = { overview, recentActivity, outstandingRepStock, paymentsCollected, brandBreakdown, command, analysis };

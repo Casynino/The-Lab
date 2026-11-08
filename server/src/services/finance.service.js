@@ -1980,6 +1980,8 @@ async function overview(period = 'month') {
 }
 
 module.exports = {
+  // The dashboard builds its month-by-month cash series on this.
+  flowBetween,
   ensureDefaults,
   backfillFromHistory,
   accountBalances,

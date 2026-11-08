@@ -26,6 +26,14 @@ const brands = asyncHandler(async (_req, res) => {
   return ok(res, await dashboard.brandBreakdown());
 });
 
+// The shape of the business: this month against last, the ratios, two years of
+// months, the age of the boxes still out, and where the money goes. Read apart
+// from /command so a slow month-by-month pass can never hold up the figures
+// the owner opens the screen for.
+const analysis = asyncHandler(async (_req, res) => {
+  return ok(res, await dashboard.analysis());
+});
+
 // Personal dashboard for a sales representative — built around the rep's real
 // job: stock held, open orders (72h settlements), and commission on settled
 // boxes. Reps do not record customer sales, so there are no sales figures here.
@@ -146,4 +154,6 @@ const pendingActions = asyncHandler(async (_req, res) => {
 // The composed command-center payload for the admin dashboard.
 const command = asyncHandler(async (_req, res) => ok(res, await dashboard.command()));
 
-module.exports = { overview, activity, brands, myOverview, myStats, pendingActions, command };
+module.exports = { overview, activity, brands, myOverview, myStats, pendingActions, command,
+  analysis,
+};
