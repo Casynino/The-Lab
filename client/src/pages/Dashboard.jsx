@@ -40,7 +40,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import { TrendChart, BarChartCard, DonutChart } from '@/components/charts';
-import { tzGreeting, tzDateLabel, eatDay } from '@/lib/tz';
+import { tzDateLabel, eatDay } from '@/lib/tz';
 import {
   StatCard,
   Card,
@@ -272,7 +272,6 @@ export default function Dashboard() {
   const withIndex = accounts.filter((a) => !a.isCommissionRecord).map((a, i) => ({ ...a, _i: i }));
   const funded = withIndex.filter((a) => Number(a.balance) !== 0);
   const heroAccounts = funded.length ? funded : withIndex;
-  const firstName = user?.name?.split(' ')[0] || 'there';
   const attentionCount =
     attention.stockRequests + attention.settlements + attention.returns +
     attention.overdueSettlements + attention.lowStock.count + attention.outOfStock;
@@ -280,146 +279,18 @@ export default function Dashboard() {
   // `short` is the tile's word on a phone. "Approve requests" in an 80 px
   // tile wraps to three lines and the row stops being a row.
   const QUICK = [
-    { label: 'Approve requests', short: 'Requests', kind: 'approve', icon: ClipboardList, to: '/stock-requests', badge: attention.stockRequests },
-    { label: 'Approve settlements', short: 'Settle', kind: 'approve', icon: Timer, to: '/settlements', badge: attention.settlements },
-    { label: 'Approve returns', short: 'Returns', kind: 'approve', icon: Undo2, to: '/returns', badge: attention.returns },
-    { label: 'Record sale', short: 'Sale', kind: 'money', icon: ShoppingCart, to: '/sales' },
-    { label: 'Record expense', short: 'Expense', kind: 'money', icon: Receipt, to: '/finance?tab=expenses' },
-    { label: 'Purchase stock', short: 'Purchase', kind: 'stock', icon: Factory, to: '/finance?tab=suppliers' },
-    { label: 'Adjust stock', short: 'Adjust', kind: 'stock', icon: SlidersHorizontal, to: '/inventory' },
-    { label: 'Move stock', short: 'Transfer', kind: 'stock', icon: ArrowLeftRight, to: '/transfers' },
+    { label: 'Approve requests', short: 'Requests', kind: 'sky', icon: ClipboardList, to: '/stock-requests', badge: attention.stockRequests },
+    { label: 'Approve settlements', short: 'Settle', kind: 'amber', icon: Timer, to: '/settlements', badge: attention.settlements },
+    { label: 'Approve returns', short: 'Returns', kind: 'rose', icon: Undo2, to: '/returns', badge: attention.returns },
+    { label: 'Record sale', short: 'Sale', kind: 'emerald', icon: ShoppingCart, to: '/sales' },
+    { label: 'Record expense', short: 'Expense', kind: 'orange', icon: Receipt, to: '/finance?tab=expenses' },
+    { label: 'Purchase stock', short: 'Purchase', kind: 'violet', icon: Factory, to: '/finance?tab=suppliers' },
+    { label: 'Adjust stock', short: 'Adjust', kind: 'cyan', icon: SlidersHorizontal, to: '/inventory' },
+    { label: 'Move stock', short: 'Transfer', kind: 'indigo', icon: ArrowLeftRight, to: '/transfers' },
   ];
 
   return (
     <div>
-      {/* ── Hero ────────────────────────────────────────────────────────────
-             The greeting used to take the top line and the money came third,
-             under two chips; the accounts were three flat tiles crammed to
-             the right. Now the money leads, the greeting is a byline, and the
-             accounts read as one bar split between them — which also shows at
-             a glance which pocket actually holds the business's cash. ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.2, 0.7, 0.3, 1] }}
-        className="relative mb-5 overflow-hidden rounded-3xl border border-white/10 shadow-2xl"
-        style={{ background: 'linear-gradient(118deg, #14260a 0%, #06402f 45%, #0b3242 100%)' }}
-      >
-        {/* Two light sources and a hairline sheen, so the panel reads as a
-            surface catching light rather than a flat block of colour. */}
-        <div className="pointer-events-none absolute -left-24 -top-28 h-80 w-80 rounded-full bg-brand-400/25 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute -bottom-28 right-0 h-72 w-72 rounded-full bg-cyan-300/12 blur-3xl" aria-hidden="true" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" aria-hidden="true" />
-
-        {/* On a phone this banner was half the screen: a headline figure, two
-            pills, a greeting, a section label, a bar and the rows. The number
-            and where it sits are what the owner opens the app for; the rest is
-            kept for the desktop, where there is room for it. */}
-        <div className="relative grid gap-4 p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-center lg:gap-10 lg:p-7">
-          {/* The money, first. */}
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-brand-300/90 sm:text-[11px] sm:tracking-[0.2em]">Money you can use right now</p>
-            <p className="mt-1.5 text-[30px] font-bold leading-none tracking-tight text-white sm:mt-2 sm:text-5xl">
-              {formatCurrency(totalFunds)}
-            </p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2 sm:mt-3">
-              {/* This is the NET move in the balance above it, so it has to be
-                  worded as one. It read "TSh 449,000 out today" on a day when
-                  624,000 went out and 175,000 came in — 449,000 never left
-                  anything, and the cash-flow card further down the same screen
-                  said so plainly. Both gross figures are already in the
-                  payload, so they carry the detail on hover. */}
-              <span
-                title={`In ${formatCurrency(today.moneyIn || 0)} · out ${formatCurrency(today.moneyOut || 0)}`}
-                className={clsx(
-                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold',
-                  today.netCash === 0 ? 'bg-white/10 text-white/80'
-                    : today.netCash > 0 ? 'bg-emerald-400/15 text-emerald-200' : 'bg-rose-400/15 text-rose-200',
-                )}>
-                {today.netCash === 0 ? null : today.netCash > 0 ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
-                {today.netCash === 0
-                  ? 'No change today'
-                  : <>{formatCurrency(Math.abs(today.netCash))} {today.netCash > 0 ? 'up' : 'down'} today</>}
-              </span>
-              {today.boxesSold > 0 && (
-                // Also the first tile of Today's business, a screen below.
-                <span className="hidden items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80 sm:inline-flex">
-                  <Boxes className="h-3 w-3" /> {formatNumber(today.boxesSold)} boxes sold today
-                </span>
-              )}
-            </div>
-            <p className="mt-4 hidden text-sm text-white/55 sm:block">
-              {tzGreeting()}, {firstName} · {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long' })}
-            </p>
-          </div>
-
-          {/* Where that money sits — one bar, then the pockets. An account
-              holding nothing is not an answer to "where does it sit", so it
-              is left out; its colour stays reserved by its original position
-              so the others do not shuffle when one empties. */}
-          <div className="min-w-0">
-            {/* On a phone the pockets are one strip, not a panel. Three full
-                rows with an icon, a name, a balance and a share turned the
-                banner into most of the screen; the strip answers the same
-                question — where is it — in a line and a half, and taps
-                through to the same page. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:hidden">
-              {heroAccounts.map((a) => (
-                <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                  className="flex min-w-0 cursor-pointer items-center gap-1.5 text-left">
-                  <span className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', HERO_DOT[a._i % HERO_DOT.length])} />
-                  <span className="truncate text-[11px] text-white/50">{a.name}</span>
-                  <span className={clsx('text-xs font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white/90')}>
-                    {formatCurrency(a.balance)}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            <div className="hidden sm:block">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">Where it sits</p>
-              <button onClick={() => navigate('/finance?tab=accounts')}
-                className="cursor-pointer text-[11px] font-semibold text-brand-300 transition hover:text-brand-200">
-                Open accounts →
-              </button>
-            </div>
-            {totalFunds > 0 && (
-              <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-white/10">
-                {heroAccounts.map((a) => (
-                  <div key={a.id} className={HERO_BAR[a._i % HERO_BAR.length]}
-                    style={{ width: `${Math.max(0, (a.balance / totalFunds) * 100)}%` }} />
-                ))}
-              </div>
-            )}
-            {/* Rows, not cards. Boxing each balance put a card inside a card
-                and made three small panels compete with the headline; the bar
-                above already carries the proportions, so these only have to
-                name them. Hairline dividers, one line each, numbers aligned. */}
-            <div className="mt-4 divide-y divide-white/10">
-              {heroAccounts.map((a) => {
-                const i = a._i;
-                const Icon = ACCOUNT_ICON[a.type] || Wallet;
-                const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
-                return (
-                  <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
-                    className="group flex w-full cursor-pointer items-center gap-3 py-2.5 text-left transition duration-200 hover:opacity-80">
-                    <span className={clsx('h-2.5 w-2.5 shrink-0 rounded-full', HERO_DOT[i % HERO_DOT.length])} />
-                    <Icon className="h-4 w-4 shrink-0 text-white/45" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/75">{a.name}</span>
-                    <span className={clsx('shrink-0 text-lg font-bold tabular-nums', a.balance < 0 ? 'text-rose-300' : 'text-white')}>
-                      {formatCurrency(a.balance)}
-                    </span>
-                    <span className="w-10 shrink-0 text-right text-xs tabular-nums text-white/40">{share}%</span>
-                  </button>
-                );
-              })}
-            </div>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
       {/* ── Quick actions ──
           Above the attention list, not below it: these are what you DO about
           what the list tells you, and burying them under it meant scrolling
@@ -441,14 +312,24 @@ export default function Dashboard() {
           // wins — responsive variants are emitted after the base utilities,
           // and the pill gets its colour back at every width above a phone.
           const TINT = {
-            approve: 'sm:border-sky-500/30 sm:bg-sky-500/10 sm:text-sky-300 sm:hover:bg-sky-500/20',
-            money: 'sm:border-emerald-500/30 sm:bg-emerald-500/10 sm:text-emerald-300 sm:hover:bg-emerald-500/20',
-            stock: 'sm:border-violet-500/30 sm:bg-violet-500/10 sm:text-violet-300 sm:hover:bg-violet-500/20',
+            sky: 'sm:border-sky-500/30 sm:bg-sky-500/10 sm:text-sky-300 sm:hover:bg-sky-500/20',
+            amber: 'sm:border-amber-500/30 sm:bg-amber-500/10 sm:text-amber-300 sm:hover:bg-amber-500/20',
+            rose: 'sm:border-rose-500/30 sm:bg-rose-500/10 sm:text-rose-300 sm:hover:bg-rose-500/20',
+            emerald: 'sm:border-emerald-500/30 sm:bg-emerald-500/10 sm:text-emerald-300 sm:hover:bg-emerald-500/20',
+            orange: 'sm:border-orange-500/30 sm:bg-orange-500/10 sm:text-orange-300 sm:hover:bg-orange-500/20',
+            violet: 'sm:border-violet-500/30 sm:bg-violet-500/10 sm:text-violet-300 sm:hover:bg-violet-500/20',
+            cyan: 'sm:border-cyan-500/30 sm:bg-cyan-500/10 sm:text-cyan-300 sm:hover:bg-cyan-500/20',
+            indigo: 'sm:border-indigo-500/30 sm:bg-indigo-500/10 sm:text-indigo-300 sm:hover:bg-indigo-500/20',
           };
           const GLYPH = {
-            approve: 'bg-sky-500/15 text-sky-300',
-            money: 'bg-emerald-500/15 text-emerald-300',
-            stock: 'bg-violet-500/15 text-violet-300',
+            sky: 'bg-sky-500/15 text-sky-300',
+            amber: 'bg-amber-500/15 text-amber-300',
+            rose: 'bg-rose-500/15 text-rose-300',
+            emerald: 'bg-emerald-500/15 text-emerald-300',
+            orange: 'bg-orange-500/15 text-orange-300',
+            violet: 'bg-violet-500/15 text-violet-300',
+            cyan: 'bg-cyan-500/15 text-cyan-300',
+            indigo: 'bg-indigo-500/15 text-indigo-300',
           };
           return (
             <button
@@ -461,7 +342,7 @@ export default function Dashboard() {
                 // phone: a tile
                 'flex flex-col items-center gap-1.5 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-1 py-2.5 active:scale-95',
                 // desktop: the pill it has always been
-                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-xl sm:px-3.5 sm:py-2 sm:text-sm sm:font-medium sm:active:scale-100',
+                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:px-4 sm:py-2 sm:text-sm sm:font-semibold sm:active:scale-100',
                 TINT[q.kind],
               )}
             >
@@ -623,6 +504,100 @@ export default function Dashboard() {
           </div>
         );
       })()}
+
+      {/* ── The money ──────────────────────────────────────────────────────
+             This used to be a tall green banner at the very top: the figure,
+             two chips, a greeting, a section label, a bar and three rows. The
+             banner above it already says who is signed in and what day it is,
+             so this is now a card like any other — the total on the left with
+             the pockets it sits in, the day's movement on the right — and it
+             sits under the attention list, because what needs deciding comes
+             before what is simply true. ── */}
+      <div className="card mb-4 overflow-hidden sm:mb-5">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+          <h2 className="text-base font-semibold text-foreground">The money</h2>
+          <div className="flex items-center gap-2">
+            {/* This is the NET move in the balance, so it has to be worded as
+                one. It read "TSh 449,000 out today" on a day when 624,000 went
+                out and 175,000 came in. Both gross figures are in the payload,
+                so they carry the detail on hover. */}
+            <span
+              title={`In ${formatCurrency(today.moneyIn || 0)} · out ${formatCurrency(today.moneyOut || 0)}`}
+              className={clsx(
+                'hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold sm:inline-flex',
+                today.netCash === 0 ? 'bg-white/[0.06] text-muted'
+                  : today.netCash > 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300',
+              )}>
+              {today.netCash === 0 ? null : today.netCash > 0 ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
+              {today.netCash === 0
+                ? 'No change today'
+                : <>{formatCurrency(Math.abs(today.netCash))} {today.netCash > 0 ? 'up' : 'down'} today</>}
+            </span>
+            <button onClick={() => navigate('/finance?tab=accounts')}
+              className="cursor-pointer text-xs font-semibold text-brand-400 transition hover:text-brand-300">
+              Open accounts →
+            </button>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+          {/* Left: what there is, and which pocket holds it. An account with
+              nothing in it is not an answer to "where does it sit", so it is
+              left out; its colour stays reserved by its original position so
+              the others do not shuffle when one empties. */}
+          <div className="min-w-0 p-4 sm:p-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">In the accounts</p>
+            <p className="mt-1.5 text-[30px] font-bold leading-none tracking-tight text-foreground sm:text-4xl">
+              {formatCurrency(totalFunds)}
+            </p>
+            {totalFunds > 0 && (
+              <div className="mt-4 flex h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                {heroAccounts.map((a) => (
+                  <div key={a.id} className={HERO_BAR[a._i % HERO_BAR.length]}
+                    style={{ width: `${Math.max(0, (a.balance / totalFunds) * 100)}%` }} />
+                ))}
+              </div>
+            )}
+            <div className="mt-3 divide-y divide-border/70">
+              {heroAccounts.map((a) => {
+                const Icon = ACCOUNT_ICON[a.type] || Wallet;
+                const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
+                return (
+                  <button key={a.id} onClick={() => navigate('/finance?tab=accounts')}
+                    className="group flex w-full cursor-pointer items-center gap-2.5 py-2 text-left transition hover:opacity-80 sm:gap-3 sm:py-2.5">
+                    <span className={clsx('h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5', HERO_DOT[a._i % HERO_DOT.length])} />
+                    <Icon className="hidden h-4 w-4 shrink-0 text-faint sm:block" />
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-muted sm:text-sm">{a.name}</span>
+                    <span className={clsx('shrink-0 text-sm font-bold tabular-nums sm:text-base', a.balance < 0 ? 'text-rose-300' : 'text-foreground')}>
+                      {formatCurrency(a.balance)}
+                    </span>
+                    <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-faint">{share}%</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right: what moved today. */}
+          <div className="min-w-0 border-t border-border p-4 sm:p-5 lg:border-l lg:border-t-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">Today</p>
+            <div className="mt-1 divide-y divide-border/70">
+              {[
+                { label: 'Money in today', value: formatCurrency(today.moneyIn || 0), tone: (today.moneyIn || 0) > 0 ? 'text-emerald-300' : 'text-muted' },
+                { label: 'Money out today', value: formatCurrency(today.moneyOut || 0), tone: (today.moneyOut || 0) > 0 ? 'text-rose-300' : 'text-muted' },
+                { label: 'Net cash today', value: formatCurrency(today.netCash || 0), tone: today.netCash > 0 ? 'text-emerald-300' : today.netCash < 0 ? 'text-rose-300' : 'text-muted' },
+                { label: 'Boxes sold today', value: formatNumber(today.boxesSold || 0), tone: 'text-foreground' },
+              ].map((r) => (
+                <div key={r.label} className="flex items-center justify-between gap-3 py-2.5 sm:py-3">
+                  <span className="min-w-0 truncate text-[13px] text-muted sm:text-sm">{r.label}</span>
+                  <span className={clsx('shrink-0 text-sm font-bold tabular-nums sm:text-base', r.tone)}>{r.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
 
       {/* ── Today's business (all from Finance) ──
           A figure on its own says how much and nothing about whether that is
