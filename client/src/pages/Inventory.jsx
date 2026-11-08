@@ -148,10 +148,10 @@ function Balances() {
         <div className="max-w-sm flex-1"><SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search product…" /></div>
         <div className="flex flex-wrap gap-1.5">
           <button onClick={() => { setBrand(''); setPage(1); }}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${brand === '' ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>All brands</button>
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${brand === '' ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>All brands</button>
           {brands.map((b) => (
             <button key={b.id} onClick={() => { setBrand(b.name); setPage(1); }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${brand === b.name ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{b.name}</button>
+              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${brand === b.name ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{b.name}</button>
           ))}
         </div>
       </div>
@@ -171,7 +171,7 @@ function Balances() {
             // lets the eye go straight to the one that is a problem.
             const cards = [
               { label: 'Stock value', value: formatCurrency(sm.totalValue), sub: `${formatNumber(sm.productCount)} products`,
-                icon: Boxes, ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.14]', chip: 'bg-brand-500/15 text-brand-400', num: 'text-foreground' },
+                icon: Boxes, ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.14]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-foreground' },
               { label: 'Boxes on hand', value: formatNumber(sm.totalBoxes), sub: 'everywhere in the business',
                 icon: Warehouse, ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.14]', chip: 'bg-sky-500/15 text-sky-400', num: 'text-foreground' },
               { label: 'Running low', value: formatNumber(sm.lowCount), sub: sm.lowCount ? 'reorder before they go' : 'nothing to reorder',
@@ -247,7 +247,7 @@ function Balances() {
                             <div key={`${h.type}:${h.id}`}>
                               <div className="flex items-center gap-2">
                                 {isStore
-                                  ? <Warehouse className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+                                  ? <Warehouse className="h-3.5 w-3.5 shrink-0 text-brand-600" />
                                   : <Truck className="h-3.5 w-3.5 shrink-0 text-violet-400" />}
                                 <span className="min-w-0 flex-1 truncate text-sm text-foreground">{h.name}</span>
                                 <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{formatNumber(h.boxes)}</span>
@@ -355,7 +355,7 @@ function Balances() {
                             <div key={k} className="flex items-center justify-between gap-2">
                               <span className="flex min-w-0 items-center gap-1.5">
                                 {loc.type === 'WAREHOUSE'
-                                  ? <Warehouse className="h-3 w-3 shrink-0 text-brand-400" />
+                                  ? <Warehouse className="h-3 w-3 shrink-0 text-brand-600" />
                                   : <Truck className="h-3 w-3 shrink-0 text-violet-400" />}
                                 <span className="truncate text-[11px] text-muted">{loc.name}</span>
                               </span>
@@ -493,7 +493,7 @@ function ProductStockModal({ row, onClose }) {
                 return (
                   <div key={i} className="flex items-center gap-3 bg-surface px-3 py-2">
                     {loc.type === 'WAREHOUSE'
-                      ? <Warehouse className="h-3.5 w-3.5 shrink-0 text-brand-400" />
+                      ? <Warehouse className="h-3.5 w-3.5 shrink-0 text-brand-600" />
                       : <Truck className="h-3.5 w-3.5 shrink-0 text-violet-400" />}
                     <span className="min-w-0 flex-1 truncate text-sm text-foreground">{loc.name}</span>
                     <span className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.07] sm:block">
@@ -565,7 +565,7 @@ export default function Inventory() {
 
       <div className="mb-4 flex gap-2">
         {[['balances', 'Stock balances'], ['movements', 'Movement ledger']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === k ? 'bg-brand-600 text-slate-950' : 'bg-surface text-muted hover:bg-elevated'}`}>{label}</button>
+          <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === k ? 'bg-brand-600 text-white' : 'bg-surface text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
 

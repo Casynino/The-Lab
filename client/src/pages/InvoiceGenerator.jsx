@@ -40,8 +40,8 @@ function InvoicePreview({ inv }) {
   return (
     <div id="invoice-paper" className="mx-auto max-w-[640px] rounded-2xl bg-white p-6 text-slate-900 shadow-card sm:p-8">
       {/* Header */}
-      <div className="border-b-2 border-lime-500 pb-4 text-center">
-        <h2 className="text-2xl font-black tracking-tight text-lime-700">{INVOICE_COMPANY.name}</h2>
+      <div className="border-b-2 border-brand-500 pb-4 text-center">
+        <h2 className="text-2xl font-black tracking-tight text-brand-500">{INVOICE_COMPANY.name}</h2>
         <p className="mt-1 text-xs text-slate-500">TIN: {INVOICE_COMPANY.tin}</p>
         <p className="text-xs text-slate-500">{INVOICE_COMPANY.location}</p>
       </div>
@@ -65,7 +65,7 @@ function InvoicePreview({ inv }) {
       {/* Items */}
       <table className="mt-5 w-full border-collapse text-sm">
         <thead>
-          <tr className="bg-lime-500 text-left text-slate-900">
+          <tr className="bg-brand-900/400 text-left text-slate-900">
             <th className="rounded-l px-3 py-2 font-bold">Item</th>
             <th className="px-2 py-2 text-right font-bold">Qty</th>
             <th className="px-2 py-2 text-right font-bold">Unit Price</th>
@@ -85,9 +85,9 @@ function InvoicePreview({ inv }) {
       </table>
 
       {/* Grand total */}
-      <div className="mt-3 flex items-center justify-between rounded-lg bg-lime-50 px-3 py-3">
-        <span className="font-bold text-lime-800">GRAND TOTAL</span>
-        <span className="text-lg font-black text-lime-800 tabular-nums">{tzs(inv.total)}</span>
+      <div className="mt-3 flex items-center justify-between rounded-lg bg-brand-900/40 px-3 py-3">
+        <span className="font-bold text-brand-300">GRAND TOTAL</span>
+        <span className="text-lg font-black text-brand-300 tabular-nums">{tzs(inv.total)}</span>
       </div>
 
       {/* Payment details */}
@@ -109,7 +109,7 @@ function InvoicePreview({ inv }) {
         </ul>
       </div>
 
-      <p className="mt-5 border-t border-slate-100 pt-3 text-center text-xs italic text-lime-700">{INVOICE_FOOTER}</p>
+      <p className="mt-5 border-t border-slate-100 pt-3 text-center text-xs italic text-brand-500">{INVOICE_FOOTER}</p>
     </div>
   );
 }
@@ -277,7 +277,7 @@ export default function InvoiceGenerator() {
                   ))}
                   <div className="flex items-center justify-between rounded-xl bg-brand-500/10 px-3 py-2.5">
                     <span className="text-sm font-semibold text-foreground">Grand total</span>
-                    <span className="text-lg font-bold text-brand-400 tabular-nums">{tzs(grandTotal)}</span>
+                    <span className="text-lg font-bold text-brand-600 tabular-nums">{tzs(grandTotal)}</span>
                   </div>
                 </div>
               )}

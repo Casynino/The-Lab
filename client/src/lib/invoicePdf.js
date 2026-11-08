@@ -3,7 +3,7 @@ import { INVOICE_COMPANY, INVOICE_PAYMENT, INVOICE_TERMS, INVOICE_FOOTER } from 
 
 // A clean, print-friendly A4 invoice rendered with jsPDF — reliable output that
 // can be downloaded as a file and shared (WhatsApp / native share sheet).
-const LIME = [132, 204, 22];
+const BRAND = [238, 49, 36]; // Hao Labs red — see lib/brand.js
 const DARKGREEN = [60, 90, 16];
 const INK = [24, 24, 27];
 const MUTED = [110, 110, 120];
@@ -27,7 +27,7 @@ export function buildInvoicePdf(inv) {
   y += 4.5;
   doc.text(INVOICE_COMPANY.location, W / 2, y, { align: 'center' });
   y += 6;
-  doc.setDrawColor(...LIME).setLineWidth(0.8);
+  doc.setDrawColor(...BRAND).setLineWidth(0.8);
   doc.line(M, y, right, y);
   doc.setLineWidth(0.2);
   y += 9;
@@ -57,7 +57,7 @@ export function buildInvoicePdf(inv) {
   // ── Items table ──
   const cols = { item: M, qty: 120, unit: 158, total: right };
   const headH = 8;
-  doc.setFillColor(...LIME);
+  doc.setFillColor(...BRAND);
   doc.rect(M, y, right - M, headH, 'F');
   doc.setFont('helvetica', 'bold').setFontSize(9.5).setTextColor(...INK);
   doc.text('Item', cols.item + 2, y + 5.4);

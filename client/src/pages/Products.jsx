@@ -200,7 +200,7 @@ export default function Products() {
         const value = rows.reduce((n, p) => n + (p.onHandBase || 0) * Number(p.sellingPrice || 0), 0);
         const cards = [
           { label: 'Products', value: formatNumber(data?.meta?.total ?? rows.length), icon: Package, sub: 'in the catalogue',
-            ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
+            ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
           { label: 'Boxes on hand', value: formatNumber(onHand), icon: Boxes, sub: 'across these products',
             ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
           { label: 'Worth at selling price', value: formatCurrency(value), icon: Wallet, sub: 'if every box sold',
@@ -234,7 +234,7 @@ export default function Products() {
             {[{ id: '', name: 'All brands' }, ...brands].map((b) => (
               <button key={b.id || 'all'} type="button" onClick={() => { setBrandId(b.id); setPage(1); }}
                 className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
-                  brandId === b.id ? 'bg-brand-500/15 text-brand-300 ring-brand-500/30' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
+                  brandId === b.id ? 'bg-brand-500/15 text-brand-600 ring-brand-500/30' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
                 {b.name}
               </button>
             ))}
@@ -281,7 +281,7 @@ export default function Products() {
                     <TD><Badge className={p.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/[0.06] text-muted'}>{p.isActive ? 'Active' : 'Inactive'}</Badge></TD>
                     <TD>
                       <div className="flex justify-end gap-1">
-                        <button title="Edit" className="cursor-pointer px-2 py-1 text-faint transition hover:text-brand-400" onClick={() => setModal({ open: true, editing: p })}><Pencil className="h-4 w-4" /></button>
+                        <button title="Edit" className="cursor-pointer px-2 py-1 text-faint transition hover:text-brand-600" onClick={() => setModal({ open: true, editing: p })}><Pencil className="h-4 w-4" /></button>
                         <button title="Remove" className="cursor-pointer px-2 py-1 text-faint transition hover:text-rose-400" onClick={() => { if (confirm(`Remove ${p.name}?`)) del.mutate(p.id); }}><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </TD>

@@ -24,7 +24,7 @@ function Row({ label, pct, hint, reward, ready, readyLabel, markers = [], onClic
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
         <span className={clsx(
           'text-xl font-bold leading-none tabular-nums',
-          ready ? 'text-emerald-400' : 'text-brand-400',
+          ready ? 'text-emerald-400' : 'text-brand-600',
         )}>
           {Math.round(width)}<span className="text-xs font-semibold text-faint">%</span>
         </span>

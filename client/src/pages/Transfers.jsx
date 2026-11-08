@@ -110,7 +110,7 @@ const DIR_FILTERS = [
 ];
 
 const DIR_TONE = {
-  WAREHOUSE_TO_REP: { chip: 'bg-brand-500/15 text-brand-300', icon: UserRound },
+  WAREHOUSE_TO_REP: { chip: 'bg-brand-500/15 text-brand-600', icon: UserRound },
   REP_TO_WAREHOUSE: { chip: 'bg-amber-500/15 text-amber-300', icon: RotateCcw },
   WAREHOUSE_TO_WAREHOUSE: { chip: 'bg-sky-500/15 text-sky-300', icon: Warehouse },
 };
@@ -169,7 +169,7 @@ export default function Transfers() {
             <TintCard label="Boxes moved" value={formatNumber(sum.boxes)} sub={period} icon={Boxes}
               ring="ring-violet-500/25" glow="from-violet-500/[0.14]" chip="bg-violet-500/15 text-violet-300" num="text-violet-300" />
             <TintCard label="Movements" value={formatNumber(sum.movements)} sub="completed transfers" icon={Truck}
-              ring="ring-brand-500/25" glow="from-brand-500/[0.12]" chip="bg-brand-500/15 text-brand-300" num="text-brand-300" />
+              ring="ring-brand-500/25" glow="from-brand-500/[0.12]" chip="bg-brand-500/15 text-brand-600" num="text-brand-600" />
             <TintCard label="Took the most" value={top ? top.name : '—'}
               sub={top ? `${formatNumber(top.boxes)} boxes of the ${formatNumber(sum.boxes)}` : 'nothing dispatched'} icon={UserRound}
               ring="ring-emerald-500/25" glow="from-emerald-500/[0.12]" chip="bg-emerald-500/15 text-emerald-300" num="text-lg text-emerald-300" />
@@ -213,7 +213,7 @@ export default function Transfers() {
             onClick={() => { setDirection(f.key); setPage(1); }}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
               direction === f.key
-                ? 'bg-brand-500/15 text-brand-300 ring-brand-500/30'
+                ? 'bg-brand-500/15 text-brand-600 ring-brand-500/30'
                 : 'bg-surface text-muted ring-white/[0.07] hover:text-foreground'}`}
           >
             {f.label}
@@ -240,7 +240,7 @@ export default function Transfers() {
                     <Fragment key={t.id}>
                       <TR className={dead ? 'opacity-60' : ''}>
                         <TD>
-                          <button onClick={() => setExpanded(isOpen ? null : t.id)} className="flex items-center gap-1.5 font-medium text-foreground hover:text-brand-300">
+                          <button onClick={() => setExpanded(isOpen ? null : t.id)} className="flex items-center gap-1.5 font-medium text-foreground hover:text-brand-600">
                             <ChevronDown className={`h-3.5 w-3.5 text-faint transition ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
                             {t.transferNumber}
                           </button>

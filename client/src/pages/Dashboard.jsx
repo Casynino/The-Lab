@@ -58,6 +58,7 @@ import {
   TD,
   Modal,
 } from '@/components/ui';
+import { RED } from '@/lib/brand';
 
 // How many attention rows are visible before the list scrolls, and the height
 // of one row: py-2.5 top and bottom (20px) over two leading-tight lines at
@@ -175,7 +176,7 @@ function ReviewWithdrawals({ items, onClose }) {
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" disabled={!!busy}
                 onClick={() => run(w.id, 'PAY')}
-                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-slate-950 ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
+                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-white ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
                 <ShieldCheck className="h-4 w-4" />
                 {busy === `${w.id}:PAY` ? 'Paying…' : 'Approve & pay'}
               </button>
@@ -210,7 +211,7 @@ function PeriodTabs({ value, onChange, options }) {
           onClick={() => onChange(o.key)}
           className={clsx(
             'rounded-[10px] px-3 py-1.5 text-xs font-semibold transition',
-            value === o.key ? 'bg-brand-500 text-slate-950' : 'text-muted hover:text-foreground',
+            value === o.key ? 'bg-brand-500 text-white' : 'text-muted hover:text-foreground',
           )}
         >
           {o.label}
@@ -310,7 +311,7 @@ function Analysis({ a, navigate }) {
         <MonthCard label="Net profit" icon={Coins} tone="bg-violet-500/15 text-violet-300"
           value={formatCurrency(month.netProfit)} delta={growth.netProfit}
           beforeLabel={formatCurrency(lastMonth.netProfit)} />
-        <MonthCard label="Boxes sold" icon={Boxes} tone="bg-brand-500/15 text-brand-300"
+        <MonthCard label="Boxes sold" icon={Boxes} tone="bg-brand-500/15 text-brand-600"
           value={formatNumber(month.boxes)} delta={growth.boxes}
           beforeLabel={formatNumber(lastMonth.boxes)} />
         {/* Not a month's figure at all, so it carries no comparison: it is
@@ -331,7 +332,7 @@ function Analysis({ a, navigate }) {
               <TrendChart data={trend} height={240} series={[
                 { key: 'revenue', name: 'Revenue', color: '#38bdf8' },
                 { key: 'cost', name: 'Cost of boxes', color: '#f43f5e' },
-                { key: 'profit', name: 'What was left', color: '#a3e635' },
+                { key: 'profit', name: 'What was left', color: RED },
               ]} />
             ) : (
               <p className="px-3 py-10 text-center text-sm text-muted">Nothing sold in the last twelve months yet.</p>
@@ -391,7 +392,7 @@ function Analysis({ a, navigate }) {
               <h2 className="text-base font-semibold text-foreground">Boxes still out with reps</h2>
               <p className="mt-0.5 text-xs text-muted">From the day they were issued</p>
             </div>
-            <button onClick={() => navigate('/settlements')} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-400 hover:text-brand-300">
+            <button onClick={() => navigate('/settlements')} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-600 hover:text-brand-600">
               Open orders →
             </button>
           </div>
@@ -479,7 +480,7 @@ function Analysis({ a, navigate }) {
           <div className="px-2 pb-2 pt-3">
             {anyYear ? (
               <TrendChart data={boxesByYear} height={220} money={false} series={[
-                { key: 'thisYear', name: 'This year', color: '#a3e635' },
+                { key: 'thisYear', name: 'This year', color: RED },
                 { key: 'lastYear', name: 'Last year', color: '#64748b' },
               ]} />
             ) : (
@@ -498,7 +499,7 @@ function SectionHeading({ title, action, navigate }) {
     <div className="mb-2.5 flex items-end justify-between gap-3">
       <h2 className="min-w-0 truncate text-[11px] font-bold uppercase tracking-[0.16em] text-faint">{title}</h2>
       {action && (
-        <button onClick={() => navigate(action.to)} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-400 hover:text-brand-300">
+        <button onClick={() => navigate(action.to)} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-600 hover:text-brand-600">
           {action.label} →
         </button>
       )}
@@ -811,7 +812,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between gap-2">
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">In the accounts</p>
               <button onClick={() => navigate('/finance?tab=accounts')}
-                className="cursor-pointer text-[11px] font-semibold text-brand-400 transition hover:text-brand-300 lg:hidden">
+                className="cursor-pointer text-[11px] font-semibold text-brand-600 transition hover:text-brand-600 lg:hidden">
                 Open accounts →
               </button>
             </div>
@@ -868,7 +869,7 @@ export default function Dashboard() {
           </div>
 
           <button onClick={() => navigate('/finance?tab=accounts')}
-            className="hidden shrink-0 cursor-pointer text-xs font-semibold text-brand-400 transition hover:text-brand-300 lg:block">
+            className="hidden shrink-0 cursor-pointer text-xs font-semibold text-brand-600 transition hover:text-brand-600 lg:block">
             Open accounts →
           </button>
         </div>
@@ -1031,7 +1032,7 @@ export default function Dashboard() {
               const total = wh + rep;
               const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
               const parts = [
-                { key: 'wh', label: 'In warehouse', value: wh, colour: '#a3e635', to: '/inventory' },
+                { key: 'wh', label: 'In warehouse', value: wh, colour: RED, to: '/inventory' },
                 { key: 'rep', label: 'With reps', value: rep, colour: '#7c3aed', to: '/reps' },
               ];
               return (
@@ -1091,7 +1092,7 @@ export default function Dashboard() {
                 data={charts.daily}
                 height={240}
                 series={[
-                  { key: 'revenue', name: 'Revenue', color: '#a3e635' },
+                  { key: 'revenue', name: 'Revenue', color: RED },
                   { key: 'profit', name: 'Gross profit', color: '#34d399' },
                 ]}
               />
@@ -1165,7 +1166,7 @@ export default function Dashboard() {
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2>
-              <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-300">
+              <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-600">
                 {shown.when}
               </span>
             </div>

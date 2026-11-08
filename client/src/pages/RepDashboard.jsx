@@ -38,15 +38,15 @@ function hoursLabel(h) {
 const HEADER_LIGHT = {
   'Good morning': {
     near: 'bg-[radial-gradient(closest-side,rgba(251,146,60,0.10),transparent_72%)]',
-    far: 'bg-[radial-gradient(closest-side,rgba(163,230,53,0.06),transparent_75%)]',
+    far: 'bg-[radial-gradient(closest-side,rgba(238,49,36,0.07),transparent_75%)]',
   },
   'Good afternoon': {
-    near: 'bg-[radial-gradient(closest-side,rgba(132,204,22,0.11),transparent_72%)]',
+    near: 'bg-[radial-gradient(closest-side,rgba(255,95,75,0.12),transparent_72%)]',
     far: 'bg-[radial-gradient(closest-side,rgba(16,185,129,0.06),transparent_75%)]',
   },
   'Good evening': {
     near: 'bg-[radial-gradient(closest-side,rgba(99,102,241,0.13),transparent_72%)]',
-    far: 'bg-[radial-gradient(closest-side,rgba(132,204,22,0.05),transparent_75%)]',
+    far: 'bg-[radial-gradient(closest-side,rgba(238,49,36,0.06),transparent_75%)]',
   },
 };
 
@@ -67,7 +67,7 @@ function DashCard({ icon: Icon, label, value, hint, badge, highlight, onClick })
       <div className="mb-2.5 flex items-center justify-between">
         <span className={clsx(
           'relative flex h-8 w-8 items-center justify-center rounded-lg',
-          highlight ? 'bg-brand-500 text-slate-950' : 'bg-elevated text-brand-500',
+          highlight ? 'bg-brand-500 text-white' : 'bg-elevated text-brand-500',
         )}>
           <Icon className="h-4 w-4" />
           {badge != null && (
@@ -177,7 +177,7 @@ export default function RepDashboard() {
             transition={{ duration: reduce ? 0 : 0.42, delay: reduce ? 0 : 0.22, ease: [0.2, 0.8, 0.3, 1] }}
             className="inline-block text-[28px] font-bold tracking-[-0.02em] text-foreground sm:text-[34px]"
           >
-            {first}<span className="text-brand-400">.</span>
+            {first}<span className="text-brand-600">.</span>
           </motion.span>
         </h1>
       </div>
@@ -274,7 +274,7 @@ export default function RepDashboard() {
                   )}
                   <div className={clsx('mt-1.5 flex items-center justify-between text-xs', overdue ? 'text-rose-400' : approaching ? 'text-amber-400' : 'text-faint')}>
                     <span>{hoursLabel(o.hoursRemaining)} · {formatDateTime(o.deadlineAt)}</span>
-                    <span className="font-semibold text-brand-400">Settle &rsaquo;</span>
+                    <span className="font-semibold text-brand-600">Settle &rsaquo;</span>
                   </div>
                 </motion.button>
               );
@@ -320,7 +320,7 @@ export default function RepDashboard() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-400">
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
                           Open <Eye className="h-3.5 w-3.5" />
                         </span>
                       </td>

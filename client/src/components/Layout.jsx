@@ -181,14 +181,14 @@ function GlassSidebar({
   };
 
   const brand = (compact) => (
-    <NavLink to="/" onClick={onNavigate} data-hint="The Lab"
+    <NavLink to="/" onClick={onNavigate} data-hint="Hao Labs"
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
       <span className={clsx('grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 ring-2 ring-brand-500/40', sheet ? 'size-9' : 'size-10')}>
         <Boxes className={clsx('text-slate-950', sheet ? 'size-4' : 'h-[18px] w-[18px]')} />
       </span>
       {compact ? null : (
         <span className="min-w-0 leading-tight">
-          <span className={clsx('block truncate font-semibold tracking-tight g-strong', sheet ? 'text-[13px]' : 'text-sm')}>The Lab</span>
+          <span className={clsx('block truncate font-semibold tracking-tight g-strong', sheet ? 'text-[13px]' : 'text-sm')}>Hao Labs</span>
           <span className={clsx('mt-0.5 block truncate g-soft', sheet ? 'text-[11px]' : 'text-xs')}>Hao Stock</span>
         </span>
       )}
@@ -489,13 +489,13 @@ function Banner({ user, unread, onBell }) {
 
   return (
     <section className="relative mb-4 overflow-hidden rounded-2xl text-white ring-1 ring-white/10 shadow-[0_12px_30px_-14px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.10)]"
-      style={{ background: 'linear-gradient(120deg,#08140e 0%,#0d2a1c 45%,#114036 75%,#16566a 100%)' }}>
+      style={{ background: 'linear-gradient(120deg,#140807 0%,#2a0f0b 42%,#4a1711 72%,#6e2419 100%)' }}>
       {/* Depth, painted in: a light from the right, a little lime from the top,
           and a fine sheen along the top edge. */}
       <div aria-hidden className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(600px 220px at 92% 60%, rgba(56,189,160,0.38), transparent 62%)' }} />
+        style={{ background: 'radial-gradient(600px 220px at 92% 60%, rgba(255,95,75,0.34), transparent 62%)' }} />
       <div aria-hidden className="pointer-events-none absolute inset-0"
-        style={{ background: 'radial-gradient(420px 150px at 50% -10%, rgba(163,230,53,0.16), transparent 70%)' }} />
+        style={{ background: 'radial-gradient(420px 150px at 50% -10%, rgba(238,49,36,0.20), transparent 70%)' }} />
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
 
       {/* The cartons at the side: softly on a phone, clearer on a computer. */}
@@ -530,13 +530,13 @@ function Banner({ user, unread, onBell }) {
           long ? 'text-base tracking-[0.2em] sm:text-2xl sm:tracking-[0.3em] lg:text-3xl'
             : 'text-xl tracking-[0.32em] sm:text-3xl sm:tracking-[0.5em] lg:text-4xl',
         )}>
-          <span aria-hidden className="hidden h-px w-10 shrink-0 bg-brand-400/60 sm:block" />
+          <span aria-hidden className="hidden h-px w-10 shrink-0 bg-brand-500/70 sm:block" />
           {/* The padding gives back the space the wide tracking leaves after the
               last letter, so the word sits truly in the middle. */}
           <span className={clsx('min-w-0 break-words', long ? 'pl-[0.2em] sm:pl-[0.3em]' : 'pl-[0.32em] sm:pl-[0.5em]')}>{name}</span>
-          <span aria-hidden className="hidden h-px w-10 shrink-0 bg-brand-400/60 sm:block" />
+          <span aria-hidden className="hidden h-px w-10 shrink-0 bg-brand-500/70 sm:block" />
         </h1>
-        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.32em] text-brand-400 sm:mt-2 sm:text-[11px]">
+        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.32em] text-brand-600 sm:mt-2 sm:text-[11px]">
           {bannerTitle(user?.role)}
         </p>
         <p className="mt-1 text-xs text-white/65 sm:mt-1.5 sm:text-sm">
@@ -559,7 +559,7 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
             Notifications
             {unread > 0 && <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{unread}</span>}
           </span>
-          {unread > 0 && <button onClick={onReadAll} className="cursor-pointer text-xs text-brand-400 hover:underline">Mark all read</button>}
+          {unread > 0 && <button onClick={onReadAll} className="cursor-pointer text-xs text-brand-600 hover:underline">Mark all read</button>}
         </div>
         {notes.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted">You're all caught up.</div>
@@ -573,13 +573,13 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
                   <div className="mt-0.5 line-clamp-2 text-xs text-muted">{n.message}</div>
                   <div className="mt-1 text-[10px] text-faint">{fromNow(n.createdAt)}</div>
                 </div>
-                {!n.isRead && <button onClick={() => onReadOne(n.id)} className="shrink-0 cursor-pointer text-[10px] text-brand-400 hover:underline">Read</button>}
+                {!n.isRead && <button onClick={() => onReadOne(n.id)} className="shrink-0 cursor-pointer text-[10px] text-brand-600 hover:underline">Read</button>}
               </li>
             ))}
           </ul>
         )}
         <div className="border-t border-border p-2 text-center">
-          <button onClick={onViewAll} className="cursor-pointer text-sm text-brand-400 hover:underline">View all notifications →</button>
+          <button onClick={onViewAll} className="cursor-pointer text-sm text-brand-600 hover:underline">View all notifications →</button>
         </div>
       </div>
     </>
@@ -723,7 +723,7 @@ export default function Layout() {
             initial={{ x: -24, opacity: 0.6 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="absolute inset-y-3 left-3 w-[14.75rem] max-w-[78vw]"
+            className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 top-[calc(0.75rem+env(safe-area-inset-top))] w-[14.75rem] max-w-[78vw]"
           >
             <GlassSidebar mode="sheet" {...shared} onNavigate={() => setDrawer(null)} autoFocusSearch={drawer === 'search'} />
           </motion.div>
@@ -737,8 +737,17 @@ export default function Layout() {
         <div className="lg:pl-[var(--sidebar-room)]">
           {/* On a phone the menu and the bell have to stay reachable, so they
               sit in a small bar of their own above everything. */}
-          <div className="sticky top-0 z-30 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] lg:hidden">
-            <div className="glass flex h-12 items-center gap-1 rounded-2xl border px-2">
+          {/* calc, not max: on a phone with a camera hole the inset IS the
+              clock's height, so max() parks the bar against the clock. Adding
+              to it leaves the same 12px of air there as everywhere else.
+              The gradient is the app's own ground painted solid behind the bar
+              and faded out under it, so a page scrolls AWAY rather than
+              sliding visibly past a floating pill. */}
+          <div
+            className="pointer-events-none sticky top-0 z-30 px-3 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] lg:hidden"
+            style={{ background: 'linear-gradient(to bottom, #0a0a0b 62%, rgba(10,10,11,0))' }}
+          >
+            <div className="glass pointer-events-auto flex h-12 items-center gap-1 rounded-2xl border px-2">
               <button className="cursor-pointer rounded-xl p-2 text-muted hover:bg-white/[0.06] hover:text-white" onClick={() => setDrawer('menu')} aria-label="Menu">
                 <Menu className="h-5 w-5" />
               </button>
@@ -756,7 +765,12 @@ export default function Layout() {
             </div>
           </div>
 
-          <main className="overflow-x-clip p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:p-4 lg:p-6 lg:pb-8">
+          {/* Each side named on its own. `p-3 sm:p-4` sets padding-bottom
+              twice over, and a responsive variant beats an unprefixed pb-*,
+              so a single pb-[...] for the tab bar silently vanished on every
+              screen past 640px — which is most phones held sideways and every
+              tablet. The room under the page is a spacer now, below. */}
+          <main className="overflow-x-clip px-3 pb-3 pt-1 sm:px-4 sm:pb-4 lg:px-6 lg:pb-8 lg:pt-6">
             {/* 1400px was a cap for a laptop. On the owner's own screen it
                 left a hand's width of empty page between the rail and the
                 banner, and the same again on the right — the panel looked
@@ -783,17 +797,24 @@ export default function Layout() {
               </motion.div>
             </div>
           </main>
+          {/* The room the tab bar stands in. Without it the bar is a lid: the
+              last row of every list — the oldest order, the last box — sits
+              under it, and on a list that ends exactly at the fold there is
+              nothing left to scroll to uncover it. */}
+          <div aria-hidden className="h-[calc(3.5rem+env(safe-area-inset-bottom))] lg:hidden" />
         </div>
       </div>
 
       {/* The phone's tab bar */}
-      <nav className="glass fixed inset-x-0 bottom-0 z-40 flex border-t pb-[max(0.25rem,env(safe-area-inset-bottom))] lg:hidden">
+      {/* The left/right insets too: body padding cannot move a fixed element,
+          so sideways on a notched phone the first tab would sit under it. */}
+      <nav className="glass fixed inset-x-0 bottom-0 z-40 flex border-t pb-[max(0.25rem,env(safe-area-inset-bottom))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden">
         {TABS.map((tab) => {
           const active = tab.to === '/' ? location.pathname === '/' : location.pathname.startsWith(tab.to);
           return (
             <NavLink key={tab.to} to={tab.to}
               className={clsx('relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition',
-                active ? 'text-brand-400' : 'text-faint')}>
+                active ? 'text-brand-600' : 'text-faint')}>
               {active && <span className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-brand-400" />}
               <span className="relative">
                 <tab.icon className="h-[19px] w-[19px]" />

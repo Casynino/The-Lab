@@ -4,9 +4,12 @@ import {
   CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { RED, SERIES } from '@/lib/brand';
 
 const AXIS = { fontSize: 11, fill: '#94a3b8' };
-const PALETTE = ['#a3e635', '#84cc16', '#f59e0b', '#e11d48', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
+// Hao Labs' red leads; the rest are chosen to stay apart from it and from
+// each other on a near-black page. See lib/brand.js.
+const PALETTE = SERIES;
 
 function MoneyTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -38,7 +41,7 @@ function CountTooltip({ active, payload, label }) {
   );
 }
 
-export function TrendChart({ data, series = [{ key: 'revenue', name: 'Revenue', color: '#a3e635' }], height = 260, money = true }) {
+export function TrendChart({ data, series = [{ key: 'revenue', name: 'Revenue', color: RED }], height = 260, money = true }) {
   /* An SVG id is global to the document. Two charts on one page that both
      plot a series called "revenue" were defining `grad-revenue` twice, and
      the first definition won — so the second chart drew its Revenue band in
@@ -68,7 +71,7 @@ export function TrendChart({ data, series = [{ key: 'revenue', name: 'Revenue', 
   );
 }
 
-export function BarChartCard({ data, dataKey = 'value', labelKey = 'name', money = true, height = 280, color = '#a3e635' }) {
+export function BarChartCard({ data, dataKey = 'value', labelKey = 'name', money = true, height = 280, color = RED }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>

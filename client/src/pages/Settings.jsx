@@ -29,7 +29,7 @@ function Toggle({ checked, onChange, disabled }) {
       type="button"
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-lime-500' : 'bg-border'} ${disabled ? 'opacity-50' : ''}`}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-emerald-500' : 'bg-border'} ${disabled ? 'opacity-50' : ''}`}
       aria-checked={checked}
       role="switch"
     >
@@ -40,7 +40,7 @@ function Toggle({ checked, onChange, disabled }) {
 
 function StatusChip({ row }) {
   if (row.status === 'SENT') {
-    return <Badge className="bg-lime-500/15 text-lime-600">{row.attempts > 1 ? 'Sent · retried' : 'Sent'}</Badge>;
+    return <Badge className="bg-emerald-500/15 text-emerald-400">{row.attempts > 1 ? 'Sent · retried' : 'Sent'}</Badge>;
   }
   if (row.status === 'FAILED') return <Badge className="bg-red-500/15 text-red-600">Failed</Badge>;
   return <Badge className="bg-amber-500/15 text-amber-600">Pending</Badge>;

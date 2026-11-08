@@ -1,26 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Download, EllipsisVertical, Share, SquarePlus, Smartphone, Compass, ExternalLink } from 'lucide-react';
+import { Download, EllipsisVertical, Menu, Share, SquarePlus, Smartphone } from 'lucide-react';
 import { Modal } from '@/components/ui';
 
 /**
  * Use it like an app.
  *
- * Nino, 9 Nov 2026: the screen must be full on ANY phone — "not only people on
- * iPhone, Google Pixel or Android or Huawei". A site open in a browser tab
- * always keeps the address bar, on every phone and in every browser, and no
- * page can hide it. The only full screen is the one the person installs. So on
- * a phone that has not installed it yet, a small sheet shows how — and the
- * steps differ by browser, which is the whole point of this file:
+ * Nino, 9 Nov 2026: the screen must be full on ANY phone — "iPhone and Android
+ * and Huawei and Google Pixel and any kind of phone". A site open in a browser
+ * tab always keeps the address bar, on every phone and in every browser, and
+ * no page can hide it. The only full screen is the one the person installs.
  *
- *   Android / Huawei / Samsung (Chromium)  one tap: the browser's own prompt
- *   iPhone in Safari                       Share → Add to Home Screen
- *   iPhone in Chrome, Firefox, Edge        only Safari can install on iOS
- *   inside WhatsApp, Instagram, Facebook   open it in the real browser first
- *   anything else on Android               browser menu → Add to Home screen
+ * So the sheet says how — and the way there is different on each browser, which
+ * is the whole point of this file. Chrome puts its menu at the TOP right;
+ * Samsung Internet and Huawei's browser put theirs at the BOTTOM; Safari hides
+ * it in the Share sheet; and WhatsApp's or Instagram's own browser cannot add
+ * anything to a home screen at all. Telling a Huawei user to look top right is
+ * the same as telling them it does not work.
  *
- * It opens by itself once, a moment after a phone's browser reaches the app,
- * and any time from "Get the app" on the sign-in page or in the account menu.
- * Nothing shows on a computer or once the app is installed.
+ * Ported from Target Express's components/install-app.tsx; keep them in step.
  */
 
 /* Chromium fires this once, early — long before any component asks. It is
@@ -48,6 +45,19 @@ const read = (key) => {
   try { return window.localStorage.getItem(key); } catch { return null; }
 };
 
+/** Which phone browser this is — see the note at the top of the file. */
+function browserOf(ua, ios) {
+  // None of these can put anything on a home screen. WhatsApp matters here:
+  // it is how a rep is sent the link in the first place.
+  if (/MicroMessenger|WhatsApp|FBAN|FBAV|Instagram|Line\/|TikTok|Snapchat|GSA\/|; wv\)/i.test(ua)) return 'in-app';
+  // On iOS every browser is Safari underneath, but only Safari itself installs.
+  if (ios) return /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/i.test(ua) ? 'ios-other' : 'safari';
+  if (/SamsungBrowser/i.test(ua)) return 'samsung';
+  if (/HuaweiBrowser|HBPC|HarmonyOS|OpenHarmony|ArkWeb/i.test(ua)) return 'huawei';
+  if (/Chrome\//i.test(ua) && !/EdgA|OPR|Firefox|YaBrowser|UCBrowser|MiuiBrowser|HeyTapBrowser/i.test(ua)) return 'chrome';
+  return 'android-other';
+}
+
 /** What this phone is, and what it can actually do about installing. */
 function look() {
   const ua = navigator.userAgent || '';
@@ -57,17 +67,12 @@ function look() {
   // A phone or a small tablet held in the hand — not a laptop with a touchscreen.
   const phone = mm('(max-width: 1023px)') && mm('(pointer: coarse)');
   const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  // WhatsApp, Facebook, Instagram, Telegram, TikTok, WeChat and the generic
-  // Android WebView: none of them can add anything to a home screen.
-  const inApp = /\bFBAN|\bFBAV|Instagram|Line\/|WhatsApp|Telegram|TikTok|Snapchat|MicroMessenger|GSA\/|; wv\)/i.test(ua);
-  // On iOS every browser is Safari underneath, but only Safari itself may install.
-  const iosOther = ios && /CriOS|FxiOS|EdgiOS|OPiOS|YaBrowser/.test(ua);
-  return { ready: true, installed, phone, ios, inApp, iosOther, canPrompt: !!deferred };
+  return { ready: true, installed, phone, ios, browser: browserOf(ua, ios), canPrompt: !!deferred };
 }
 
 export function useInstall() {
   const [state, setState] = useState({
-    ready: false, installed: false, phone: false, ios: false, inApp: false, iosOther: false, canPrompt: false,
+    ready: false, installed: false, phone: false, ios: false, browser: 'chrome', canPrompt: false,
   });
 
   useEffect(() => {
@@ -75,7 +80,7 @@ export function useInstall() {
     check();
     listeners.add(check);
     // Installing from the browser's own menu fires nothing we can hear, so the
-    // display mode is watched as well: the sheet closes itself afterwards.
+    // display mode is watched as well: the sheet stops offering afterwards.
     const dm = window.matchMedia('(display-mode: standalone)');
     dm.addEventListener?.('change', check);
     return () => { listeners.delete(check); dm.removeEventListener?.('change', check); };
@@ -93,106 +98,92 @@ export function useInstall() {
   return { ...state, install };
 }
 
-const STEP = 'flex items-start gap-3 rounded-xl border border-border bg-elevated px-3 py-2.5 text-[13px] leading-snug text-muted';
-const NUM = 'grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-500 text-[11px] font-bold text-slate-950';
-
-function Steps({ items, note }) {
+/** One step, with the button it names drawn at the end of the row. */
+function Step({ n, icon: Icon, children }) {
   return (
-    <>
-      <ol className="space-y-2">
-        {items.map((line, i) => (
-          <li key={i} className={STEP}>
-            <span className={NUM}>{i + 1}</span>
-            <span>{line}</span>
-          </li>
-        ))}
-      </ol>
-      {note && <p className="mt-3 text-xs text-faint">{note}</p>}
-    </>
+    <li className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-3 py-2.5 text-[13px] leading-snug text-muted">
+      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-500 text-[11px] font-bold text-white">{n}</span>
+      <span className="min-w-0 flex-1">{children}</span>
+      {Icon ? <Icon className="h-4 w-4 shrink-0 text-faint" /> : null}
+    </li>
   );
 }
 
 const b = (text) => <b className="font-semibold text-foreground">{text}</b>;
 
-/** The button's own picture, set into the sentence that names it. */
-function Glyph({ icon: Icon }) {
-  return <Icon className="mx-0.5 inline h-3.5 w-3.5 -translate-y-px" />;
+function steps(browser, ios) {
+  if (browser === 'in-app') {
+    return [
+      <Step key={1} n={1} icon={EllipsisVertical}>Tap the menu at the top, then {b('Open in browser')}.</Step>,
+      <Step key={2} n={2}>
+        {ios ? <>In {b('Safari')}, open this page again and tap {b('Get the app')}.</>
+          : <>In the browser, open this page again and tap {b('Get the app')}.</>}
+      </Step>,
+    ];
+  }
+  if (ios) {
+    return [
+      <Step key={1} n={1} icon={Share}>
+        {browser === 'safari' ? <>Tap {b('Share')} at the bottom of Safari.</> : <>Tap {b('Share')} in the address bar or the menu.</>}
+      </Step>,
+      <Step key={2} n={2} icon={SquarePlus}>Scroll down and tap {b('Add to Home Screen')}.</Step>,
+      <Step key={3} n={3}>Tap {b('Add')}, then open {b('Hao Labs')} from your home screen.</Step>,
+    ];
+  }
+  if (browser === 'samsung') {
+    return [
+      <Step key={1} n={1} icon={Menu}>Tap the menu at the {b('bottom right')}.</Step>,
+      <Step key={2} n={2}>Tap {b('Add page to')}, then {b('Home screen')}.</Step>,
+      <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
+    ];
+  }
+  if (browser === 'huawei') {
+    return [
+      <Step key={1} n={1} icon={Menu}>Tap the menu at the {b('bottom')} of the browser.</Step>,
+      <Step key={2} n={2}>Tap {b('Add to home screen')} — it may sit under {b('Add to')}.</Step>,
+      <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
+    ];
+  }
+  return [
+    <Step key={1} n={1} icon={browser === 'chrome' ? EllipsisVertical : Menu}>
+      {browser === 'chrome' ? <>Open the browser menu at the {b('top right')}.</> : <>Open the browser menu.</>}
+    </Step>,
+    <Step key={2} n={2}>Tap {b('Install app')} or {b('Add to Home screen')}.</Step>,
+    <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
+  ];
 }
 
 export function InstallSheet({ open, onClose }) {
-  const { ios, inApp, iosOther, canPrompt, install } = useInstall();
-
-  let body;
-  if (inApp) {
-    // Nothing can be installed from inside a chat app's own browser, on any phone.
-    body = (
-      <Steps
-        items={[
-          <>Tap the <Glyph icon={EllipsisVertical} /> menu at the corner of this screen.</>,
-          <>Choose {b('Open in browser')} <Glyph icon={ExternalLink} /> — Chrome, Safari or whichever browser this phone uses.</>,
-          <>Then add it to the home screen from there.</>,
-        ]}
-        note="This page opened inside another app, and an app's own browser cannot put anything on a home screen."
-      />
-    );
-  } else if (canPrompt) {
-    body = (
-      <div className="flex flex-col gap-2">
-        <button type="button" className="btn-primary w-full py-3" onClick={async () => { if (await install()) onClose(); }}>
-          <Download className="h-4 w-4" /> Install The Lab
-        </button>
-        <button type="button" className="btn-secondary w-full" onClick={onClose}>Not now</button>
-      </div>
-    );
-  } else if (iosOther) {
-    body = (
-      <Steps
-        items={[
-          <>Copy this page's address, then open {b('Safari')} <Glyph icon={Compass} />.</>,
-          <>Paste it, then tap {b('Share')} <Glyph icon={Share} /> at the bottom.</>,
-          <>Tap {b('Add to Home Screen')} <Glyph icon={SquarePlus} />, then {b('Add')}.</>,
-        ]}
-        note="On an iPhone only Safari can put an app on the home screen — Chrome, Firefox and Edge cannot."
-      />
-    );
-  } else if (ios) {
-    body = (
-      <Steps
-        items={[
-          <>Tap {b('Share')} <Glyph icon={Share} /> at the bottom of Safari.</>,
-          <>Scroll down and tap {b('Add to Home Screen')} <Glyph icon={SquarePlus} />.</>,
-          <>Tap {b('Add')}, then open {b('The Lab')} from your home screen.</>,
-        ]}
-      />
-    );
-  } else {
-    // Android, Huawei, Samsung and anything else: the menu wording differs by
-    // browser, so both names it may carry are given.
-    body = (
-      <Steps
-        items={[
-          <>Open the browser menu <Glyph icon={EllipsisVertical} /> — usually top right.</>,
-          <>Tap {b('Install app')} or {b('Add to Home screen')}.</>,
-          <>Confirm, then open {b('The Lab')} from your home screen.</>,
-        ]}
-      />
-    );
-  }
+  const { ios, browser, canPrompt, install } = useInstall();
 
   return (
     <Modal open={open} onClose={onClose} title="Use it like an app" size="sm">
       <div className="flex items-center gap-3 pb-4">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-slate-950">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white">
           <Smartphone className="h-5 w-5" />
         </span>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">Full screen, no address bar</p>
-          <p className="text-xs text-muted">Its own icon, and it opens straight into your work.</p>
-        </div>
+        <p className="text-[13px] leading-snug text-muted">
+          Full screen, no address bar, its own icon.
+        </p>
       </div>
-      {body}
-      {!canPrompt && (
-        <button type="button" className="btn-secondary mt-4 w-full" onClick={onClose}>Got it</button>
+
+      {canPrompt ? (
+        <div className="flex flex-col gap-2">
+          <button type="button" className="btn-primary w-full py-3" onClick={async () => { if (await install()) onClose(); }}>
+            <Download className="h-4 w-4" /> Install Hao Labs
+          </button>
+          <button type="button" className="btn-secondary w-full" onClick={onClose}>Not now</button>
+        </div>
+      ) : (
+        <>
+          <ol className="space-y-2">{steps(browser, ios)}</ol>
+          {browser !== 'in-app' && (
+            <p className="mt-3 text-xs text-faint">
+              If this page opened inside WhatsApp, open it in {ios ? 'Safari' : 'your browser'} first.
+            </p>
+          )}
+          <button type="button" className="btn-secondary mt-4 w-full" onClick={onClose}>Got it</button>
+        </>
       )}
     </Modal>
   );

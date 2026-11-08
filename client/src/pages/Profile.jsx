@@ -67,7 +67,7 @@ function ChangePasswordForm() {
 // ── Stat card ─────────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, label, value, hint, tone = 'default' }) {
   const tones = {
-    brand: 'from-brand-500/20 to-brand-500/5 text-brand-400',
+    brand: 'from-brand-500/20 to-brand-500/5 text-brand-600',
     emerald: 'from-emerald-500/20 to-emerald-500/5 text-emerald-400',
     sky: 'from-sky-500/20 to-sky-500/5 text-sky-400',
     amber: 'from-amber-500/20 to-amber-500/5 text-amber-400',
@@ -144,7 +144,7 @@ export default function Profile() {
 
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
           {/* Avatar */}
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-slate-950 text-2xl font-bold shadow-lg shadow-brand-500/20">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white text-2xl font-bold shadow-lg shadow-brand-500/20">
             {initials(user?.name)}
           </div>
 
@@ -201,7 +201,7 @@ export default function Profile() {
           className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur"
         >
           <div className="flex items-center gap-2 mb-4">
-            <Coins className="h-5 w-5 text-brand-400" />
+            <Coins className="h-5 w-5 text-brand-600" />
             <h2 className="text-sm font-semibold text-white">Commission</h2>
           </div>
           {!commission ? <PageSpinner /> : (
@@ -212,7 +212,7 @@ export default function Profile() {
                   <div className="mt-0.5 text-xs text-white/50">Boxes settled</div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-center">
-                  <div className="text-lg font-bold text-brand-400">{formatCurrency(commission.earned)}</div>
+                  <div className="text-lg font-bold text-brand-600">{formatCurrency(commission.earned)}</div>
                   <div className="mt-0.5 text-xs text-white/50">Total earned</div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-center">
@@ -244,7 +244,7 @@ export default function Profile() {
           className="rounded-2xl border border-border bg-surface p-5"
         >
           <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="h-5 w-5 text-brand-400" />
+            <TrendingUp className="h-5 w-5 text-brand-600" />
             <h2 className="text-sm font-semibold text-foreground">Closed orders</h2>
           </div>
           {!settlements ? <PageSpinner /> : !settlements.length ? (
@@ -276,7 +276,7 @@ export default function Profile() {
         className="rounded-2xl border border-border bg-surface p-5 sm:p-6"
       >
         <div className="flex items-center gap-2 mb-4">
-          <Lock className="h-5 w-5 text-brand-400" />
+          <Lock className="h-5 w-5 text-brand-600" />
           <h2 className="text-sm font-semibold text-foreground">Change password</h2>
         </div>
         <ChangePasswordForm />

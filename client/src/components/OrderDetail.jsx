@@ -27,7 +27,7 @@ function pendingBoxesByProduct(order) {
 function StepHead({ n, children, right }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/15 text-[10px] font-bold text-brand-300">{n}</span>
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/15 text-[10px] font-bold text-brand-600">{n}</span>
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
       {right && <span className="ml-auto text-[11px] text-faint">{right}</span>}
     </div>
@@ -54,7 +54,7 @@ function BoxStepper({ value, max, onChange }) {
         <button
           type="button"
           onClick={() => set(max)}
-          className="shrink-0 rounded-xl bg-brand-500/15 px-3 py-3 text-xs font-semibold text-brand-300 ring-1 ring-brand-500/25 transition active:scale-95"
+          className="shrink-0 rounded-xl bg-brand-500/15 px-3 py-3 text-xs font-semibold text-brand-600 ring-1 ring-brand-500/25 transition active:scale-95"
         >
           All {formatNumber(max)}
         </button>
@@ -344,7 +344,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
                   <button
                     onClick={() => inc(line.productId)}
                     disabled={qty >= returnAvail(line)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-lg font-bold text-slate-950 transition hover:bg-brand-400 disabled:opacity-40"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-lg font-bold text-white transition hover:bg-brand-400 disabled:opacity-40"
                   >+</button>
                 </div>
               </div>
@@ -429,7 +429,7 @@ function SelfExtendModal({ order, onClose, onDone }) {
       <div className="space-y-4 text-sm">
         <div className="rounded-xl border border-border bg-elevated p-3">
           <div className="flex justify-between"><span className="text-muted">Current deadline</span><span className="font-medium">{formatDateTime(order.deadlineAt)}</span></div>
-          <div className="mt-1 flex justify-between"><span className="text-muted">Extra time</span><span className="font-medium text-brand-400">+{order.extensionHours || 96} hours</span></div>
+          <div className="mt-1 flex justify-between"><span className="text-muted">Extra time</span><span className="font-medium text-brand-600">+{order.extensionHours || 96} hours</span></div>
           <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
             <span>New deadline</span><span>{formatDateTime(newDeadline)}</span>
           </div>
@@ -626,8 +626,8 @@ function ExtendDeadlineModal({ order, onClose, onDone }) {
         </p>
 
         <div className="flex gap-2">
-          <button onClick={() => setMode('quick')} className={`rounded-lg border px-3 py-1.5 text-sm transition ${mode === 'quick' ? 'border-brand-500 bg-brand-500/10 text-brand-400' : 'border-border text-muted hover:bg-elevated'}`}>Quick</button>
-          <button onClick={() => setMode('custom')} className={`rounded-lg border px-3 py-1.5 text-sm transition ${mode === 'custom' ? 'border-brand-500 bg-brand-500/10 text-brand-400' : 'border-border text-muted hover:bg-elevated'}`}>Custom date</button>
+          <button onClick={() => setMode('quick')} className={`rounded-lg border px-3 py-1.5 text-sm transition ${mode === 'quick' ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-muted hover:bg-elevated'}`}>Quick</button>
+          <button onClick={() => setMode('custom')} className={`rounded-lg border px-3 py-1.5 text-sm transition ${mode === 'custom' ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-muted hover:bg-elevated'}`}>Custom date</button>
         </div>
 
         {mode === 'quick' ? (
@@ -636,7 +636,7 @@ function ExtendDeadlineModal({ order, onClose, onDone }) {
               <button
                 key={h}
                 onClick={() => setHours(h)}
-                className={`flex-1 rounded-xl border py-3 text-sm font-semibold transition ${hours === h ? 'border-brand-500 bg-brand-500/10 text-brand-400' : 'border-border text-muted hover:bg-elevated'}`}
+                className={`flex-1 rounded-xl border py-3 text-sm font-semibold transition ${hours === h ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-muted hover:bg-elevated'}`}
               >
                 {label}
               </button>
@@ -706,7 +706,7 @@ function RejectSubmissionModal({ submission, onClose, onDone }) {
 // and a wash of the tone rather than four identical grey boxes. `brand-600`
 // was a light-theme leftover and read muddy on a dark page.
 const MONEY_TONE = {
-  brand: { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', num: 'text-brand-400' },
+  brand: { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', num: 'text-brand-600' },
   emerald: { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', num: 'text-emerald-400' },
   rose: { ring: 'ring-rose-500/25', glow: 'from-rose-500/[0.12]', num: 'text-rose-400' },
   default: { ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', num: 'text-foreground' },
@@ -887,7 +887,7 @@ function SettleSummary({ boxes, unitPrice, productName }) {
         <span className="min-w-0 truncate text-sm text-muted">
           {formatNumber(n)} {n === 1 ? 'box' : 'boxes'} &times; {formatCurrency(unitPrice)}
         </span>
-        <span className="shrink-0 text-2xl font-bold tabular-nums text-brand-400">{formatCurrency(total)}</span>
+        <span className="shrink-0 text-2xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
       </div>
       {productName && <p className="mt-1 truncate text-[11px] text-faint">{productName}</p>}
     </div>
@@ -955,7 +955,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           if (canAct && active && remaining > 0) {
             actions.push({
               key: 'settle', label: 'Submit settlement', Icon: Wallet, onClick: () => setSub('settle'),
-              cls: 'bg-brand-500 text-slate-950 ring-brand-500 font-bold shadow-lg shadow-brand-500/20', icon: 'text-slate-950',
+              cls: 'bg-brand-500 text-white ring-brand-500 font-bold shadow-lg shadow-brand-500/20', icon: 'text-white',
             });
           }
           if (staff && active && remaining <= 0) {
@@ -1080,7 +1080,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   <div>
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Extension</div>
                     <div className={`mt-0.5 text-[13px] font-medium ${
-                      order.extensionStatus === 'ACTIVE' ? 'text-brand-400'
+                      order.extensionStatus === 'ACTIVE' ? 'text-brand-600'
                         : order.extensionStatus === 'EXPIRED' ? 'text-rose-400' : 'text-muted'}`}>
                       {order.extensionStatus === 'ACTIVE' ? 'Active'
                         : order.extensionStatus === 'EXPIRED' ? 'Expired' : 'Not used'}
@@ -1225,7 +1225,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                         suffix={done ? 'accounted for' : overdue ? 'missing' : 'left'}
                         unitClassName="text-[11px] font-semibold text-muted"
                         className={`text-[22px] font-black leading-none ${
-                          done ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-brand-400'}`}
+                          done ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-brand-600'}`}
                       />
                       {!done && <span className="text-[11px] text-faint">of {formatNumber(t.assignedBoxes)}</span>}
                     </span>
@@ -1318,7 +1318,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               </p>
               <p className="mt-1 text-[11px] leading-snug text-faint">
                 Commission on {formatNumber(order.order.totals.settledBoxes)} settled box{order.order.totals.settledBoxes === 1 ? '' : 'es'}:{' '}
-                <span className="font-semibold text-brand-400">{formatCurrency(order.order.totals.commission)}</span> · paid via Commissions.
+                <span className="font-semibold text-brand-600">{formatCurrency(order.order.totals.commission)}</span> · paid via Commissions.
               </p>
             </div>
 

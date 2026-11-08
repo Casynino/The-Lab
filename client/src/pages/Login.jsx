@@ -54,14 +54,14 @@ function Mark({ size = 'md' }) {
   const big = size === 'lg';
   return (
     <div className="flex items-center gap-3 sm:gap-4">
-      <span className={`grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-slate-950 shadow-[0_14px_38px_-12px_rgba(132,204,22,0.65)] ${big ? 'h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]' : 'h-14 w-14'}`}>
+      <span className={`grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-[0_14px_38px_-12px_rgba(238,49,36,0.7)] ${big ? 'h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]' : 'h-14 w-14'}`}>
         <Carton className={big ? 'h-9 w-9 sm:h-10 sm:w-10' : 'h-8 w-8'} />
       </span>
       <span className="leading-none">
         <span className={`block font-black uppercase tracking-[0.12em] text-white ${big ? 'text-3xl sm:text-4xl' : 'text-2xl'}`}>
-          The Lab
+          Hao Labs
         </span>
-        <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.34em] text-brand-500 sm:text-[11px]">
+        <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.34em] text-brand-600 sm:text-[11px]">
           Hao Stock
         </span>
       </span>
@@ -71,16 +71,66 @@ function Mark({ size = 'md' }) {
 
 // ── The scene ────────────────────────────────────────────────────────────────
 
+/* Stock going out across the near floor. Each lane names how far below the
+   horizon it runs, how big a box is down there, how long a crossing takes and
+   where in that crossing it starts — nearer the eye is lower, bigger and
+   quicker, which is the whole of the perspective. */
+const LANES = [
+  { b: '2.5%', k: 0.5, d: '17s', o: 0.45, at: ['-2s', '-11s'] },
+  { b: '7%', k: 0.8, d: '12s', o: 0.72, at: ['-1s', '-7s'] },
+  { b: '12.5%', k: 1.2, d: '8.5s', o: 1, at: ['-3.5s'] },
+];
+
+/* Dust in the light, drifting up off the floor. */
+const MOTES = [
+  { x: '12%', d: '13s', s: '-3s', dx: '18px' },
+  { x: '28%', d: '17s', s: '-9s', dx: '-14px' },
+  { x: '44%', d: '11s', s: '-6s', dx: '22px' },
+  { x: '61%', d: '15s', s: '-1s', dx: '-20px' },
+  { x: '77%', d: '12s', s: '-8s', dx: '16px' },
+  { x: '91%', d: '16s', s: '-4s', dx: '-12px' },
+];
+
+/** A carton on the move: a box, its lid band, and the horizon's red on its seam. */
+function Crate() {
+  return (
+    <svg viewBox="0 0 28 38" aria-hidden="true">
+      {/* Lit from the horizon behind them, so a box reads as a box on a black
+          floor rather than a hole in it. */}
+      <rect x="0" y="6" width="28" height="32" rx="1.5" fill="#2e211c" />
+      <rect x="0" y="6" width="28" height="6.4" rx="1.5" fill="#46322a" />
+      <rect x="0" y="11.6" width="28" height="1.1" fill="rgba(255,95,75,0.75)" />
+      <rect x="9" y="20" width="10" height="2.6" rx="1.3" fill="rgba(255,138,115,0.45)" />
+      <rect x="0" y="6" width="1.4" height="32" fill="rgba(255,255,255,0.10)" />
+      <rect x="26.6" y="6" width="1.4" height="32" fill="rgba(0,0,0,0.35)" />
+    </svg>
+  );
+}
+
 function Scene() {
   return (
     <div className="ls" aria-hidden="true">
       <span className="ls-glow a" />
       <span className="ls-glow b" />
+      {MOTES.map((m, i) => (
+        <span key={i} className="ls-mote" style={{ '--x': m.x, '--d': m.d, '--s': m.s, '--dx': m.dx }} />
+      ))}
       <div className="ls-floor"><div className="ls-grid" /></div>
       <div className="ls-horizon" />
       <div className="ls-shelf">
         <img src="/login-shelf.webp" alt="" width="1560" height="720" fetchpriority="high" />
       </div>
+      {LANES.map((lane) => (
+        <div key={lane.b}>
+          <div className="ls-lane" style={{ '--b': lane.b }} />
+          {lane.at.map((at) => (
+            <div key={at} className="ls-crate" style={{ '--b': lane.b, '--k': lane.k, '--d': lane.d, '--s': at, '--o': lane.o }}>
+              <Crate />
+            </div>
+          ))}
+        </div>
+      ))}
+      <div className="ls-sweep" />
       <div className="ls-vignette" />
     </div>
   );
@@ -110,7 +160,7 @@ function Gate({ children }) {
         type="button"
         onClick={() => setOpen(true)}
         style={rise(0.5)}
-        className="ls-up inline-flex h-12 cursor-pointer items-center gap-2 rounded-full bg-brand-500 px-8 text-[15px] font-bold text-slate-950 shadow-[0_10px_30px_-10px_rgba(163,230,53,0.8)] transition active:scale-[0.98] hover:bg-brand-600 md:hidden"
+        className="ls-up inline-flex h-12 cursor-pointer items-center gap-2 rounded-full bg-brand-500 px-8 text-[15px] font-bold text-white shadow-[0_10px_30px_-10px_rgba(238,49,36,0.85)] transition active:scale-[0.98] hover:bg-brand-600 md:hidden"
       >
         Log in
         <ArrowRight className="h-4 w-4" />
@@ -177,9 +227,13 @@ export default function Login() {
   /* overflow-x only. A phone held sideways has 390 pixels of height and the
      card alone is taller than that, so the page has to be allowed to scroll —
      clipping it put the Log in button out of reach. The scene is fixed, so it
-     stays where it is while the words move over it. */
+     stays where it is while the words move over it.
+
+     data-login-scene: the stylesheet switches the status strip off here and
+     paints the body the scene's own colour — this one screen runs under the
+     phone's clock on purpose. */
   return (
-    <div className="relative isolate min-h-dvh overflow-x-hidden bg-[#070907] text-white">
+    <div data-login-scene className="relative isolate min-h-dvh overflow-x-hidden bg-[#070907] text-white">
       <Scene />
 
       <div className="relative z-10 grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
@@ -193,7 +247,7 @@ export default function Login() {
               Take stock. Make moves. <span className="text-brand-500">Earn more.</span>
             </h2>
             <p className="ls-up mt-4 max-w-md text-[15px] leading-relaxed text-white/65" style={rise(0.4)}>
-              Every box that leaves The Lab is on the system — who took it, what came
+              Every box that leaves the Lab is on the system — who took it, what came
               back, and what is still owed.
             </p>
             <ul className="ls-up mt-7 flex flex-wrap gap-2" style={rise(0.54)}>
@@ -209,7 +263,7 @@ export default function Login() {
           {/* The line that names the system. On a computer it stands in the
               corner of the words column; under the card it would print itself
               across a carton. */}
-          <p className="text-xs text-white/40">The Lab · Hao Stock Management System</p>
+          <p className="text-xs text-white/40">Hao Labs · Hao Stock Management System</p>
         </section>
 
         {/* The way in. On a phone this column is the whole screen. */}
@@ -252,7 +306,7 @@ export default function Login() {
               tablet the card floats halfway up and the line would print
               itself across a carton. */}
           <p className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 text-center text-xs text-white/45 lg:hidden">
-            The Lab · Hao Stock Management System
+            Hao Labs · Hao Stock Management System
           </p>
         </section>
       </div>

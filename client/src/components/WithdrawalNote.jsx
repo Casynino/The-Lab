@@ -39,8 +39,8 @@ const TONE = {
   brand: {
     ring: 'ring-brand-500/25',
     glow: 'from-brand-500/[0.12]',
-    chip: 'bg-brand-500/15 text-brand-300',
-    value: 'text-brand-300',
+    chip: 'bg-brand-500/15 text-brand-600',
+    value: 'text-brand-600',
   },
   rose: {
     ring: 'ring-rose-500/25',

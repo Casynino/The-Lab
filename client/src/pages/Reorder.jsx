@@ -94,7 +94,7 @@ export default function Reorder() {
         ? `${formatCurrency(s.urgentValue || 0)} of it cannot wait`
         : `${formatNumber(s.reorderCount || 0)} product${s.reorderCount === 1 ? '' : 's'}, none urgent`,
       quiet: !(s.estimatedReorderValue > 0),
-      ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300',
+      ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600',
     },
     {
       label: 'Below minimum, still covered', value: formatNumber(s.lowCount || 0), icon: Gauge,

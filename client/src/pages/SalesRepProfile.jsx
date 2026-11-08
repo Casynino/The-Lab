@@ -23,6 +23,7 @@ import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
   Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, NumberInput, Textarea,
 } from '@/components/ui';
+import { RED } from '@/lib/brand';
 
 // ── Section wrapper ──────────────────────────────────────────────────────────
 function Section({ icon: Icon, title, count, children, action }) {
@@ -215,7 +216,7 @@ function ClosingSpeed({ closings, discipline, onOpen }) {
 
 const ACTIVITY_META = {
   STOCK_REQUEST: { icon: ClipboardList, cls: 'text-slate-400 bg-slate-500/10' },
-  ISSUE: { icon: Package, cls: 'text-brand-400 bg-brand-500/10' },
+  ISSUE: { icon: Package, cls: 'text-brand-600 bg-brand-500/10' },
   SETTLEMENT: { icon: CheckCircle2, cls: 'text-emerald-400 bg-emerald-500/10' },
   RETURN: { icon: Undo2, cls: 'text-sky-400 bg-sky-500/10' },
   COMMISSION: { icon: Coins, cls: 'text-violet-400 bg-violet-500/10' },
@@ -711,7 +712,7 @@ export default function SalesRepProfile() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">{rep.name}</h1>
-              <Badge className="bg-brand-500/15 text-brand-400">{rep.code}</Badge>
+              <Badge className="bg-brand-500/15 text-brand-600">{rep.code}</Badge>
               {rep.isActive
                 ? <Badge className="bg-emerald-500/15 text-emerald-300">Active</Badge>
                 : <Badge className="bg-rose-500/15 text-rose-300">Suspended</Badge>}
@@ -821,7 +822,7 @@ export default function SalesRepProfile() {
               <TrendChart
                 data={data.trend}
                 height={200}
-                series={[{ key: 'revenue', name: 'Revenue', color: '#a3e635' }]}
+                series={[{ key: 'revenue', name: 'Revenue', color: RED }]}
               />
             </Section>
           )}

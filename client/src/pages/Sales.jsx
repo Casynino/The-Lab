@@ -368,8 +368,8 @@ export default function Sales() {
               sub: period ? `${formatNumber(sum.sales)} ${saleWord(sum.sales)} ${period}` : nothing,
               ring: (sum?.revenue ?? 0) > 0 ? 'ring-brand-500/25' : 'ring-white/[0.08]',
               glow: (sum?.revenue ?? 0) > 0 ? 'from-brand-500/[0.12]' : 'from-white/[0.03]',
-              chip: (sum?.revenue ?? 0) > 0 ? 'bg-brand-500/15 text-brand-300' : 'bg-white/10 text-muted',
-              num: (sum?.revenue ?? 0) > 0 ? 'text-brand-300' : 'text-foreground',
+              chip: (sum?.revenue ?? 0) > 0 ? 'bg-brand-500/15 text-brand-600' : 'bg-white/10 text-muted',
+              num: (sum?.revenue ?? 0) > 0 ? 'text-brand-600' : 'text-foreground',
             },
             {
               label: 'Profit kept', value: formatCurrency(sum?.profit ?? 0), icon: TrendingUp,

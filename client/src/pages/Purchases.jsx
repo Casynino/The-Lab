@@ -392,7 +392,7 @@ function PurchaseOrders() {
                       <button
                         title="Open this order"
                         onClick={(e) => { e.stopPropagation(); setViewing(po); }}
-                        className="cursor-pointer text-faint transition hover:text-brand-400"
+                        className="cursor-pointer text-faint transition hover:text-brand-600"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -401,7 +401,7 @@ function PurchaseOrders() {
                           <button
                             title="Edit this order"
                             onClick={(e) => { e.stopPropagation(); setEditing(po); }}
-                            className="cursor-pointer text-faint transition hover:text-brand-400"
+                            className="cursor-pointer text-faint transition hover:text-brand-600"
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -473,7 +473,7 @@ export default function Purchases() {
       <PageHeader title="Imports & Purchase Orders" subtitle="Order stock from China, track costs, and receive into the warehouse." />
       <div className="mb-4 flex gap-2">
         {[['orders', 'Purchase orders'], ['suppliers', 'Suppliers']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === k ? 'bg-brand-600 text-slate-950' : 'bg-surface text-muted hover:bg-elevated'}`}>{label}</button>
+          <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === k ? 'bg-brand-600 text-white' : 'bg-surface text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
       {tab === 'orders' ? <PurchaseOrders /> : <Suppliers />}

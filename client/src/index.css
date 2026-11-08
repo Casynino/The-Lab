@@ -38,8 +38,8 @@
     /* Near-black backdrop with faint lime/emerald glows for depth. */
     background-color: #0a0a0b;
     background-image:
-      radial-gradient(900px circle at 12% -10%, rgba(132, 204, 22, 0.08), transparent 45%),
-      radial-gradient(800px circle at 100% 0%, rgba(16, 185, 129, 0.06), transparent 40%);
+      radial-gradient(900px circle at 12% -10%, rgba(238, 49, 36, 0.07), transparent 45%),
+      radial-gradient(800px circle at 100% 0%, rgba(255, 95, 75, 0.05), transparent 40%);
     background-attachment: fixed;
   }
   * {
@@ -79,7 +79,7 @@
       focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-60 sm:py-2;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-slate-950 hover:bg-brand-500 focus:ring-brand-500/40;
+    @apply btn bg-brand-500 text-white hover:bg-brand-600 focus:ring-brand-500/40;
   }
   .btn-secondary {
     @apply btn border border-border bg-elevated text-foreground hover:bg-[#26262c] focus:ring-border;
@@ -246,13 +246,13 @@
   --glass-text: #b3b7ad;
   --glass-soft: #8f958a;
   --glass-icon: #6e7469;
-  --glass-gold: #a3e635;
+  --glass-gold: #ff5f4b;
   position: relative;
   border-radius: 2.25rem;
   border: 1px solid rgba(255, 255, 255, 0.13);
   background:
     radial-gradient(120% 45% at 50% 0%, rgba(255, 255, 255, 0.10), transparent 70%),
-    radial-gradient(120% 50% at 50% 100%, rgba(163, 230, 53, 0.20), rgba(16, 185, 129, 0.07) 55%, transparent 80%),
+    radial-gradient(120% 50% at 50% 100%, rgba(238, 49, 36, 0.22), rgba(255, 95, 75, 0.07) 55%, transparent 80%),
     rgba(18, 21, 17, 0.66);
   -webkit-backdrop-filter: blur(26px) saturate(150%);
   backdrop-filter: blur(26px) saturate(150%);
@@ -287,7 +287,7 @@
   width: 3px;
   transform: translateY(-50%);
   border-radius: 3px;
-  background: #a3e635;
+  background: #ee3124;
 }
 .glass-row { transition: color 0.15s ease; }
 /* The search is a line, not a box. */
@@ -312,3 +312,63 @@
   pointer-events: none;
 }
 .glass-divider { height: 1px; background: linear-gradient(90deg, transparent, var(--glass-line), transparent); }
+
+/* ───────── Full screen on a phone ─────────────────────────────────────────
+   Nino, 9 Nov 2026, holding up Target Express: using the system on a phone
+   must feel like an app, on every page, on any phone — iPhone, Pixel,
+   Android, Huawei. Ported from that repo's app/globals.css; keep the two in
+   step.
+
+   The page runs edge to edge (viewport-fit=cover in index.html). The
+   home-screen app runs UNDER the phone's status bar (black-translucent), so
+   this strip is that bar's own colour and the clock stays readable on the
+   app's own ground. In a browser tab the inset is zero and the strip has no
+   height at all. The sign-in scene runs under the clock on purpose, so it
+   switches the strip off. */
+.status-strip {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  height: env(safe-area-inset-top, 0px);
+  background: #0a0a0b;
+  pointer-events: none;
+}
+body:has([data-login-scene]) .status-strip { display: none; }
+body:has([data-login-scene]) { background-color: #070907; }
+@media print { .status-strip { display: none; } }
+
+/* A phone turned sideways keeps the page clear of the notch. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* A long press on a button selects its words and offers to copy them, which
+   is a web page's behaviour, not an app's. */
+@media (pointer: coarse) {
+  button,
+  [role='button'],
+  [role='tab'],
+  [role='menuitem'],
+  nav a {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+
+/* An iPhone zooms the whole page into any field under 16px and STAYS zoomed —
+   the cut-off, forced look, and the reason a rep's form ends up half off the
+   screen. Every field a thumb can reach is 16px; one deliberately larger
+   keeps its own size. */
+@media (pointer: coarse) {
+  .input,
+  input.text-sm,
+  input.text-xs,
+  textarea.text-sm,
+  textarea.text-xs,
+  select.text-sm,
+  select.text-xs {
+    font-size: 16px;
+  }
+}

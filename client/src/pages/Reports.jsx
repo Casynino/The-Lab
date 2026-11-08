@@ -9,6 +9,7 @@ import {
   Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import { TrendChart, BarChartCard } from '@/components/charts';
+import { RED, CORAL } from '@/lib/brand';
 
 const TABS = [
   { key: 'sales', label: 'Sales', path: '/reports/sales', file: 'sales-report' },
@@ -47,7 +48,7 @@ function SalesReport({ data }) {
       <Card className="mt-4">
         <CardHeader title="Revenue & profit trend" />
         <CardBody>
-          {data.series.length ? <TrendChart data={data.series} series={[{ key: 'revenue', name: 'Revenue', color: '#a3e635' }, { key: 'profit', name: 'Profit', color: '#84cc16' }]} /> : <EmptyState title="No sales in this period" />}
+          {data.series.length ? <TrendChart data={data.series} series={[{ key: 'revenue', name: 'Revenue', color: RED }, { key: 'profit', name: 'Profit', color: CORAL }]} /> : <EmptyState title="No sales in this period" />}
         </CardBody>
       </Card>
     </>
@@ -112,7 +113,7 @@ export default function Reports({ embedded = false }) {
 
       <div className="mb-4 tab-row">
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === t.key ? 'bg-brand-600 text-slate-950' : 'bg-surface text-muted hover:bg-elevated'}`}>{t.label}</button>
+          <button key={t.key} onClick={() => setTab(t.key)} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-surface text-muted hover:bg-elevated'}`}>{t.label}</button>
         ))}
       </div>
 
@@ -135,7 +136,7 @@ export default function Reports({ embedded = false }) {
           {tab === 'regional' && (
             <Card>
               <CardHeader title="Regional performance" />
-              <CardBody>{data.items?.length ? <BarChartCard data={data.items.map((r) => ({ name: r.region, value: r.revenue }))} color="#84cc16" /> : <EmptyState title="No regional sales" />}</CardBody>
+              <CardBody>{data.items?.length ? <BarChartCard data={data.items.map((r) => ({ name: r.region, value: r.revenue }))} color={RED} /> : <EmptyState title="No regional sales" />}</CardBody>
               <Table>
                 <THead><TR><TH>Region</TH><TH>Orders</TH><TH>Revenue</TH><TH>Profit</TH></TR></THead>
                 <TBody>{(data.items || []).map((r) => (<TR key={r.region}><TD>{r.region}</TD><TD>{r.orders}</TD><TD>{formatCurrency(r.revenue)}</TD><TD>{formatCurrency(r.profit)}</TD></TR>))}</TBody>

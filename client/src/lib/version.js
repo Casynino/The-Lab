@@ -44,10 +44,10 @@ const PILL = {
   // (14px of padding + half a 16px icon), so when the words close the light is
   // already dead centre of the circle that is left. Move the padding and this
   // number has to move with it.
-  background: 'radial-gradient(90px circle at 22px 50%, rgba(132,204,22,0.16), rgba(132,204,22,0) 72%), #151517',
+  background: 'radial-gradient(90px circle at 22px 50%, rgba(238,49,36,0.18), rgba(238,49,36,0) 72%), #151517',
   color: '#f4f4f5',
-  border: '1px solid rgba(132,204,22,0.30)',
-  boxShadow: '0 1px 2px rgba(0,0,0,0.45), 0 10px 30px -14px rgba(132,204,22,0.45)',
+  border: '1px solid rgba(238,49,36,0.34)',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.45), 0 10px 30px -14px rgba(238,49,36,0.5)',
   // The global toast style caps every card at 350px. Not this one.
   maxWidth: 'none',
 };

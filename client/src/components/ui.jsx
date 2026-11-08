@@ -529,7 +529,7 @@ export function PageHeader({ title, subtitle, children }) {
 
 // --- Stat card --------------------------------------------------------------
 const STAT_TONES = {
-  brand: { badge: 'from-brand-500 to-brand-600', glow: 'rgba(163,230,53,0.22)', dark: true },
+  brand: { badge: 'from-brand-500 to-brand-400', glow: 'rgba(238,49,36,0.26)', dark: false },
   emerald: { badge: 'from-emerald-500 to-teal-500', glow: 'rgba(16,185,129,0.18)' },
   amber: { badge: 'from-amber-500 to-orange-500', glow: 'rgba(245,158,11,0.18)' },
   rose: { badge: 'from-rose-500 to-pink-500', glow: 'rgba(244,63,94,0.18)' },

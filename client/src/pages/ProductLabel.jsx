@@ -195,7 +195,7 @@ function QRPanel({ defaultUrl, pagePath = 'p' }) {
           <div className="min-w-0 space-y-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className="bg-elevated text-muted">{modules ? `${modules} × ${modules} modules` : '—'}</Badge>
-              <Badge className={tight ? 'bg-amber-500/15 text-amber-500' : 'bg-lime-500/15 text-lime-500'}>
+              <Badge className={tight ? 'bg-amber-500/15 text-amber-500' : 'bg-emerald-500/15 text-emerald-400'}>
                 {moduleMm ? `${moduleMm.toFixed(2)} mm per module` : '—'}
               </Badge>
             </div>
@@ -268,7 +268,7 @@ function FactRows({ facts, onChange }) {
       ))}
       <button
         type="button"
-        className="text-sm text-brand-400 hover:underline"
+        className="text-sm text-brand-600 hover:underline"
         onClick={() => onChange([...facts, { label: '', value: '' }])}
       >
         + Add a detail

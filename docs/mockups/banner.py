@@ -58,9 +58,9 @@ for x in range(W):
     t = x / (W - 1)
     for y in range(H):
         v = y / (H - 1)
-        r = int(7 + 9 * t + 5 * v)
-        g = int(17 + 20 * t + 7 * v)
-        b = int(14 + 18 * t + 9 * v)
+        r = int(13 + 26 * t + 8 * v)
+        g = int(11 + 13 * t + 6 * v)
+        b = int(11 + 12 * t + 7 * v)
         px[x, y] = (r, g, b)
 base = base.convert("RGBA")
 
@@ -77,7 +77,7 @@ for x in range(0, W, 2):
             for dx in (0, 1):
                 for dy in (0, 1):
                     if x + dx < W and y + dy < H:
-                        gp[x + dx, y + dy] = (168, 214, 128, a)
+                        gp[x + dx, y + dy] = (232, 118, 92, a)
 base = Image.alpha_composite(base, glow.filter(ImageFilter.GaussianBlur(52)))
 
 shelf = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -153,7 +153,7 @@ for x in range(200):
     v = int(255 * (x / 200) ** 1.4)
     for y in range(H):
         ep[x, y] = v
-dark = Image.new("RGBA", (W, H), (7, 16, 13, 255))
+dark = Image.new("RGBA", (W, H), (13, 10, 10, 255))
 out = Image.composite(out, dark, edge)
 
 out.convert("RGB").save(os.path.join(PUB, "banner.webp"), "WEBP", quality=84, method=6)

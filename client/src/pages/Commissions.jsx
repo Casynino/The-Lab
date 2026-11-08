@@ -123,7 +123,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
         </Field>
         {amt > 0 && amt < available && (
           <button type="button" onClick={() => setAmount(String(Math.floor(available)))}
-            className="cursor-pointer text-xs font-medium text-brand-400 hover:text-brand-300">
+            className="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-600">
             Take the whole {formatCurrency(available)}
           </button>
         )}
@@ -140,7 +140,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
                 onClick={() => setVia(o.key)}
                 className={`rounded-xl px-3 py-2.5 text-sm font-semibold ring-1 transition active:scale-[0.98] ${
                   via === o.key
-                    ? 'bg-brand-500/15 text-brand-300 ring-brand-500/30'
+                    ? 'bg-brand-500/15 text-brand-600 ring-brand-500/30'
                     : 'bg-elevated text-muted ring-white/[0.08] hover:text-foreground'
                 }`}
               >
@@ -1241,7 +1241,7 @@ function BalancesTable({ items, bonus }) {
           const offCommission = i.earnsCommission === false;
           return (
             <TR key={i.salesRepId}>
-              <TD className={clsx('font-medium', leads && 'text-brand-400')}>
+              <TD className={clsx('font-medium', leads && 'text-brand-600')}>
                 {i.name}
                 {runView && (
                   // Every rep's run starts on their own date, so the row has to
@@ -1449,7 +1449,7 @@ function AdminView() {
             <TBody>{wd.data.map((w) => (
               <TR key={w.id}>
                 <TD className="font-medium">
-                  <button type="button" onClick={() => setOpenWd(w)} className="text-left hover:text-brand-300">
+                  <button type="button" onClick={() => setOpenWd(w)} className="text-left hover:text-brand-600">
                     {w.salesRep?.user?.name}
                   </button>
                 </TD>
@@ -1458,7 +1458,7 @@ function AdminView() {
                     <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
                   {/* Where to send it. This is the whole point of the request,
                       and it was only visible by hovering a different column. */}
-                    {w.notes && <div className="mt-0.5 text-[11px] text-brand-300">{w.notes}</div>}
+                    {w.notes && <div className="mt-0.5 text-[11px] text-brand-600">{w.notes}</div>}
                   </button>
                 </TD>
                 <TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>

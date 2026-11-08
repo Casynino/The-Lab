@@ -62,7 +62,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               },
               // The tick and the cross sit on the dark card now, so their
               // secondary colour is the card, not white.
-              success: { iconTheme: { primary: '#84cc16', secondary: '#151517' } },
+              success: { iconTheme: { primary: '#10b981', secondary: '#151517' } },
               error: { iconTheme: { primary: '#fb7185', secondary: '#151517' } },
             }}
           />

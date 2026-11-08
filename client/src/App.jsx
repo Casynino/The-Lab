@@ -7,6 +7,7 @@ import { ROLES } from '@/lib/constants';
 import { PageSpinner } from '@/components/ui';
 
 import Login from '@/pages/Login';
+import ThemeColor from '@/components/ThemeColor';
 import Dashboard from '@/pages/Dashboard';
 import RepDashboard from '@/pages/RepDashboard';
 import Products from '@/pages/Products';
@@ -55,7 +56,14 @@ const W = [ROLES.WAREHOUSE_STAFF]; // ADMIN always allowed by hasRole
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <ThemeColor />
+      {/* The strip behind the phone's clock when the app runs from the home
+          screen: the page runs under the status bar, and this keeps the clock
+          on the app's own ground rather than on whatever scrolled up there.
+          No height at all in a browser tab. See .status-strip in index.css. */}
+      <div aria-hidden className="status-strip" />
+      <Routes>
       <Route path="/login" element={<Login />} />
 
       <Route
@@ -95,6 +103,7 @@ export default function App() {
         <Route path="/settings" element={<ProtectedRoute roles={[ROLES.ADMIN]}><Settings /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Route>
-    </Routes>
+      </Routes>
+    </>
   );
 }

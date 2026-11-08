@@ -52,7 +52,7 @@ function RepModal({ onClose }) {
 // One colour per rep, fixed by their code so a face keeps its colour wherever
 // the list moves it.
 const HUES = [
-  { edge: 'bg-brand-400', text: 'text-brand-300' },
+  { edge: 'bg-brand-400', text: 'text-brand-600' },
   { edge: 'bg-violet-400', text: 'text-violet-300' },
   { edge: 'bg-sky-400', text: 'text-sky-300' },
   { edge: 'bg-amber-400', text: 'text-amber-300' },

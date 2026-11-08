@@ -27,8 +27,9 @@ BRAND = os.path.join(PUB, "brand")
 SPLASH_DIR = os.path.join(BRAND, "splash")
 os.makedirs(SPLASH_DIR, exist_ok=True)
 
-LIME = (163, 230, 53, 255)      # brand-500
-INK = (10, 10, 11, 255)         # background / the stroke on the tile
+RED = (238, 49, 36, 255)        # brand-500 — Hao Labs' own red
+INK = (10, 10, 11, 255)         # the page's own near-black
+WHITE = (255, 255, 255, 255)    # the mark sits white on the red tile
 SS = 4                          # drawn at four times, then shrunk
 
 F = "/System/Library/Fonts/Supplemental/"
@@ -39,7 +40,7 @@ HEX = [(32, 13), (51, 24), (51, 40), (32, 51), (13, 40), (13, 24)]
 SPOKES = [[(32, 13), (32, 32)], [(32, 32), (51, 24)], [(32, 32), (13, 24)]]
 
 
-def carton(d, cx, cy, size, colour=INK):
+def carton(d, cx, cy, size, colour=WHITE):
     """The open carton: a cube seen corner-on, one line, round corners."""
     k = size / 64
     w = max(2, int(3.5 * k))
@@ -54,7 +55,7 @@ def carton(d, cx, cy, size, colour=INK):
         d.ellipse([p[0] - w / 2, p[1] - w / 2, p[0] + w / 2, p[1] + w / 2], fill=colour)
 
 
-def tile(px, glyph=0.62, radius=0.22, bg=LIME):
+def tile(px, glyph=0.62, radius=0.22, bg=RED):
     """The lime tile with the carton on it. `glyph` is how much of the tile the
     carton takes — Android masks a maskable icon down to a circle, so that one
     is drawn smaller."""
@@ -103,13 +104,13 @@ for w, h, r in SPLASH:
         t = 1 - abs(y - H * 0.42) / (H * 0.72)
         if t > 0:
             v = int(26 * t * t)
-            d.line([(0, y), (W, y)], fill=(10 + v // 3, 10 + v, 11 + v // 4))
+            d.line([(0, y), (W, y)], fill=(10 + v, 10 + v // 4, 11 + v // 5))
     side = int(min(W, H) * 0.22)
     im.paste(tile(side), ((W - side) // 2, int(H * 0.40) - side // 2), tile(side))
-    d.text((W / 2, int(H * 0.40) + side * 0.82), "THE LAB",
+    d.text((W / 2, int(H * 0.40) + side * 0.82), "HAO LABS",
            font=font("Arial Bold.ttf", int(side * 0.19)), fill=(244, 244, 245), anchor="mm")
     d.text((W / 2, int(H * 0.40) + side * 1.12), "HAO STOCK",
-           font=font("Arial Bold.ttf", int(side * 0.10)), fill=(132, 204, 22), anchor="mm")
+           font=font("Arial Bold.ttf", int(side * 0.10)), fill=(255, 95, 75), anchor="mm")
     p = os.path.join(SPLASH_DIR, f"{w}x{h}@{r}.png")
     im.save(p, "PNG", optimize=True)
 

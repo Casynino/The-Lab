@@ -12,20 +12,28 @@ export default {
         foreground: '#f4f4f5',
         muted: '#a1a1aa',
         faint: '#71717a',
-        // Accent ramp = lime/green. Low numbers are dark tints (for chips on a
-        // dark background); high numbers are the bright accent (buttons, active).
+        /* Accent ramp = the house red, from Hao Labs' own mark (Nino, 9 Nov
+           2026). Low numbers are dark tints for chips on a near-black page;
+           500 is the mark's own red and belongs on fills and the logo; high
+           numbers run to coral, which is where accent TEXT lives.
+
+           Why text is not 500: red is a dark hue. The lime this replaced hit
+           73% lightness at 400 and carried small text on black easily; the
+           same number in red is 45% and fails it. So a fill is brand-500 with
+           white on it, and a word is brand-600. The one hex that must be
+           exactly right is 500 — change it here and nowhere else. */
         brand: {
-          50: '#16210a',
-          100: '#1d2e0c',
-          200: '#365314',
-          300: '#4d7c0f',
-          400: '#84cc16',
-          500: '#a3e635',
-          600: '#bef264',
-          700: '#d9f99d',
-          800: '#e9fbc0',
-          900: '#f7fee7',
-          950: '#fbffe8',
+          50: '#2a0a06',
+          100: '#431009',
+          200: '#6a1810',
+          300: '#9c2317',
+          400: '#d12d1e',
+          500: '#ee3124',
+          600: '#ff5f4b',
+          700: '#ff8d7d',
+          800: '#ffb6ab',
+          900: '#ffe2dc',
+          950: '#fff5f3',
         },
       },
       fontFamily: {

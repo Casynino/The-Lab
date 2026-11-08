@@ -241,7 +241,7 @@ function ReturnModal({ onClose }) {
           <div className="flex gap-2">
             {[['CUSTOMER_RETURN', 'Customer return'], ['SALES_RETURN', 'Rep → The Lab']].map(([k, label]) => (
               <button key={k} onClick={() => { setType(k); setCart({}); }}
-                className={`flex-1 rounded-lg border px-4 py-2 text-sm font-semibold transition ${type === k ? 'border-brand-500 bg-brand-500/10 text-brand-400' : 'border-border text-muted hover:bg-elevated'}`}>
+                className={`flex-1 rounded-lg border px-4 py-2 text-sm font-semibold transition ${type === k ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-muted hover:bg-elevated'}`}>
                 {label}
               </button>
             ))}
@@ -315,7 +315,7 @@ function ReturnModal({ onClose }) {
                     placeholder="0"
                     className="h-8 w-14 rounded-lg border border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
                   <button onClick={() => inc(product.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-lg font-bold text-slate-950 transition hover:bg-brand-400">+</button>
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-lg font-bold text-white transition hover:bg-brand-400">+</button>
                 </div>
               </div>
             );

@@ -47,7 +47,7 @@ const TXN_TYPE_LABEL = {
 // Settlements pages settled on. Finance was the last page still on the old
 // flat cards.
 const TINT = {
-  brand: { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
+  brand: { ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
   emerald: { ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
   rose: { ring: 'ring-rose-500/30', glow: 'from-rose-500/[0.14]', chip: 'bg-rose-500/15 text-rose-300', num: 'text-rose-300' },
   amber: { ring: 'ring-amber-500/30', glow: 'from-amber-500/[0.14]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
@@ -102,7 +102,7 @@ const SEG_WASH = {
   emerald: { bg: 'bg-gradient-to-br from-emerald-500/[0.12] via-emerald-500/[0.04] to-transparent', num: 'text-emerald-400' },
   rose: { bg: 'bg-gradient-to-br from-rose-500/[0.12] via-rose-500/[0.04] to-transparent', num: 'text-rose-400' },
   sky: { bg: 'bg-gradient-to-br from-sky-500/[0.12] via-sky-500/[0.04] to-transparent', num: 'text-sky-300' },
-  brand: { bg: 'bg-gradient-to-br from-brand-500/[0.12] via-brand-500/[0.04] to-transparent', num: 'text-brand-300' },
+  brand: { bg: 'bg-gradient-to-br from-brand-500/[0.12] via-brand-500/[0.04] to-transparent', num: 'text-brand-600' },
   amber: { bg: 'bg-gradient-to-br from-amber-500/[0.12] via-amber-500/[0.04] to-transparent', num: 'text-amber-300' },
   violet: { bg: 'bg-gradient-to-br from-violet-500/[0.12] via-violet-500/[0.04] to-transparent', num: 'text-violet-300' },
   slate: { bg: 'bg-gradient-to-br from-white/[0.04] to-transparent', num: 'text-foreground' },
@@ -449,7 +449,7 @@ function OwnerMoneyModal({ mode, accounts: all, onClose }) {
 function SectionHead({ label, sub }) {
   return (
     <div className="border-l-2 border-brand-500/70 pl-3">
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-300">{label}</h2>
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-600">{label}</h2>
       {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
     </div>
   );
@@ -501,7 +501,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
 
   const desks = [
     { tab: 'profit', title: 'Profit', line: 'What you make — per brand, and box by box', value: formatCurrency(data.netProfit), tone: data.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300' },
-    { tab: 'cashflow', title: 'Cash Flow', line: 'Opening to closing, and what moved it', value: formatCurrency(data.cashPosition), tone: 'text-brand-300' },
+    { tab: 'cashflow', title: 'Cash Flow', line: 'Opening to closing, and what moved it', value: formatCurrency(data.cashPosition), tone: 'text-brand-600' },
     { tab: 'suppliers', title: 'Suppliers', line: 'Who you buy from and what you owe them', value: formatCurrency(ny.supplierOutstanding || 0), tone: ny.supplierOutstanding > 0 ? 'text-rose-300' : 'text-faint' },
     { tab: 'expenses', title: 'Expenses', line: 'What the business spends, by category', value: formatCurrency(data.expenses), tone: 'text-foreground' },
     { tab: 'commissions', title: 'Commissions', line: 'What the reps have earned and can withdraw', value: formatCurrency(data.outstandingCommission), tone: data.outstandingCommission > 0 ? 'text-amber-300' : 'text-faint' },
@@ -513,7 +513,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
       <div className="flex flex-wrap gap-1.5">
         {PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
-            className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
+            className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
 
@@ -812,7 +812,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/[0.06] to-transparent" aria-hidden="true" />
                   <div className="relative p-5">
                     <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-brand-500/15 px-3 py-1 text-sm font-bold text-brand-300">{b.name}</span>
+                      <span className="rounded-full bg-brand-500/15 px-3 py-1 text-sm font-bold text-brand-600">{b.name}</span>
                       <span className="text-xs text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'} sold · {periodLabel}</span>
                     </div>
 
@@ -828,7 +828,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
                       </div>
                       <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.08] pt-2.5">
                         <span className="text-sm font-semibold text-foreground">Earned on these sales</span>
-                        <span className={`text-xl font-bold tabular-nums ${(b.revenue - b.cogs) >= 0 ? 'text-brand-300' : 'text-rose-400'}`}>
+                        <span className={`text-xl font-bold tabular-nums ${(b.revenue - b.cogs) >= 0 ? 'text-brand-600' : 'text-rose-400'}`}>
                           {formatCurrency(b.revenue - b.cogs)}
                         </span>
                       </div>
@@ -1000,7 +1000,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
 }
 
 function Money({ label, value, tone, big }) {
-  const tones = { emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-400', amber: 'text-amber-500', slate: 'text-muted', default: 'text-foreground' };
+  const tones = { emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-600', amber: 'text-amber-500', slate: 'text-muted', default: 'text-foreground' };
   return (
     <div className={`rounded-xl border border-border bg-elevated p-3 ${big ? 'ring-1 ring-brand-500/30' : ''}`}>
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
@@ -1043,7 +1043,7 @@ function AccountStatementModal({ account, onClose }) {
       footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-white/[0.08] bg-surface p-4">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400"><Icon className="h-5 w-5" /></span>
+          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500/10 text-brand-600"><Icon className="h-5 w-5" /></span>
           {isRecord ? (
             <>
               <div>
@@ -1151,7 +1151,7 @@ function Accounts({ onQuick }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-faint">Total cash position</div>
-          <div className="text-2xl font-black text-brand-400 tabular-nums">{formatCurrency(total)}</div>
+          <div className="text-2xl font-black text-brand-600 tabular-nums">{formatCurrency(total)}</div>
           <div className="hidden text-[11px] text-faint sm:block">What your accounts are holding right now.</div>
         </div>
         <div className="tab-row sm:flex sm:gap-2">
@@ -1201,7 +1201,7 @@ function Accounts({ onQuick }) {
               <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tint.glow} to-transparent`} aria-hidden="true" />
               <div className="relative flex items-center justify-between">
                 <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-5 w-5" /></span>
-                {a.isDefault && <Badge className="bg-brand-500/15 text-brand-400">Default</Badge>}
+                {a.isDefault && <Badge className="bg-brand-500/15 text-brand-600">Default</Badge>}
               </div>
               <div className="relative mt-3 text-sm font-semibold text-foreground">{a.name}</div>
               {a.notes && <div className="relative text-[11px] text-faint">{a.notes}</div>}
@@ -1212,7 +1212,7 @@ function Accounts({ onQuick }) {
               </div>
               <div className="relative mt-1 flex items-center justify-between text-[11px] text-faint">
                 <span>Opening {formatCurrency(a.openingBalance)}</span>
-                <span className="inline-flex items-center gap-1 font-medium text-brand-400">
+                <span className="inline-flex items-center gap-1 font-medium text-brand-600">
                   See every movement <ChevronRight className="h-3 w-3" />
                 </span>
               </div>
@@ -1243,7 +1243,7 @@ function Accounts({ onQuick }) {
             </p>
             <div className="relative mt-3 flex items-center justify-between border-t border-white/[0.07] pt-2 text-[11px] text-faint">
               <span>No money is held here</span>
-              <span className="inline-flex items-center gap-1 font-medium text-brand-400">
+              <span className="inline-flex items-center gap-1 font-medium text-brand-600">
                 See every payout <ChevronRight className="h-3 w-3" />
               </span>
             </div>
@@ -1387,7 +1387,7 @@ function Ledger({ expensesOnly }) {
                 <TR key={t.id}>
                   <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                   <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
-                  <TD>{t.brandName ? <Badge className="bg-brand-500/15 text-brand-400">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
+                  <TD>{t.brandName ? <Badge className="bg-brand-500/15 text-brand-600">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
                   <TD className="max-w-[220px] truncate text-foreground">{ledgerLabel(t)}</TD>
                   <TD className="text-muted">{t.account?.name}</TD>
                   {isPayoutRow(t) ? (
@@ -1400,7 +1400,7 @@ function Ledger({ expensesOnly }) {
                   )}
                   <TD>
                     <div className="flex items-center justify-end gap-2">
-                      <button title="Correct this transaction" onClick={() => setEditing(t)} className="text-faint hover:text-brand-400"><Pencil className="h-4 w-4" /></button>
+                      <button title="Correct this transaction" onClick={() => setEditing(t)} className="text-faint hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
                       <button title="Delete" onClick={() => del.mutate(t.id)} className="text-faint hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </TD>
@@ -1527,7 +1527,7 @@ function ProfitTab() {
     { label: 'Cost of goods', value: formatCurrency(t.cost), icon: Package, sub: 'at cost when each box sold',
       ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', chip: 'bg-white/10 text-muted', num: 'text-foreground' },
     { label: 'Gross profit', value: formatCurrency(t.profit), icon: Wallet, sub: `${t.margin}% margin`,
-      ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-300', num: 'text-brand-300' },
+      ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
     // Reported, never deducted — the owner pays reps himself, in cash.
     { label: 'Reps earned', value: formatCurrency(t.commission), icon: Coins, sub: 'you pay this, not the business',
       ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.12]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
@@ -1545,7 +1545,7 @@ function ProfitTab() {
       <div className="flex flex-wrap items-center gap-1.5">
         {PROFIT_PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
         {windowLabel && <span className="ml-2 text-xs text-faint">{windowLabel}</span>}
       </div>
@@ -1580,7 +1580,7 @@ function ProfitTab() {
                 <Card key={b.brandId}>
                   <div className="p-5">
                     <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-bold text-brand-400">{b.name}</span>
+                      <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-bold text-brand-600">{b.name}</span>
                       <span className="text-xs text-faint">{formatNumber(b.boxes)} box{b.boxes === 1 ? '' : 'es'}</span>
                     </div>
                     <p className={`mt-3 text-3xl font-bold leading-none tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -1623,7 +1623,7 @@ function ProfitTab() {
                         </div>
                         <div className="flex items-baseline justify-between border-t border-white/[0.06] pt-1.5">
                           <span className="text-xs font-semibold text-foreground">= Potential profit</span>
-                          <span className={`text-sm font-bold tabular-nums ${stock.stockPotential > 0 ? 'text-brand-400' : 'text-muted'}`}>
+                          <span className={`text-sm font-bold tabular-nums ${stock.stockPotential > 0 ? 'text-brand-600' : 'text-muted'}`}>
                             {formatCurrency(stock.stockPotential)}
                           </span>
                         </div>
@@ -1716,7 +1716,7 @@ function CashFlowTab() {
       <div className="flex flex-wrap gap-1.5">
         {CF_PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-slate-950' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
 
@@ -1764,7 +1764,7 @@ function CashFlowTab() {
               </>
             )}
             <ChevronRight className="h-4 w-4 text-faint" />
-            <span className="text-muted">Closing <b className={data.closingBalance >= 0 ? 'text-brand-400' : 'text-rose-500'}>{formatCurrency(data.closingBalance)}</b></span>
+            <span className="text-muted">Closing <b className={data.closingBalance >= 0 ? 'text-brand-600' : 'text-rose-500'}>{formatCurrency(data.closingBalance)}</b></span>
           </div>
         </CardBody>
       </Card>
@@ -2136,7 +2136,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
           <div className="space-y-5">
             {/* Identity */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-              {s.brandName && <Badge className="bg-brand-500/15 text-brand-400">{s.brandName}</Badge>}
+              {s.brandName && <Badge className="bg-brand-500/15 text-brand-600">{s.brandName}</Badge>}
               {s.country && <span>{s.country}</span>}
               {s.contactName && <span>{s.contactName}</span>}
               {s.phone && <span>{s.phone}</span>}
@@ -2338,7 +2338,7 @@ function SuppliersTab({ accounts }) {
                       </div>
                     )}
                   </TD>
-                  <TD>{s.brandName ? <Badge className="bg-brand-500/15 text-brand-400">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
+                  <TD>{s.brandName ? <Badge className="bg-brand-500/15 text-brand-600">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
                   <TD className="text-muted">{s.country}</TD>
                   <TD>{s.poCount}</TD>
                   <TD>{formatCurrency(s.totalPurchased)}</TD>
@@ -2429,7 +2429,7 @@ function ArchiveTab() {
                   <TR key={r.id}>
                     <TD className="font-medium">{r.label}</TD>
                     <TD>
-                      <Badge className={r.type === 'MONTHLY' ? 'bg-violet-500/15 text-violet-500' : 'bg-lime-500/15 text-lime-600'}>
+                      <Badge className={r.type === 'MONTHLY' ? 'bg-violet-500/15 text-violet-500' : 'bg-emerald-500/15 text-emerald-400'}>
                         {r.type === 'MONTHLY' ? 'Monthly' : 'Weekly'}
                       </Badge>
                     </TD>
@@ -2482,7 +2482,7 @@ export default function Finance() {
         {TABS.map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k
-              ? 'bg-brand-500 text-slate-950 ring-brand-500'
+              ? 'bg-brand-500 text-white ring-brand-500'
               : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>

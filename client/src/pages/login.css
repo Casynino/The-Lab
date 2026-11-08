@@ -1,24 +1,31 @@
 /* The sign-in scene.
 
-   One full screen with the business standing on it: a night floor running back
-   to a lime horizon, the four cartons on that line, and the words over them.
-   Everything here is decorative and aria-hidden; the page itself is Login.jsx.
+   Nino, 9 Nov 2026: "a very animated scene, based on this business" — the way
+   Super Drive's sign-in has its night road with cars driving past. Hao Labs
+   does not move oil, it moves boxes, so this is the floor they move across:
+   a grid running back to a lit horizon, the four real cartons standing on that
+   line, and a steady traffic of boxes going out across the near floor.
+
+   Everything here is decorative and aria-hidden, and every moving part is a
+   transform or an opacity, so the whole scene is the compositor's work and
+   none of it is the main thread's. The page itself is Login.jsx.
 
    --h      where the horizon falls down the screen
-   --shelf  how tall the cartons stand (their feet are 75% down that picture,
-            which is where login-shelf.webp puts the baseline)
+   --shelf  how tall the standing cartons are (their feet are 75% down that
+            picture, which is where login-shelf.webp puts the baseline)
 
-   Phones keep the horizon low so the words have the top of the screen to
-   themselves. A computer can afford a bigger shelf. */
+   Phones keep the horizon low so the words own the top of the screen. */
 
 .ls {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  background: #070907;
+  background: #070606;
   --h: 82%;
   --shelf: 30%;
+  --red: 238, 49, 36;
+  --coral: 255, 95, 75;
 }
 
 @media (min-width: 640px) {
@@ -29,7 +36,8 @@
   .ls { --h: 78%; --shelf: 48%; }
 }
 
-/* Two slow lights, one lime and one deeper green, so the dark is not flat. */
+/* Two slow lights so the dark is not flat: the house red, and the coral it
+   runs to. */
 .ls-glow {
   position: absolute;
   border-radius: 50%;
@@ -38,51 +46,70 @@
 }
 
 .ls-glow.a {
-  left: -14%;
-  top: -10%;
-  width: 62%;
-  height: 46%;
-  background: rgba(163, 230, 53, 0.16);
+  left: -16%;
+  top: -12%;
+  width: 64%;
+  height: 48%;
+  background: rgba(var(--red), 0.17);
   animation: ls-drift-a 19s ease-in-out infinite;
 }
 
 .ls-glow.b {
-  right: -16%;
-  top: 6%;
-  width: 58%;
-  height: 50%;
-  background: rgba(16, 185, 129, 0.13);
+  right: -18%;
+  top: 4%;
+  width: 60%;
+  height: 52%;
+  background: rgba(var(--coral), 0.10);
   animation: ls-drift-b 23s ease-in-out infinite;
 }
 
-@keyframes ls-drift-a {
-  50% { transform: translate3d(7%, 5%, 0) scale(1.1); }
+@keyframes ls-drift-a { 50% { transform: translate3d(7%, 5%, 0) scale(1.1); } }
+@keyframes ls-drift-b { 50% { transform: translate3d(-6%, 7%, 0) scale(1.08); } }
+
+/* Dust in the light, drifting up off the floor. */
+.ls-mote {
+  position: absolute;
+  left: var(--x);
+  bottom: 0;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(var(--coral), 0.75);
+  opacity: 0;
+  animation: ls-mote var(--d) linear infinite;
+  animation-delay: var(--s);
 }
 
-@keyframes ls-drift-b {
-  50% { transform: translate3d(-6%, 7%, 0) scale(1.08); }
+@keyframes ls-mote {
+  0% { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
+  12% { opacity: 0.9; }
+  80% { opacity: 0.5; }
+  100% { transform: translate3d(var(--dx, 12px), -46vh, 0) scale(1.25); opacity: 0; }
 }
 
-/* The line the cartons stand on, with its own bloom above it. */
+/* The line the cartons stand on, breathing. */
 .ls-horizon {
   position: absolute;
   left: 0;
   right: 0;
   top: var(--h);
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(163, 230, 53, 0.55) 22%, rgba(190, 242, 100, 0.8) 50%, rgba(163, 230, 53, 0.55) 78%, transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--red), 0.6) 20%, rgba(var(--coral), 0.95) 50%, rgba(var(--red), 0.6) 80%, transparent);
+  animation: ls-breathe 7s ease-in-out infinite;
 }
 
 .ls-horizon::before {
   content: '';
   position: absolute;
-  left: 8%;
-  right: 8%;
+  left: 6%;
+  right: 6%;
   bottom: 0;
-  height: 190px;
-  background: radial-gradient(60% 100% at 50% 100%, rgba(132, 204, 22, 0.26), transparent 72%);
+  height: 200px;
+  background: radial-gradient(60% 100% at 50% 100%, rgba(var(--red), 0.3), transparent 72%);
   pointer-events: none;
 }
+
+@keyframes ls-breathe { 50% { opacity: 0.68; } }
 
 /* The floor: a flat grid laid down under the eye, running away from it. */
 .ls-floor {
@@ -104,19 +131,32 @@
   transform: rotateX(76deg);
   transform-origin: 50% 0%;
   background-image:
-    linear-gradient(to right, rgba(163, 230, 53, 0.30) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(163, 230, 53, 0.22) 1px, transparent 1px);
+    linear-gradient(to right, rgba(var(--red), 0.34) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--red), 0.24) 1px, transparent 1px);
   background-size: 54px 54px;
   animation: ls-run 6s linear infinite;
 }
 
-@keyframes ls-run {
-  to { background-position: 0 54px; }
+@keyframes ls-run { to { background-position: 0 54px; } }
+
+/* A light that walks across the floor every few seconds, the way a lamp over
+   a loading bay catches what is moving under it. */
+.ls-sweep {
+  position: absolute;
+  inset: var(--h) -30% 0 -30%;
+  background: linear-gradient(104deg, transparent 42%, rgba(var(--coral), 0.11) 50%, transparent 58%);
+  animation: ls-sweep 11s ease-in-out infinite;
+  pointer-events: none;
 }
 
-/* The cartons, standing with their feet on the horizon. The picture is
-   1560 x 720 with that baseline three quarters of the way down it, so lifting
-   it by 0.75 of its own height puts their feet exactly on the line. */
+@keyframes ls-sweep {
+  0%, 100% { transform: translate3d(-40%, 0, 0); }
+  50% { transform: translate3d(40%, 0, 0); }
+}
+
+/* The cartons standing on the horizon. The picture is 1560 x 720 with that
+   baseline three quarters of the way down it, so lifting it by 0.75 of its own
+   height puts their feet exactly on the line. */
 .ls-shelf {
   position: absolute;
   left: 50%;
@@ -127,12 +167,7 @@
   pointer-events: none;
 }
 
-.ls-shelf img {
-  display: block;
-  height: 100%;
-  width: 100%;
-  object-fit: contain;
-}
+.ls-shelf img { display: block; height: 100%; width: 100%; object-fit: contain; }
 
 /* A phone is too narrow for four cartons across, and four tiny ones say
    nothing. It stands at the right-hand end of the shelf instead, so OHIS and
@@ -140,9 +175,56 @@
    a share of the PICTURE's width, not the screen's, so it holds at every size:
    0.72 is the point halfway between those two cartons. */
 @media (max-width: 639px) {
-  .ls-shelf {
-    transform: translateX(-72%);
-  }
+  .ls-shelf { transform: translateX(-72%); }
+}
+
+/* ── the traffic ──────────────────────────────────────────────────────────
+   Stock going out, across the near floor, right to left. Each lane sets how
+   far below the horizon it runs (--b), how big a box is down there (--k), how
+   long a crossing takes (--d) and where in that crossing it starts (--s).
+   Nearer the eye means lower, bigger and quicker, which is the whole of the
+   perspective and costs one multiplication. */
+.ls-lane {
+  position: absolute;
+  left: -10%;
+  right: -10%;
+  top: calc(var(--h) + var(--b));
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(var(--red), 0.16), transparent);
+  pointer-events: none;
+}
+
+.ls-crate {
+  position: absolute;
+  top: calc(var(--h) + var(--b));
+  left: 0;
+  width: calc(var(--k) * 34px);
+  transform: translate3d(110vw, -100%, 0);
+  animation: ls-haul var(--d) linear infinite;
+  animation-delay: var(--s);
+  will-change: transform;
+  opacity: var(--o, 1);
+  filter: drop-shadow(0 0 calc(var(--k) * 10px) rgba(238, 49, 36, 0.22));
+  pointer-events: none;
+}
+
+.ls-crate svg { display: block; width: 100%; height: auto; }
+
+/* The dark it presses into the floor, directly under it. */
+.ls-crate::after {
+  content: '';
+  position: absolute;
+  left: -14%;
+  right: -14%;
+  bottom: -6%;
+  height: 22%;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.85), transparent 72%);
+}
+
+@keyframes ls-haul {
+  from { transform: translate3d(110vw, -100%, 0); }
+  to { transform: translate3d(-40vw, -100%, 0); }
 }
 
 /* Dark at the edges, so nothing competes with the words. */
@@ -150,8 +232,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(130% 95% at 50% 42%, transparent 38%, rgba(4, 6, 5, 0.72) 100%),
-    linear-gradient(to bottom, rgba(4, 6, 5, 0.55), transparent 26%, transparent 62%, rgba(4, 6, 5, 0.5));
+    radial-gradient(130% 95% at 50% 42%, transparent 38%, rgba(4, 3, 3, 0.74) 100%),
+    linear-gradient(to bottom, rgba(4, 3, 3, 0.58), transparent 26%, transparent 62%, rgba(4, 3, 3, 0.5));
   pointer-events: none;
 }
 
@@ -162,20 +244,22 @@
   animation-delay: var(--rd, 0s);
 }
 
-@keyframes ls-rise {
-  from { opacity: 0; transform: translateY(16px); }
-}
+@keyframes ls-rise { from { opacity: 0; transform: translateY(16px); } }
 
 /* The sign-in card when it opens as a pop-up on a phone. */
-.ls-pop {
-  animation: ls-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
-}
+.ls-pop { animation: ls-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1) both; }
 
-@keyframes ls-pop {
-  from { opacity: 0; transform: translateY(14px) scale(0.96); }
-}
+@keyframes ls-pop { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
 
+/* Somebody who has asked their phone to stop moving things gets the scene
+   standing still — it is a picture, not information. */
 @media (prefers-reduced-motion: reduce) {
-  .ls-glow, .ls-grid { animation: none; }
+  .ls-glow,
+  .ls-grid,
+  .ls-sweep,
+  .ls-horizon,
+  .ls-mote { animation: none; }
+  .ls-mote { opacity: 0.5; }
+  .ls-crate { animation-duration: 0s; animation-play-state: paused; transform: translate3d(50vw, -100%, 0); }
   .ls-up, .ls-pop { animation-duration: 0.01ms; }
 }
