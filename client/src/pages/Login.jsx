@@ -153,10 +153,14 @@ function Gate({ children }) {
         type="button"
         onClick={() => setOpen(true)}
         style={rise(0.5)}
-        className="ls-up inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-brand-500 px-7 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-brand-600 md:h-12 md:px-9 md:text-[15px]"
+        className="ls-up group inline-flex h-12 cursor-pointer items-center gap-2.5 rounded px-3 text-base font-semibold tracking-wide text-white outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/60 md:h-14 md:text-[17px]"
       >
-        Log in
-        <ArrowRight className="h-3.5 w-3.5" />
+        {/* No pill, no glow: the words, a short red line under them, an arrow.
+            Nino, 10 Nov 2026, three times: no red shape around Log in — but it
+            must stay visible. White on the dark band is the most visible a
+            thing can be; the red line is the brand, the size of an underline. */}
+        <span className="border-b-2 border-brand-500 pb-0.5 transition-colors duration-200 group-hover:border-white">Log in</span>
+        <ArrowRight className="h-4 w-4 text-white/85 transition-transform duration-200 group-hover:translate-x-1" />
       </button>
 
       {/* The way to the full-screen app, for a phone that has not installed
