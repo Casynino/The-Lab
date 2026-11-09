@@ -7,7 +7,7 @@ import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { Field, Input } from '@/components/ui';
+import { Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
 import { idle, IDLE_LIMIT_MINUTES } from '@/lib/idle';
 import './login.css';
@@ -52,6 +52,10 @@ function offerToSave(email, password, name) {
     }
   } catch { /* no password manager here: the form's own attributes still work */ }
 }
+
+/* A field on the glass card: 40px tall, a faint fill, a hairline, no red ring
+   (the input's own 16px text is kept — below that an iPhone zooms the page). */
+const FIELD = '!h-10 !rounded-xl !border-white/10 !bg-white/[0.06] !py-0 !shadow-none placeholder:text-white/25 focus:!border-white/30 focus:!ring-0';
 
 /** The delay before a thing rises into place. */
 const rise = (s) => ({ '--rd': `${s}s` });
@@ -183,15 +187,15 @@ function Gate({ children }) {
       <div
         onClick={(e) => e.target === e.currentTarget && setOpen(false)}
         className={open
-          ? 'fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#040605]/60 p-5 pt-[13vh] backdrop-blur-sm md:items-center md:pt-5'
+          ? 'fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-5 pt-[max(calc(env(safe-area-inset-top)+3rem),14vh)] md:items-center md:pt-5'
           : 'hidden'}
       >
-        <div className="ls-pop relative w-full max-w-sm">
+        <div className="ls-pop relative w-full max-w-[19.5rem]">
           {children}
           {open && (
             <button type="button" onClick={() => setOpen(false)} aria-label="Close"
-              className="absolute right-3 top-3 grid h-8 w-8 cursor-pointer place-items-center rounded-full text-muted transition hover:bg-elevated hover:text-foreground">
-              <X className="h-4 w-4" />
+              className="absolute right-2.5 top-2.5 grid h-7 w-7 cursor-pointer place-items-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white/80">
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -269,7 +273,7 @@ export default function Login() {
           sections are as short as the words need and the room under them is
           the picture's. */}
       <div className="relative z-10 flex min-h-dvh flex-col">
-        <section className="flex flex-1 flex-col items-center justify-start px-5 pb-16 pt-[max(calc(env(safe-area-inset-top)+1.5rem),10vh)] md:pt-[6vh]">
+        <section className="flex flex-1 flex-col items-center justify-start px-5 pb-16 pt-[max(10vh,calc(env(safe-area-inset-top)_+_7vh))] md:pt-[6vh]">
           <div className="ls-up mb-4 md:mb-5" style={rise(0.05)}><Mark size="lg" /></div>
 
           <p className="ls-up mb-3.5 hidden h-[3px] w-10 rounded bg-brand-500 md:block" style={rise(0.18)} />
@@ -278,25 +282,34 @@ export default function Login() {
           </h2>
 
           <Gate>
-            <div className="ls-up card w-full border-white/10 bg-surface/85 p-6 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:p-7" style={rise(0.22)}>
-              <h1 className="text-xl font-bold tracking-tight text-foreground">Log in</h1>
-              <p className="mt-1 text-sm text-muted">Enter your details to start working.</p>
+            {/* The same frosted glass as the install card (Nino, 10 Nov 2026, on
+                the installed app: the form "looks big and bad, it should match
+                the clean design"): see-through, warm, a title and two fields and
+                one button. No subtitle, no red asterisks, labels you can tap. */}
+            <div className="w-full rounded-2xl border border-white/[0.09] bg-[#140b0b]/72 px-4 pb-4 pt-3.5 shadow-[0_18px_44px_-22px_rgba(0,0,0,0.75)] backdrop-blur-2xl backdrop-saturate-150">
+              <h1 className="text-[15px] font-medium tracking-tight text-white">Log in</h1>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4">
-                <Field label="Email" error={errors.email?.message} required>
-                  <Input id="login-email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="you@thelab.co.tz" {...register('email')} />
-                </Field>
-                <Field label="Password" error={errors.password?.message} required>
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-3.5 space-y-3">
+                <div>
+                  <label htmlFor="login-email" className="mb-1 block text-[12px] text-white/50">Email</label>
+                  <Input id="login-email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="you@thelab.co.tz"
+                    className={FIELD} {...register('email')} />
+                  {errors.email && <p className="mt-1 text-[11.5px] text-rose-400">{errors.email.message}</p>}
+                </div>
+                <div>
+                  <label htmlFor="login-password" className="mb-1 block text-[12px] text-white/50">Password</label>
                   <div className="relative">
-                    <Input id="login-password" type={showPwd ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="••••••••" {...register('password')} />
+                    <Input id="login-password" type={showPwd ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="••••••••"
+                      className={`${FIELD} !pr-10`} {...register('password')} />
                     <button type="button" onClick={() => setShowPwd((v) => !v)} aria-label={showPwd ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-faint hover:text-muted">
+                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-white/35 transition hover:text-white/70">
                       {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                </Field>
-                <button type="submit" disabled={isSubmitting} className="btn-primary w-full py-3 text-base">
-                  {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Log in <ArrowRight className="h-5 w-5" /></>}
+                  {errors.password && <p className="mt-1 text-[11.5px] text-rose-400">{errors.password.message}</p>}
+                </div>
+                <button type="submit" disabled={isSubmitting} className="btn-primary !mt-4 w-full !rounded-xl !py-0 h-10 text-[14px]">
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Log in <ArrowRight className="h-4 w-4" /></>}
                 </button>
               </form>
             </div>

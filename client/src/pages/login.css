@@ -107,7 +107,10 @@
 @keyframes ls-rise { from { opacity: 0; transform: translateY(16px); } }
 
 /* The sign-in card when it opens as a pop-up on a phone. */
-.ls-pop { animation: ls-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1) both; }
+/* `backwards`, not `both`: an element still held by a finished animation is not
+   a plain element any more, and the frosted card inside it stopped blurring what
+   is behind it — the page's own logo showed straight through the glass. */
+.ls-pop { animation: ls-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards; }
 
 @keyframes ls-pop { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
 

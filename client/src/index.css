@@ -347,7 +347,14 @@
   pointer-events: none;
 }
 body:has([data-login-scene]) .status-strip { display: none; }
-body:has([data-login-scene]) { background-color: #070907; }
+/* The sign-in screen paints the WHOLE screen — under the clock and the home bar
+   too — with a gradient that is the picture's own colour at its top and at its
+   bottom (the sky under the dark band; the sea under the vignette). In the
+   installed app the picture does not always reach the very edge, and a flat
+   black strip with a hard edge there looked like the screen was cut short
+   (Nino, 10 Nov 2026). The body is left clear so this shows through. */
+html:has([data-login-scene]) { background: linear-gradient(to bottom, #0d0504, #0b0d15) top / 100% 100lvh no-repeat, #0b0d15; }
+body:has([data-login-scene]) { background-color: transparent; }
 @media print { .status-strip { display: none; } }
 
 /* A phone turned sideways keeps the page clear of the notch. */
