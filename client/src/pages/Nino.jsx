@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowDown, ArrowLeft, ArrowUpRight, Bot, CreditCard, Database, FolderGit2, Globe,
-  LayoutDashboard, Mail, MapPin, MessageCircle, PenTool, Plug, Smartphone, TrendingUp, Workflow,
+  LayoutDashboard, Lock, Mail, MapPin, MessageCircle, PenTool, Plug, Smartphone, TrendingUp, Workflow,
 } from 'lucide-react';
 import { CONTACT, EXPERTISE, LIVE, MORE, STACK } from './nino.work';
 import './nino.css';
@@ -117,7 +117,7 @@ export default function Nino() {
 
         {/* ── Coming next & on GitHub ── */}
         <section aria-labelledby="more-title" className={`${wrap} py-10 sm:py-16`}>
-          <SectionHead id="more-title" index="02" title="Coming next & on GitHub" note="Launching soon, and code you can read." />
+          <SectionHead id="more-title" index="02" title="More work" note="Launching soon, code you can read, and private projects." />
           <ul className="mt-10 grid gap-4 sm:gap-5 md:grid-cols-2">
             {MORE.map((p) => <MoreCard key={p.name} p={p} />)}
           </ul>
@@ -275,30 +275,46 @@ function ProjectCard({ p, featured }) {
 
 function MoreCard({ p }) {
   const soon = p.status === 'soon';
+  const priv = !p.url;
+  const inner = (
+    <>
+      {p.shot ? (
+        <div className="sm:w-[44%] sm:shrink-0"><Shot p={p} /></div>
+      ) : (
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-[var(--n-rule)] bg-white/[0.04]">
+          {priv ? <Lock className="h-5 w-5 text-[var(--n-accent)]" strokeWidth={1.6} aria-hidden="true" /> : <FolderGit2 className="h-5 w-5 text-[var(--n-accent)]" strokeWidth={1.6} aria-hidden="true" />}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--n-faint)]">
+          {soon && <span className="rounded-full bg-[var(--n-accent)] px-2 py-0.5 font-sans text-[10.5px] font-semibold normal-case tracking-normal text-[var(--n-accent-ink)]">Launching soon</span>}
+          {p.kind}
+        </p>
+        <h3 className="mt-2 flex items-start justify-between gap-3 text-xl font-bold tracking-[-0.03em]">
+          {p.name}
+          {!priv && <ArrowUpRight className="nino-arrow mt-1 h-5 w-5 shrink-0 text-[var(--n-faint)] group-hover:text-[var(--n-accent)]" aria-hidden="true" />}
+        </h3>
+        <p className="mt-2 text-pretty text-[14.5px] leading-relaxed text-[var(--n-muted)]">{p.line}</p>
+        {priv && p.tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {p.tags.map((t) => <span key={t} className="rounded-full border border-[var(--n-rule)] px-2.5 py-1 text-[11.5px] text-[var(--n-muted)]">{t}</span>)}
+          </div>
+        )}
+        <p className="mt-3 truncate font-mono text-[11px] text-[var(--n-faint)]">{priv ? 'Private project' : soon ? `Preview · ${p.domain}` : p.domain}</p>
+      </div>
+    </>
+  );
+  const box = `group flex h-full gap-4 rounded-3xl border border-[var(--n-rule)] bg-[var(--n-card)] p-5 sm:items-center sm:gap-5 sm:p-6 ${p.shot ? 'flex-col sm:flex-row' : 'flex-row items-start'}`;
   return (
     <li>
-      <a href={p.url} {...ext} className={`nino-card group flex h-full gap-4 rounded-3xl border border-[var(--n-rule)] bg-[var(--n-card)] p-5 sm:items-center sm:gap-5 sm:p-6 ${p.shot ? 'flex-col sm:flex-row' : 'flex-row items-start'} ${focus}`}>
-        {p.shot ? (
-          <div className="sm:w-[44%] sm:shrink-0"><Shot p={p} /></div>
-        ) : (
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-[var(--n-rule)] bg-white/[0.04]">
-            <FolderGit2 className="h-5 w-5 text-[var(--n-accent)]" strokeWidth={1.6} aria-hidden="true" />
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--n-faint)]">
-            {soon && <span className="rounded-full bg-[var(--n-accent)] px-2 py-0.5 font-sans text-[10.5px] font-semibold normal-case tracking-normal text-[var(--n-accent-ink)]">Launching soon</span>}
-            {p.kind}
-          </p>
-          <h3 className="mt-2 flex items-start justify-between gap-3 text-xl font-bold tracking-[-0.03em]">
-            {p.name}
-            <ArrowUpRight className="nino-arrow mt-1 h-5 w-5 shrink-0 text-[var(--n-faint)] group-hover:text-[var(--n-accent)]" aria-hidden="true" />
-          </h3>
-          <p className="mt-2 text-pretty text-[14.5px] leading-relaxed text-[var(--n-muted)]">{p.line}</p>
-          <p className="mt-3 truncate font-mono text-[11px] text-[var(--n-faint)]">{soon ? `Preview · ${p.domain}` : p.domain}</p>
-        </div>
-        <span className="sr-only"> (opens in a new tab)</span>
-      </a>
+      {priv ? (
+        <div className={box}>{inner}</div>
+      ) : (
+        <a href={p.url} {...ext} className={`nino-card ${box} ${focus}`}>
+          {inner}
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      )}
     </li>
   );
 }
