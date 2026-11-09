@@ -8,6 +8,7 @@ import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Boxes, Timer, Coins, Sm
 import { useAuth } from '@/context/AuthContext';
 import { Field, Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
+import TZ from './tanzania';
 import './login.css';
 
 /**
@@ -60,55 +61,106 @@ function Mark({ size = 'md' }) {
 
 // ── The scene ────────────────────────────────────────────────────────────────
 
-/* Stock going out across the near floor. Each lane names how far below the
-   horizon it runs, how big a box is down there, how long a crossing takes and
-   where in that crossing it starts — nearer the eye is lower, bigger and
-   quicker, which is the whole of the perspective. */
-const LANES = [
-  { b: '2.5%', k: 0.8, d: '17s', o: 0.5, at: ['-2s', '-11s'] },
-  { b: '7%', k: 1.25, d: '12s', o: 0.78, at: ['-1s', '-7s'] },
-  { b: '13%', k: 1.9, d: '8.5s', o: 1, at: ['-3.5s'] },
-];
+/* The country, and the work.
+ *
+ * Nino, 9 Nov 2026: "show a map of Tanzania, moving boxes — this is a world
+ * class distribution channel". So the sign-in screen is the business drawn
+ * once: the Lab in Dar es Salaam, the regions it supplies, and stock on the
+ * road between them. The outline is real coordinates, simplified and
+ * projected by docs/mockups/tanzania.py — not a doodle of a country shape.
+ *
+ * Every moving part is a transform or an opacity on its own layer, so the
+ * whole thing is the compositor's work and none of it is the main thread's.
+ */
 
-/* Dust in the light, drifting up off the floor. */
-const MOTES = [
-  { x: '12%', d: '13s', s: '-3s', dx: '18px' },
-  { x: '28%', d: '17s', s: '-9s', dx: '-14px' },
-  { x: '44%', d: '11s', s: '-6s', dx: '22px' },
-  { x: '61%', d: '15s', s: '-1s', dx: '-20px' },
-  { x: '77%', d: '12s', s: '-8s', dx: '16px' },
-  { x: '91%', d: '16s', s: '-4s', dx: '-12px' },
-];
-
-/* The three cartons that cross the floor. Real plates, cut out small by
-   docs/mockups/login_shelf.py, so the traffic is Pepa, OHIS and Civlily
-   rather than a grey rectangle pretending to be a box. */
+/* The real cartons, cut out small by docs/mockups/login_shelf.py. */
 const CRATES = ['/crate-pepa.webp', '/crate-ohis.webp', '/crate-civlily.webp'];
 
+/* Where the stock goes, how long a run takes, and how far into it each box
+   already is. Staggered on purpose: eight lorries leaving at once is a parade,
+   not a distribution network. */
+const RUNS = [
+  { to: 'arusha', d: '7s', at: '-1.2s' },
+  { to: 'mwanza', d: '9.5s', at: '-5.5s' },
+  { to: 'dodoma', d: '5.5s', at: '-2.8s' },
+  { to: 'mbeya', d: '8.5s', at: '-7s' },
+  { to: 'tanga', d: '4.5s', at: '-0.6s' },
+  { to: 'morogoro', d: '4s', at: '-3.2s' },
+  { to: 'mtwara', d: '8s', at: '-4.4s' },
+  { to: 'kigoma', d: '11s', at: '-9s' },
+];
+
 function Scene() {
+  const { w, h, border, victoria, cities, routes } = TZ;
+  const dar = cities.dar;
+
   return (
     <div className="ls" aria-hidden="true">
       <span className="ls-glow a" />
       <span className="ls-glow b" />
-      {MOTES.map((m, i) => (
-        <span key={i} className="ls-mote" style={{ '--x': m.x, '--d': m.d, '--s': m.s, '--dx': m.dx }} />
-      ))}
-      <div className="ls-floor"><div className="ls-grid" /></div>
-      <div className="ls-horizon" />
-      <div className="ls-shelf">
-        <img src="/login-shelf.webp" alt="" width="1560" height="720" fetchpriority="high" />
-      </div>
-      {LANES.map((lane, i) => (
-        <div key={lane.b}>
-          <div className="ls-lane" style={{ '--b': lane.b }} />
-          {lane.at.map((at) => (
-            <div key={at} className="ls-crate" style={{ '--b': lane.b, '--k': lane.k, '--d': lane.d, '--s': at, '--o': lane.o }}>
-              <img src={CRATES[(i + lane.at.indexOf(at)) % CRATES.length]} alt="" loading="lazy" />
-            </div>
+
+      <div className="ls-map">
+        <svg viewBox={`0 0 ${w} ${h}`} className="ls-svg" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="ls-land" x1="0" y1="0" x2="0.35" y2="1">
+              <stop offset="0%" stopColor="rgb(238 49 36 / 0.26)" />
+              <stop offset="60%" stopColor="rgb(238 49 36 / 0.09)" />
+              <stop offset="100%" stopColor="rgb(255 95 75 / 0.02)" />
+            </linearGradient>
+          </defs>
+
+          {/* The country: filled faintly, drawn in the house red. */}
+          <path d={border} fill="url(#ls-land)" stroke="rgb(255 95 75 / 0.8)" strokeWidth="2.5"
+            strokeLinejoin="round" className="ls-border" />
+          {/* Lake Victoria, cut out of the north so the shape is readable. */}
+          <path d={victoria} fill="#070606" stroke="rgb(255 95 75 / 0.22)" strokeWidth="1.6" />
+
+          {/* The roads out of the Lab. The dash crawls, so a lane reads as a
+              route being worked rather than a line drawn on a map. Each one is
+              named, because the cartons below ride these exact paths. */}
+          {RUNS.map((r) => (
+            <path key={r.to} id={`ls-road-${r.to}`} d={routes[r.to]} fill="none"
+              stroke="rgb(255 95 75 / 0.30)" strokeWidth="1.6" strokeLinecap="round"
+              className="ls-road" style={{ '--d': r.d }} />
           ))}
-        </div>
-      ))}
-      <div className="ls-sweep" />
+
+          {/* Where the stock lands. */}
+          {RUNS.map((r, i) => {
+            const [cx, cy] = cities[r.to];
+            return (
+              <g key={r.to} className="ls-stop" style={{ '--s': `${i * 0.9}s` }}>
+                <circle cx={cx} cy={cy} r="15" className="ls-stop-ring" />
+                <circle cx={cx} cy={cy} r="4.5" fill="#ff5f4b" />
+              </g>
+            );
+          })}
+
+          {/* The Lab itself, in Dar. */}
+          <g>
+            <circle cx={dar[0]} cy={dar[1]} r="32" className="ls-hub-ring" />
+            <circle cx={dar[0]} cy={dar[1]} r="17" fill="none" stroke="#ff8d7d" strokeWidth="2" opacity="0.65" />
+            <circle cx={dar[0]} cy={dar[1]} r="9" fill="#ee3124" />
+          </g>
+          {/* The stock on the road: the real cartons, small, walking the lanes.
+
+              Inside the SVG, riding the road's own path. They were HTML
+              siblings with CSS offset-path first, which works but is sized in
+              pixels — so the boxes kept their 1000-unit scale while the map
+              shrank to fit the screen, and came out 0.05px wide. In here they
+              share the viewBox and scale with it for nothing. */}
+          {RUNS.map((r, i) => (
+            <image key={r.to} href={CRATES[i % CRATES.length]} width="54" x="-27" y="-54"
+              className="ls-parcel" preserveAspectRatio="xMidYMax meet">
+              <animateMotion dur={r.d} begin={r.at} repeatCount="indefinite" rotate="0">
+                <mpath href={`#ls-road-${r.to}`} />
+              </animateMotion>
+              <animate attributeName="opacity" dur={r.d} begin={r.at} repeatCount="indefinite"
+                values="0;1;1;0" keyTimes="0;0.08;0.9;1" />
+            </image>
+          ))}
+        </svg>
+      </div>
+
       <div className="ls-vignette" />
     </div>
   );

@@ -1,20 +1,14 @@
-/* The sign-in scene.
+/* The sign-in scene: the country, and the work.
 
-   Nino, 9 Nov 2026: "a very animated scene, based on this business" — the way
-   Super Drive's sign-in has its night road with cars driving past. Hao Labs
-   does not move oil, it moves boxes, so this is the floor they move across:
-   a grid running back to a lit horizon, the four real cartons standing on that
-   line, and a steady traffic of boxes going out across the near floor.
+   Nino, 9 Nov 2026: "show a map of Tanzania, moving boxes — this is a world
+   class distribution channel". So this is the business drawn once — the Lab in
+   Dar es Salaam, the regions it supplies, and stock on the road between them.
+   The geometry is real coordinates from docs/mockups/tanzania.py; everything
+   here is the lighting and the motion.
 
-   Everything here is decorative and aria-hidden, and every moving part is a
-   transform or an opacity, so the whole scene is the compositor's work and
-   none of it is the main thread's. The page itself is Login.jsx.
-
-   --h      where the horizon falls down the screen
-   --shelf  how tall the standing cartons are (their feet are 75% down that
-            picture, which is where login-shelf.webp puts the baseline)
-
-   Phones keep the horizon low so the words own the top of the screen. */
+   Every animation is a transform, an opacity or a dash offset, which the
+   compositor can do on its own. Nothing animates a filter, a blur or a layout
+   property — that is what made the last version stutter on a phone. */
 
 .ls {
   position: fixed;
@@ -22,209 +16,132 @@
   z-index: 0;
   overflow: hidden;
   background: #070606;
-  --h: 82%;
-  --shelf: 30%;
   --red: 238, 49, 36;
   --coral: 255, 95, 75;
 }
 
-@media (min-width: 640px) {
-  .ls { --h: 80%; --shelf: 38%; }
-}
-
-@media (min-width: 1024px) {
-  .ls { --h: 78%; --shelf: 48%; }
-}
-
-/* Two slow lights so the dark is not flat: the house red, and the coral it
-   runs to. */
+/* Two slow lights so the dark is not flat. */
 .ls-glow {
   position: absolute;
   border-radius: 50%;
-  filter: blur(90px);
+  filter: blur(100px);
   will-change: transform;
 }
 
 .ls-glow.a {
-  left: -16%;
-  top: -12%;
-  width: 64%;
-  height: 48%;
-  background: rgba(var(--red), 0.17);
-  animation: ls-drift-a 19s ease-in-out infinite;
+  left: -18%;
+  top: -14%;
+  width: 66%;
+  height: 52%;
+  background: rgba(var(--red), 0.16);
+  animation: ls-drift-a 21s ease-in-out infinite;
 }
 
 .ls-glow.b {
-  right: -18%;
-  top: 4%;
-  width: 60%;
-  height: 52%;
-  background: rgba(var(--coral), 0.10);
-  animation: ls-drift-b 23s ease-in-out infinite;
+  right: -20%;
+  bottom: -18%;
+  width: 62%;
+  height: 54%;
+  background: rgba(var(--coral), 0.09);
+  animation: ls-drift-b 26s ease-in-out infinite;
 }
 
-@keyframes ls-drift-a { 50% { transform: translate3d(7%, 5%, 0) scale(1.1); } }
-@keyframes ls-drift-b { 50% { transform: translate3d(-6%, 7%, 0) scale(1.08); } }
+@keyframes ls-drift-a { 50% { transform: translate3d(8%, 6%, 0) scale(1.1); } }
+@keyframes ls-drift-b { 50% { transform: translate3d(-7%, -6%, 0) scale(1.08); } }
 
-/* Dust in the light, drifting up off the floor. */
-.ls-mote {
+/* ── the map ──────────────────────────────────────────────────────────────
+   A square-ish box the country is drawn inside. The parcels are positioned
+   against this same box, so the SVG and the moving cartons share one
+   coordinate space and a box cannot drift off its own road. */
+.ls-map {
   position: absolute;
-  left: var(--x);
-  bottom: 0;
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: rgba(var(--coral), 0.75);
-  opacity: 0;
-  animation: ls-mote var(--d) linear infinite;
-  animation-delay: var(--s);
-}
-
-@keyframes ls-mote {
-  0% { transform: translate3d(0, 0, 0) scale(0.7); opacity: 0; }
-  12% { opacity: 0.9; }
-  80% { opacity: 0.5; }
-  100% { transform: translate3d(var(--dx, 12px), -46vh, 0) scale(1.25); opacity: 0; }
-}
-
-/* The line the cartons stand on, breathing. */
-.ls-horizon {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: var(--h);
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(var(--red), 0.6) 20%, rgba(var(--coral), 0.95) 50%, rgba(var(--red), 0.6) 80%, transparent);
-  animation: ls-breathe 7s ease-in-out infinite;
-}
-
-.ls-horizon::before {
-  content: '';
-  position: absolute;
-  left: 6%;
-  right: 6%;
-  bottom: 0;
-  height: 200px;
-  background: radial-gradient(60% 100% at 50% 100%, rgba(var(--red), 0.3), transparent 72%);
-  pointer-events: none;
-}
-
-@keyframes ls-breathe { 50% { opacity: 0.68; } }
-
-/* The floor: a flat grid laid down under the eye, running away from it. */
-.ls-floor {
-  position: absolute;
-  left: -40%;
-  right: -40%;
-  top: var(--h);
-  bottom: -2%;
-  perspective: 260px;
-  perspective-origin: 50% 0%;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 96%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 55%, transparent 96%);
-}
-
-.ls-grid {
-  position: absolute;
-  inset: 0 0 -140% 0;
-  transform: rotateX(76deg);
-  transform-origin: 50% 0%;
-  background-image:
-    linear-gradient(to right, rgba(var(--red), 0.34) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(var(--red), 0.24) 1px, transparent 1px);
-  background-size: 54px 54px;
-  animation: ls-run 6s linear infinite;
-}
-
-@keyframes ls-run { to { background-position: 0 54px; } }
-
-/* A light that walks across the floor every few seconds, the way a lamp over
-   a loading bay catches what is moving under it. */
-.ls-sweep {
-  position: absolute;
-  inset: var(--h) -30% 0 -30%;
-  background: linear-gradient(104deg, transparent 42%, rgba(var(--coral), 0.11) 50%, transparent 58%);
-  animation: ls-sweep 11s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes ls-sweep {
-  0%, 100% { transform: translate3d(-40%, 0, 0); }
-  50% { transform: translate3d(40%, 0, 0); }
-}
-
-/* The cartons standing on the horizon. The picture is 1560 x 720 with that
-   baseline three quarters of the way down it, so lifting it by 0.75 of its own
-   height puts their feet exactly on the line. */
-.ls-shelf {
-  position: absolute;
+  /* Low on a phone: the brand, the line and the button own the top of the
+     screen, and the country fills the air under them. */
+  top: 69%;
   left: 50%;
-  top: calc(var(--h) - var(--shelf) * 0.75);
-  height: var(--shelf);
-  aspect-ratio: 1560 / 720;
-  transform: translateX(-50%);
+  width: min(54vh, 86vw);
+  aspect-ratio: 1000 / 974;
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
-.ls-shelf img { display: block; height: 100%; width: 100%; object-fit: contain; }
-
-/* A phone is too narrow for four cartons across, and four tiny ones say
-   nothing. It stands at the right-hand end of the shelf instead, so OHIS and
-   the tall Pepa come out big and the other two run off the edge. The shift is
-   a share of the PICTURE's width, not the screen's, so it holds at every size:
-   0.72 is the point halfway between those two cartons. */
-@media (max-width: 639px) {
-  .ls-shelf { transform: translateX(-72%); }
+/* On a computer the words own the left of the screen, so the country stands
+   to the right of them rather than underneath. The X half of the centring
+   translate has to go with the centring: left:auto without it still pulled the
+   map back by half its own width, and it sat under the headline. */
+@media (min-width: 1024px) {
+  .ls-map {
+    left: auto;
+    right: 4%;
+    width: min(76vh, 44vw);
+    transform: translateY(-50%);
+  }
 }
 
-/* ── the traffic ──────────────────────────────────────────────────────────
-   Stock going out, across the near floor, right to left. Each lane sets how
-   far below the horizon it runs (--b), how big a box is down there (--k), how
-   long a crossing takes (--d) and where in that crossing it starts (--s).
-   Nearer the eye means lower, bigger and quicker, which is the whole of the
-   perspective and costs one multiplication. */
-.ls-lane {
+.ls-svg {
   position: absolute;
-  left: -10%;
-  right: -10%;
-  top: calc(var(--h) + var(--b));
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(var(--red), 0.16), transparent);
-  pointer-events: none;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.ls-crate {
-  position: absolute;
-  top: calc(var(--h) + var(--b));
-  left: 0;
-  width: calc(var(--k) * 34px);
-  transform: translate3d(110vw, -100%, 0);
-  animation: ls-haul var(--d) linear infinite;
-  animation-delay: var(--s);
-  will-change: transform;
-  opacity: var(--o, 1);
-  filter: drop-shadow(0 0 calc(var(--k) * 10px) rgba(238, 49, 36, 0.22));
-  pointer-events: none;
+/* The border draws itself once, on arrival. */
+.ls-border {
+  stroke-dasharray: 4200;
+  stroke-dashoffset: 4200;
+  animation: ls-draw 2.8s cubic-bezier(0.3, 0.8, 0.3, 1) 0.2s forwards;
+  filter: drop-shadow(0 0 18px rgba(var(--red), 0.35));
 }
 
-.ls-crate img { display: block; width: 100%; height: auto; }
+@keyframes ls-draw { to { stroke-dashoffset: 0; } }
 
-/* The dark it presses into the floor, directly under it. */
-.ls-crate::after {
-  content: '';
-  position: absolute;
-  left: -14%;
-  right: -14%;
-  bottom: -6%;
-  height: 22%;
-  border-radius: 50%;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.85), transparent 72%);
+/* A road being worked: the dash crawls from the Lab outwards. */
+.ls-road {
+  stroke-dasharray: 10 14;
+  animation: ls-crawl var(--d, 7s) linear infinite;
 }
 
-@keyframes ls-haul {
-  from { transform: translate3d(110vw, -100%, 0); }
-  to { transform: translate3d(-40vw, -100%, 0); }
+@keyframes ls-crawl { to { stroke-dashoffset: -24; } }
+
+/* A region taking delivery. */
+.ls-stop-ring {
+  fill: none;
+  stroke: rgba(var(--coral), 0.75);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ls-land 3.6s ease-out infinite;
+  animation-delay: var(--s, 0s);
+}
+
+@keyframes ls-land {
+  0% { transform: scale(0.35); opacity: 0; }
+  30% { opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* The Lab, breathing. */
+.ls-hub-ring {
+  fill: none;
+  stroke: rgba(var(--red), 0.9);
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ls-hub 3s ease-out infinite;
+}
+
+@keyframes ls-hub {
+  0% { transform: scale(0.45); opacity: 0.95; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ── the stock on the road ────────────────────────────────────────────────
+   The cartons live inside the SVG now and ride the road's own path, so they
+   scale with the viewBox and need no sizing of their own. All that is left
+   here is how they sit in the dark. */
+.ls-parcel {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.8));
 }
 
 /* Dark at the edges, so nothing competes with the words. */
@@ -232,8 +149,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(130% 95% at 50% 42%, transparent 38%, rgba(4, 3, 3, 0.74) 100%),
-    linear-gradient(to bottom, rgba(4, 3, 3, 0.58), transparent 26%, transparent 62%, rgba(4, 3, 3, 0.5));
+    radial-gradient(140% 100% at 58% 48%, transparent 38%, rgba(4, 3, 3, 0.62) 100%),
+    linear-gradient(to bottom, rgba(4, 3, 3, 0.5), transparent 22%, transparent 70%, rgba(4, 3, 3, 0.5));
   pointer-events: none;
 }
 
@@ -251,15 +168,11 @@
 
 @keyframes ls-pop { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
 
-/* Somebody who has asked their phone to stop moving things gets the scene
+/* Somebody who has asked their phone to stop moving things gets the map
    standing still — it is a picture, not information. */
 @media (prefers-reduced-motion: reduce) {
-  .ls-glow,
-  .ls-grid,
-  .ls-sweep,
-  .ls-horizon,
-  .ls-mote { animation: none; }
-  .ls-mote { opacity: 0.5; }
-  .ls-crate { animation-duration: 0s; animation-play-state: paused; transform: translate3d(50vw, -100%, 0); }
+  .ls-glow, .ls-road, .ls-stop-ring, .ls-hub-ring { animation: none; }
+  .ls-border { stroke-dashoffset: 0; animation: none; }
+  .ls-parcel { opacity: 0.9; }
   .ls-up, .ls-pop { animation-duration: 0.01ms; }
 }
