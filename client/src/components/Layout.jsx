@@ -178,18 +178,13 @@ function GlassSidebar({
   const brand = (compact) => (
     <NavLink to="/" onClick={onNavigate} data-hint="ZELab"
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
-      {/* The name, where there is room: red "ZE" and the white word "Lab" — the main
-          word (Nino, 10 Nov 2026, looking at this panel: "it should say Lab, the main
-          word here is Lab"; the mark alone read "ZEL", which is not a name). In the
-          narrow rail there is no room for the word, so there it is the mark. Artwork:
-          docs/mockups/brand.py. */}
-      {compact ? (
-        <img src="/brand/zel-mark.png" alt="ZELab" width="940" height="512"
-          className="h-6 w-auto shrink-0" />
-      ) : (
-        <img src="/brand/zelab-dark.png" alt="ZELab" width="911" height="320"
-          className={clsx('w-auto shrink-0', sheet ? 'h-8' : 'h-9')} />
-      )}
+      {/* Just "Lab" — the big L and the small "ab" of the logo, in white. Nino, 10 Nov 2026,
+          looking at this panel: "it should just say Lab, no need for ZELab up there"
+          (the red ZE is on the sign-in page, the tab and the home-screen icon). The
+          same word in the folded rail, smaller. The name is still here for a screen
+          reader and for the rail's tooltip. Artwork: docs/mockups/brand.py. */}
+      <img src="/brand/lab-dark.png" alt="ZELab" width="473" height="320"
+        className={clsx('w-auto shrink-0', compact ? 'h-6' : sheet ? 'h-7' : 'h-8')} />
     </NavLink>
   );
 

@@ -33,6 +33,7 @@ Writes into client/public/brand/:
     zel-mark.png          the mark alone: red "ZE" + big white "L", transparent
     zelab-dark.png        "ZEL" + "ab": red ZE, white Lab, for the app's near-black
     zelab-light.png       the same with Lab in ink, for white paper
+    lab-dark.png          just "Lab" (big L + ab, white) — the sidebar header
     app-180/192/512, maskable, favicon.png, splash/*   the home-screen set
     favicon-32.png, ../favicon.ico                    the browser-tab icon
     og-image.jpg                                      the card a shared link shows
@@ -323,6 +324,22 @@ def lockup(word_rgb, height=320):
     return out.crop(out.getbbox())
 
 
+def lab_lockup(word_rgb, height=320):
+    """Just the word: the big L and the small "ab", no "ZE". Nino, 10 Nov 2026, looking at
+    the sidebar header: "it should just say Lab, no need for ZELab up there". The same
+    letters, the same size relationship and spacing as in the full lockup."""
+    l = Image.new("RGBA", L_MASK.size, (0, 0, 0, 0))
+    l.paste(Image.new("RGBA", l.size, tuple(word_rgb) + (255,)), (0, 0), L_MASK)
+    l = l.crop(l.getbbox())
+    l = l.resize((round(l.width * height / l.height), height), Image.LANCZOS)
+    w = recolour(lab_at(round(height * 0.62)), word_rgb)
+    gapx = round(height * 0.035)
+    out = Image.new("RGBA", (l.width + gapx + w.width, height), (0, 0, 0, 0))
+    out.alpha_composite(l, (0, 0))
+    out.alpha_composite(w, (l.width + gapx, height - w.height - round(height * 0.012)))
+    return out.crop(out.getbbox())
+
+
 def save(im, *path):
     p = os.path.join(BRAND, *path)
     im.save(p, "PNG", optimize=True)
@@ -332,6 +349,7 @@ def save(im, *path):
 save(mark.resize((round(mark.width * 512 / mark.height), 512), Image.LANCZOS), "zel-mark.png")
 save(lockup(WORD_ON_DARK), "zelab-dark.png")
 save(lockup(WORD_ON_LIGHT), "zelab-light.png")
+save(lab_lockup(WORD_ON_DARK), "lab-dark.png")      # the sidebar header says just "Lab"
 
 
 def tile(px, glyph=0.80, radius=0.22, glow=True):
