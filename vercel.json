@@ -23,6 +23,41 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/((?!api/cron/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "hao-stock.vercel.app"
+        }
+      ],
+      "destination": "https://www.zelab.site/$1",
+      "permanent": false
+    },
+    {
+      "source": "/((?!api/cron/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "the-haolab.vercel.app"
+        }
+      ],
+      "destination": "https://www.zelab.site/$1",
+      "permanent": false
+    },
+    {
+      "source": "/((?!api/cron/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "the-lab.vercel.app"
+        }
+      ],
+      "destination": "https://www.zelab.site/$1",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

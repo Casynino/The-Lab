@@ -218,11 +218,11 @@ test('all three pictures sit together under Pepa Ndogo, none above it', async ()
 
 test('the page references only pictures that ship, and carries no script', async () => {
   seed(V1_ROW);
-  const html = page.renderHtml(await page.readContent(), { host: 'the-haolab.vercel.app' });
+  const html = page.renderHtml(await page.readContent(), { host: 'www.zelab.site' });
   const refs = [...html.matchAll(/\/pepa\/[a-z0-9.-]+\.(?:webp|jpg)/g)].map((m) => m[0]);
   assert.ok(refs.length >= 12);
   for (const ref of refs) assert.ok(fs.existsSync(path.join(__dirname, '../../client/public', ref)), `missing ${ref}`);
-  assert.match(html, /og:image" content="https:\/\/the-haolab\.vercel\.app\/pepa\/hero-1000\.[0-9a-f]{10}\.jpg"/);
+  assert.match(html, /og:image" content="https:\/\/www\.zelab\.site\/pepa\/hero-1000\.[0-9a-f]{10}\.jpg"/);
   assert.doesNotMatch(html, /<script/i);
   assert.equal(html.includes('pepa-box.jpg'), false);
 });
