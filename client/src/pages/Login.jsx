@@ -4,10 +4,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Boxes, Timer, Coins, Smartphone, X } from 'lucide-react';
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Boxes, Timer, Coins, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Field, Input } from '@/components/ui';
-import { InstallButton } from '@/components/InstallApp';
 import TZ from './tanzania';
 import './login.css';
 
@@ -317,17 +316,11 @@ function Gate({ children }) {
         <ArrowRight className="h-4 w-4" />
       </button>
 
-      {/* A browser tab always keeps its address bar; only an installed app is
-          full screen. Nothing draws here on a computer or once it is in. */}
-      <InstallButton
-        render={(openSheet) => (
-          <button type="button" onClick={openSheet} style={rise(0.68)}
-            className="ls-up mt-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] text-white/60 underline-offset-4 transition hover:text-white hover:underline md:hidden">
-            <Smartphone className="h-3.5 w-3.5" />
-            Get the full-screen app
-          </button>
-        )}
-      />
+      {/* No "Get the full-screen app" link here any more (owner, 9 Nov 2026).
+          The sheet offers itself once, on its own, the first time a phone
+          reaches the app after signing in — see InstallPrompt in Layout. Once
+          dismissed it stays dismissed; a standing link on the way in was the
+          same offer sitting there every single visit. */}
 
       <div
         onClick={(e) => e.target === e.currentTarget && setOpen(false)}
@@ -411,7 +404,7 @@ export default function Login() {
           <div className="mb-[clamp(170px,30vh,320px)] max-w-lg">
             <p className="ls-up mb-5 h-1 w-12 rounded bg-brand-500" style={rise(0.18)} />
             <h2 className="ls-up text-balance text-4xl font-bold leading-[1.08] tracking-tight xl:text-5xl" style={rise(0.26)}>
-              Every box out. <span className="text-brand-500">Every shilling back.</span>
+              We keep Tanzania <span className="text-brand-500">stocked.</span>
             </h2>
             <p className="ls-up mt-4 max-w-md text-[15px] leading-relaxed text-white/65" style={rise(0.4)}>
               Every box that leaves the Lab is on the system — who took it, what came
@@ -444,7 +437,7 @@ export default function Login() {
           <div className="ls-up mb-7 lg:hidden" style={rise(0.05)}><Mark /></div>
 
           <p className="ls-up mb-7 max-w-[15rem] text-balance text-center text-[15px] leading-snug text-white/80 md:hidden" style={rise(0.3)}>
-            Every box out. Every shilling back.
+            We keep Tanzania stocked.
           </p>
 
           <Gate>
