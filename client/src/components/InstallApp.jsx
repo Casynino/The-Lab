@@ -172,18 +172,25 @@ export function InstallSheet({ open, onClose }) {
 
   if (!open) return null;
 
-  /* Frosted glass, so the scene stays there behind it instead of being covered
-     by a slab: a light scrim, and a card that blurs what is under it. Only a
-     title and the steps. What was here before also had a subtitle, a footnote
-     for WhatsApp (the in-app steps already say so) and a full-width button,
-     and the card read as too much. Closing is the X, a tap outside, or Escape. */
+  // On an iPhone in Safari a small arrow points at the Share button.
+  const hint = ios && browser === 'safari' && !canPrompt;
+
+  /* Frosted glass that belongs to the page (Nino, 10 Nov 2026: "it should feel
+     like the background, it should not disturb the design"). So it sits low,
+     in the empty dark ground above the toolbar — the sea and the plain — and
+     leaves the logo, Log in and the scene alone; the dim behind it is barely
+     there; and the card is see-through, warm like the sky, blurring the scene
+     under it instead of covering it with a slab. Only a title and the steps.
+     Closing is the X, a tap outside, or Escape. */
   return (
     <div
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-5"
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/15 p-5 ${hint
+        ? 'pb-[calc(max(0.5rem,env(safe-area-inset-bottom))+5.75rem)]'
+        : 'pb-[max(1.75rem,calc(env(safe-area-inset-bottom)+1rem))]'}`}
     >
       <div role="dialog" aria-modal="true" aria-label="Use it like an app"
-        className="w-full max-w-[17.5rem] rounded-2xl border border-white/10 bg-[#0c0c0d]/70 px-4 pb-2 pt-3.5 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-2xl">
+        className="w-full max-w-[17.5rem] rounded-2xl border border-white/[0.09] bg-[#140b0b]/55 px-4 pb-1.5 pt-3.5 shadow-[0_18px_44px_-22px_rgba(0,0,0,0.75)] backdrop-blur-2xl backdrop-saturate-150">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-[14px] font-medium tracking-tight text-white">Use it like an app</h3>
           <button type="button" onClick={onClose} aria-label="Close"
@@ -202,14 +209,14 @@ export function InstallSheet({ open, onClose }) {
             <button type="button" className="h-8 cursor-pointer text-[12px] text-white/45 transition hover:text-white/75" onClick={onClose}>Not now</button>
           </div>
         ) : (
-          <ol className="mt-1.5 divide-y divide-white/[0.07]">{steps(browser, ios)}</ol>
+          <ol className="mt-1.5 divide-y divide-white/[0.06]">{steps(browser, ios)}</ol>
         )}
       </div>
 
       {/* An iPhone has no one-tap install, so the next best thing: while the
           sheet is open in Safari, a small arrow bounces over the toolbar
           where Share actually is, so nobody hunts for it. */}
-      {ios && browser === 'safari' && !canPrompt && (
+      {hint && (
         <div aria-hidden className="pointer-events-none fixed inset-x-0 bottom-[calc(max(0.5rem,env(safe-area-inset-bottom))+2.4rem)] z-[60] flex justify-center">
           <span className="flex animate-bounce flex-col items-center gap-0.5 text-[10px] font-medium text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             Share
