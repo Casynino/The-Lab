@@ -4,25 +4,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/hero-700.c13e470276.webp",
-        "bytes": 32046
+        "src": "/pepa/hero-700.fc636e4e0d.webp",
+        "bytes": 31974
       },
       {
         "w": 1000,
-        "src": "/pepa/hero-1000.03929e7888.webp",
-        "bytes": 52822
+        "src": "/pepa/hero-1000.c1fe3a662b.webp",
+        "bytes": 52758
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/hero-700.3f7eec6122.jpg",
-        "bytes": 49330
+        "src": "/pepa/hero-700.41d8f4805a.jpg",
+        "bytes": 49337
       },
       {
         "w": 1000,
-        "src": "/pepa/hero-1000.de4345e85f.jpg",
-        "bytes": 85100
+        "src": "/pepa/hero-1000.7d868ed7ab.jpg",
+        "bytes": 85098
       }
     ],
     "w": 1000,
@@ -33,25 +33,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/open-700.a5ff651090.webp",
-        "bytes": 21022
+        "src": "/pepa/open-700.d5d1b0c09e.webp",
+        "bytes": 21146
       },
       {
         "w": 1000,
-        "src": "/pepa/open-1000.ededf23adb.webp",
-        "bytes": 37046
+        "src": "/pepa/open-1000.cce66c400d.webp",
+        "bytes": 37054
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/open-700.40840d8c50.jpg",
-        "bytes": 32197
+        "src": "/pepa/open-700.c66cdecf21.jpg",
+        "bytes": 32195
       },
       {
         "w": 1000,
-        "src": "/pepa/open-1000.25d853e2db.jpg",
-        "bytes": 57056
+        "src": "/pepa/open-1000.3e0bc2b949.jpg",
+        "bytes": 57085
       }
     ],
     "w": 1000,
@@ -62,25 +62,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/pair-700.dad6d36d34.webp",
-        "bytes": 29226
+        "src": "/pepa/pair-700.4365ab0d99.webp",
+        "bytes": 29238
       },
       {
         "w": 1000,
-        "src": "/pepa/pair-1000.30692a635b.webp",
-        "bytes": 51432
+        "src": "/pepa/pair-1000.464efef6da.webp",
+        "bytes": 51418
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/pair-700.818828670f.jpg",
-        "bytes": 44340
+        "src": "/pepa/pair-700.46d78cd3d5.jpg",
+        "bytes": 44335
       },
       {
         "w": 1000,
-        "src": "/pepa/pair-1000.e2b939beef.jpg",
-        "bytes": 78176
+        "src": "/pepa/pair-1000.6e4263eaa3.jpg",
+        "bytes": 78223
       }
     ],
     "w": 1000,
@@ -91,25 +91,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-hero-700.d562574160.webp",
-        "bytes": 28590
+        "src": "/pepa/kubwa-hero-700.16456bc309.webp",
+        "bytes": 28594
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-hero-1000.fa4edf2d23.webp",
-        "bytes": 48240
+        "src": "/pepa/kubwa-hero-1000.9f15ae0f0b.webp",
+        "bytes": 48370
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-hero-700.3257b8d492.jpg",
-        "bytes": 41662
+        "src": "/pepa/kubwa-hero-700.ff360bc662.jpg",
+        "bytes": 41677
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-hero-1000.f8fa8f686a.jpg",
-        "bytes": 72164
+        "src": "/pepa/kubwa-hero-1000.355cb7de74.jpg",
+        "bytes": 72176
       }
     ],
     "w": 1000,
@@ -120,25 +120,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-back-700.9d1432db4d.webp",
-        "bytes": 31396
+        "src": "/pepa/kubwa-back-700.b46e7f45a3.webp",
+        "bytes": 31544
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-back-1000.fad76071e7.webp",
-        "bytes": 53272
+        "src": "/pepa/kubwa-back-1000.d2c54a552a.webp",
+        "bytes": 53302
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-back-700.44c9e657f6.jpg",
-        "bytes": 43709
+        "src": "/pepa/kubwa-back-700.6462cc8dd0.jpg",
+        "bytes": 43715
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-back-1000.07c6e8ceca.jpg",
-        "bytes": 76065
+        "src": "/pepa/kubwa-back-1000.7a65814bf6.jpg",
+        "bytes": 75951
       }
     ],
     "w": 1000,
@@ -149,25 +149,25 @@
     "webp": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-booklets-700.80eec36138.webp",
-        "bytes": 28576
+        "src": "/pepa/kubwa-booklets-700.094dd3fc49.webp",
+        "bytes": 28484
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-booklets-1000.447926ecbe.webp",
-        "bytes": 48640
+        "src": "/pepa/kubwa-booklets-1000.5713c4d4f7.webp",
+        "bytes": 48668
       }
     ],
     "jpg": [
       {
         "w": 700,
-        "src": "/pepa/kubwa-booklets-700.9cf2b32755.jpg",
-        "bytes": 40643
+        "src": "/pepa/kubwa-booklets-700.ebb2197c76.jpg",
+        "bytes": 40652
       },
       {
         "w": 1000,
-        "src": "/pepa/kubwa-booklets-1000.4ed892fc33.jpg",
-        "bytes": 70731
+        "src": "/pepa/kubwa-booklets-1000.a95a81c857.jpg",
+        "bytes": 70725
       }
     ],
     "w": 1000,
