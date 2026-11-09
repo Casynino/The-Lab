@@ -14,7 +14,8 @@ import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
-import { TZ_REGIONS } from '@/lib/regions';
+import RegionPicker from '@/components/RegionPicker';
+import { repRegions } from '@/lib/repRegions';
 import OrderDetailModal from '@/components/OrderDetail';
 import ProgressRows from '@/components/ProgressRows';
 import WithdrawalNote, { PayoutHistory, withdrawalState } from '@/components/WithdrawalNote';
@@ -383,7 +384,7 @@ function EditRepModal({ rep, onClose }) {
     name: rep.name || '',
     email: rep.email || '',
     phone: rep.phone || '',
-    region: rep.region || '',
+    regions: repRegions(rep),
     monthlyTarget: rep.monthlyTarget != null ? String(rep.monthlyTarget) : '',
     whatsappPhone: rep.whatsappPhone || '',
     whatsappApiKey: rep.whatsappApiKey || '',
@@ -395,7 +396,7 @@ function EditRepModal({ rep, onClose }) {
       const target = form.monthlyTarget === '' ? null : Number(form.monthlyTarget);
       await api.put(`/users/${rep.userId}`, { name: form.name.trim(), email: form.email.trim().toLowerCase() });
       await api.put(`/sales-reps/${rep.id}`, {
-        region: form.region.trim() || null,
+        regions: form.regions,
         phone: form.phone.trim() || null,
         monthlyTarget: target,
         whatsappPhone: form.whatsappPhone.trim() || null,
@@ -431,11 +432,8 @@ function EditRepModal({ rep, onClose }) {
         <Field label="Full name" required><Input value={form.name} onChange={set('name')} placeholder="Full name" /></Field>
         <Field label="Email" required><Input type="email" value={form.email} onChange={set('email')} placeholder="name@example.com" /></Field>
         <Field label="Phone"><Input value={form.phone} onChange={set('phone')} placeholder="07.." /></Field>
-        <Field label="Region / location" hint="Where this rep sells — shown on their sales & profile">
-          <Select value={form.region} onChange={set('region')}>
-            <option value="">— Select region —</option>
-            {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </Select>
+        <Field label="Region(s)" hint="Where this rep sells — one or more; the first is the main region">
+          <RegionPicker value={form.regions} onChange={(regions) => setForm((f) => ({ ...f, regions }))} />
         </Field>
         <Field label="Monthly target (TZS)" hint="Optional">
           <NumberInput min="0" value={form.monthlyTarget} onChange={set('monthlyTarget')} placeholder="0" />
@@ -720,7 +718,7 @@ export default function SalesRepProfile() {
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted">
               {rep.email && <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-faint" />{rep.email}</span>}
               {rep.phone && <span className="inline-flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-faint" />{rep.phone}</span>}
-              {rep.region && <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-faint" />{rep.region}</span>}
+              {repRegions(rep).length > 0 && <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-faint" />{repRegions(rep).join(', ')}</span>}
               <span className="inline-flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5 text-faint" />Joined {formatDate(rep.joinDate)}</span>
             </div>
           </div>

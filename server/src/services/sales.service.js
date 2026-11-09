@@ -7,6 +7,7 @@ const inventory = require('./inventory.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { round2, toNumber, formatCurrency } = require('../utils/money');
 const { dayjs } = require('../utils/dates');
+const { DEFAULT_REGION, regionWhere } = require('../constants/regions');
 
 const SALE_INCLUDE = {
   items: { include: { product: true, packagingUnit: true } },
@@ -75,6 +76,31 @@ function deriveStatus(total, amountPaid) {
 // Core sale creation that runs inside a caller-provided transaction. Settlement
 // reuses this so each settled box becomes a CASH sale — meaning revenue,
 // product performance, analytics and inventory all flow through one path.
+/**
+ * The region a sale is filed under, for the regional report: what the caller
+ * said > the customer's > the rep's. With none of those and NO rep, this is a
+ * direct sale out of the warehouse, so it belongs to the warehouse's region —
+ * Dar es Salaam unless that warehouse says otherwise. (It used to be saved blank
+ * and show as "Unassigned"; owner, 10 Nov 2026.) A rep's sale whose rep has no
+ * region stays blank: that is genuinely not known, and it is not the warehouse's.
+ */
+async function resolveSaleRegion(tx, { region, customerId, salesRepId, warehouseId }) {
+  let resolved = region || null;
+  if (!resolved && customerId) {
+    const c = await tx.customer.findUnique({ where: { id: customerId }, select: { region: true } });
+    resolved = c?.region || null;
+  }
+  if (!resolved && salesRepId) {
+    const r = await tx.salesRepresentative.findUnique({ where: { id: salesRepId }, select: { region: true } });
+    resolved = r?.region || null;
+  }
+  if (!resolved && !salesRepId) {
+    const wh = warehouseId ? await tx.warehouse.findUnique({ where: { id: warehouseId }, select: { region: true } }) : null;
+    resolved = wh?.region || DEFAULT_REGION;
+  }
+  return resolved;
+}
+
 async function createSaleTx(tx, payload, actor) {
   const {
     type,
@@ -151,16 +177,7 @@ async function createSaleTx(tx, payload, actor) {
 
   const saleNumber = await nextDocNumber(tx.sale, 'saleNumber', 'SALE');
 
-  // Resolve a region for reporting: explicit > customer > rep.
-  let resolvedRegion = region || null;
-  if (!resolvedRegion && customerId) {
-    const c = await tx.customer.findUnique({ where: { id: customerId }, select: { region: true } });
-    resolvedRegion = c?.region || null;
-  }
-  if (!resolvedRegion && salesRepId) {
-    const r = await tx.salesRepresentative.findUnique({ where: { id: salesRepId }, select: { region: true } });
-    resolvedRegion = r?.region || null;
-  }
+  const resolvedRegion = await resolveSaleRegion(tx, { region, customerId, salesRepId, warehouseId });
 
   const sale = await tx.sale.create({
     data: {
@@ -260,7 +277,9 @@ async function listSales(filters, pagination) {
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
   if (filters.customerId) where.customerId = filters.customerId;
   if (filters.warehouseId) where.warehouseId = filters.warehouseId;
-  if (filters.region) where.region = filters.region;
+  // Dar es Salaam also finds the sales with no region, which are its own.
+  const regionClause = regionWhere(filters.region);
+  if (regionClause) where.AND = [...(where.AND || []), regionClause];
   if (filters.from || filters.to) {
     where.soldAt = {};
     if (filters.from) where.soldAt.gte = new Date(filters.from);
@@ -405,4 +424,4 @@ async function cancelSale(id, actor, reason) {
   });
 }
 
-module.exports = { createSale, createSaleTx, listSales, getSale, cancelSale, SALE_INCLUDE };
+module.exports = { createSale, createSaleTx, listSales, getSale, cancelSale, resolveSaleRegion, SALE_INCLUDE };

@@ -384,7 +384,12 @@ model SalesRepresentative {
   userId                   String    @unique
   user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   code                     String    @unique // e.g. REP-001
+  // The rep's MAIN region — always the first of `regions`, kept in step by the
+  // API, and what every report and sale-region lookup already reads.
   region                   String?
+  // Every region the rep works (Nino, 10 Nov 2026: "even two"). Empty for a rep
+  // from before this existed, who is read as [region] — see repRegions().
+  regions                  String[]  @default([])
   phone                    String?
   // Per-rep WhatsApp (CallMeBot): the rep activates their own number and gets
   // their own apikey; when both are set, important alerts push to their phone.

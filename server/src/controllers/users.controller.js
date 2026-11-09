@@ -9,6 +9,7 @@ const { ok, created, paginated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
 const audit = require('../services/audit.service');
 const { nextRepCode } = require('../utils/numbering');
+const { regionWrite } = require('../constants/regions');
 
 const PUBLIC_SELECT = {
   id: true,
@@ -21,7 +22,7 @@ const PUBLIC_SELECT = {
   roleId: true,
   role: { select: { id: true, name: true } },
   warehouse: { select: { id: true, name: true } },
-  salesRep: { select: { id: true, code: true, region: true } },
+  salesRep: { select: { id: true, code: true, region: true, regions: true } },
 };
 
 const list = asyncHandler(async (req, res) => {
@@ -71,7 +72,9 @@ const create = asyncHandler(async (req, res) => {
     data.salesRep = {
       create: {
         code: salesRep?.code || (await nextRepCode(prisma)),
-        region: salesRep?.region || null,
+        region: null,
+        regions: [],
+        ...regionWrite(salesRep),
         phone: salesRep?.phone || phone || null,
         monthlyTarget: salesRep?.monthlyTarget ?? null,
       },

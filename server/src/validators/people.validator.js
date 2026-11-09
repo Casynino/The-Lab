@@ -2,7 +2,7 @@
 
 const { z } = require('zod');
 const { id, paginationFields, boolQuery, money, positiveInt } = require('./common.validator');
-const { canonicalRegion } = require('../constants/regions');
+const { canonicalRegion, cleanRegions } = require('../constants/regions');
 
 // A region is typed once and then grouped forever in the regional report, so a
 // stray spelling would split one market in two. Anything recognisable is
@@ -19,6 +19,22 @@ const tzRegion = z
     message: 'Choose one of the 31 regions of Tanzania',
   });
 
+// A rep can work several regions (owner, 10 Nov 2026: "even two"). Each must be
+// one of the official regions, repeats are dropped, the first is the main one.
+const tzRegionList = z
+  .array(z.string().trim().max(120))
+  .max(5, 'A rep can have at most 5 regions')
+  .optional()
+  .superRefine((list, ctx) => {
+    for (const v of list || []) {
+      if (v && canonicalRegion(v) === null) {
+        ctx.addIssue({ code: 'custom', message: 'Choose regions from the 31 regions of Tanzania' });
+        return;
+      }
+    }
+  })
+  .transform((list) => (list ? cleanRegions(list) : list));
+
 // --- Users -----------------------------------------------------------------
 const userCreate = {
   body: z.object({
@@ -34,6 +50,7 @@ const userCreate = {
       .object({
         code: z.string().trim().max(40).optional(),
         region: tzRegion,
+        regions: tzRegionList,
         phone: z.string().trim().max(40).optional().nullable(),
         monthlyTarget: money.optional().nullable(),
       })
@@ -85,6 +102,7 @@ const salesRepCreate = {
     userId: id,
     code: z.string().trim().max(40).optional(),
     region: tzRegion,
+    regions: tzRegionList,
     phone: z.string().trim().max(40).optional().nullable(),
     monthlyTarget: money.optional().nullable(),
     isActive: z.boolean().optional(),
@@ -94,6 +112,7 @@ const salesRepUpdate = {
   body: z.object({
     code: z.string().trim().max(40).optional(),
     region: tzRegion,
+    regions: tzRegionList,
     phone: z.string().trim().max(40).optional().nullable(),
     monthlyTarget: money.optional().nullable(),
     isActive: z.boolean().optional(),

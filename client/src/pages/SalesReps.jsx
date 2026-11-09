@@ -5,7 +5,8 @@ import toast from 'react-hot-toast';
 import { Plus, UserCog, AlertTriangle } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { formatCurrency, formatNumber, fromNow } from '@/lib/format';
-import { TZ_REGIONS } from '@/lib/regions';
+import RegionPicker from '@/components/RegionPicker';
+import { repRegions } from '@/lib/repRegions';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, NumberInput, Pagination,
 } from '@/components/ui';
@@ -14,13 +15,13 @@ function RepModal({ onClose }) {
   const qc = useQueryClient();
   const { data: users = [] } = useQuery({ queryKey: ['users', 'all'], queryFn: async () => unwrap(await api.get('/users', { params: { limit: 200 } })).data });
   const [userId, setUserId] = useState('');
-  const [region, setRegion] = useState('');
+  const [regions, setRegions] = useState([]);
   const [monthlyTarget, setMonthlyTarget] = useState('');
 
   const candidates = users.filter((u) => !u.salesRep);
 
   const create = useMutation({
-    mutationFn: () => api.post('/sales-reps', { userId, region: region || null, monthlyTarget: monthlyTarget ? Number(monthlyTarget) : null }),
+    mutationFn: () => api.post('/sales-reps', { userId, regions, monthlyTarget: monthlyTarget ? Number(monthlyTarget) : null }),
     onSuccess: () => { toast.success('Sales rep created'); qc.invalidateQueries({ queryKey: ['sales-reps'] }); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
@@ -36,11 +37,8 @@ function RepModal({ onClose }) {
           </Select>
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Region">
-            <Select value={region} onChange={(e) => setRegion(e.target.value)}>
-            <option value="">— Select region —</option>
-            {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </Select>
+          <Field label="Region(s)" hint="One or more — the first is the main region">
+            <RegionPicker value={regions} onChange={setRegions} />
           </Field>
           <Field label="Monthly target"><NumberInput min="0" value={monthlyTarget} onChange={(e) => setMonthlyTarget(e.target.value)} /></Field>
         </div>
@@ -213,7 +211,7 @@ export default function SalesReps() {
                           {st.label}
                         </span>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-faint">{r.code}{r.region ? ` · ${r.region}` : ''}</div>
+                      <div className="mt-0.5 truncate text-xs text-faint">{r.code}{repRegions(r).length ? ` · ${repRegions(r).join(', ')}` : ''}</div>
                     </div>
                     <div className="shrink-0 text-right">
                       {g.known ? (

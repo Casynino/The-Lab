@@ -8,7 +8,7 @@ import { useWarehouses, useDebounce } from '@/lib/hooks';
 import { ROLE_LABELS } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateTime } from '@/lib/format';
-import { TZ_REGIONS } from '@/lib/regions';
+import RegionPicker from '@/components/RegionPicker';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Select,
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
@@ -23,6 +23,9 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
       : { name: '', email: '', password: '', phone: '', roleId: roles[0]?.id || '', warehouseId: '', isActive: true },
   });
 
+  // Not part of the react-hook-form values: it is a list, picked with chips.
+  const [regions, setRegions] = useState([]);
+
   const selectedRole = roles.find((r) => r.id === watch('roleId'));
   const isRep = selectedRole?.name === 'SALES_REP';
 
@@ -31,7 +34,7 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
       const payload = { ...values, warehouseId: values.warehouseId || null };
       if (!payload.password) delete payload.password;
       if (isEdit) return api.put(`/users/${editing.id}`, payload);
-      if (isRep) payload.salesRep = { region: values.region || null };
+      if (isRep) payload.salesRep = { regions };
       delete payload.region;
       return api.post('/users', payload);
     },
@@ -83,11 +86,8 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
           </Field>
         </div>
         {!isEdit && isRep && (
-          <Field label="Sales region" hint="Used to compare how regions are performing">
-            <Select {...register('region')}>
-            <option value="">— Select region —</option>
-            {TZ_REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-            </Select>
+          <Field label="Sales region(s)" hint="One or more — the first is the main region. Used to compare how regions are performing">
+            <RegionPicker value={regions} onChange={setRegions} />
           </Field>
         )}
         <label className="flex items-center gap-2 text-sm text-foreground">

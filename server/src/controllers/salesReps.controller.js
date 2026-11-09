@@ -14,6 +14,7 @@ const settlement = require('../services/settlement.service');
 const { toNumber, round2 } = require('../utils/money');
 const audit = require('../services/audit.service');
 const { nextRepCode } = require('../utils/numbering');
+const { regionWrite, repRegions } = require('../constants/regions');
 
 // Settlement-discipline grading, kept byte-for-byte in step with
 // settlement.service.analytics(). The contract is 72h, or 168h once the rep has
@@ -556,6 +557,7 @@ const getProfile = asyncHandler(async (req, res) => {
       email: rep.user?.email,
       phone: rep.phone || rep.user?.phone || null,
       region: rep.region,
+      regions: repRegions(rep),
       isActive: rep.isActive,
       // Whether this rep is on commission at all.
       earnsCommission: rep.earnsCommission !== false,
@@ -632,7 +634,10 @@ const create = asyncHandler(async (req, res) => {
     data: {
       userId: req.body.userId,
       code,
-      region: req.body.region || null,
+      // main region + the full list; a request with neither leaves both empty
+      region: null,
+      regions: [],
+      ...regionWrite(req.body),
       phone: req.body.phone || null,
       monthlyTarget: req.body.monthlyTarget ?? null,
       isActive: req.body.isActive ?? true,
@@ -648,7 +653,9 @@ const update = asyncHandler(async (req, res) => {
   if (!existing) throw ApiError.notFound('Sales representative not found');
   const rep = await prisma.salesRepresentative.update({
     where: { id: req.params.id },
-    data: req.body,
+    // regionWrite keeps `region` (main) equal to the first of `regions`, and
+    // writes nothing when the request does not mention regions at all.
+    data: { ...req.body, ...regionWrite(req.body) },
     include: { user: { select: { name: true, email: true } } },
   });
   await audit.record(req, { action: 'UPDATE', entityType: 'SalesRepresentative', entityId: rep.id, oldValues: existing, newValues: req.body });

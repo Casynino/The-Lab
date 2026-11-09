@@ -9,6 +9,7 @@ const stockCount = require('./stockCount.service');
 const settlement = require('./settlement.service');
 const { toNumber, round2 } = require('../utils/money');
 const { resolveRange } = require('../utils/dates');
+const { mergeRegionRevenue } = require('../constants/regions');
 
 async function periodSales(period) {
   const r = await reports.salesReport({ period });
@@ -312,10 +313,10 @@ async function revenueByRegion(range) {
     where: { status: { not: 'CANCELLED' }, soldAt: { gte: range.start, lte: range.end } },
     _sum: { total: true },
   });
-  return rows
-    .map((r) => ({ name: r.region || 'Unassigned', value: round2(toNumber(r._sum.total)) }))
-    .filter((r) => r.value > 0)
-    .sort((a, b) => b.value - a.value);
+  // A sale with no region is Dar es Salaam's — direct sales out of the
+  // warehouse, and everything saved before regions were filled in. It used to
+  // be its own "Unassigned" slice; now it is added to Dar es Salaam's.
+  return mergeRegionRevenue(rows.map((r) => ({ region: r.region, total: toNumber(r._sum.total) })));
 }
 
 async function revenueByRep(range) {

@@ -5,6 +5,7 @@ const inventory = require('./inventory.service');
 const credit = require('./credit.service');
 const { toNumber, round2 } = require('../utils/money');
 const { dayjs, resolveRange } = require('../utils/dates');
+const { DEFAULT_REGION, repRegions, regionWhere } = require('../constants/regions');
 
 const NON_CANCELLED = { status: { not: 'CANCELLED' } };
 
@@ -38,7 +39,8 @@ async function salesReport(params = {}) {
 
   const where = { ...NON_CANCELLED, soldAt: { gte: range.start, lte: range.end } };
   if (params.salesRepId) where.salesRepId = params.salesRepId;
-  if (params.region) where.region = params.region;
+  const regionClause = regionWhere(params.region);
+  if (regionClause) where.AND = [...(where.AND || []), regionClause];
   if (params.type) where.type = params.type;
 
   const sales = await prisma.sale.findMany({
@@ -177,15 +179,18 @@ async function regionalPerformance(params = {}) {
       _sum: { total: true, costTotal: true },
       _count: true,
     }),
-    prisma.salesRepresentative.findMany({ select: { id: true, region: true } }),
+    prisma.salesRepresentative.findMany({ select: { id: true, region: true, regions: true } }),
     prisma.warehouse.findFirst({ where: { isActive: true }, orderBy: { isPrimary: 'desc' }, select: { region: true } }),
   ]);
 
   // Direct (no-rep) sales come straight from The Lab — a normal cash sale from
   // the warehouse — so they belong to the warehouse's region. Rep sales use the
   // rep's CURRENT region (live).
-  const labRegion = (primaryWh?.region || '').trim() || 'Unspecified';
-  const regionByRep = new Map(reps.map((r) => [r.id, (r.region || '').trim() || 'Unspecified']));
+  // The warehouse is in Dar es Salaam, so when it has no region of its own the
+  // direct sales are Dar es Salaam's, not "Unspecified" (owner, 10 Nov 2026).
+  // A rep with several regions is counted under the MAIN (first) one.
+  const labRegion = (primaryWh?.region || '').trim() || DEFAULT_REGION;
+  const regionByRep = new Map(reps.map((r) => [r.id, repRegions(r)[0] || 'Unspecified']));
 
   const byRegion = new Map();
   for (const g of grouped) {
