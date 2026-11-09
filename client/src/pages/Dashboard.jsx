@@ -18,8 +18,6 @@ import {
   PiggyBank,
   ClipboardList,
   ArrowLeftRight,
-  Undo2,
-  Factory,
   Receipt,
   ShoppingCart,
   SlidersHorizontal,
@@ -570,17 +568,16 @@ export default function Dashboard() {
 
   // `short` is the tile's word on a phone. "Approve requests" in an 80 px
   // tile wraps to three lines and the row stops being a row.
-  // Six, not eight. Adjusting stock and moving it between stores are
-  // corrections and housekeeping — they live on Inventory and Transfers, where
-  // the person doing them already is. What stays here is the day itself: the
-  // three approvals a rep's boxes need, and the three ways money moves.
+  // Four, not six (Nino, 10 Nov 2026: "those icons look too much … just the 4
+  // only"). What stays is the day itself: the two approvals a rep's boxes and
+  // money wait on, and the two records made all day. A return waiting for a
+  // decision shows in Attention; buying stock is on the Purchases page and in
+  // the menu; adjusting and moving stock live on Inventory and Transfers.
   const QUICK = [
     { label: 'Approve requests', short: 'Requests', kind: 'sky', icon: ClipboardList, to: '/stock-requests', badge: attention.stockRequests },
     { label: 'Approve settlements', short: 'Settle', kind: 'amber', icon: Timer, to: '/settlements', badge: attention.settlements },
-    { label: 'Approve returns', short: 'Returns', kind: 'rose', icon: Undo2, to: '/returns', badge: attention.returns },
     { label: 'Record sale', short: 'Sale', kind: 'emerald', icon: ShoppingCart, to: '/sales' },
     { label: 'Record expense', short: 'Expense', kind: 'orange', icon: Receipt, to: '/finance?tab=expenses' },
-    { label: 'Purchase stock', short: 'Purchase', kind: 'violet', icon: Factory, to: '/finance?tab=suppliers' },
   ];
 
   return (
@@ -599,7 +596,7 @@ export default function Dashboard() {
           accident rather than a set of things you can do. From sm they are
           the tinted pills they always were, where there is room for the whole
           phrase. */}
-      <div className="mb-4 grid grid-cols-6 gap-0.5 sm:mb-5 sm:flex sm:flex-wrap sm:gap-2">
+      <div className="mb-4 grid grid-cols-4 gap-1 sm:mb-5 sm:flex sm:flex-wrap sm:gap-2">
         {QUICK.map((q) => {
           // Every tint class carries the sm: prefix. The tile's own dark
           // surface is unprefixed, so the two never fight over which `bg-`
@@ -616,10 +613,8 @@ export default function Dashboard() {
           const TONE = {
             sky: 'text-zinc-300 sm:text-sky-400',
             amber: 'text-zinc-300 sm:text-amber-400',
-            rose: 'text-zinc-300 sm:text-rose-400',
             emerald: 'text-zinc-300 sm:text-emerald-400',
             orange: 'text-zinc-300 sm:text-orange-400',
-            violet: 'text-zinc-300 sm:text-violet-400',
           };
           return (
             <button
@@ -630,18 +625,18 @@ export default function Dashboard() {
               className={clsx(
                 'cursor-pointer transition duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
                 // phone: a bare icon over its word, in one scrolling line
-                'flex min-w-0 flex-col items-center gap-1.5 rounded-xl py-1.5 active:scale-95',
+                'flex min-w-0 flex-col items-center gap-2 rounded-xl py-2 active:scale-95',
                 // desktop: a plain dark pill, its chrome the same for all six
                 'sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:border-white/10 sm:bg-white/[0.04] sm:px-4 sm:py-2 sm:text-sm sm:font-medium sm:text-zinc-200 sm:hover:border-white/20 sm:hover:bg-white/[0.07] sm:active:scale-100',
               )}
             >
               <span className={clsx('relative flex items-center justify-center', TONE[q.kind])}>
-                <q.icon className="h-[22px] w-[22px] sm:h-4 sm:w-4" strokeWidth={1.6} />
+                <q.icon className="h-6 w-6 sm:h-4 sm:w-4" strokeWidth={1.6} />
                 {q.badge > 0 && (
                   <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white sm:hidden">{q.badge}</span>
                 )}
               </span>
-              <span className="w-full truncate text-center text-[11px] font-medium leading-none text-zinc-200 sm:w-auto sm:text-left sm:text-sm sm:leading-tight sm:text-inherit">
+              <span className="w-full truncate text-center text-xs font-medium leading-none text-zinc-200 sm:w-auto sm:text-left sm:text-sm sm:leading-tight sm:text-inherit">
                 <span className="sm:hidden">{q.short}</span>
                 <span className="hidden sm:inline">{q.label}</span>
               </span>
@@ -653,13 +648,15 @@ export default function Dashboard() {
         })}
       </div>
 
-      {/* ── Needs your attention ──
-          A plain list: one line for each thing, the figure at the right, a
-          small dot for how urgent. Nino, 10 Nov 2026, from his phone: the
-          filter pills, the count badge, the tinted icon tiles, the line saying
-          why each one was there and the box around the lot were "too much" —
-          "just the list". Every item is shown (no inner scroll, no "scroll for
-          more"); the reason for an item is still its tooltip. */}
+      {/* ── Attention ──
+          One box with the list inside it. Nino, 10 Nov 2026, from his phone:
+          the filter pills, the count badge, the tinted icon tiles, the line
+          saying why each item was there and the long uppercase heading were
+          "too much" — but the box itself stays ("keep the table around it").
+          So: a short, quiet heading inside the box, then every item on one
+          line (a dot for urgency, the words, the figure, an arrow). Every item
+          is shown — no inner scroll, no "scroll for more"; the reason for an
+          item is still its tooltip. */}
       {(() => {
         const items = [
           (attention.commissionRequests?.count || 0) > 0 && {
@@ -720,9 +717,9 @@ export default function Dashboard() {
         const DOT = { rose: 'bg-rose-500', amber: 'bg-amber-400', sky: 'bg-amber-400', violet: 'bg-zinc-400' };
 
         return (
-          <div className="mb-6">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs your attention</h2>
+          <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-2 px-4 pb-2.5 pt-3.5">
+              <h2 className="text-[13px] font-semibold text-muted">Attention</h2>
               {items.length === 0 && (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
                   <CheckCircle2 className="h-3.5 w-3.5" /> All clear
@@ -731,13 +728,13 @@ export default function Dashboard() {
             </div>
 
             {items.length === 0 ? (
-              <Card><p className="p-5 text-sm text-faint">Nothing is waiting on you. Every request, settlement and return has been dealt with.</p></Card>
+              <p className="border-t border-white/[0.06] px-4 py-4 text-sm text-faint">Nothing is waiting on you. Every request, settlement and return has been dealt with.</p>
             ) : (
               <ul className="divide-y divide-white/[0.06] border-t border-white/[0.06]">
                 {items.map((i) => (
                   <li key={i.key}>
                     <button type="button" title={i.desc} onClick={() => (i.onOpen ? i.onOpen() : navigate(i.to))}
-                      className="flex w-full cursor-pointer items-center gap-3 px-1 py-3 text-left transition duration-200 hover:bg-white/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+                      className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition duration-200 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/60">
                       <span aria-hidden className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', DOT[i.tone])} />
                       <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-foreground">{i.title}</span>
                       {i.value && <span className="shrink-0 text-[14px] font-semibold tabular-nums text-foreground">{i.value}</span>}
