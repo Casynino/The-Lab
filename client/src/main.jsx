@@ -51,6 +51,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               looks like it belongs to the screen it lands on. */}
           <Toaster
             position="top-right"
+            /* 16px from every edge, as the library does — plus whatever the
+               phone keeps for its clock, camera and home bar. Without it a toast
+               opened UNDER the status bar of the installed app. */
+            containerStyle={{
+              top: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+              right: 'calc(env(safe-area-inset-right, 0px) + 16px)',
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+              left: 'calc(env(safe-area-inset-left, 0px) + 16px)',
+            }}
             toastOptions={{
               duration: 3500,
               style: {

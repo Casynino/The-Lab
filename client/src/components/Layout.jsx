@@ -825,7 +825,7 @@ export default function Layout() {
                 {atHome && <Banner user={user} unread={unread} onBell={() => setBellOpen((v) => !v)} />}
                 {bellOpen && (
                   <BellPanel
-                    position="max-lg:fixed max-lg:inset-x-3 max-lg:top-[4.25rem] max-lg:w-auto lg:right-3 lg:top-16"
+                    position="max-lg:fixed max-lg:inset-x-3 max-lg:top-[calc(4.25rem+env(safe-area-inset-top))] max-lg:w-auto lg:right-3 lg:top-16"
                     unread={unread} notes={recentNotes} onClose={() => setBellOpen(false)}
                     onReadAll={() => markAllRead.mutate()} onReadOne={(id) => markOneRead.mutate(id)}
                     onViewAll={() => { setBellOpen(false); navigate('/notifications'); }} />

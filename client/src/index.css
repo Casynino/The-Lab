@@ -363,6 +363,38 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* POP-UP WINDOWS IN THE INSTALLED APP (Nino, 10 Nov 2026: on the home-screen
+   app "the edge looks like the app is moved … the data is not well seen").
+   The installed app runs under the clock, the camera and the home bar, and the
+   status strip above is opaque, so a window pinned 12px from the top had its
+   title and its close button hidden under it, and its buttons sat on the home
+   bar. The window keeps `max()` of its own margin and whatever the phone keeps
+   back, on every side — a phone turned sideways keeps clear of the notch too.
+   The plain value first: a browser that does not know env() drops the second
+   line and keeps this one. Outside @layer so it is never tree-shaken. */
+.modal-safe {
+  padding: 0.75rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-right))
+    max(0.75rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+}
+/* Tall enough for its own margins (my-4 = 2rem) so it never makes the dim
+   backdrop scroll behind it. */
+.modal-panel {
+  max-height: calc(100dvh - 3.5rem);
+  max-height: calc(100dvh - max(0.75rem, env(safe-area-inset-top)) - max(0.75rem, env(safe-area-inset-bottom)) - 2rem);
+}
+@media (min-width: 640px) {
+  .modal-safe {
+    padding: 1.5rem;
+    padding: max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right))
+      max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+  }
+  .modal-panel {
+    max-height: calc(100dvh - 7rem);
+    max-height: calc(100dvh - max(1.5rem, env(safe-area-inset-top)) - max(1.5rem, env(safe-area-inset-bottom)) - 4rem);
+  }
+}
+
 /* A long press on a button selects its words and offers to copy them, which
    is a web page's behaviour, not an app's. */
 @media (pointer: coarse) {

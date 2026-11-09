@@ -492,12 +492,18 @@ export function SearchInput({ value, onChange, placeholder = 'Search…' }) {
 // Caps to the viewport height (dvh handles mobile browser chrome); the body
 // scrolls while the header and footer stay pinned, and the footer wraps so
 // action buttons never clip off-screen on a phone.
+//
+// In the installed app the page runs under the clock, the camera and the home
+// bar (viewport-fit=cover), so a window pinned to the top had its title and its
+// close button UNDER the opaque status strip, and its buttons on the home bar.
+// `modal-safe` / `modal-panel` (index.css) keep the window inside what the phone
+// leaves visible; on a screen with no notch they are the old 0.75rem / 1.5rem.
 const SIZES = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-3 backdrop-blur-sm sm:p-6">
-      <div className={clsx('card my-4 flex max-h-[calc(100dvh-2rem)] w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true">
+    <div className="modal-safe fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 backdrop-blur-sm">
+      <div className={clsx('modal-panel card my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true">
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
           <h3 className="text-base font-semibold text-foreground">{title}</h3>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-faint hover:bg-elevated hover:text-muted">
