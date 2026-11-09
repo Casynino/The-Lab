@@ -84,6 +84,19 @@
     radial-gradient(130% 90% at 50% 62%, transparent 55%, rgba(5, 4, 4, 0.42) 100%);
 }
 
+/* A phone held upright: the picture's red dawn glow lands exactly behind the
+   button, and read as "a big red shape around it" (Nino, 10 Nov 2026, twice).
+   So the band the words sit in is taken down to near-black, and the picture
+   comes up out of the dark underneath it — the button and the logo stand on a
+   clean ground, the scene still starts where it did. */
+@media (orientation: portrait) {
+  .ls-vignette {
+    background:
+      linear-gradient(to bottom, rgba(5, 4, 4, 0.84) 0%, rgba(5, 4, 4, 0.82) 24%, rgba(5, 4, 4, 0.66) 36%, rgba(5, 4, 4, 0.34) 46%, rgba(5, 4, 4, 0.1) 56%, transparent 64%, transparent 86%, rgba(5, 4, 4, 0.6) 100%),
+      radial-gradient(130% 90% at 50% 62%, transparent 55%, rgba(5, 4, 4, 0.42) 100%);
+  }
+}
+
 /* Everything on the page arrives from below, each a moment after the last
    (--rd is that moment). */
 .ls-up {
