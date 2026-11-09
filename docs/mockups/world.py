@@ -890,10 +890,15 @@ def world(t):
         sh.append((-75, 75, -22, 22, 120, bp, yaw, 0.45))
     # ── Hao Labs' plane: in from the far right, low over the plain, growing as
     # it comes, out past the camera's left shoulder. Heading set from the path.
-    A, B = (13000, 1400, -6000), (-5000, 1700, 1600)
+    # Low — 450 units up — so on a phone it flies through the open band of
+    # sky between the button and the market, not behind the logo (Nino,
+    # 10 Nov 2026: "the plane should be down a little so even on the phone it
+    # can be visible"). Kept out of `q` because the haze would wash a plane
+    # this low to nothing; frame() draws it after the haze.
+    A, B = (9000, 450, -4500), (-3000, 450, 2600)
     pp = tuple(A[i] + (B[i] - A[i]) * t for i in range(3))
-    q += plane(pp, math.degrees(math.atan2(-(B[2] - A[2]), B[0] - A[0])))
-    return q, sh, lights, labels
+    air = plane(pp, math.degrees(math.atan2(-(B[2] - A[2]), B[0] - A[0])))
+    return q, sh, lights, labels, air
 
 
 # ── light, painted on afterwards ────────────────────────────────────────────
@@ -995,7 +1000,7 @@ def frame(name, t):
     c = CAMS[name]
     W, H = c["size"]
     cam = r3d.Camera(target=c["target"], dist=c["dist"], az=c["az"], el=c["el"], fov=c["fov"], W=W, H=H)
-    q, sh, lights, labels = world(t)
+    q, sh, lights, labels, air = world(t)
     shade, obj = r3d.render(q, cam, light=(0.45, 0.8, -0.6), ambient=0.66, shadows=sh)
     hz = int(cam.H * horizon_of(c))
     canvas = sky(cam.W, cam.H, hz)
@@ -1003,6 +1008,8 @@ def frame(name, t):
     canvas.alpha_composite(obj)
     paint_lights(canvas, cam, lights)
     haze(canvas, hz)
+    _, plane_img = r3d.render(air, cam, light=(0.45, 0.8, -0.6), ambient=0.78)
+    canvas.alpha_composite(plane_img)
     paint_labels(canvas, cam, labels, c["label"])
     return canvas.convert("RGB").resize((W, H), Image.LANCZOS)
 

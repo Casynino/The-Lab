@@ -29,6 +29,14 @@
   animation: ls-breathe 38s ease-in-out infinite alternate;
 }
 
+/* On a computer the words take the top band, so the picture sits a little
+   lower. The strip that leaves along the top is painted the sky's own colour
+   (the poster's top row), or it shows as a black bar. */
+@media (min-width: 768px) and (orientation: landscape) {
+  .ls { background: #491612; }
+  .ls-film { inset: 6% -3% -3% -3%; }
+}
+
 .ls-film img {
   position: absolute;
   inset: 0;
@@ -50,25 +58,17 @@
 
 .ls-moving.is-ready { opacity: 1; }
 
-/* Dark where the words are, clear where the picture is. On a phone the brand
-   and the button live in the top third, the footer along the bottom; on a
-   computer the words have the left column and the card the right. */
+/* Dark where the words are, clear where the picture is. The brand and the
+   button sit in the top third at every size now, the footer along the
+   bottom, so one pair of gradients serves a phone and a computer. It is kept
+   light in the middle so the plane flying through the sky stays visible. */
 .ls-vignette {
   position: absolute;
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(to bottom, rgba(5, 4, 4, 0.74) 0%, rgba(5, 4, 4, 0.5) 24%, rgba(5, 4, 4, 0.3) 40%, transparent 56%, transparent 84%, rgba(5, 4, 4, 0.7) 100%),
-    radial-gradient(130% 90% at 50% 62%, transparent 52%, rgba(5, 4, 4, 0.5) 100%);
-}
-
-@media (min-width: 1024px) {
-  .ls-vignette {
-    background:
-      linear-gradient(to right, rgba(5, 4, 4, 0.84) 0%, rgba(5, 4, 4, 0.56) 30%, rgba(5, 4, 4, 0.1) 52%, transparent 64%),
-      linear-gradient(to bottom, rgba(5, 4, 4, 0.5) 0%, transparent 26%, transparent 86%, rgba(5, 4, 4, 0.55) 100%),
-      radial-gradient(120% 100% at 60% 50%, transparent 60%, rgba(5, 4, 4, 0.45) 100%);
-  }
+    linear-gradient(to bottom, rgba(5, 4, 4, 0.72) 0%, rgba(5, 4, 4, 0.42) 22%, rgba(5, 4, 4, 0.16) 40%, transparent 54%, transparent 86%, rgba(5, 4, 4, 0.6) 100%),
+    radial-gradient(130% 90% at 50% 62%, transparent 55%, rgba(5, 4, 4, 0.42) 100%);
 }
 
 /* Everything on the page arrives from below, each a moment after the last
