@@ -21,6 +21,10 @@ const STAFF = ['ADMIN', 'WAREHOUSE_STAFF'];
 // database: stock is bought, held, sent out with a rep, sold, and settled —
 // so the menu is ordered the way a box actually travels. Each carries its own
 // icon so a group reads as a department.
+// MENU WORDS ARE ONE SIMPLE WORD (Nino, 10 Nov 2026, twice: "keep reading too
+// long words, like Stock Requests… one name each, even for admin"). They match
+// the phone's bottom bar (Requests, Settle, Money). A page keeps its own full
+// title; this is only what the menu calls it.
 export const NAV_GROUPS = [
   ['home', '', 'LayoutDashboard'],
   ['selling', 'Selling', 'ShoppingCart'],
@@ -28,7 +32,7 @@ export const NAV_GROUPS = [
   ['money', 'Money', 'Wallet'],
   ['people', 'People', 'Users'],
   ['records', 'Records', 'ScrollText'],
-  ['admin', 'Administration', 'ShieldCheck'],
+  ['admin', 'Admin', 'ShieldCheck'],
 ];
 
 export const NAV = [
@@ -36,17 +40,17 @@ export const NAV = [
   { to: '/', label: 'Home', icon: 'LayoutDashboard', roles: ALL, group: 'home' },
 
   // ── Selling — money coming in, in the order it arrives ──
-  { to: '/stock-requests', label: 'Stock Requests', icon: 'ClipboardList', roles: ALL, group: 'selling', badge: 'stockRequests' },
-  { to: '/settlements', label: 'Settlements', icon: 'Timer', roles: ALL, group: 'selling', badge: 'settlements' },
+  { to: '/stock-requests', label: 'Requests', icon: 'ClipboardList', roles: ALL, group: 'selling', badge: 'stockRequests' },
+  { to: '/settlements', label: 'Settle', icon: 'Timer', roles: ALL, group: 'selling', badge: 'settlements' },
   { to: '/sales', label: 'Sales', icon: 'ShoppingCart', roles: STAFF, group: 'selling' },
   { to: '/returns', label: 'Returns', icon: 'Undo2', roles: ALL, group: 'selling', badge: 'returns' },
-  { to: '/invoice-generator', label: 'Generate Invoice', icon: 'Receipt', roles: ALL, group: 'selling' },
+  { to: '/invoice-generator', label: 'Invoice', icon: 'Receipt', roles: ALL, group: 'selling' },
 
   // ── Stock — where the goods come from and where they are ──
-  { to: '/purchases', label: 'Purchases & Imports', icon: 'Ship', roles: STAFF, group: 'stock' },
+  { to: '/purchases', label: 'Purchases', icon: 'Ship', roles: STAFF, group: 'stock' },
   { to: '/inventory', label: 'Inventory', icon: 'Boxes', roles: STAFF, group: 'stock' },
   { to: '/products', label: 'Products', icon: 'Package', roles: STAFF, group: 'stock' },
-  { to: '/transfers', label: 'Stock Transfers', icon: 'Truck', roles: STAFF, group: 'stock' },
+  { to: '/transfers', label: 'Transfers', icon: 'Truck', roles: STAFF, group: 'stock' },
   { to: '/reorder', label: 'Reorder', icon: 'Repeat', roles: STAFF, group: 'stock' },
 
   // ── Money ──
@@ -57,17 +61,17 @@ export const NAV = [
   { to: '/commissions', label: 'Commissions', icon: 'Coins', roles: STAFF.concat(['SALES_REP']), group: 'money' },
 
   // ── People ──
-  { to: '/reps', label: 'Sales Reps', icon: 'UserCog', roles: STAFF, group: 'people' },
+  { to: '/reps', label: 'Reps', icon: 'UserCog', roles: STAFF, group: 'people' },
   { to: '/customers', label: 'Customers', icon: 'Users', roles: STAFF, group: 'people' },
 
   // ── Records — what happened, after the fact ──
-  { to: '/daily-reports', label: 'Daily Reports', icon: 'NotebookPen', roles: ALL, group: 'records' },
+  { to: '/daily-reports', label: 'Reports', icon: 'NotebookPen', roles: ALL, group: 'records' },
   { to: '/activity', label: 'Activity', icon: 'Activity', roles: STAFF, group: 'records' },
-  { to: '/audit', label: 'Audit Log', icon: 'ScrollText', roles: ['ADMIN'], group: 'records' },
+  { to: '/audit', label: 'Audit', icon: 'ScrollText', roles: ['ADMIN'], group: 'records' },
 
   // ── Administration ──
   { to: '/users', label: 'Users', icon: 'ShieldCheck', roles: ['ADMIN'], group: 'admin' },
-  { to: '/label', label: 'Product Label', icon: 'QrCode', roles: ['ADMIN'], group: 'admin' },
+  { to: '/label', label: 'Label', icon: 'QrCode', roles: ['ADMIN'], group: 'admin' },
   { to: '/settings', label: 'Settings', icon: 'Settings', roles: ['ADMIN'], group: 'admin' },
 ];
 

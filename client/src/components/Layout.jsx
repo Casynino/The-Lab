@@ -14,9 +14,10 @@ import {
   Wallet, Wrench, QrCode, Search, Smartphone,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { NAV, NAV_GROUPS, ROLE_LABELS, ROLES } from '@/lib/constants';
-import { initials, fromNow } from '@/lib/format';
+import { NAV, NAV_GROUPS, ROLES } from '@/lib/constants';
+import { repRegions, sayRegions } from '@/lib/repRegions';
 import { tzDateLabel } from '@/lib/tz';
+import { initials, fromNow } from '@/lib/format';
 import api, { unwrap, apiError } from '@/lib/api';
 import { Modal, Button, Field, Input } from '@/components/ui';
 
@@ -37,15 +38,6 @@ const FOCUS = 'outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60
 
 /** The room the page leaves for the floating panel, open and folded. */
 const ROOM = { open: '15.5rem', rail: '5.9rem' };
-
-/* The job title under the name in the banner, which is not the same thing as
-   the permission the account holds. The owner reads Director (MD) there;
-   every screen that is ABOUT permissions — the foot of the sidebar, the
-   account menu, the Users table — still says Administrator, because that is
-   what the account can do. Target Express draws the same distinction in its
-   page-banner (jobTitle). */
-const BANNER_TITLE = { ADMIN: 'Director (MD)' };
-const bannerTitle = (role) => BANNER_TITLE[role] || ROLE_LABELS[role] || role;
 
 function readStore(key, fallback) {
   try {
@@ -326,8 +318,8 @@ function GlassSidebar({
                 <div className={clsx('grid transition-[grid-template-rows] duration-200 ease-out', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
                   <div className="overflow-hidden">
                     {/* The phone's drawer is narrower than the desk panel, so
-                        the branch gives back some of its indent — otherwise
-                        "Purchases & Imports" has nowhere to go but an ellipsis. */}
+                        the branch gives back some of its indent, so even the
+                        longest word in the menu never meets an ellipsis. */}
                     <ul className={clsx('glass-tree mt-1 space-y-0.5 pb-1', sheet ? 'ml-[1.15rem] pl-2.5' : 'ml-[1.7rem] pl-3.5')}>
                       {s.items.map((item) => row(item, true))}
                     </ul>
@@ -490,20 +482,31 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
 
 // ── The banner ───────────────────────────────────────────────────────────────
 
+/* The banner is one short greeting, the same for everybody (Nino, 10 Nov 2026:
+   "Mambo vipi? KP … Keep the stores stocked … the admin is the Director, no need
+   to say Director"). First name only, in Swahili; no job title for anybody; a
+   line that says what the person is here to do — and for a rep that line names
+   THEIR region or regions ("Keep Arusha and Mwanza stocked."), which the owner
+   sets when he adds the rep. Everyone else keeps the stores stocked.
+
+   Left, where the eye starts, with the cartons on the right. The lines rise in
+   one after another (hello-in, index.css): small, quick, and still for
+   anybody who has asked their phone for less motion. */
 function Banner({ user, unread, onBell }) {
   const name = (user?.name || 'The Lab').trim().split(/\s+/)[0] || user?.name;
-  // A long name gets narrower letters, or a phone pushes it onto two lines.
-  const long = name.length > 10;
-  /* A rep's banner is a greeting, not a name plate (Nino, 10 Nov 2026, holding
-     up KP's: "write the name nicely like Hello KP, no need to write Sales
-     Representative… not in the middle, simple and nice"). The other roles keep
-     the name plate and their title. */
-  const rep = user?.role === ROLES.SALES_REP;
+  const regions = user?.role === ROLES.SALES_REP ? sayRegions(repRegions(user?.salesRep)) : '';
+  const line = regions ? `Keep ${regions} stocked.` : 'Keep the stores stocked.';
+  // "Mambo vipi? " is already twelve letters, so a long name would be cut off
+  // ("Mambo vipi? …") on a phone. The type steps down a size as the whole
+  // greeting gets longer, so every name is read in full; a computer has the
+  // room and keeps one size.
+  const greetLength = 'Mambo vipi? '.length + name.length;
+  const greetSize = greetLength <= 18 ? 'text-[1.65rem]' : greetLength <= 22 ? 'text-[1.45rem]' : greetLength <= 26 ? 'text-[1.3rem]' : 'text-[1.15rem]';
 
   return (
     <section className="relative mb-4 overflow-hidden rounded-2xl text-white ring-1 ring-white/10 shadow-[0_12px_30px_-14px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.10)]"
       style={{ background: 'linear-gradient(120deg,#140807 0%,#2a0f0b 42%,#4a1711 72%,#6e2419 100%)' }}>
-      {/* Depth, painted in: a light from the right, a little lime from the top,
+      {/* Depth, painted in: a light from the right, a little red from the top,
           and a fine sheen along the top edge. */}
       <div aria-hidden className="pointer-events-none absolute inset-0"
         style={{ background: 'radial-gradient(600px 220px at 92% 60%, rgba(255,95,75,0.34), transparent 62%)' }} />
@@ -514,7 +517,7 @@ function Banner({ user, unread, onBell }) {
       {/* The cartons at the side: softly on a phone, clearer on a computer. */}
       <div
         aria-hidden
-        /* A phone has room for the name or for the cartons, not both: the
+        /* A phone has room for the words or for the cartons, not both: the
            window is narrower there and the picture quieter, so the second
            carton never cuts through the words. A desk shows the shelf. */
         className="pointer-events-none absolute inset-y-0 right-0 w-[40%] opacity-40 sm:w-[38%] sm:opacity-75 lg:w-[34%] lg:opacity-95"
@@ -537,46 +540,17 @@ function Banner({ user, unread, onBell }) {
         )}
       </button>
 
-      {rep ? (
-        /* Left, where the eye starts; the cartons stay on the right. Three
-           short lines of type rise in one after another (hello-in, index.css):
-           small, quick, and still when somebody has asked their phone for
-           less motion. lg:pl-16 keeps clear of the bell that hangs at the
-           banner's left edge on a computer. */
-        <div className="relative flex min-h-[5.5rem] min-w-0 flex-col justify-center px-5 py-4 text-left sm:min-h-[7rem] sm:px-7 lg:pl-16">
-          <h1 className="hello-in max-w-[62%] truncate text-[1.65rem] leading-tight tracking-tight text-white sm:text-3xl" style={{ '--i': 0 }}>
-            <span className="font-normal text-white/70">Hello,</span>{' '}
-            <span className="font-semibold">{name}</span>
-          </h1>
-          <p className="hello-in mt-1 max-w-[62%] text-[12.5px] leading-snug text-white/60 sm:text-sm" style={{ '--i': 1 }}>
-            Keep the stores stocked.
-          </p>
-        </div>
-      ) : (
-      <div className="relative flex min-h-[5.75rem] flex-col items-center justify-center px-5 py-4 text-center sm:min-h-[7.5rem] sm:py-5">
-        <h1 className={clsx(
-          'flex max-w-full items-center gap-4 font-semibold uppercase text-white',
-          long ? 'text-base tracking-[0.2em] sm:text-2xl sm:tracking-[0.3em] lg:text-3xl'
-            : 'text-xl tracking-[0.32em] sm:text-3xl sm:tracking-[0.5em] lg:text-4xl',
-        )}>
-          <span aria-hidden className="hidden h-px w-10 shrink-0 bg-brand-500/70 sm:block" />
-          {/* The padding gives back the space the wide tracking leaves after the
-              last letter, so the word sits truly in the middle. */}
-          <span className={clsx('min-w-0 break-words', long ? 'pl-[0.2em] sm:pl-[0.3em]' : 'pl-[0.32em] sm:pl-[0.5em]')}>{name}</span>
-          <span aria-hidden className="hidden h-px w-10 shrink-0 bg-brand-500/70 sm:block" />
+      {/* lg:pl-16 keeps the words clear of the bell that hangs at the banner's
+          left edge on a computer. */}
+      <div className="relative flex min-h-[5.5rem] min-w-0 flex-col justify-center px-5 py-4 text-left sm:min-h-[7rem] sm:px-7 lg:pl-16">
+        <h1 className={clsx('hello-in max-w-full truncate leading-tight tracking-tight text-white sm:max-w-[60%] sm:text-3xl', greetSize)} style={{ '--i': 0 }}>
+          <span className="font-normal text-white/70">Mambo vipi?</span>{' '}
+          <span className="font-semibold">{name}</span>
         </h1>
-        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.32em] text-brand-600 sm:mt-2 sm:text-[11px]">
-          {bannerTitle(user?.role)}
-        </p>
-        {/* Computers only. A phone already carries the date in its own top
-            bar a few pixels above this, and saying it twice on one screen is
-            just a line of the banner spent on nothing (owner, 9 Nov 2026).
-            That bar is lg:hidden, so this is its exact opposite. */}
-        <p className="mt-1 hidden text-xs text-white/65 sm:mt-1.5 sm:text-sm lg:block">
-          {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        <p className="hello-in mt-1 max-w-[68%] text-[12.5px] leading-snug text-white/60 sm:max-w-[60%] sm:text-sm" style={{ '--i': 1 }}>
+          {line}
         </p>
       </div>
-      )}
     </section>
   );
 }
@@ -783,9 +757,9 @@ export default function Layout() {
             initial={{ x: -24, opacity: 0.6 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            /* Narrower than it was: the longest word in here is "Administration"
-               and nothing wraps at this width, so the rest was a panel taking
-               three quarters of a phone for no reason (owner, 9 Nov 2026). */
+            /* Narrower than it was, and the menu words are one simple word each
+               now (owner, 9 and 10 Nov 2026) — nothing wraps at this width, and
+               a wider panel would just be taking a phone for no reason. */
             className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 top-[calc(0.75rem+env(safe-area-inset-top))] w-[12.75rem] max-w-[62vw]"
           >
             <GlassSidebar mode="sheet" {...shared} onNavigate={() => setDrawer(null)} />

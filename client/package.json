@@ -6,10 +6,11 @@
   "description": "The Lab — Distribution ERP (frontend)",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/check-jsx-imports.mjs && vite build",
+    "build": "node scripts/check-jsx-imports.mjs && npm run check:undef && vite build",
     "preview": "vite preview --port 4173",
     "lint": "eslint src",
     "check:jsx": "node scripts/check-jsx-imports.mjs",
+    "check:undef": "eslint --no-eslintrc --no-inline-config --parser-options=\"ecmaVersion:2022,sourceType:module,ecmaFeatures:{jsx:true}\" --env browser,es2022 --rule \"{\\\"no-undef\\\":\\\"error\\\"}\" --ext .js,.jsx,.mjs src",
     "test": "node --test \"src/lib/*.test.mjs\""
   },
   "dependencies": {
