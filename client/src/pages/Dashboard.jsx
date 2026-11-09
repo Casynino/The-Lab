@@ -16,10 +16,8 @@ import {
   Landmark,
   Smartphone,
   PiggyBank,
-  ClipboardList,
   ArrowLeftRight,
   Receipt,
-  ShoppingCart,
   SlidersHorizontal,
   ArrowDownLeft,
   ArrowUpRight,
@@ -569,87 +567,10 @@ export default function Dashboard() {
     attention.stockRequests + attention.settlements + attention.returns +
     attention.overdueSettlements + attention.lowStock.count + attention.outOfStock;
 
-  // `short` is the tile's word on a phone. "Approve requests" in an 80 px
-  // tile wraps to three lines and the row stops being a row.
-  // Four, not six (Nino, 10 Nov 2026: "those icons look too much … just the 4
-  // only"). What stays is the day itself: the two approvals a rep's boxes and
-  // money wait on, and the two records made all day. A return waiting for a
-  // decision shows in Attention; buying stock is on the Purchases page and in
-  // the menu; adjusting and moving stock live on Inventory and Transfers.
-  const QUICK = [
-    { label: 'Approve requests', short: 'Requests', kind: 'sky', icon: ClipboardList, to: '/stock-requests', badge: attention.stockRequests },
-    { label: 'Approve settlements', short: 'Settle', kind: 'amber', icon: Timer, to: '/settlements', badge: attention.settlements },
-    { label: 'Record sale', short: 'Sale', kind: 'emerald', icon: ShoppingCart, to: '/sales' },
-    { label: 'Record expense', short: 'Expense', kind: 'orange', icon: Receipt, to: '/finance?tab=expenses' },
-  ];
-
   return (
     <div>
-      {/* ── Quick actions ──
-          Above the attention list, not below it: these are what you DO about
-          what the list tells you, and burying them under it meant scrolling
-          past the whole thing to act on the first line of it.
-          Eight identical grey buttons make you read all eight. Tinting them by
-          what they touch — approvals, money, stock — lets the eye find the one
-          it wants without reading, and the colours match the rest of the page. */}
-      {/* On a phone these are tiles on a four-column grid, the way a banking
-          app lays its actions out: one glyph, one word, every tile the same
-          size. As pills they wrapped by their own width, so eight buttons made
-          a staircase with an orphan on the last line — it looked like an
-          accident rather than a set of things you can do. From sm they are
-          the tinted pills they always were, where there is room for the whole
-          phrase. */}
-      <div className="mb-4 grid grid-cols-4 gap-1 sm:mb-5 sm:flex sm:flex-wrap sm:gap-2">
-        {QUICK.map((q) => {
-          // Every tint class carries the sm: prefix. The tile's own dark
-          // surface is unprefixed, so the two never fight over which `bg-`
-          // wins — responsive variants are emitted after the base utilities,
-          // and the pill gets its colour back at every width above a phone.
-          // One colour per action, and it lives on the GLYPH — never on the
-          // pill. Six pills each washed in their own tint made a paint chart;
-          // a plain dark pill with a coloured mark on it is the same
-          // information, read in a glance, and it is what Target Express's
-          // own row does. The phone shows the mark alone.
-          // On a phone the six glyphs are ONE quiet tone — six colours in a row
-          // read as clutter on a small screen (Nino, 10 Nov 2026: "the icons
-          // look bad and too much"). From sm the pills keep their tints.
-          const TONE = {
-            sky: 'text-zinc-300 sm:text-sky-400',
-            amber: 'text-zinc-300 sm:text-amber-400',
-            emerald: 'text-zinc-300 sm:text-emerald-400',
-            orange: 'text-zinc-300 sm:text-orange-400',
-          };
-          return (
-            <button
-              key={q.label}
-              type="button"
-              onClick={() => navigate(q.to)}
-              title={q.label}
-              className={clsx(
-                'cursor-pointer transition duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60',
-                // phone: a bare icon over its word, in one scrolling line
-                'flex min-w-0 flex-col items-center gap-2 rounded-xl py-2 active:scale-95',
-                // desktop: a plain dark pill, its chrome the same for all six
-                'sm:flex-row sm:items-center sm:gap-2 sm:rounded-full sm:border sm:border-white/10 sm:bg-white/[0.04] sm:px-4 sm:py-2 sm:text-sm sm:font-medium sm:text-zinc-200 sm:hover:border-white/20 sm:hover:bg-white/[0.07] sm:active:scale-100',
-              )}
-            >
-              <span className={clsx('relative flex items-center justify-center', TONE[q.kind])}>
-                <q.icon className="h-6 w-6 sm:h-4 sm:w-4" strokeWidth={1.6} />
-                {q.badge > 0 && (
-                  <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white sm:hidden">{q.badge}</span>
-                )}
-              </span>
-              <span className="w-full truncate text-center text-xs font-medium leading-none text-zinc-200 sm:w-auto sm:text-left sm:text-sm sm:leading-tight sm:text-inherit">
-                <span className="sm:hidden">{q.short}</span>
-                <span className="hidden sm:inline">{q.label}</span>
-              </span>
-              {q.badge > 0 && (
-                <span className="hidden h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white sm:ml-0.5 sm:flex">{q.badge}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* No quick-action row here: Nino, 10 Nov 2026 — "I don't need these"; the
+          phone has the same doors in its bottom bar and the menu. */}
 
       {/* ── Attention ──
           The same box as before: three rows showing, the rest by scrolling
