@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Smartphone, X } from 'lucide-react';
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Field, Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
@@ -153,14 +153,17 @@ function Gate({ children }) {
         type="button"
         onClick={() => setOpen(true)}
         style={rise(0.5)}
-        className="ls-up group inline-flex h-12 cursor-pointer items-center gap-2.5 rounded px-3 text-base font-semibold tracking-wide text-white outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/60 md:h-14 md:text-[17px]"
+        className="ls-up group inline-flex h-10 cursor-pointer items-center rounded px-2 text-[15px] font-semibold tracking-[0.02em] text-white outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/60 md:h-11 md:text-base"
       >
-        {/* No pill, no glow: the words, a short red line under them, an arrow.
-            Nino, 10 Nov 2026, three times: no red shape around Log in — but it
-            must stay visible. White on the dark band is the most visible a
-            thing can be; the red line is the brand, the size of an underline. */}
-        <span className="border-b-2 border-brand-500 pb-0.5 transition-colors duration-200 group-hover:border-white">Log in</span>
-        <ArrowRight className="h-4 w-4 text-white/85 transition-transform duration-200 group-hover:translate-x-1" />
+        {/* No pill, no glow (Nino, 10 Nov 2026, four times). The words and the
+            arrow are ONE pair, centred as one, with one thin red line under
+            the pair — not under the words alone, which left the arrow hanging
+            outside it and the whole thing looking off-centre. */}
+        <span className="relative inline-flex items-center gap-2 pb-1.5">
+          Log in
+          <ArrowRight className="h-3.5 w-3.5 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5" />
+          <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[1.5px] rounded-full bg-brand-500 transition-colors duration-200 group-hover:bg-white" />
+        </span>
       </button>
 
       {/* The way to the full-screen app, for a phone that has not installed
@@ -171,8 +174,7 @@ function Gate({ children }) {
       <InstallButton
         render={(openSheet) => (
           <button type="button" onClick={openSheet} style={rise(0.68)}
-            className="ls-up mt-3 inline-flex cursor-pointer items-center gap-1.5 text-xs text-white/55 underline-offset-4 transition hover:text-white hover:underline">
-            <Smartphone className="h-3 w-3" />
+            className="ls-up inline-flex h-8 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline">
             Get the full-screen app
           </button>
         )}
@@ -271,7 +273,7 @@ export default function Login() {
           <div className="ls-up mb-4 md:mb-5" style={rise(0.05)}><Mark size="lg" /></div>
 
           <p className="ls-up mb-3.5 hidden h-[3px] w-10 rounded bg-brand-500 md:block" style={rise(0.18)} />
-          <h2 className="ls-up mb-5 max-w-[15rem] text-balance text-center text-[13.5px] leading-snug tracking-[0.01em] text-white/75 md:mb-6 md:max-w-none md:whitespace-nowrap md:text-[1.7rem] md:font-semibold md:leading-[1.15] md:tracking-tight md:text-white lg:text-[2rem]" style={rise(0.3)}>
+          <h2 className="ls-up mb-3 max-w-[15rem] text-balance text-center text-[13.5px] leading-snug tracking-[0.01em] text-white/75 md:mb-6 md:max-w-none md:whitespace-nowrap md:text-[1.7rem] md:font-semibold md:leading-[1.15] md:tracking-tight md:text-white lg:text-[2rem]" style={rise(0.3)}>
             We keep Tanzania <span className="md:text-brand-500">stocked.</span>
           </h2>
 
