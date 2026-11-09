@@ -1,8 +1,9 @@
 /* /nino — Nino's page, ported from the same page on the Vegas Luxury Hotel
    site (Vegas/src/app/nino/nino.module.css). Dark by design, because the
-   work's screenshots carry the colour; one acid accent, which is Nino's own
-   and deliberately NOT Hao Labs' red — this page belongs to the person who
-   built the system, not to the business running it.
+   work's screenshots carry the colour; one accent. It came over with Nino's
+   own acid lime; on 10 Nov 2026 he asked for it to fit this app, so the
+   accent is Hao Labs' red here — the page is reached from this system's
+   sign-in and should feel like the same house.
 
    Everything is scoped under .nino so it cannot leak into the app's own
    stylesheet; the app is a single bundle, unlike the CSS module this came
@@ -14,8 +15,8 @@
   --n-faint: rgb(244 244 241 / 0.38);
   --n-rule: rgb(244 244 241 / 0.1);
   --n-card: rgb(255 255 255 / 0.03);
-  --n-accent: #c6f432;
-  --n-accent-ink: #10130a;
+  --n-accent: #ee3124;
+  --n-accent-ink: #fff5f3;
   position: relative;
   min-height: 100svh;
   background: #0a0a0b;
@@ -31,8 +32,8 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(60rem 36rem at 12% -8%, rgb(198 244 50 / 0.07), transparent 60%),
-    radial-gradient(50rem 30rem at 100% 0%, rgb(120 140 255 / 0.05), transparent 60%);
+    radial-gradient(60rem 36rem at 12% -8%, rgb(238 49 36 / 0.12), transparent 60%),
+    radial-gradient(50rem 30rem at 100% 0%, rgb(255 95 75 / 0.06), transparent 60%);
   z-index: 0;
 }
 
@@ -64,13 +65,13 @@
 }
 
 .nino-pulse {
-  box-shadow: 0 0 0 0 rgb(198 244 50 / 0.6);
+  box-shadow: 0 0 0 0 rgb(238 49 36 / 0.6);
   animation: nino-pulse 2.2s ease-out infinite;
 }
 
 @keyframes nino-pulse {
-  70% { box-shadow: 0 0 0 9px rgb(198 244 50 / 0); }
-  100% { box-shadow: 0 0 0 0 rgb(198 244 50 / 0); }
+  70% { box-shadow: 0 0 0 9px rgb(238 49 36 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(238 49 36 / 0); }
 }
 
 /* The screenshot in its browser frame lifts a little and comes into focus. */

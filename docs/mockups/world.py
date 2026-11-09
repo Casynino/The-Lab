@@ -67,6 +67,7 @@ HOUSE = M((206, 196, 190), (160, 150, 144), (184, 174, 168))
 TIN = M((110, 96, 90), (74, 64, 60), (90, 78, 74))
 QUAY = M((120, 110, 106), (84, 76, 72), (100, 92, 88))
 TAN = M((234, 178, 112), (190, 132, 74), (212, 154, 92))
+CONC = M((226, 210, 186), (182, 166, 144), (204, 188, 166))
 BLUE = M((64, 128, 226), (40, 88, 172), (52, 106, 198))
 GREEN = M((70, 176, 96), (40, 124, 64), (54, 150, 78))
 PINK = M((242, 124, 176), (192, 84, 134), (216, 104, 154))
@@ -178,17 +179,17 @@ def panel_sign(w=600, h=144):
 def panel_arcade(w=1200, h=110, n=9):
     """Kariakoo's crown: a row of arches between pale pillars, the way the
     1974 market reads in every painting of it."""
-    im = Image.new("RGBA", (w, h), (234, 178, 112, 255))
+    im = Image.new("RGBA", (w, h), (216, 200, 176, 255))
     d = ImageDraw.Draw(im)
     cell = w / n
     for i in range(n):
         x0 = i * cell
-        d.rectangle([x0, 0, x0 + cell * 0.14, h], fill=(248, 216, 170, 255))
+        d.rectangle([x0, 0, x0 + cell * 0.14, h], fill=(236, 222, 200, 255))
         ax0, ax1 = x0 + cell * 0.2, x0 + cell * 0.94
         r = (ax1 - ax0) / 2
         d.rectangle([ax0, h * 0.3 + r, ax1, h], fill=(38, 24, 20, 255))
         d.ellipse([ax0, h * 0.3, ax1, h * 0.3 + 2 * r], fill=(38, 24, 20, 255))
-    d.rectangle([0, 0, w, h * 0.08], fill=(196, 138, 80, 255))
+    d.rectangle([0, 0, w, h * 0.08], fill=(172, 156, 134, 255))
     return im
 
 
@@ -197,7 +198,10 @@ def panel_shops(w=1200, h=240):
     coloured awning."""
     im = Image.new("RGBA", (w, h), (234, 178, 112, 255))
     d = ImageDraw.Draw(im)
-    top = h * 0.12
+    top = h * 0.16
+    d.rectangle([0, 0, w, top], fill=(238, 196, 60, 255))
+    for x in range(int(w * 0.03), w, int(w * 0.11)):
+        d.rectangle([x, top * 0.3, x + w * 0.05, top * 0.7], fill=(40, 28, 24, 255))
     n = 7
     cell = w / n
     cols = [(238, 49, 36), (255, 214, 92), (70, 176, 96), (64, 128, 226), (242, 124, 176), (238, 49, 36), (255, 214, 92)]
@@ -212,14 +216,14 @@ def panel_shops(w=1200, h=240):
 def panel_roof(w=820, h=580, nx=6, nz=4):
     """The roof from above: the grid of concrete funnels, each a square that
     drains to its own dark centre."""
-    im = Image.new("RGBA", (w, h), (214, 158, 96, 255))
+    im = Image.new("RGBA", (w, h), (206, 190, 166, 255))
     d = ImageDraw.Draw(im)
     cw, ch = w / nx, h / nz
     for i in range(nx):
         for j in range(nz):
             x0, y0 = i * cw, j * ch
-            d.rectangle([x0, y0, x0 + cw, y0 + ch], outline=(236, 190, 130, 255), width=4)
-            for k, c in ((0.3, (200, 144, 84)), (0.16, (176, 122, 68)), (0.06, (120, 80, 44))):
+            d.rectangle([x0, y0, x0 + cw, y0 + ch], outline=(228, 214, 192, 255), width=4)
+            for k, c in ((0.3, (190, 174, 150)), (0.16, (166, 150, 128)), (0.06, (110, 96, 80))):
                 d.rectangle([x0 + cw / 2 - cw * k, y0 + ch / 2 - ch * k, x0 + cw / 2 + cw * k, y0 + ch / 2 + ch * k], fill=c + (255,))
     return im
 
@@ -374,7 +378,11 @@ class Road:
         seg = self.cum[i + 1] - self.cum[i]
         u = (d - self.cum[i]) / seg if seg else 0
         x, z = a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u
-        yaw = math.degrees(math.atan2(b[0] - a[0], b[1] - a[1]))
+        # yaw turns a thing's nose (+X) toward (cos yaw, -sin yaw) on the
+        # ground, so the heading along (dx, dz) is atan2(-dz, dx). It was
+        # atan2(dx, dz) — a quarter turn out — and every lorry slid along the
+        # road broadside (Nino, 10 Nov 2026: "the cars are moving sideways").
+        yaw = math.degrees(math.atan2(-(b[1] - a[1]), b[0] - a[0]))
         return (x, z), yaw
 
 
@@ -394,10 +402,10 @@ def road_quads():
         (x1, z1), _ = ROAD.at((i + 1) / n)
         cx, cz = (x0 + x1) / 2, (z0 + z1) / 2
         seg = math.hypot(x1 - x0, z1 - z0) + 6
-        q += flat(260, seg, TARMAC, (cx, 0, cz), yaw=yaw, y0=2, layer=-1)
-        q += flat(300, seg, DARK, (cx, 0, cz), yaw=yaw, y0=1, layer=-1)       # the verge
+        q += flat(seg, 260, TARMAC, (cx, 0, cz), yaw=yaw, y0=2, layer=-1)
+        q += flat(seg, 300, DARK, (cx, 0, cz), yaw=yaw, y0=1, layer=-1)       # the verge
         if i % 3 == 0:
-            q += flat(10, seg * 0.5, DASH, (cx, 0, cz), yaw=yaw, y0=3, layer=-1)
+            q += flat(seg * 0.5, 10, DASH, (cx, 0, cz), yaw=yaw, y0=3, layer=-1)
     return q
 
 
@@ -553,15 +561,25 @@ def ship(pos, bob, k=1.15, d=1):
 
 def kariakoo(pos):
     """Kariakoo market, Dar es Salaam's big one (Nino, 10 Nov 2026, holding up
-    three paintings of it): the long tan block of shops, the crown of arches,
-    the roof of concrete funnels, the flag."""
+    three paintings of it). What makes it Kariakoo is the roof: a canopy of
+    concrete trees, each a column flaring into a square funnel, pointed arches
+    between them along the edge, the whole thing floating out past the walls
+    of the shops below. So: a set-back block of shops, a ring of columns in
+    the gallery under the overhang, the band of arches, the slab of funnels,
+    and the flag."""
     q = []
     x, _, z = pos
-    q += r3d.box_quads(760, 150, 520, f(TAN, front=SHOPS_F, back=SHOPS_F, left=SHOPS_S, right=SHOPS_S), pos=pos, y0=0)
-    q += r3d.box_quads(790, 70, 550, f(TAN, front=ARCADE_F, back=ARCADE_F, left=ARCADE_S, right=ARCADE_S), pos=pos, y0=150)
-    q += r3d.box_quads(830, 14, 590, f(TAN, top=ROOF_TEX), pos=pos, y0=220)
-    q += r3d.box_quads(6, 170, 6, f(STEEL), pos=(x + 360, 0, z + 240), y0=234)
-    q += r3d.box_quads(66, 40, 2, f(BLUE, front=FLAG, back=FLAG.transpose(Image.FLIP_LEFT_RIGHT)), pos=(x + 396, 0, z + 240), y0=360)
+    q += r3d.box_quads(700, 140, 470, f(TAN, front=SHOPS_F, back=SHOPS_F, left=SHOPS_S, right=SHOPS_S), pos=pos, y0=0)
+    for cx in range(-400, 401, 160):
+        for cz in (-290, 290):
+            q += r3d.box_quads(26, 164, 26, f(CONC), pos=(x + cx, 0, z + cz), y0=0, sheen=0.0)
+    for cz in (-145, 0, 145):
+        for cx in (-400, 400):
+            q += r3d.box_quads(26, 164, 26, f(CONC), pos=(x + cx, 0, z + cz), y0=0, sheen=0.0)
+    q += r3d.box_quads(880, 70, 640, f(CONC, front=ARCADE_F, back=ARCADE_F, left=ARCADE_S, right=ARCADE_S), pos=pos, y0=164)
+    q += r3d.box_quads(900, 16, 660, f(CONC, top=ROOF_TEX), pos=pos, y0=234)
+    q += r3d.box_quads(6, 170, 6, f(STEEL), pos=(x + 400, 0, z + 280), y0=250)
+    q += r3d.box_quads(66, 40, 2, f(BLUE, front=FLAG, back=FLAG.transpose(Image.FLIP_LEFT_RIGHT)), pos=(x + 436, 0, z + 280), y0=376)
     return q
 
 
@@ -607,6 +625,14 @@ def bus(pos, yaw, spin, layer=0):
     return q
 
 
+def underside(W, D, colour, pos, yaw, y, shade=0.5):
+    """box_quads has no bottom face; a plane overhead shows its belly, so it
+    gets one — two-sided, in shadow."""
+    w, d = W / 2, D / 2
+    cs = [r3d.add(r3d.roty((px, y, pz), yaw), pos) for (px, pz) in ((-w, -d), (w, -d), (w, d), (-w, d))]
+    return [r3d.Quad(cs, color=colour, twosided=True, shade=shade, sheen=0.0)]
+
+
 def plane(pos, yaw, k=1.3):
     """Hao Labs' cargo plane, high over the plain. Flies along +X in its own
     frame; `pos` carries its height in y."""
@@ -622,6 +648,9 @@ def plane(pos, yaw, k=1.3):
         q += part(80 * k, 34 * k, 34 * k, DARK, p, yaw, (30 * k, y - 20 * k, 150 * k * side))
     q += part(90 * k, 100 * k, 8 * k, RED, p, yaw, (-200 * k, y + 40 * k, 0))
     q += part(60 * k, 6 * k, 220 * k, BODY, p, yaw, (-205 * k, y + 48 * k, 0))
+    q += underside(480 * k, 54 * k, (214, 206, 200), p, yaw, y)
+    wo = yaw_about((20 * k, 0, 0), yaw)
+    q += underside(96 * k, 580 * k, (204, 196, 190), (p[0] + wo[0], 0, p[2] + wo[2]), yaw, y + 8 * k, shade=0.45)
     return q
 
 
@@ -784,18 +813,18 @@ def world(t):
         q += person((mx + px, 0, mz + pz), yaw, SHIRTS[i % len(SHIRTS)])
     for i, (x0, dx, ph) in enumerate(((-380, 520, 0.0), (420, -500, 0.4), (-120, 300, 0.7))):
         v = (math.cos((t + ph) * 2 * math.pi) + 1) / 2
-        yaw = 90 if (dx > 0) == (math.sin((t + ph) * 2 * math.pi) < 0) else -90
+        yaw = 0 if (dx > 0) == (math.sin((t + ph) * 2 * math.pi) < 0) else 180
         q += person((mx + x0 + v * dx, 0, mz + 220), yaw, SHIRTS[(i + 3) % len(SHIRTS)], phase=(t + ph) * 7)
     q += bus((mx + 650, 0, mz + 140), 0, 0)
     # two people crossing the apron empty-handed, the ones who have delivered
     for i, (x0, z0, dx, ph) in enumerate(((-700, 560, 1100, 0.15), (500, 600, -1100, 0.65))):
         v = (math.cos((t + ph) * 2 * math.pi) + 1) / 2
-        yaw = 90 if (dx > 0) == (math.sin((t + ph) * 2 * math.pi) < 0) else -90
+        yaw = 0 if (dx > 0) == (math.sin((t + ph) * 2 * math.pi) < 0) else 180
         q += person((x0 + v * dx, 0, z0), yaw, SHIRTS[(i + 1) % len(SHIRTS)], phase=(t + ph) * 7)
     # dockers walking the quay
     for i, (x0, dx, ph) in enumerate(((-300, 900, 0.3), (1200, -700, 0.8))):
         v = (math.cos((t + ph) * 2 * math.pi) + 1) / 2
-        yaw = 90 if (dx > 0) == (math.sin((t + ph) * 2 * math.pi) < 0) else -90
+        yaw = 0 if (dx > 0) == (math.sin((t + ph) * 2 * math.pi) < 0) else 180
         q += worker((x0 + v * dx, 0, SHORE - 40), yaw, (t + ph) * 8, shirt=SHIRTS[(i + 4) % len(SHIRTS)])
     lights.append(((mx, 0, mz + 100), 1100, 420, (255, 190, 140), 0.2))
 
@@ -825,7 +854,7 @@ def world(t):
     trnd = random.Random(5)
     for i, s in enumerate(DEPOTS):
         (x, z), yaw = ROAD.at(s)
-        off = yaw_about((-260, 0, 0), yaw)
+        off = yaw_about((0, 0, 260), yaw)                        # beside the road, not on it
         p = (x + off[0], 0, z + off[2])
         q += depot(p, yaw)
         q += town(p, yaw, trnd)
@@ -859,9 +888,11 @@ def world(t):
         bp = (x + off[0], 0, z + off[2])
         q += bike(bp, yaw, s * ROAD.length / 22.0, 0)
         sh.append((-75, 75, -22, 22, 120, bp, yaw, 0.45))
-    # ── Hao Labs' plane, crossing the sky once a loop, high over the plain ──
-    px = 15000 - t * 21000
-    q += plane((px, 2100, -2600), 180)
+    # ── Hao Labs' plane: in from the far right, low over the plain, growing as
+    # it comes, out past the camera's left shoulder. Heading set from the path.
+    A, B = (13000, 1400, -6000), (-5000, 1700, 1600)
+    pp = tuple(A[i] + (B[i] - A[i]) * t for i in range(3))
+    q += plane(pp, math.degrees(math.atan2(-(B[2] - A[2]), B[0] - A[0])))
     return q, sh, lights, labels
 
 
@@ -980,7 +1011,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--preview", choices=CAMS.keys())
     ap.add_argument("--loop", choices=CAMS.keys())
-    ap.add_argument("--frames", type=int, default=140)
+    ap.add_argument("--frames", type=int, default=240)
     ap.add_argument("--fps", type=int, default=10)
     ap.add_argument("--t", type=float, default=0.0)
     ap.add_argument("--dump", help="also keep every frame as a PNG in this folder, for cutting a video later")

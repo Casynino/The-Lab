@@ -76,7 +76,7 @@ function Mark({ size = 'md' }) {
    inner boxes, on the pallets, the forklift, the racking, in people's hands,
    on the bike, outside every depot and on the market stalls.
 
-   140 frames, a 14-second loop, as an animated WebP — the site he pointed at
+   240 frames, a 24-second loop, as an animated WebP — the site he pointed at
    plays a 5.6 MB MP4, and there is no ffmpeg on this machine to cut one; the
    frames are kept (--dump) so there can be one later. Two films, one per way
    of holding the phone, and the browser picks by orientation. The poster (one
@@ -187,7 +187,7 @@ function Gate({ children }) {
 function Credit() {
   return (
     <Link to="/nino" className="group inline-flex items-center gap-1 text-white/45 transition-colors hover:text-white">
-      Developed by <span className="font-semibold text-white/75 transition-colors group-hover:text-[#c6f432]">Nino</span>
+      Developed by <span className="font-semibold text-white/75 transition-colors group-hover:text-brand-500">Nino</span>
       <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
     </Link>
   );
@@ -255,11 +255,12 @@ export default function Login() {
             </ul>
           </div>
 
-          {/* The line that names the system. On a computer it stands in the
+          {/* The line that names the system — "The Distribution Network", not the
+              company again (Nino, 10 Nov 2026). On a computer it stands in the
               corner of the words column; under the card it would print itself
               across a carton. */}
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
-            <span>Hao Labs · Distribution Channels</span>
+            <span>The Distribution Network</span>
             <Credit />
           </p>
         </section>
@@ -305,7 +306,7 @@ export default function Login() {
               tablet the card floats halfway up and the line would print
               itself across a carton. */}
           <p className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 text-center text-xs text-white/45 lg:hidden">
-            <span>Hao Labs · Distribution Channels</span>
+            <span>The Distribution Network</span>
             <Credit />
           </p>
         </section>
