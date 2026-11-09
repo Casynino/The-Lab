@@ -58,6 +58,19 @@ function offerToSave(email, password, name) {
    (the input's own 16px text is kept — below that an iPhone zooms the page). */
 const FIELD = '!h-10 !rounded-xl !border-white/10 !bg-white/[0.06] !py-0 !shadow-none placeholder:text-white/25 focus:!border-white/30 focus:!ring-0';
 
+/* Said once per device, with the first sign-in: the browser's "Save password?"
+   box appears right then and is easily waved away without knowing why it is
+   there (Nino, 10 Nov 2026: he wants people to save their passwords). It cannot
+   be forced — only the browser asks, and only the person answers — so this just
+   tells them what the box is for, one time. */
+const SAVE_TIP_KEY = 'lab.savehint';
+const firstSignIn = () => {
+  try { return !window.localStorage.getItem(SAVE_TIP_KEY); } catch { return false; }
+};
+const sawSaveTip = () => {
+  try { window.localStorage.setItem(SAVE_TIP_KEY, '1'); } catch { /* private window: it says it again next time */ }
+};
+
 /** The delay before a thing rises into place. */
 const rise = (s) => ({ '--rd': `${s}s` });
 
@@ -280,7 +293,12 @@ export default function Login() {
     const res = await login(values.email, values.password);
     if (res.ok) {
       offerToSave(values.email, values.password, res.user.name);
-      toast.success(`Welcome back, ${res.user.name.split(' ')[0]}`);
+      const first = firstSignIn();
+      sawSaveTip();
+      const who = res.user.name.split(' ')[0];
+      toast.success(first
+        ? `Welcome, ${who}. When your phone asks, tap Save password — next time is one tap.`
+        : `Welcome back, ${who}`, first ? { duration: 7000 } : undefined);
       navigate(from, { replace: true });
     } else {
       toast.error(res.message);
