@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowDown, Download, EllipsisVertical, Menu, Share, SquarePlus, Smartphone } from 'lucide-react';
-import { Modal } from '@/components/ui';
+import { ArrowDown, Download, EllipsisVertical, Menu, Share, SquarePlus, X } from 'lucide-react';
 
 /**
  * Use it like an app.
@@ -102,13 +101,15 @@ export function useInstall() {
   return { ...state, install };
 }
 
-/** One step, with the button it names drawn at the end of the row. */
+/** One step, with the button it names drawn at the end of the row. Kept small:
+    Nino, 10 Nov 2026, holding up the iPhone's: "it should be small and nice,
+    don't make it big and bad". */
 function Step({ n, icon: Icon, children }) {
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-border bg-elevated px-3 py-2.5 text-[13px] leading-snug text-muted">
-      <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-brand-500 text-[11px] font-bold text-white">{n}</span>
+    <li className="flex items-center gap-2.5 rounded-lg border border-border bg-elevated px-2.5 py-2 text-[12.5px] leading-snug text-muted">
+      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-brand-500 text-[10px] font-bold text-white">{n}</span>
       <span className="min-w-0 flex-1">{children}</span>
-      {Icon ? <Icon className="h-4 w-4 shrink-0 text-faint" /> : null}
+      {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-faint" /> : null}
     </li>
   );
 }
@@ -120,8 +121,8 @@ function steps(browser, ios) {
     return [
       <Step key={1} n={1} icon={EllipsisVertical}>Tap the menu at the top, then {b('Open in browser')}.</Step>,
       <Step key={2} n={2}>
-        {ios ? <>In {b('Safari')}, open this page again and tap {b('Get the app')}.</>
-          : <>In the browser, open this page again and tap {b('Get the app')}.</>}
+        {ios ? <>In {b('Safari')}, open this page and tap {b('Get the app')}.</>
+          : <>Open this page again and tap {b('Get the app')}.</>}
       </Step>,
     ];
   }
@@ -129,11 +130,11 @@ function steps(browser, ios) {
     return [
       <Step key={1} n={1} icon={Share}>
         {browser === 'safari'
-          ? <>Tap {b('Share')} at the bottom of Safari (on newer iPhones it is under the {b('···')} button).</>
-          : <>Tap {b('Share')} in the address bar or the menu.</>}
+          ? <>Tap {b('Share')} (bottom bar, or {b('···')}).</>
+          : <>Tap {b('Share')} in the address bar or menu.</>}
       </Step>,
-      <Step key={2} n={2} icon={SquarePlus}>Scroll down and tap {b('Add to Home Screen')}.</Step>,
-      <Step key={3} n={3}>Tap {b('Add')}, then open {b('Hao Labs')} from your home screen.</Step>,
+      <Step key={2} n={2} icon={SquarePlus}>Tap {b('Add to Home Screen')}.</Step>,
+      <Step key={3} n={3}>Tap {b('Add')}, then open {b('Hao Labs')}.</Step>,
     ];
   }
   if (browser === 'samsung') {
@@ -146,13 +147,13 @@ function steps(browser, ios) {
   if (browser === 'huawei') {
     return [
       <Step key={1} n={1} icon={Menu}>Tap the menu at the {b('bottom')} of the browser.</Step>,
-      <Step key={2} n={2}>Tap {b('Add to home screen')} — it may sit under {b('Add to')}.</Step>,
+      <Step key={2} n={2}>Tap {b('Add to home screen')} (it may sit under {b('Add to')}).</Step>,
       <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
     ];
   }
   return [
     <Step key={1} n={1} icon={browser === 'chrome' ? EllipsisVertical : Menu}>
-      {browser === 'chrome' ? <>Open the browser menu at the {b('top right')}.</> : <>Open the browser menu.</>}
+      {browser === 'chrome' ? <>Open the menu at the {b('top right')}.</> : <>Open the browser menu.</>}
     </Step>,
     <Step key={2} n={2}>Tap {b('Install app')} or {b('Add to Home screen')}.</Step>,
     <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
@@ -162,48 +163,65 @@ function steps(browser, ios) {
 export function InstallSheet({ open, onClose }) {
   const { ios, browser, canPrompt, install } = useInstall();
 
-  return (
-    <Modal open={open} onClose={onClose} title="Use it like an app" size="sm">
-      <div className="flex items-center gap-3 pb-4">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white">
-          <Smartphone className="h-5 w-5" />
-        </span>
-        <p className="text-[13px] leading-snug text-muted">
-          Full screen, no browser bar, its own icon.
-        </p>
-      </div>
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
-      {canPrompt ? (
-        <div className="flex flex-col gap-2">
-          <button type="button" className="btn-primary w-full py-3" onClick={async () => { if (await install()) onClose(); }}>
-            <Download className="h-4 w-4" /> Install the app
+  if (!open) return null;
+
+  return (
+    <div
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-5 backdrop-blur-[2px]"
+    >
+      <div role="dialog" aria-modal="true" aria-label="Use it like an app"
+        className="w-full max-w-[19.5rem] rounded-2xl border border-border bg-surface p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[15px] font-semibold leading-tight text-foreground">Use it like an app</h3>
+            <p className="mt-0.5 text-[12px] text-faint">Full screen, no browser bar, its own icon.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close"
+            className="-mr-1 -mt-1 grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-full text-faint transition hover:bg-elevated hover:text-muted">
+            <X className="h-4 w-4" />
           </button>
-          <button type="button" className="btn-secondary w-full" onClick={onClose}>Not now</button>
         </div>
-      ) : (
-        <>
-          <ol className="space-y-2">{steps(browser, ios)}</ol>
-          {browser !== 'in-app' && (
-            <p className="mt-3 text-xs text-faint">
-              If this page opened inside WhatsApp, open it in {ios ? 'Safari' : 'your browser'} first.
-            </p>
-          )}
-          <button type="button" className="btn-secondary mt-4 w-full" onClick={onClose}>Got it</button>
-        </>
-      )}
+
+        {canPrompt ? (
+          <div className="mt-3.5 flex flex-col gap-1.5">
+            <button type="button" className="btn-primary w-full !py-2 text-[13px]" onClick={async () => { if (await install()) onClose(); }}>
+              <Download className="h-3.5 w-3.5" /> Install the app
+            </button>
+            <button type="button" className="btn-secondary w-full !py-1.5 text-[12.5px]" onClick={onClose}>Not now</button>
+          </div>
+        ) : (
+          <>
+            <ol className="mt-3 space-y-1.5">{steps(browser, ios)}</ol>
+            {browser !== 'in-app' && (
+              <p className="mt-2 text-[11px] leading-snug text-faint">
+                Opened in WhatsApp? Open it in {ios ? 'Safari' : 'your browser'} first.
+              </p>
+            )}
+            <button type="button" className="btn-secondary mt-3 w-full !py-1.5 text-[12.5px]" onClick={onClose}>Got it</button>
+          </>
+        )}
+      </div>
 
       {/* An iPhone has no one-tap install, so the next best thing: while the
           sheet is open in Safari, a small arrow bounces over the toolbar
           where Share actually is, so nobody hunts for it. */}
-      {open && ios && browser === 'safari' && !canPrompt && (
+      {ios && browser === 'safari' && !canPrompt && (
         <div aria-hidden className="pointer-events-none fixed inset-x-0 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-[60] flex justify-center">
-          <span className="flex animate-bounce flex-col items-center gap-0.5 text-[11px] font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+          <span className="flex animate-bounce flex-col items-center gap-0.5 text-[10px] font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             Share
-            <ArrowDown className="h-4 w-4 text-brand-500" />
+            <ArrowDown className="h-3.5 w-3.5 text-brand-500" />
           </span>
         </div>
       )}
-    </Modal>
+    </div>
   );
 }
 
