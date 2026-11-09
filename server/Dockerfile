@@ -1,4 +1,4 @@
-# Hao Stock — backend API image
+# ZELab — backend API image
 FROM node:20-alpine
 
 WORKDIR /app

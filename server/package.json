@@ -1,5 +1,5 @@
 {
-  "name": "the-lab-server",
+  "name": "zelab-server",
   "version": "1.0.0",
   "private": true,
   "description": "ZELab — Ledger-based Distribution ERP (backend API)",

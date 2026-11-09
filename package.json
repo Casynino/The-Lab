@@ -1,5 +1,5 @@
 {
-  "name": "the-lab",
+  "name": "zelab",
   "version": "1.0.0",
   "private": true,
   "description": "ZELab — Distribution ERP (Vercel deploy root: builds the static SPA and runs the Express API as a serverless function).",
