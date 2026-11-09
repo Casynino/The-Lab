@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
+import { useReducedMotion } from 'motion/react';
 import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Boxes, Timer, Coins, X } from 'lucide-react';
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Boxes, Timer, Coins, Smartphone, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Field, Input } from '@/components/ui';
+import { InstallButton } from '@/components/InstallApp';
 import './login.css';
 
 /**
@@ -59,37 +61,52 @@ function Mark({ size = 'md' }) {
 
 // ── The scene ────────────────────────────────────────────────────────────────
 
-/* ── the dock ──────────────────────────────────────────────────────────────
-   Nino, 9 Nov 2026: "I want to see the machine, I want to see people, I want
-   to see real movement". So the sign-in scene is the Lab's own loading dock,
-   rendered in 3D by docs/mockups/dock.py — the shed with its bays open and
-   racking inside, pallets of stock on the apron, a forklift working, two
-   people carrying boxes, and a lorry that loads and pulls out.
+/* Nino, 10 Nov 2026: "I want the WHOLE page designed… a very animated,
+   video-like, moving, realistic scene: show the map, show the road, show the
+   bike… take Bongo Life as the example." So the page is one picture that
+   moves: Hao Labs' own corner of Tanzania, rendered in 3D by
+   docs/mockups/world.py — the Lab on the Dar coast with a lorry at the bay,
+   the forklift and the people loading it, the port beside it with its crane
+   and the ships coming and going, Kariakoo market with its arches and
+   umbrellas and crowd (he sent three paintings of it), the city's streets,
+   the road running inland with the lorries, daladalas and bikes on it, and
+   the cargo plane overhead. No place names and no billboards — he found the
+   pins forced and the brand must not be shouted; instead the products ride
+   on the stock itself: OHIS, Civlily and Pepa cartons, master cartons and
+   inner boxes, on the pallets, the forklift, the racking, in people's hands,
+   on the bike, outside every depot and on the market stalls.
 
-   Every layer is the SAME frame rendered through the SAME camera, so stacking
-   them needs no alignment: each object is already in its right place in the
-   picture. The actors are their own layers, and the browser slides them along
-   the ground. 76 KB for the lot.
+   140 frames, a 14-second loop, as an animated WebP — the site he pointed at
+   plays a 5.6 MB MP4, and there is no ffmpeg on this machine to cut one; the
+   frames are kept (--dump) so there can be one later. Two films, one per way
+   of holding the phone, and the browser picks by orientation. The poster (one
+   frame, a few dozen KB) is on screen at once; the film fades in over it when
+   it has arrived, so nobody waits in the dark. */
 
-   Sliding along the ground is not sliding sideways: on this camera 100 units
-   of dock move a thing 6.47% of the frame across and 2.42% up. Those two
-   numbers are in login.css, and every movement here is built from them. */
+const FILM = {
+  poster: { portrait: '/scene/portrait-poster.webp', landscape: '/scene/landscape-poster.webp' },
+  film: { portrait: '/scene/portrait.webp', landscape: '/scene/landscape.webp' },
+};
 
-const LAYERS = ['bg', 'stacks', 'lorry', 'forklift', 'worker1', 'worker2'];
+function Film({ kind, className, onLoad }) {
+  return (
+    <picture className={className}>
+      <source media="(orientation: portrait)" srcSet={FILM[kind].portrait} />
+      <img src={FILM[kind].landscape} alt="" width="1600" height="900" decoding="async"
+        fetchpriority={kind === 'poster' ? 'high' : undefined} onLoad={onLoad} />
+    </picture>
+  );
+}
 
 function Scene() {
+  const [ready, setReady] = useState(false);
+  const still = useReducedMotion();
   return (
     <div className="ls" aria-hidden="true">
-      <span className="ls-glow a" />
-      <span className="ls-glow b" />
-
-      <div className="ls-dock">
-        {LAYERS.map((n) => (
-          <img key={n} src={`/dock/${n}.webp`} alt="" width="1500" height="950"
-            className={`ls-layer ls-${n}`} fetchpriority={n === 'bg' ? 'high' : undefined} />
-        ))}
-      </div>
-
+      <Film kind="poster" className="ls-film" />
+      {/* Somebody who has asked their phone to stop moving things gets the
+          poster alone — it is a picture, not information. */}
+      {!still && <Film kind="film" className={`ls-film ls-moving${ready ? ' is-ready' : ''}`} onLoad={() => setReady(true)} />}
       <div className="ls-vignette" />
     </div>
   );
@@ -125,11 +142,20 @@ function Gate({ children }) {
         <ArrowRight className="h-4 w-4" />
       </button>
 
-      {/* No "Get the full-screen app" link here any more (owner, 9 Nov 2026).
-          The sheet offers itself once, on its own, the first time a phone
-          reaches the app after signing in — see InstallPrompt in Layout. Once
-          dismissed it stays dismissed; a standing link on the way in was the
-          same offer sitting there every single visit. */}
+      {/* The way to the full-screen app, for a phone that has not installed
+          it yet (owner, 9 Nov 2026 — taken off, then asked for back the same
+          night: a rep arriving at the door should be able to get the app
+          from here). The sheet also offers itself once after sign-in. Draws
+          nothing on a computer or once the app is installed. */}
+      <InstallButton
+        render={(openSheet) => (
+          <button type="button" onClick={openSheet} style={rise(0.68)}
+            className="ls-up mt-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] text-white/60 underline-offset-4 transition hover:text-white hover:underline md:hidden">
+            <Smartphone className="h-3.5 w-3.5" />
+            Get the full-screen app
+          </button>
+        )}
+      />
 
       <div
         onClick={(e) => e.target === e.currentTarget && setOpen(false)}
@@ -240,9 +266,10 @@ export default function Login() {
 
         {/* The way in. On a phone this column is the whole screen. */}
         {/* A phone gives the whole screen to this one column, so the brand and
-            the way in sit in the middle of the air ABOVE the cartons, not at
-            the top of the glass: pb-[36vh] is the room the shelf wants. */}
-        <section className="flex flex-col items-center justify-center px-5 pb-[max(36vh,calc(3rem+env(safe-area-inset-bottom)))] pt-[max(1.75rem,env(safe-area-inset-top))] md:pb-[max(4rem,calc(3rem+env(safe-area-inset-bottom)))] lg:px-10 lg:py-10">
+            the way in sit in the top third of the picture — the sky and the
+            far plain, the calm part — and the Lab, the port and the sea fill
+            the rest: pb-[46vh] is the room the picture wants. */}
+        <section className="flex flex-col items-center justify-center px-5 pb-[max(46vh,calc(3rem+env(safe-area-inset-bottom)))] pt-[max(1.75rem,env(safe-area-inset-top))] md:pb-[max(4rem,calc(3rem+env(safe-area-inset-bottom)))] lg:px-10 lg:py-10">
           <div className="ls-up mb-7 lg:hidden" style={rise(0.05)}><Mark /></div>
 
           <p className="ls-up mb-7 max-w-[15rem] text-balance text-center text-[15px] leading-snug text-white/80 md:hidden" style={rise(0.3)}>

@@ -1,18 +1,13 @@
-/* The sign-in scene: the Lab's loading dock.
+/* The sign-in scene: Hao Labs' corner of Tanzania, moving.
 
-   Nino, 9 Nov 2026: "I want to see the machine, I want to see people, I want
-   to see real movement". The objects are rendered in 3D (docs/mockups/dock.py)
-   and the browser moves them — 76 KB for the whole scene, against the 5.6 MB
-   video the site he pointed at downloads every visit.
-
-   SLIDING ALONG THE GROUND is not sliding sideways. On this camera, 100 units
-   of dock floor move a thing 6.47% of the frame across and 2.42% of it up. So
-   a lorry pulling 900 units up the apron travels translate(58.2%, -21.8%),
-   and every movement below is built from that pair. Get it wrong and things
-   float off the floor.
+   Nino, 10 Nov 2026: one animated, video-like picture across the WHOLE page,
+   like the site he pointed at — the map, the road, the port, the bike. The
+   picture itself is rendered by docs/mockups/world.py (see Login.jsx); this
+   file only places it, drifts it, and keeps the words readable over it.
 
    Everything animated here is a transform or an opacity: the compositor's
-   work, not the main thread's. */
+   work, not the main thread's. The film's own frames are the one real cost,
+   and they decode off the main thread too. */
 
 .ls {
   position: fixed;
@@ -20,123 +15,60 @@
   z-index: 0;
   overflow: hidden;
   background: #070606;
-  --red: 238, 49, 36;
-  --coral: 255, 95, 75;
 }
 
-/* Two slow lights so the dark is not flat. */
-.ls-glow {
+/* The poster and the film are the same frame, so the film can fade in over
+   the poster without a jump. Both drift together — a slow push in and back,
+   the camera breathing — because they share the one animation from the same
+   moment. The 3% bleed is the room the drift needs at the edges. */
+.ls-film {
   position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
+  inset: -3%;
+  display: block;
   will-change: transform;
+  animation: ls-breathe 38s ease-in-out infinite alternate;
 }
 
-.ls-glow.a {
-  left: -18%;
-  top: -14%;
-  width: 66%;
-  height: 52%;
-  background: rgba(var(--red), 0.16);
-  animation: ls-drift-a 21s ease-in-out infinite;
-}
-
-.ls-glow.b {
-  right: -20%;
-  bottom: -22%;
-  width: 66%;
-  height: 56%;
-  background: rgba(var(--coral), 0.1);
-  animation: ls-drift-b 26s ease-in-out infinite;
-}
-
-@keyframes ls-drift-a { 50% { transform: translate3d(8%, 6%, 0) scale(1.1); } }
-@keyframes ls-drift-b { 50% { transform: translate3d(-7%, -6%, 0) scale(1.08); } }
-
-/* ── the dock ─────────────────────────────────────────────────────────────
-   A band across the foot of the screen on a phone, so the brand and the way
-   in own the top. On a computer it sits low and left of the sign-in card. */
-.ls-dock {
-  position: absolute;
-  left: 50%;
-  /* The rendered frame carries air around the dock, so 128% of the screen is
-     what puts the shed at one edge and the lorry at the other without
-     clipping either. */
-  bottom: -2%;
-  width: 128%;
-  aspect-ratio: 1500 / 950;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-@media (min-width: 640px) {
-  .ls-dock { width: 104%; bottom: -4%; }
-}
-
-@media (min-width: 1024px) {
-  .ls-dock {
-    left: 2%;
-    width: min(72%, 1180px);
-    bottom: -10%;
-    transform: none;
-  }
-}
-
-.ls-layer {
+.ls-film img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  will-change: transform;
+  object-fit: cover;
+  object-position: 50% 50%;
 }
 
-/* The lorry loads, then pulls out up the apron and the next one rolls in.
-   Long and slow: a loaded lorry does not leave in a hurry. */
-.ls-lorry { animation: ls-pullout 17s cubic-bezier(0.5, 0, 0.6, 1) infinite; }
-
-@keyframes ls-pullout {
-  0%, 34% { transform: translate(0, 0); opacity: 1; }
-  72% { transform: translate(58.2%, -21.8%); opacity: 1; }
-  80%, 88% { transform: translate(72.8%, -27.2%); opacity: 0; }
-  96% { transform: translate(-19.4%, 7.3%); opacity: 0; }
-  100% { transform: translate(0, 0); opacity: 1; }
+@keyframes ls-breathe {
+  from { transform: scale(1) translate3d(0, 0, 0); }
+  to { transform: scale(1.06) translate3d(-1.2%, 1%, 0); }
 }
 
-/* The forklift shuttles a pallet from the stacks to the lorry and goes back
-   for the next one. */
-.ls-forklift { animation: ls-shuttle 13s ease-in-out infinite; }
-
-@keyframes ls-shuttle {
-  0%, 8% { transform: translate(0, 0); }
-  42%, 56% { transform: translate(19.4%, -7.3%); }
-  92%, 100% { transform: translate(0, 0); }
+.ls-moving {
+  opacity: 0;
+  transition: opacity 1.4s ease;
 }
 
-/* Two people walking boxes across the apron, out of step with each other. */
-.ls-worker1 { animation: ls-walk-a 11s ease-in-out infinite; }
-.ls-worker2 { animation: ls-walk-b 9s ease-in-out infinite; }
+.ls-moving.is-ready { opacity: 1; }
 
-@keyframes ls-walk-a {
-  0%, 6% { transform: translate(0, 0); }
-  46%, 54% { transform: translate(16.8%, -6.3%); }
-  94%, 100% { transform: translate(0, 0); }
-}
-
-@keyframes ls-walk-b {
-  0%, 5% { transform: translate(0, 0); }
-  48%, 56% { transform: translate(-13.6%, 5.1%); }
-  95%, 100% { transform: translate(0, 0); }
-}
-
-/* Dark at the edges, so nothing competes with the words. */
+/* Dark where the words are, clear where the picture is. On a phone the brand
+   and the button live in the top third, the footer along the bottom; on a
+   computer the words have the left column and the card the right. */
 .ls-vignette {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(135% 100% at 50% 72%, transparent 32%, rgba(4, 3, 3, 0.68) 100%),
-    linear-gradient(to bottom, rgba(4, 3, 3, 0.72), rgba(4, 3, 3, 0.2) 34%, transparent 62%);
   pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(5, 4, 4, 0.8) 0%, rgba(5, 4, 4, 0.6) 24%, rgba(5, 4, 4, 0.34) 40%, transparent 56%, transparent 84%, rgba(5, 4, 4, 0.7) 100%),
+    radial-gradient(130% 90% at 50% 62%, transparent 52%, rgba(5, 4, 4, 0.5) 100%);
+}
+
+@media (min-width: 1024px) {
+  .ls-vignette {
+    background:
+      linear-gradient(to right, rgba(5, 4, 4, 0.84) 0%, rgba(5, 4, 4, 0.56) 30%, rgba(5, 4, 4, 0.1) 52%, transparent 64%),
+      linear-gradient(to bottom, rgba(5, 4, 4, 0.5) 0%, transparent 26%, transparent 86%, rgba(5, 4, 4, 0.55) 100%),
+      radial-gradient(120% 100% at 60% 50%, transparent 60%, rgba(5, 4, 4, 0.45) 100%);
+  }
 }
 
 /* Everything on the page arrives from below, each a moment after the last
@@ -156,6 +88,6 @@
 /* Somebody who has asked their phone to stop moving things gets the dock
    standing still — it is a picture, not information. */
 @media (prefers-reduced-motion: reduce) {
-  .ls-glow, .ls-lorry, .ls-forklift, .ls-worker1, .ls-worker2 { animation: none; }
+  .ls-film { animation: none; }
   .ls-up, .ls-pop { animation-duration: 0.01ms; }
 }

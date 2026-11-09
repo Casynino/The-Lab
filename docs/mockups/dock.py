@@ -1,5 +1,9 @@
 """The loading dock: the sign-in scene, rendered in 3D.
 
+NOT WIRED TO ANYTHING SINCE 10 Nov 2026 — the sign-in page is one moving
+picture now, docs/mockups/world.py, and client/public/dock/ is gone. Kept for
+the camera and the layer trick, which world.py grew out of.
+
 Nino, 9 Nov 2026: "I want to see the machine, I want to see people, I want to
 see real movement". So this is not a map any more — it is the Lab's own dock:
 the shed with its bays open, racking inside, pallets of real stock on the

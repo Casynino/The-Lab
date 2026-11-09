@@ -138,6 +138,12 @@ def render(quads, cam, light=(-0.45, 0.85, 0.55), ambient=0.74, shadows=(), bg=N
         xs = [p[0] for p in pr]; ys = [p[1] for p in pr]
         x0, y0 = int(math.floor(min(xs))) - 2, int(math.floor(min(ys))) - 2
         x1, y1 = int(math.ceil(max(xs))) + 2, int(math.ceil(max(ys))) + 2
+        # Only the part of the quad that can land on the canvas. A ground
+        # plane seen from low down projects to a box billions of pixels wide,
+        # and PIL (rightly) refuses to allocate it; nothing outside the frame
+        # was ever going to be seen, so clipping changes no pixel.
+        x0, y0 = max(x0, -4), max(y0, -4)
+        x1, y1 = min(x1, cam.W + 4), min(y1, cam.H + 4)
         bw, bh = x1-x0, y1-y0
         if bw <= 1 or bh <= 1: continue
         dst = [(p[0]-x0, p[1]-y0) for p in pr]
