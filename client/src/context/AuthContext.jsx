@@ -23,7 +23,6 @@ function endSession(reason) {
   const token = tokenStore.get();
   tokenStore.clear();
   idle.reset();
-  if (why === 'idle') idle.flag();
   queryClient.clear();
   if (token) {
     // The request interceptor only adds a token when one is stored, and none

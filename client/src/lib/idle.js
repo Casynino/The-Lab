@@ -18,16 +18,18 @@
   mouse over it, and not the app asking the server for something by itself —
   otherwise a screen left open would keep itself signed in for ever.
 
+  Nino, 10 Nov 2026: the limit is ONE HOUR, and the sign-out is silent. No
+  notice on the sign-in page, no welcome afterwards: the person simply finds
+  the sign-in screen and logs in again.
+
   The limit is one number. Change it here and nowhere else.
 */
 
-export const IDLE_LIMIT_MS = 30 * 60_000;
-export const IDLE_LIMIT_MINUTES = IDLE_LIMIT_MS / 60_000;
+export const IDLE_LIMIT_MS = 60 * 60_000;
 
 export const ACTIVE_KEY = 'haostock.lastActive';
-const NOTICE_KEY = 'haostock.idleNotice';
 // Writing storage on every scroll event would be a cost for nothing: once in
-// ten seconds is far finer than a thirty-minute limit needs.
+// ten seconds is far finer than a one-hour limit needs.
 const WRITE_EVERY_MS = 10_000;
 
 let lastWrite = 0;
@@ -58,19 +60,5 @@ export const idle = {
   reset() {
     lastWrite = 0;
     try { localStorage.removeItem(ACTIVE_KEY); } catch { /* ignore */ }
-  },
-
-  /** Leave a note for the sign-in page, so it can say why the person is there. */
-  flag() {
-    try { sessionStorage.setItem(NOTICE_KEY, '1'); } catch { /* ignore */ }
-  },
-
-  /** Read the note once. */
-  takeNotice() {
-    try {
-      const had = sessionStorage.getItem(NOTICE_KEY) === '1';
-      sessionStorage.removeItem(NOTICE_KEY);
-      return had;
-    } catch { return false; }
   },
 };

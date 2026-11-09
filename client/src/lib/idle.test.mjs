@@ -27,6 +27,10 @@ test('used a moment ago is not expired', () => {
   assert.equal(idle.expired(), false);
 });
 
+test('the limit is one hour', () => {
+  assert.equal(IDLE_LIMIT_MS, 60 * 60_000);
+});
+
 test('just inside the limit is not expired, just outside is', () => {
   agoMs(IDLE_LIMIT_MS - 5_000);
   assert.equal(idle.expired(), false);
@@ -55,13 +59,6 @@ test('reset forgets the clock, so the next sign-in starts clean', () => {
   idle.reset();
   assert.equal(localStorage.getItem(ACTIVE_KEY), null);
   assert.equal(idle.expired(), false);
-});
-
-test('the sign-in note is read once', () => {
-  assert.equal(idle.takeNotice(), false);
-  idle.flag();
-  assert.equal(idle.takeNotice(), true);
-  assert.equal(idle.takeNotice(), false);
 });
 
 test('a future timestamp (clock moved back) is not treated as expired', () => {
