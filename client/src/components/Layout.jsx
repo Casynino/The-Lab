@@ -183,17 +183,16 @@ function GlassSidebar({
   const brand = (compact) => (
     <NavLink to="/" onClick={onNavigate} data-hint="Hao Labs"
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
-      {/* The mark alone on the rail, the whole lockup when there is room —
-          the lockup already carries the mark, so never both (owner, 9 Nov
-          2026). Official artwork either way: docs/mockups/brand.py. */}
-      {compact ? (
-        <img src="/brand/hao-mark.png" alt="Hao Labs" width="894" height="512"
-          className={clsx('w-auto shrink-0', sheet ? 'h-[22px]' : 'h-6')} />
-      ) : (
+      {/* The mark on its own, and the words set beside it. The full hǎo Labs
+          lockup belongs on the sign-in screen, where it is big enough to read
+          — at sidebar size its "Labs" shrinks to nothing (owner, 9 Nov 2026).
+          Official artwork: docs/mockups/brand.py. */}
+      <img src="/brand/hao-mark.png" alt="Hao Labs" width="894" height="512"
+        className={clsx('w-auto shrink-0', sheet ? 'h-[19px]' : 'h-[22px]')} />
+      {compact ? null : (
         <span className="min-w-0 leading-tight">
-          <img src="/brand/hao-labs-dark.png" alt="Hao Labs" width="1071" height="320"
-            className={clsx('block w-auto', sheet ? 'h-[19px]' : 'h-[22px]')} />
-          <span className={clsx('mt-1.5 block truncate g-soft', sheet ? 'text-[11px]' : 'text-xs')}>Hao Stock</span>
+          <span className={clsx('block truncate font-semibold tracking-tight g-strong', sheet ? 'text-[13px]' : 'text-sm')}>Hao Labs</span>
+          <span className={clsx('mt-0.5 block truncate g-soft', sheet ? 'text-[10.5px]' : 'text-xs')}>Hao Stock</span>
         </span>
       )}
     </NavLink>
@@ -213,7 +212,7 @@ function GlassSidebar({
             'relative flex items-center rounded-lg',
             FOCUS,
             sheet
-              ? clsx('gap-2.5 px-2.5 text-[12.5px]', child ? 'min-h-7 py-1' : 'min-h-8 py-1.5')
+              ? clsx('px-2 text-[12px]', child ? 'min-h-7 gap-2 py-1' : 'min-h-8 gap-2.5 py-1.5')
               : clsx('gap-3 text-[13px]', child ? 'px-3 py-1.5' : 'px-3 py-2'),
             active ? 'glass-active font-medium g-strong' : 'glass-row g-text g-hover',
           )}
@@ -326,7 +325,10 @@ function GlassSidebar({
                 </button>
                 <div className={clsx('grid transition-[grid-template-rows] duration-200 ease-out', isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]')}>
                   <div className="overflow-hidden">
-                    <ul className="glass-tree ml-[1.7rem] mt-1 space-y-0.5 pb-1 pl-3.5">
+                    {/* The phone's drawer is narrower than the desk panel, so
+                        the branch gives back some of its indent — otherwise
+                        "Purchases & Imports" has nowhere to go but an ellipsis. */}
+                    <ul className={clsx('glass-tree mt-1 space-y-0.5 pb-1', sheet ? 'ml-[1.15rem] pl-2.5' : 'ml-[1.7rem] pl-3.5')}>
                       {s.items.map((item) => row(item, true))}
                     </ul>
                   </div>
@@ -665,6 +667,29 @@ export default function Layout() {
   // The bell hangs off the banner, so leaving home takes its anchor with it.
   useEffect(() => { setBellOpen(false); }, [location.pathname]);
 
+  /* While the drawer is open the page behind it must not move.
+     Without this the page keeps scrolling under the panel, and on a phone
+     that scroll collapses the browser's address bar — which the page sees as
+     the viewport changing height, so it reflows mid-animation and the whole
+     screen jumps. The position is held and put back exactly. */
+  useEffect(() => {
+    if (!drawer) return undefined;
+    const y = window.scrollY;
+    const { body } = document;
+    const was = {
+      position: body.style.position, top: body.style.top,
+      width: body.style.width, overflow: body.style.overflow,
+    };
+    body.style.position = 'fixed';
+    body.style.top = `-${y}px`;
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    return () => {
+      Object.assign(body.style, was);
+      window.scrollTo(0, y);
+    };
+  }, [drawer]);
+
   const setFold = (next) => { writeStore(SIDEBAR_KEY, next); setCollapsed(next); };
 
   const { data: unread = 0 } = useQuery({
@@ -722,12 +747,18 @@ export default function Layout() {
       {/* The phone's drawer */}
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDrawer(null)} />
+          {/* Solid, not blurred: a full-screen backdrop-filter fading in over a
+              sliding panel is two re-samples of the whole page per frame, and
+              a phone shows that as a shudder. */}
+          <div className="absolute inset-0 bg-[#050605]/80" onClick={() => setDrawer(null)} />
           <motion.div
             initial={{ x: -24, opacity: 0.6 }}
             animate={{ x: 0, opacity: 1 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 top-[calc(0.75rem+env(safe-area-inset-top))] w-[14.75rem] max-w-[78vw]"
+            /* Narrower than it was: the longest word in here is "Administration"
+               and nothing wraps at this width, so the rest was a panel taking
+               three quarters of a phone for no reason (owner, 9 Nov 2026). */
+            className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 top-[calc(0.75rem+env(safe-area-inset-top))] w-[12.75rem] max-w-[62vw]"
           >
             <GlassSidebar mode="sheet" {...shared} onNavigate={() => setDrawer(null)} autoFocusSearch={drawer === 'search'} />
           </motion.div>

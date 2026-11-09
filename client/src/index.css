@@ -264,8 +264,21 @@
 }
 /* The phone's drawer lies over a dark backdrop, not over the page: thicker
    glass, so it reads clean instead of showing the page through itself. */
+/* The phone's drawer carries NO backdrop blur, and that is the whole of why
+   it stopped shaking (Nino, 9 Nov 2026: "when I press the burger the site
+   tends to shake and the page looks like it was forced").
+
+   A backdrop-filter has to re-sample everything behind it every frame. Slide
+   such an element across the screen and the phone re-rasterises the whole
+   page sixty times a second, which it cannot do, so the panel stutters and
+   drags the page with it. The drawer was already 94% opaque — the blur was
+   buying nothing and costing the animation. It is solid now, and the slide
+   is a plain transform the compositor can do on its own. */
 .glass-panel.glass-drawer {
-  background-color: rgba(14, 17, 14, 0.94);
+  background-color: rgba(13, 15, 13, 0.985);
+  background-image: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border-radius: 2rem;
 }
 .glass-panel .g-strong { color: var(--glass-strong); }
