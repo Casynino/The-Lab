@@ -77,62 +77,73 @@ function Mark({ size = 'md' }) {
 const CRATES = ['/crate-pepa.webp', '/crate-ohis.webp', '/crate-civlily.webp'];
 
 /* ── who is on the road ────────────────────────────────────────────────────
-   Nino, 9 Nov 2026: "some people in a car, some people carrying the boxes,
-   some taking the boxes from the warehouse — show the movement, like team
-   work". So the lanes carry the people who actually do this: a van on the
-   long runs, a boda with a box strapped on, a porter on foot, and the stock
-   itself. Each is drawn from its own feet, so animateMotion stands it on the
-   road rather than hanging it from a corner.
+   Nino, 9 Nov 2026: the first set "looked unrealistic" — flat rectangles with
+   circles for wheels. These are drawn the way a fulfilment operation actually
+   looks: a panel van with a sloped cab and a cargo door, a box lorry with a
+   separate cab, and a porter walking a stacked hand trolley. Pale bodywork so
+   they read as vehicles on a dark map rather than as holes in it, a red flash
+   on the side because they are ours, and dark glass and tyres for weight.
 
-   Silhouettes, filled — an outline figure at thirty pixels reads as scribble.
-   Lit in the coral the horizon is, so they sit in the same light as the map. */
+   Each is drawn from its own wheels, then shifted so the origin is where the
+   road is — animateMotion puts that point on the lane. */
 
-const SKIN = '#ffb6ab';
-const DARK = '#7a1a12';
+const BODY = '#f4ece7';     // bodywork
+const TYRE = '#2a0a06';     // tyres and glass
+const SEAM = '#cfc0b8';     // panel seams
+const CARD = '#d9b78c';     // cardboard
 
-/** A delivery van: the long runs, Dar to Mwanza, Dar to Mbeya. */
+/** A panel van: the everyday run. */
 function Van() {
   return (
-    <g transform="translate(-26,-28)">
-      <rect x="1" y="5" width="29" height="15" rx="2.5" fill={SKIN} />
-      <path d="M30 9 h8.5 L47 15.5 V20 H30 Z" fill={SKIN} />
-      <path d="M32 11 h5.5 L42 15 H32 Z" fill={DARK} />
-      <rect x="5" y="8.5" width="9" height="2" rx="1" fill={DARK} opacity="0.55" />
-      <circle cx="11" cy="21.5" r="4.6" fill={SKIN} />
-      <circle cx="11" cy="21.5" r="1.9" fill={DARK} />
-      <circle cx="40" cy="21.5" r="4.6" fill={SKIN} />
-      <circle cx="40" cy="21.5" r="1.9" fill={DARK} />
+    <g transform="translate(-35,-34)">
+      <path d="M4 27 V8 Q4 5 7 5 H41 L45 9 H54 Q57.5 9 59.5 12 L65 20 Q67 22.5 67 25.5 V27 Q67 29.5 64.5 29.5 H6.5 Q4 29.5 4 27 Z" fill={BODY} />
+      <path d="M46.5 11.5 H54 Q56 11.5 57 13 L61 19 H46.5 Z" fill={TYRE} />
+      <rect x="9" y="9.5" width="30" height="2.6" rx="1.3" fill="#ee3124" />
+      <path d="M25 5 V29" stroke={SEAM} strokeWidth="1.1" />
+      <circle cx="17" cy="29" r="6.2" fill={TYRE} />
+      <circle cx="17" cy="29" r="2.7" fill={BODY} />
+      <circle cx="55" cy="29" r="6.2" fill={TYRE} />
+      <circle cx="55" cy="29" r="2.7" fill={BODY} />
     </g>
   );
 }
 
-/** A boda with a box strapped on the back: how most of it really moves. */
-function Boda() {
+/** A box lorry: the long haul, Dar to Mwanza and Mbeya. */
+function Lorry() {
   return (
-    <g transform="translate(-21,-28)">
-      <circle cx="6.5" cy="20" r="5.6" fill="none" stroke={SKIN} strokeWidth="2.4" />
-      <circle cx="34" cy="20" r="5.6" fill="none" stroke={SKIN} strokeWidth="2.4" />
-      <path d="M6.5 20 L15 12 h9 l10 8" fill="none" stroke={SKIN} strokeWidth="2.6"
-        strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="6" y="6" width="11" height="8.5" rx="1.2" fill={SKIN} />
-      <path d="M22 12 L24.5 5" stroke={SKIN} strokeWidth="2.8" strokeLinecap="round" />
-      <circle cx="25.5" cy="2.6" r="3.1" fill={SKIN} />
-      <path d="M24.5 6 L31 9.5" stroke={SKIN} strokeWidth="2.4" strokeLinecap="round" />
+    <g transform="translate(-44,-38)">
+      <rect x="3" y="3" width="52" height="25" rx="2" fill={BODY} />
+      <rect x="8" y="8" width="42" height="3" rx="1.5" fill="#ee3124" />
+      <path d="M31 3 V28" stroke={SEAM} strokeWidth="1.2" />
+      <path d="M56 28 V14 Q56 11 59 11 H68 Q71 11 73 14 L80 23 Q82 25.5 82 28.5 V30 Q82 32 80 32 H58 Q56 32 56 30 Z" fill={BODY} />
+      <path d="M60 14 H68 Q70 14 71 15.5 L76 22 H60 Z" fill={TYRE} />
+      <circle cx="16" cy="30" r="6" fill={TYRE} />
+      <circle cx="16" cy="30" r="2.6" fill={BODY} />
+      <circle cx="28" cy="30" r="6" fill={TYRE} />
+      <circle cx="28" cy="30" r="2.6" fill={BODY} />
+      <circle cx="69" cy="32" r="6" fill={TYRE} />
+      <circle cx="69" cy="32" r="2.6" fill={BODY} />
     </g>
   );
 }
 
-/** A porter with a carton on the shoulder: the last few hundred metres. */
+/** A porter walking a loaded hand trolley: the last few hundred metres. */
 function Porter() {
   return (
-    <g transform="translate(-11,-30)">
-      <rect x="0" y="0" width="13" height="9.5" rx="1.2" fill={SKIN} />
-      <rect x="0" y="4" width="13" height="1.4" fill={DARK} opacity="0.5" />
-      <circle cx="15" cy="7" r="3.2" fill={SKIN} />
-      <path d="M15 10.5 L15 19" stroke={SKIN} strokeWidth="3.1" strokeLinecap="round" />
-      <path d="M15 12 L9 8" stroke={SKIN} strokeWidth="2.5" strokeLinecap="round" />
-      <path d="M15 19 L11 29" stroke={SKIN} strokeWidth="2.7" strokeLinecap="round" />
-      <path d="M15 19 L20 28" stroke={SKIN} strokeWidth="2.7" strokeLinecap="round" />
+    <g transform="translate(-17,-38)">
+      {/* the load */}
+      <rect x="17" y="8" width="15" height="11" rx="1.2" fill={CARD} />
+      <rect x="17" y="19" width="15" height="11" rx="1.2" fill="#c7a278" />
+      <path d="M24.5 8 V30" stroke="#8d6a46" strokeWidth="1.2" />
+      {/* the trolley */}
+      <path d="M16 5 V32 H31" fill="none" stroke={BODY} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="16" cy="33.5" r="3.6" fill={TYRE} stroke={BODY} strokeWidth="1.4" />
+      {/* the person */}
+      <circle cx="7" cy="7.5" r="3.6" fill={BODY} />
+      <path d="M7 11 V23" stroke={BODY} strokeWidth="3.2" strokeLinecap="round" />
+      <path d="M7 14 L15 10" stroke={BODY} strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M7 23 L2.5 35" stroke={BODY} strokeWidth="2.9" strokeLinecap="round" />
+      <path d="M7 23 L12 34" stroke={BODY} strokeWidth="2.9" strokeLinecap="round" />
     </g>
   );
 }
@@ -140,11 +151,14 @@ function Porter() {
 /** The Lab itself: a shed with its doors open, standing in Dar. */
 function Warehouse({ x, y }) {
   return (
-    <g transform={`translate(${x - 21},${y - 26})`}>
-      <path d="M2 14 L21 3 L40 14 V26 H2 Z" fill="#ee3124" />
-      <path d="M2 14 L21 3 L40 14 Z" fill="#ff8d7d" />
-      <rect x="14" y="17" width="14" height="9" rx="0.8" fill="#2a0a06" />
-      <rect x="16.5" y="19.5" width="9" height="6.5" fill="#ffb6ab" opacity="0.45" />
+    <g transform={`translate(${x - 26},${y - 30})`}>
+      <path d="M2 16 L26 3 L50 16 V31 H2 Z" fill="#ee3124" />
+      <path d="M2 16 L26 3 L50 16 Z" fill="#ff8d7d" />
+      <rect x="17" y="20" width="18" height="11" rx="0.8" fill="#2a0a06" />
+      <rect x="20" y="23" width="12" height="8" fill="#ffb6ab" opacity="0.4" />
+      {/* stock waiting on the apron */}
+      <rect x="4" y="24" width="9" height="7" rx="0.8" fill={CARD} />
+      <rect x="38" y="25" width="8" height="6" rx="0.8" fill={CARD} />
     </g>
   );
 }
@@ -152,14 +166,14 @@ function Warehouse({ x, y }) {
 /** A region taking stock in: a small depot beside its name. */
 function Depot({ x, y }) {
   return (
-    <g transform={`translate(${x - 9},${y - 12})`}>
-      <path d="M1 6 L9 1 L17 6 V12 H1 Z" fill="#ff5f4b" />
-      <rect x="6" y="7.5" width="6" height="4.5" fill="#2a0a06" />
+    <g transform={`translate(${x - 10},${y - 13})`}>
+      <path d="M1 7 L10 1 L19 7 V14 H1 Z" fill="#ff5f4b" />
+      <rect x="7" y="9" width="6" height="5" fill="#2a0a06" />
     </g>
   );
 }
 
-const MOVERS = [Van, Porter, Boda, Van, Porter, Boda, Van, Porter];
+const MOVERS = [Van, Porter, Lorry, Van, Porter, Van, Lorry, Porter];
 
 /* Where the stock goes, how long a run takes, and how far into it each one
    already is. Staggered on purpose: eight lorries leaving at once is a parade,
@@ -250,9 +264,11 @@ function Scene() {
             );
           })}
 
-          {/* And the stock going with them, a little behind. */}
+          {/* And the stock going with them, a little behind — smaller than the
+              vehicles, so the convoy reads lorry-first rather than a carton
+              towing a van. */}
           {RUNS.map((r, i) => (
-            <image key={`${r.to}-box`} href={CRATES[i % CRATES.length]} width="42" x="-21" y="-42"
+            <image key={`${r.to}-box`} href={CRATES[i % CRATES.length]} width="30" x="-15" y="-30"
               className="ls-parcel" preserveAspectRatio="xMidYMax meet">
               <animateMotion dur={r.d} begin={`${parseFloat(r.at) - parseFloat(r.d) * 0.42}s`}
                 repeatCount="indefinite" rotate="0">
@@ -395,7 +411,7 @@ export default function Login() {
           <div className="mb-[clamp(170px,30vh,320px)] max-w-lg">
             <p className="ls-up mb-5 h-1 w-12 rounded bg-brand-500" style={rise(0.18)} />
             <h2 className="ls-up text-balance text-4xl font-bold leading-[1.08] tracking-tight xl:text-5xl" style={rise(0.26)}>
-              Take stock. Make moves. <span className="text-brand-500">Earn more.</span>
+              Every box out. <span className="text-brand-500">Every shilling back.</span>
             </h2>
             <p className="ls-up mt-4 max-w-md text-[15px] leading-relaxed text-white/65" style={rise(0.4)}>
               Every box that leaves the Lab is on the system — who took it, what came
@@ -415,7 +431,7 @@ export default function Login() {
               corner of the words column; under the card it would print itself
               across a carton. */}
           <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
-            <span>Hao Labs · Hao Stock Management System</span>
+            <span>Hao Labs · Distribution Channels</span>
             <Credit />
           </p>
         </section>
@@ -428,7 +444,7 @@ export default function Login() {
           <div className="ls-up mb-7 lg:hidden" style={rise(0.05)}><Mark /></div>
 
           <p className="ls-up mb-7 max-w-[15rem] text-balance text-center text-[15px] leading-snug text-white/80 md:hidden" style={rise(0.3)}>
-            Take stock. Make moves. Earn more.
+            Every box out. Every shilling back.
           </p>
 
           <Gate>
@@ -460,7 +476,7 @@ export default function Login() {
               tablet the card floats halfway up and the line would print
               itself across a carton. */}
           <p className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 text-center text-xs text-white/45 lg:hidden">
-            <span>Hao Labs · Hao Stock Management System</span>
+            <span>Hao Labs · Distribution Channels</span>
             <Credit />
           </p>
         </section>

@@ -14,7 +14,7 @@ const GH = 'https://github.com/Casynino';
 export const LIVE = [
   {
     name: 'Hao Labs', kind: 'Stock, settlement & commission system',
-    line: "You're on it. Every box that leaves the Lab is on the system — who took it, what came back, what is still owed, and what each rep has earned. Take stock, make moves, earn more.",
+    line: "You're on it. Every box that leaves the Lab is on the system — who took it, what came back, what is still owed, and what each rep has earned. Every box out, every shilling back.",
     url: 'https://hao-stock.vercel.app', domain: 'hao-stock.vercel.app', shot: '/nino/haolabs.webp',
     tags: ['Stock control', 'Settlements', 'Commission', 'Reports'],
   },
