@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Wallet,
   TrendingUp,
-  TrendingDown,
   Boxes,
   Warehouse,
   Truck,
@@ -21,7 +20,6 @@ import {
   ArrowLeftRight,
   Undo2,
   Factory,
-  PackageX,
   Receipt,
   ShoppingCart,
   SlidersHorizontal,
@@ -64,8 +62,6 @@ import { RED } from '@/lib/brand';
 // of one row: py-2.5 top and bottom (20px) over two leading-tight lines at
 // 13px and 11px (30px). 56 leaves a sliver of the next row showing, which is
 // what tells you the list scrolls at all.
-const ATTENTION_ROWS = 3;
-const ATTENTION_ROW_PX = 56;
 
 const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet, COMMISSION: Coins };
 
@@ -508,7 +504,6 @@ function SectionHeading({ title, action, navigate }) {
 }
 
 export default function Dashboard() {
-  const [attentionFilter, setAttentionFilter] = useState('All');
   // Today, this week, this month — one choice for the whole page, changeable
   // from the totals strip or from the brand cards. It opens on the week: the
   // month is the figure that was always there, and the week is the one an
@@ -615,13 +610,16 @@ export default function Dashboard() {
           // a plain dark pill with a coloured mark on it is the same
           // information, read in a glance, and it is what Target Express's
           // own row does. The phone shows the mark alone.
+          // On a phone the six glyphs are ONE quiet tone — six colours in a row
+          // read as clutter on a small screen (Nino, 10 Nov 2026: "the icons
+          // look bad and too much"). From sm the pills keep their tints.
           const TONE = {
-            sky: 'text-sky-400',
-            amber: 'text-amber-400',
-            rose: 'text-rose-400',
-            emerald: 'text-emerald-400',
-            orange: 'text-orange-400',
-            violet: 'text-violet-400',
+            sky: 'text-zinc-300 sm:text-sky-400',
+            amber: 'text-zinc-300 sm:text-amber-400',
+            rose: 'text-zinc-300 sm:text-rose-400',
+            emerald: 'text-zinc-300 sm:text-emerald-400',
+            orange: 'text-zinc-300 sm:text-orange-400',
+            violet: 'text-zinc-300 sm:text-violet-400',
           };
           return (
             <button
@@ -656,17 +654,16 @@ export default function Dashboard() {
       </div>
 
       {/* ── Needs your attention ──
-          Seven tiles showing a number each told you how many of something there
-          were, but not what any of it was or which mattered. A list says the
-          thing itself: what it is, why it is here, what it is worth, and where
-          it goes when you tap it — ordered so the costly ones are first. */}
-      {/* The well shows three rows and scrolls; the footer says how many are
-          below the fold. Both come from ONE number — set the height and the
-          count separately and a padding change silently makes the footer lie. */}
+          A plain list: one line for each thing, the figure at the right, a
+          small dot for how urgent. Nino, 10 Nov 2026, from his phone: the
+          filter pills, the count badge, the tinted icon tiles, the line saying
+          why each one was there and the box around the lot were "too much" —
+          "just the list". Every item is shown (no inner scroll, no "scroll for
+          more"); the reason for an item is still its tooltip. */}
       {(() => {
         const items = [
           (attention.commissionRequests?.count || 0) > 0 && {
-            key: 'commission-req', group: 'Sign-offs', tone: 'amber', icon: Coins,
+            key: 'commission-req', tone: 'amber',
             title: `${attention.commissionRequests.count} commission request${attention.commissionRequests.count !== 1 ? 's' : ''} to decide`,
             desc: attention.commissionRequests.items?.[0]
               ? `${attention.commissionRequests.items[0].repName}${attention.commissionRequests.count > 1 ? ' and others' : ''} — waiting on your approval`
@@ -675,28 +672,28 @@ export default function Dashboard() {
             onOpen: () => setReviewing(attention.commissionRequests.items || []),
           },
           attention.overdueSettlements > 0 && {
-            key: 'overdue', group: 'Overdue', tone: 'rose', icon: AlertTriangle,
+            key: 'overdue', tone: 'rose',
             title: `${attention.overdueSettlements} order${attention.overdueSettlements !== 1 ? 's' : ''} past the deadline`,
             desc: 'Past 72 hours and collecting a daily fine',
             value: formatCurrency(attention.overdueValue), to: '/settlements',
           },
           attention.outOfStock > 0 && {
-            key: 'oos', group: 'Stock', tone: 'rose', icon: PackageX,
+            key: 'oos', tone: 'rose',
             title: `${attention.outOfStock} product${attention.outOfStock !== 1 ? 's' : ''} out of stock`,
             desc: 'Nothing left to sell or issue', to: '/reorder',
           },
           attention.settlements > 0 && {
-            key: 'stl', group: 'Approvals', tone: 'amber', icon: Timer,
+            key: 'stl', tone: 'amber',
             title: `${attention.settlements} settlement${attention.settlements !== 1 ? 's' : ''} to approve`,
             desc: 'Money reported by reps, not yet confirmed', to: '/settlements',
           },
           attention.stockRequests > 0 && {
-            key: 'req', group: 'Approvals', tone: 'sky', icon: ClipboardList,
+            key: 'req', tone: 'sky',
             title: `${attention.stockRequests} stock request${attention.stockRequests !== 1 ? 's' : ''} waiting`,
             desc: 'Reps cannot sell until this is issued', to: '/stock-requests',
           },
           attention.returns > 0 && {
-            key: 'ret', group: 'Approvals', tone: 'sky', icon: Undo2,
+            key: 'ret', tone: 'sky',
             title: `${attention.returns} return${attention.returns !== 1 ? 's' : ''} to decide`,
             desc: attention.returnsToday > 0
               ? `${attention.returnsToday} today · ${attention.returnsTodayBoxes} boxes · boxes stay locked until you decide`
@@ -704,37 +701,28 @@ export default function Dashboard() {
             to: '/returns',
           },
           attention.lowStock.count > 0 && {
-            key: 'low', group: 'Stock', tone: 'amber', icon: TrendingDown,
+            key: 'low', tone: 'amber',
             title: `${attention.lowStock.count} product${attention.lowStock.count !== 1 ? 's' : ''} running low`,
             desc: attention.lowStock.items[0]?.name ? `Lowest: ${attention.lowStock.items[0].name}` : 'Below reorder level',
             to: '/reorder',
           },
           attention.supplierDue > 0 && {
-            key: 'sup', group: 'Money', tone: 'violet', icon: Factory,
+            key: 'sup', tone: 'violet',
             title: 'Owed to suppliers',
             desc: 'Bills raised against stock you have received',
             value: formatCurrency(attention.supplierDue), to: '/finance?tab=suppliers',
           },
         ].filter(Boolean);
 
-        const groups = ['All', ...[...new Set(items.map((i) => i.group))]];
-        const shown = attentionFilter === 'All' ? items : items.filter((i) => i.group === attentionFilter);
-        const TONE = {
-          rose: 'bg-rose-500/15 text-rose-400 ring-rose-500/25',
-          amber: 'bg-amber-500/15 text-amber-400 ring-amber-500/25',
-          sky: 'bg-sky-500/15 text-sky-400 ring-sky-500/25',
-          violet: 'bg-violet-500/15 text-violet-400 ring-violet-500/25',
-        };
+        // The dot is the only urgency cue: red for what is costing money or
+        // stopping sales, amber for what is waiting on a decision, grey for
+        // a bill that is simply owed.
+        const DOT = { rose: 'bg-rose-500', amber: 'bg-amber-400', sky: 'bg-amber-400', violet: 'bg-zinc-400' };
 
         return (
           <div className="mb-6">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs your attention</h2>
-                {items.length > 0 && (
-                  <span className="rounded-full bg-rose-500/20 px-2 py-0.5 text-[11px] font-bold text-rose-400">{items.length}</span>
-                )}
-              </div>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Needs your attention</h2>
               {items.length === 0 && (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
                   <CheckCircle2 className="h-3.5 w-3.5" /> All clear
@@ -745,55 +733,19 @@ export default function Dashboard() {
             {items.length === 0 ? (
               <Card><p className="p-5 text-sm text-faint">Nothing is waiting on you. Every request, settlement and return has been dealt with.</p></Card>
             ) : (
-              <>
-                {groups.length > 2 && (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {groups.map((g) => {
-                      const n = g === 'All' ? items.length : items.filter((i) => i.group === g).length;
-                      return (
-                        <button key={g} type="button" onClick={() => setAttentionFilter(g)}
-                          className={clsx(
-                            'cursor-pointer rounded-full px-2.5 py-0.5 text-[11px] font-medium transition duration-200',
-                            attentionFilter === g ? 'bg-brand-500 text-black' : 'bg-elevated text-muted hover:text-foreground',
-                          )}>
-                          {g} <span className="opacity-60">{n}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Frosted rows over the page, per the glass style: a 1px light
-                    border and a blur, so the list reads as raised rather than drawn. */}
-                <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
-                  <div className="overflow-y-auto" style={{ maxHeight: ATTENTION_ROWS * ATTENTION_ROW_PX }}>
-                  {shown.map((i, idx) => (
-                    <button key={i.key} type="button" onClick={() => (i.onOpen ? i.onOpen() : navigate(i.to))}
-                      className={clsx(
-                        'flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left transition duration-200 hover:bg-white/[0.04]',
-                        idx > 0 && 'border-t border-white/[0.06]',
-                      )}>
-                      <span className={clsx('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1', TONE[i.tone])}>
-                        <i.icon className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-semibold leading-tight text-foreground">{i.title}</span>
-                        <span className="block truncate text-[11px] leading-tight text-muted">{i.desc}</span>
-                      </span>
-                      {i.value && <span className="shrink-0 text-[13px] font-bold tabular-nums text-foreground">{i.value}</span>}
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" />
+              <ul className="divide-y divide-white/[0.06] border-t border-white/[0.06]">
+                {items.map((i) => (
+                  <li key={i.key}>
+                    <button type="button" title={i.desc} onClick={() => (i.onOpen ? i.onOpen() : navigate(i.to))}
+                      className="flex w-full cursor-pointer items-center gap-3 px-1 py-3 text-left transition duration-200 hover:bg-white/[0.03] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60">
+                      <span aria-hidden className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', DOT[i.tone])} />
+                      <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-foreground">{i.title}</span>
+                      {i.value && <span className="shrink-0 text-[14px] font-semibold tabular-nums text-foreground">{i.value}</span>}
+                      <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
                     </button>
-                  ))}
-                  </div>
-                  {/* Say how many are below the fold, so a capped list never
-                      hides the fact that there is more. */}
-                  {shown.length > ATTENTION_ROWS && (
-                    <div className="border-t border-white/[0.06] py-1.5 text-center text-[11px] text-faint">
-                      scroll for {shown.length - ATTENTION_ROWS} more
-                    </div>
-                  )}
-                </div>
-              </>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         );
