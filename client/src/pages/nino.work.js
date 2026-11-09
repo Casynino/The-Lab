@@ -138,7 +138,7 @@ export const MORE = [
   {
     name: 'Budgeta', kind: 'Personal & business finance app',
     line: 'Income, expenses, budgets, savings and debts in one place, with a financial health score. Mambo ya pesa.',
-    url: 'https://budgeta-app.vercel.app', domain: 'budgeta-app.vercel.app', tags: ['React', 'Charts'], code: `${GH}/Budgeta-App`,
+    url: `${GH}/Budgeta-App`, domain: 'github.com/Casynino/Budgeta-App', tags: ['React', 'Charts'], code: `${GH}/Budgeta-App`,
   },
   {
     name: 'Power Popote', kind: 'Powerbank rental platform',
@@ -148,7 +148,7 @@ export const MORE = [
   {
     name: 'OBTC', kind: 'Procurement & logistics · China → Africa',
     line: "Wuhan OBTC's site: end-to-end sourcing, procurement and shipping for businesses in Africa.",
-    url: 'https://obtc-site.vercel.app', domain: 'obtc-site.vercel.app', tags: ['Company site'], code: `${GH}/OBTC-site`,
+    url: `${GH}/OBTC-site`, domain: 'github.com/Casynino/OBTC-site', tags: ['Company site'], code: `${GH}/OBTC-site`,
   },
 ];
 
