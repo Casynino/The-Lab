@@ -9,6 +9,7 @@ import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Smartphone, X } from 'l
 import { useAuth } from '@/context/AuthContext';
 import { Field, Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
+import { idle, IDLE_LIMIT_MINUTES } from '@/lib/idle';
 import './login.css';
 
 /**
@@ -30,6 +31,27 @@ const schema = z.object({
   email: z.string().email('Enter a valid email'),
   password: z.string().min(1, 'Password is required'),
 });
+
+/**
+ * Ask the browser to keep this password (Nino, 10 Nov 2026: "make sure they
+ * save their password, so next time they can log in fast").
+ *
+ * Browsers offer to save on their own when a form is submitted and goes away,
+ * but a sign-in that never reloads the page — this one, a single-page app — is
+ * the case where Chrome's guess fails, most of all when the person had pressed
+ * the eye to look at what they typed (the box is then plain text). Chrome,
+ * Edge and Samsung Internet (the phones reps carry) have a call for exactly
+ * this; Safari and Firefox ignore it and use the form's own autocomplete
+ * attributes, which are set on the fields below. The person still chooses:
+ * the browser asks, it is never saved silently.
+ */
+function offerToSave(email, password, name) {
+  try {
+    if ('PasswordCredential' in window && navigator.credentials?.store) {
+      navigator.credentials.store(new window.PasswordCredential({ id: email, password, name })).catch(() => {});
+    }
+  } catch { /* no password manager here: the form's own attributes still work */ }
+}
 
 /** The delay before a thing rises into place. */
 const rise = (s) => ({ '--rd': `${s}s` });
@@ -203,11 +225,20 @@ export default function Login() {
     defaultValues: { email: '', password: '' },
   });
 
+  // Signed out for not using it? Say so, once — otherwise a rep who comes back
+  // to a sign-in screen thinks something broke.
+  useEffect(() => {
+    if (idle.takeNotice()) {
+      toast(`You were signed out because the system was not used for ${IDLE_LIMIT_MINUTES} minutes. Log in to continue.`, { duration: 9000 });
+    }
+  }, []);
+
   if (!loading && isAuthenticated) return <Navigate to={from} replace />;
 
   const onSubmit = async (values) => {
     const res = await login(values.email, values.password);
     if (res.ok) {
+      offerToSave(values.email, values.password, res.user.name);
       toast.success(`Welcome back, ${res.user.name.split(' ')[0]}`);
       navigate(from, { replace: true });
     } else {
@@ -232,11 +263,11 @@ export default function Login() {
           sections are as short as the words need and the room under them is
           the picture's. */}
       <div className="relative z-10 flex min-h-dvh flex-col">
-        <section className="flex flex-1 flex-col items-center justify-center px-5 pb-[max(44vh,calc(3rem+env(safe-area-inset-bottom)))] pt-[max(1.75rem,env(safe-area-inset-top))] md:justify-start md:pb-16 md:pt-[6vh]">
-          <div className="ls-up mb-7 md:mb-6" style={rise(0.05)}><Mark size="lg" /></div>
+        <section className="flex flex-1 flex-col items-center justify-start px-5 pb-16 pt-[max(calc(env(safe-area-inset-top)+1.5rem),10vh)] md:pt-[6vh]">
+          <div className="ls-up mb-6 md:mb-6" style={rise(0.05)}><Mark size="lg" /></div>
 
           <p className="ls-up mb-4 hidden h-1 w-12 rounded bg-brand-500 md:block" style={rise(0.18)} />
-          <h2 className="ls-up mb-7 max-w-[15rem] text-balance text-center text-[15px] leading-snug text-white/80 md:mb-7 md:max-w-none md:whitespace-nowrap md:text-4xl md:font-bold md:leading-[1.1] md:tracking-tight md:text-white" style={rise(0.3)}>
+          <h2 className="ls-up mb-6 max-w-[15rem] text-balance text-center text-[15px] leading-snug text-white/80 md:mb-7 md:max-w-none md:whitespace-nowrap md:text-4xl md:font-bold md:leading-[1.1] md:tracking-tight md:text-white" style={rise(0.3)}>
             We keep Tanzania <span className="md:text-brand-500">stocked.</span>
           </h2>
 
@@ -247,11 +278,11 @@ export default function Login() {
 
               <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-4">
                 <Field label="Email" error={errors.email?.message} required>
-                  <Input type="email" autoComplete="username" inputMode="email" placeholder="you@thelab.co.tz" {...register('email')} />
+                  <Input id="login-email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="you@thelab.co.tz" {...register('email')} />
                 </Field>
                 <Field label="Password" error={errors.password?.message} required>
                   <div className="relative">
-                    <Input type={showPwd ? 'text' : 'password'} autoComplete="current-password" placeholder="••••••••" {...register('password')} />
+                    <Input id="login-password" type={showPwd ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="••••••••" {...register('password')} />
                     <button type="button" onClick={() => setShowPwd((v) => !v)} aria-label={showPwd ? 'Hide password' : 'Show password'}
                       className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-faint hover:text-muted">
                       {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

@@ -46,6 +46,19 @@
   object-position: 50% 50%;
 }
 
+/* A phone held upright: the words — logo, one line, the button and the install
+   link — take the top band, and the picture starts under them. Without this the
+   link sat on the market's roof (Nino, 10 Nov 2026: the log in is "destroying
+   the design and it hides the building"). The picture is held to the top of its
+   box so the same sky meets the strip above it on every phone, tall or short,
+   and that strip is painted the sky's own colour (the portrait poster's top
+   row) so there is no seam. */
+@media (orientation: portrait) {
+  .ls { background: #2c0f0d; }
+  .ls-film { inset: 2% -3% -3% -3%; }
+  .ls-film img { object-position: 50% 0; }
+}
+
 @keyframes ls-breathe {
   from { transform: scale(1) translate3d(0, 0, 0); }
   to { transform: scale(1.06) translate3d(-1.2%, 1%, 0); }

@@ -1,7 +1,36 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import api, { tokenStore, unwrap, apiError } from '@/lib/api';
+import { queryClient } from '@/lib/queryClient';
+import { idle } from '@/lib/idle';
 
 const AuthContext = createContext(null);
+
+const TOKEN_KEY = 'haostock.accessToken';
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll'];
+
+/**
+ * Forget the person on this device: the tokens, the idle clock, and every
+ * answer the app has cached for them — the next person to sign in here must not
+ * see the last one's figures for even a moment. The server is told afterwards,
+ * best effort, only so the audit log says who signed out and why; nothing waits
+ * on it, because a phone with no signal must still be able to sign out.
+ *
+ * `reason` is 'idle' or 'manual'. Anything else, including the click event
+ * that a bare `onClick={logout}` passes in, counts as manual.
+ */
+function endSession(reason) {
+  const why = reason === 'idle' ? 'idle' : 'manual';
+  const token = tokenStore.get();
+  tokenStore.clear();
+  idle.reset();
+  if (why === 'idle') idle.flag();
+  queryClient.clear();
+  if (token) {
+    // The request interceptor only adds a token when one is stored, and none
+    // is now, so this explicit header is the one that goes.
+    api.post('/auth/logout', { reason: why }, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+  }
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -15,6 +44,15 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       }
+      // Opened again after being away longer than the limit — a phone that
+      // slept in a pocket, a screen left on overnight: no timer ran, so this is
+      // where it is caught.
+      if (idle.expired()) {
+        endSession('idle');
+        setLoading(false);
+        return;
+      }
+      idle.touch(true);
       try {
         const res = await api.get('/auth/me');
         if (active) setUser(unwrap(res).data);
@@ -35,6 +73,7 @@ export function AuthProvider({ children }) {
       const res = await api.post('/auth/login', { email, password });
       const { user: u, tokens } = unwrap(res).data;
       tokenStore.set(tokens.accessToken, tokens.refreshToken);
+      idle.touch(true);
       setUser(u);
       return { ok: true, user: u };
     } catch (err) {
@@ -42,15 +81,50 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const logout = useCallback(async () => {
-    try {
-      await api.post('/auth/logout');
-    } catch {
-      /* ignore */
-    }
-    tokenStore.clear();
+  const logout = useCallback(async (reason) => {
+    endSession(reason);
     setUser(null);
   }, []);
+
+  // Sign out whoever has stopped using it, and follow another tab that already did.
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const onActivity = () => idle.touch();
+    ACTIVITY_EVENTS.forEach((e) => window.addEventListener(e, onActivity, { passive: true, capture: true }));
+
+    const check = () => {
+      if (!idle.expired()) return;
+      // Never cut off a save that is on its way: that is a sale half recorded.
+      if (queryClient.isMutating() > 0) { idle.touch(true); return; }
+      logout('idle');
+    };
+    const timer = window.setInterval(check, 30_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', check);
+    window.addEventListener('pageshow', check);
+
+    // The access token vanishing from storage means another tab signed out (or
+    // timed out). Without this, this tab would sit on a dead session showing
+    // the last screen until its next request failed.
+    const onStorage = (e) => {
+      if (e.key === TOKEN_KEY && !e.newValue) {
+        queryClient.clear();
+        setUser(null);
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, onActivity, { capture: true }));
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', check);
+      window.removeEventListener('pageshow', check);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, [user, logout]);
 
   const refreshUser = useCallback(async () => {
     const res = await api.get('/auth/me');

@@ -38,11 +38,16 @@ const changePassword = asyncHandler(async (req, res) => {
 });
 
 const logout = asyncHandler(async (req, res) => {
-  // Stateless JWT: the client discards the token. We still audit the event.
+  // Stateless JWT: the client discards the token. We still audit the event —
+  // and why: 'idle' when the app signed the person out for not using it
+  // (10 Nov 2026), 'manual' for everything else, including old clients that
+  // send no body.
+  const reason = req.body && req.body.reason === 'idle' ? 'idle' : 'manual';
   await auditService.record(req, {
     action: 'LOGOUT',
     entityType: 'User',
     entityId: req.user.id,
+    newValues: { reason },
   });
   return ok(res, { success: true });
 });
