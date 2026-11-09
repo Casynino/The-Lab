@@ -5,7 +5,8 @@
  * (Vegas/src/app/nino/work.ts) so the two cannot drift apart — every line
  * comes from the project's own live site or from Nino, nothing invented.
  * Screenshots in /public/nino are the live home pages, taken 2026-10-05;
- * Hao Labs and Super Drive were added 2026-11-09.
+ * Hao Labs and Super Drive were added 2026-11-09; BlueWave Cargo's picture
+ * is its new sign-in page, also 2026-11-09.
  */
 
 const GH = 'https://github.com/Casynino';
