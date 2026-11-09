@@ -72,7 +72,7 @@ function Mark({ size = 'md' }) {
       alt="Hao Labs"
       width="1071"
       height="320"
-      className={`w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.65)] ${big ? 'h-11 sm:h-14 lg:h-[3.75rem]' : 'h-14 sm:h-16'}`}
+      className={`w-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${big ? 'h-11 sm:h-14 lg:h-[3.75rem]' : 'h-14 sm:h-16'}`}
     />
   );
 }
@@ -153,7 +153,7 @@ function Gate({ children }) {
         type="button"
         onClick={() => setOpen(true)}
         style={rise(0.5)}
-        className="ls-up inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-brand-500 px-7 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(238,49,36,0.7)] transition active:scale-[0.98] hover:bg-brand-600 md:h-12 md:px-9 md:text-[15px]"
+        className="ls-up inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-brand-500 px-7 text-sm font-semibold text-white transition active:scale-[0.98] hover:bg-brand-600 md:h-12 md:px-9 md:text-[15px]"
       >
         Log in
         <ArrowRight className="h-3.5 w-3.5" />
