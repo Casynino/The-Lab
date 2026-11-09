@@ -72,7 +72,7 @@ function Mark({ size = 'md' }) {
       alt="Hao Labs"
       width="1071"
       height="320"
-      className={`w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.65)] ${big ? 'h-[4.25rem] sm:h-20' : 'h-14 sm:h-16'}`}
+      className={`w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.65)] ${big ? 'h-11 sm:h-14 lg:h-[3.75rem]' : 'h-14 sm:h-16'}`}
     />
   );
 }
@@ -153,10 +153,10 @@ function Gate({ children }) {
         type="button"
         onClick={() => setOpen(true)}
         style={rise(0.5)}
-        className="ls-up inline-flex h-12 cursor-pointer items-center gap-2 rounded-full bg-brand-500 px-8 text-[15px] font-bold text-white shadow-[0_10px_30px_-10px_rgba(238,49,36,0.85)] transition active:scale-[0.98] hover:bg-brand-600 md:h-14 md:px-11 md:text-base"
+        className="ls-up inline-flex h-11 cursor-pointer items-center gap-2 rounded-full bg-brand-500 px-7 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(238,49,36,0.7)] transition active:scale-[0.98] hover:bg-brand-600 md:h-12 md:px-9 md:text-[15px]"
       >
         Log in
-        <ArrowRight className="h-4 w-4" />
+        <ArrowRight className="h-3.5 w-3.5" />
       </button>
 
       {/* The way to the full-screen app, for a phone that has not installed
@@ -167,8 +167,8 @@ function Gate({ children }) {
       <InstallButton
         render={(openSheet) => (
           <button type="button" onClick={openSheet} style={rise(0.68)}
-            className="ls-up mt-3.5 inline-flex cursor-pointer items-center gap-1.5 text-[13px] text-white/60 underline-offset-4 transition hover:text-white hover:underline">
-            <Smartphone className="h-3.5 w-3.5" />
+            className="ls-up mt-3 inline-flex cursor-pointer items-center gap-1.5 text-xs text-white/55 underline-offset-4 transition hover:text-white hover:underline">
+            <Smartphone className="h-3 w-3" />
             Get the full-screen app
           </button>
         )}
@@ -264,10 +264,10 @@ export default function Login() {
           the picture's. */}
       <div className="relative z-10 flex min-h-dvh flex-col">
         <section className="flex flex-1 flex-col items-center justify-start px-5 pb-16 pt-[max(calc(env(safe-area-inset-top)+1.5rem),10vh)] md:pt-[6vh]">
-          <div className="ls-up mb-6 md:mb-6" style={rise(0.05)}><Mark size="lg" /></div>
+          <div className="ls-up mb-4 md:mb-5" style={rise(0.05)}><Mark size="lg" /></div>
 
-          <p className="ls-up mb-4 hidden h-1 w-12 rounded bg-brand-500 md:block" style={rise(0.18)} />
-          <h2 className="ls-up mb-6 max-w-[15rem] text-balance text-center text-[15px] leading-snug text-white/80 md:mb-7 md:max-w-none md:whitespace-nowrap md:text-4xl md:font-bold md:leading-[1.1] md:tracking-tight md:text-white" style={rise(0.3)}>
+          <p className="ls-up mb-3.5 hidden h-[3px] w-10 rounded bg-brand-500 md:block" style={rise(0.18)} />
+          <h2 className="ls-up mb-5 max-w-[15rem] text-balance text-center text-[13.5px] leading-snug tracking-[0.01em] text-white/75 md:mb-6 md:max-w-none md:whitespace-nowrap md:text-[1.7rem] md:font-semibold md:leading-[1.15] md:tracking-tight md:text-white lg:text-[2rem]" style={rise(0.3)}>
             We keep Tanzania <span className="md:text-brand-500">stocked.</span>
           </h2>
 
