@@ -65,15 +65,17 @@
   pointer-events: none;
 }
 
-/* On a computer the words own the left of the screen, so the country stands
-   to the right of them rather than underneath. The X half of the centring
-   translate has to go with the centring: left:auto without it still pulled the
-   map back by half its own width, and it sat under the headline. */
+/* On a computer the country sits low and to the LEFT of centre, not hard
+   right. The sign-in card lives on the right, and with the map over there the
+   card covered the Lab and most of the fleet — the one part worth looking at.
+   The Lab stands nine tenths of the way across the map, so pulling the map
+   left lands it in the gap between the words and the card. */
 @media (min-width: 1024px) {
   .ls-map {
-    left: auto;
-    right: 4%;
-    width: min(76vh, 44vw);
+    left: 6%;
+    right: auto;
+    top: 70%;
+    width: min(64vh, 40vw);
     transform: translateY(-50%);
   }
 }
@@ -136,29 +138,36 @@
   100% { transform: scale(1.8); opacity: 0; }
 }
 
-/* ── the people on the road ───────────────────────────────────────────────
-   The movers and the stock live inside the SVG and ride the road's own path,
-   so they scale with the viewBox and need no sizing of their own. All that is
-   left here is how they sit in the dark, and the walk. */
-.ls-parcel {
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.8));
-}
-
+/* ── the fleet ────────────────────────────────────────────────────────────
+   The vehicles, the shed and the ship are rendered pictures (fleet.py) living
+   inside the SVG, so they ride the roads' own paths and scale with the
+   viewBox. All that is left here is how they sit in the dark. */
 .ls-mover {
-  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.85));
+  filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.8));
 }
 
-/* A short rise and fall under the figure: a porter trudges, a van takes the
-   bumps. Transform only, on its own element inside the one animateMotion is
-   already moving — the two do not fight. */
+/* The road under a lorry: a long haul is never perfectly level. A hair of
+   movement, slowly — anything more and it reads as a toy being shaken. */
 .ls-step {
-  animation: ls-step 0.62s ease-in-out infinite;
+  animation: ls-step 2.6s ease-in-out infinite;
   transform-box: fill-box;
   transform-origin: 50% 100%;
 }
 
 @keyframes ls-step {
-  50% { transform: translateY(-1.6px); }
+  50% { transform: translateY(-1.1px); }
+}
+
+/* The ship riding the swell, slower still. */
+.ls-ship {
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.85));
+  animation: ls-swell 9s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+@keyframes ls-swell {
+  50% { transform: translateY(-3px); }
 }
 
 /* Dark at the edges, so nothing competes with the words. */
@@ -188,8 +197,7 @@
 /* Somebody who has asked their phone to stop moving things gets the map
    standing still — it is a picture, not information. */
 @media (prefers-reduced-motion: reduce) {
-  .ls-glow, .ls-road, .ls-stop-ring, .ls-hub-ring, .ls-step { animation: none; }
+  .ls-glow, .ls-road, .ls-stop-ring, .ls-hub-ring, .ls-step, .ls-ship { animation: none; }
   .ls-border { stroke-dashoffset: 0; animation: none; }
-  .ls-parcel { opacity: 0.9; }
   .ls-up, .ls-pop { animation-duration: 0.01ms; }
 }

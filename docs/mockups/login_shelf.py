@@ -1,4 +1,11 @@
-"""The cartons that stand on the horizon of the sign-in scene.
+"""The cartons that used to stand on the horizon of the sign-in scene.
+
+NOT WIRED TO ANYTHING SINCE 9 Nov 2026. The sign-in scene is the Tanzania map
+with the rendered fleet now (docs/mockups/fleet.py), so nothing loads these and
+the files are no longer committed — shipping 117 KB nobody looks at is 117 KB
+off a rep's data bundle. The script still runs if the shelf is ever wanted
+back; the plates it arranges live in plates.py, which the admin banner uses.
+
 
     python3 docs/mockups/login_shelf.py
 

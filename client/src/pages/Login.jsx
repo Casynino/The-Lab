@@ -72,120 +72,49 @@ function Mark({ size = 'md' }) {
  * whole thing is the compositor's work and none of it is the main thread's.
  */
 
-/* The real cartons, cut out small by docs/mockups/login_shelf.py. */
-const CRATES = ['/crate-pepa.webp', '/crate-ohis.webp', '/crate-civlily.webp'];
+/* ── the fleet ─────────────────────────────────────────────────────────────
+   Nino, 9 Nov 2026, holding up bongolife.app: the scene should look real, not
+   like flat drawings. Bongo Life gets that with a 5.6 MB video on every visit,
+   which is too much for a tool his reps open several times a day on mobile
+   data. So the objects are RENDERED in 3D — lit, with real shadows, by
+   docs/mockups/fleet.py — and the browser moves them. The whole set is about
+   50 KB and stays sharp at any size.
 
-/* ── who is on the road ────────────────────────────────────────────────────
-   Nino, 9 Nov 2026: the first set "looked unrealistic" — flat rectangles with
-   circles for wheels. These are drawn the way a fulfilment operation actually
-   looks: a panel van with a sloped cab and a cargo door, a box lorry with a
-   separate cab, and a porter walking a stacked hand trolley. Pale bodywork so
-   they read as vehicles on a dark map rather than as holes in it, a red flash
-   on the side because they are ours, and dark glass and tyres for weight.
+   Everything is drawn facing left, which is the way out of Dar on every route
+   but Mtwara; that one is mirrored. */
 
-   Each is drawn from its own wheels, then shifted so the origin is where the
-   road is — animateMotion puts that point on the lane. */
+const FLEET = {
+  lorry: { src: '/fleet/lorry.webp', w: 300, h: 209, on: 96 },
+  van: { src: '/fleet/van.webp', w: 230, h: 167, on: 78 },
+  warehouse: { src: '/fleet/warehouse.webp', w: 340, h: 206, on: 170 },
+  depot: { src: '/fleet/depot.webp', w: 170, h: 125, on: 58 },
+  ship: { src: '/fleet/ship.webp', w: 380, h: 234, on: 170 },
+};
 
-const BODY = '#f4ece7';     // bodywork
-const TYRE = '#2a0a06';     // tyres and glass
-const SEAM = '#cfc0b8';     // panel seams
-const CARD = '#d9b78c';     // cardboard
-
-/** A panel van: the everyday run. */
-function Van() {
+/** One rendered object, standing on the point given. */
+function Piece({ of, x, y, flip = false, className }) {
+  const p = FLEET[of];
+  const w = p.on;
+  const h = (p.h / p.w) * w;
   return (
-    <g transform="translate(-35,-34)">
-      <path d="M4 27 V8 Q4 5 7 5 H41 L45 9 H54 Q57.5 9 59.5 12 L65 20 Q67 22.5 67 25.5 V27 Q67 29.5 64.5 29.5 H6.5 Q4 29.5 4 27 Z" fill={BODY} />
-      <path d="M46.5 11.5 H54 Q56 11.5 57 13 L61 19 H46.5 Z" fill={TYRE} />
-      <rect x="9" y="9.5" width="30" height="2.6" rx="1.3" fill="#ee3124" />
-      <path d="M25 5 V29" stroke={SEAM} strokeWidth="1.1" />
-      <circle cx="17" cy="29" r="6.2" fill={TYRE} />
-      <circle cx="17" cy="29" r="2.7" fill={BODY} />
-      <circle cx="55" cy="29" r="6.2" fill={TYRE} />
-      <circle cx="55" cy="29" r="2.7" fill={BODY} />
-    </g>
+    <image href={p.src} width={w} height={h} x={-w / 2} y={-h}
+      transform={`translate(${x},${y})${flip ? ' scale(-1,1)' : ''}`}
+      className={className} preserveAspectRatio="xMidYMax meet" />
   );
 }
 
-/** A box lorry: the long haul, Dar to Mwanza and Mbeya. */
-function Lorry() {
-  return (
-    <g transform="translate(-44,-38)">
-      <rect x="3" y="3" width="52" height="25" rx="2" fill={BODY} />
-      <rect x="8" y="8" width="42" height="3" rx="1.5" fill="#ee3124" />
-      <path d="M31 3 V28" stroke={SEAM} strokeWidth="1.2" />
-      <path d="M56 28 V14 Q56 11 59 11 H68 Q71 11 73 14 L80 23 Q82 25.5 82 28.5 V30 Q82 32 80 32 H58 Q56 32 56 30 Z" fill={BODY} />
-      <path d="M60 14 H68 Q70 14 71 15.5 L76 22 H60 Z" fill={TYRE} />
-      <circle cx="16" cy="30" r="6" fill={TYRE} />
-      <circle cx="16" cy="30" r="2.6" fill={BODY} />
-      <circle cx="28" cy="30" r="6" fill={TYRE} />
-      <circle cx="28" cy="30" r="2.6" fill={BODY} />
-      <circle cx="69" cy="32" r="6" fill={TYRE} />
-      <circle cx="69" cy="32" r="2.6" fill={BODY} />
-    </g>
-  );
-}
-
-/** A porter walking a loaded hand trolley: the last few hundred metres. */
-function Porter() {
-  return (
-    <g transform="translate(-17,-38)">
-      {/* the load */}
-      <rect x="17" y="8" width="15" height="11" rx="1.2" fill={CARD} />
-      <rect x="17" y="19" width="15" height="11" rx="1.2" fill="#c7a278" />
-      <path d="M24.5 8 V30" stroke="#8d6a46" strokeWidth="1.2" />
-      {/* the trolley */}
-      <path d="M16 5 V32 H31" fill="none" stroke={BODY} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="16" cy="33.5" r="3.6" fill={TYRE} stroke={BODY} strokeWidth="1.4" />
-      {/* the person */}
-      <circle cx="7" cy="7.5" r="3.6" fill={BODY} />
-      <path d="M7 11 V23" stroke={BODY} strokeWidth="3.2" strokeLinecap="round" />
-      <path d="M7 14 L15 10" stroke={BODY} strokeWidth="2.6" strokeLinecap="round" />
-      <path d="M7 23 L2.5 35" stroke={BODY} strokeWidth="2.9" strokeLinecap="round" />
-      <path d="M7 23 L12 34" stroke={BODY} strokeWidth="2.9" strokeLinecap="round" />
-    </g>
-  );
-}
-
-/** The Lab itself: a shed with its doors open, standing in Dar. */
-function Warehouse({ x, y }) {
-  return (
-    <g transform={`translate(${x - 26},${y - 30})`}>
-      <path d="M2 16 L26 3 L50 16 V31 H2 Z" fill="#ee3124" />
-      <path d="M2 16 L26 3 L50 16 Z" fill="#ff8d7d" />
-      <rect x="17" y="20" width="18" height="11" rx="0.8" fill="#2a0a06" />
-      <rect x="20" y="23" width="12" height="8" fill="#ffb6ab" opacity="0.4" />
-      {/* stock waiting on the apron */}
-      <rect x="4" y="24" width="9" height="7" rx="0.8" fill={CARD} />
-      <rect x="38" y="25" width="8" height="6" rx="0.8" fill={CARD} />
-    </g>
-  );
-}
-
-/** A region taking stock in: a small depot beside its name. */
-function Depot({ x, y }) {
-  return (
-    <g transform={`translate(${x - 10},${y - 13})`}>
-      <path d="M1 7 L10 1 L19 7 V14 H1 Z" fill="#ff5f4b" />
-      <rect x="7" y="9" width="6" height="5" fill="#2a0a06" />
-    </g>
-  );
-}
-
-const MOVERS = [Van, Porter, Lorry, Van, Porter, Van, Lorry, Porter];
-
-/* Where the stock goes, how long a run takes, and how far into it each one
-   already is. Staggered on purpose: eight lorries leaving at once is a parade,
-   not a distribution network. */
+/* Where the stock goes, how long a run takes, how far into it each lorry
+   already is, and what is driving it. Staggered on purpose: eight lorries
+   leaving at once is a parade, not a distribution network. */
 const RUNS = [
-  { to: 'arusha', d: '7s', at: '-1.2s' },
-  { to: 'mwanza', d: '9.5s', at: '-5.5s' },
-  { to: 'dodoma', d: '5.5s', at: '-2.8s' },
-  { to: 'mbeya', d: '8.5s', at: '-7s' },
-  { to: 'tanga', d: '4.5s', at: '-0.6s' },
-  { to: 'morogoro', d: '4s', at: '-3.2s' },
-  { to: 'mtwara', d: '8s', at: '-4.4s' },
-  { to: 'kigoma', d: '11s', at: '-9s' },
+  { to: 'arusha', d: '17s', at: '-2s', of: 'lorry' },
+  { to: 'mwanza', d: '23s', at: '-13s', of: 'lorry' },
+  { to: 'dodoma', d: '13s', at: '-7s', of: 'van' },
+  { to: 'mbeya', d: '21s', at: '-17s', of: 'lorry' },
+  { to: 'tanga', d: '11s', at: '-1.5s', of: 'van' },
+  { to: 'morogoro', d: '10s', at: '-8s', of: 'van' },
+  { to: 'mtwara', d: '19s', at: '-11s', of: 'lorry' },
+  { to: 'kigoma', d: '27s', at: '-22s', of: 'lorry' },
 ];
 
 function Scene() {
@@ -228,56 +157,39 @@ function Scene() {
             const [cx, cy] = cities[r.to];
             return (
               <g key={r.to}>
-                <circle cx={cx} cy={cy} r="15" className="ls-stop-ring" style={{ '--s': `${i * 0.9}s` }} />
-                <Depot x={cx} y={cy} />
+                <circle cx={cx} cy={cy} r="16" className="ls-stop-ring" style={{ '--s': `${i * 1.1}s` }} />
+                <Piece of="depot" x={cx} y={cy + 4} />
               </g>
             );
           })}
 
-          {/* The Lab itself, in Dar: everything leaves from here. */}
-          <circle cx={dar[0]} cy={dar[1]} r="34" className="ls-hub-ring" />
-          <Warehouse x={dar[0]} y={dar[1]} />
-          {/* The stock on the road: the real cartons, small, walking the lanes.
+          {/* A ship standing off the coast: what arrives before any of this. */}
+          <g className="ls-ship">
+            <Piece of="ship" x={w - 18} y={h * 0.78} />
+          </g>
 
-              Inside the SVG, riding the road's own path. They were HTML
-              siblings with CSS offset-path first, which works but is sized in
-              pixels — so the boxes kept their 1000-unit scale while the map
-              shrank to fit the screen, and came out 0.05px wide. In here they
-              share the viewBox and scale with it for nothing. */}
-          {RUNS.map((r, i) => {
-            const Mover = MOVERS[i % MOVERS.length];
+          {/* The fleet on the road, each riding its own route. The whole run
+              is slow — a lorry crossing Tanzania should take its time, and
+              slow motion is what he asked for. */}
+          {RUNS.map((r) => {
+            const east = cities[r.to][0] > dar[0];   // Mtwara, and only Mtwara
             return (
               <g key={r.to} className="ls-mover">
                 <animateMotion dur={r.d} begin={r.at} repeatCount="indefinite" rotate="0">
                   <mpath href={`#ls-road-${r.to}`} />
                 </animateMotion>
                 <animate attributeName="opacity" dur={r.d} begin={r.at} repeatCount="indefinite"
-                  values="0;1;1;0" keyTimes="0;0.08;0.9;1" />
-                {/* The walk: the figure itself rises and falls inside the run,
-                    so a porter trudges and a van takes the bumps. Scaled up a
-                    little — at the map's own units a van is 50 wide against a
-                    1000-wide country, which is true to life and too small to
-                    read as a van. */}
-                <g className="ls-step"><g transform="scale(1.4)"><Mover /></g></g>
+                  values="0;1;1;0" keyTimes="0;0.06;0.92;1" />
+                {/* The road under it: a long haul is never perfectly level. */}
+                <g className="ls-step"><Piece of={r.of} x={0} y={0} flip={east} /></g>
               </g>
             );
           })}
 
-          {/* And the stock going with them, a little behind — smaller than the
-              vehicles, so the convoy reads lorry-first rather than a carton
-              towing a van. */}
-          {RUNS.map((r, i) => (
-            <image key={`${r.to}-box`} href={CRATES[i % CRATES.length]} width="30" x="-15" y="-30"
-              className="ls-parcel" preserveAspectRatio="xMidYMax meet">
-              <animateMotion dur={r.d} begin={`${parseFloat(r.at) - parseFloat(r.d) * 0.42}s`}
-                repeatCount="indefinite" rotate="0">
-                <mpath href={`#ls-road-${r.to}`} />
-              </animateMotion>
-              <animate attributeName="opacity" dur={r.d}
-                begin={`${parseFloat(r.at) - parseFloat(r.d) * 0.42}s`} repeatCount="indefinite"
-                values="0;1;1;0" keyTimes="0;0.08;0.9;1" />
-            </image>
-          ))}
+          {/* The Lab itself, in Dar: everything leaves from here, so it is
+              painted last and the fleet pulls out from behind it. */}
+          <circle cx={dar[0]} cy={dar[1]} r="46" className="ls-hub-ring" />
+          <Piece of="warehouse" x={dar[0] - 6} y={dar[1] + 10} />
         </svg>
       </div>
 
