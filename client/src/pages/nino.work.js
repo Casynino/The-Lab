@@ -4,9 +4,12 @@
  * Ported from the same list on the Vegas Luxury Hotel site
  * (Vegas/src/app/nino/work.ts) so the two cannot drift apart — every line
  * comes from the project's own live site or from Nino, nothing invented.
- * Screenshots in /public/nino are the live home pages, taken 2026-10-05;
- * Hao Labs and Super Drive were added 2026-11-09; BlueWave Cargo's picture
- * is its new sign-in page, also 2026-11-09.
+ * Screenshots in /public/nino are the live home pages. First taken 2026-10-05;
+ * Hao Labs and Super Drive were added 2026-11-09; BlueWave Cargo's picture is
+ * its new sign-in page, also 2026-11-09; the twelve live sites were all
+ * retaken 2026-11-10 (Nino: "it should show the new view of ORA and the other
+ * sites too") with `python3 docs/mockups/nino_shots.py` — run that again
+ * whenever a site changes its look.
  */
 
 const GH = 'https://github.com/Casynino';
