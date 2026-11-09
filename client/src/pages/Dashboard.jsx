@@ -57,12 +57,12 @@ import {
 import { RED } from '@/lib/brand';
 
 // How many attention rows are visible before the list scrolls, and the height
-// of one row. A row is h-12 (48px) with a 1px divider above all but the first;
-// the box is cut at ROWS x 54, which leaves a sliver of the next row showing —
+// of one row. A row is h-10 (40px) with a 1px divider above all but the first;
+// the box is cut at ROWS x 45, which leaves a sliver of the next row showing —
 // and that sliver is what tells you the list scrolls at all. Both numbers come
 // from here, so the box and the "scroll for N more" line can never disagree.
 const ATTENTION_ROWS = 3;
-const ATTENTION_ROW_PX = 54;
+const ATTENTION_ROW_PX = 45;
 
 const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet, COMMISSION: Coins };
 
@@ -721,8 +721,8 @@ export default function Dashboard() {
         // Nothing waiting: one quiet line in the same kind of box.
         if (items.length === 0) {
           return (
-            <div className="mb-6 flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-sm text-muted">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /> All clear. Nothing is waiting on you.
+            <div className="mb-6 flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3.5 py-2.5 text-[13px] text-muted">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" /> All clear. Nothing is waiting on you.
             </div>
           );
         }
@@ -735,11 +735,11 @@ export default function Dashboard() {
                 {items.map((i) => (
                   <li key={i.key}>
                     <button type="button" title={i.desc} onClick={() => (i.onOpen ? i.onOpen() : navigate(i.to))}
-                      className="flex h-12 w-full cursor-pointer items-center gap-3 px-4 text-left transition duration-200 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/60">
+                      className="flex h-10 w-full cursor-pointer items-center gap-2.5 px-3.5 text-left transition duration-200 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/60">
                       <span aria-hidden className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', DOT[i.tone])} />
-                      <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{i.title}</span>
-                      {i.value && <span className="shrink-0 text-[14px] font-semibold tabular-nums text-foreground">{i.value}</span>}
-                      <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{i.title}</span>
+                      {i.value && <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{i.value}</span>}
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" />
                     </button>
                   </li>
                 ))}
