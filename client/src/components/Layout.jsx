@@ -110,7 +110,7 @@ function useFolds(sections, current) {
 
 function GlassSidebar({
   mode, items, counts, user, unread, collapsed = false, onCollapsedChange, onNavigate,
-  onProfile, onPassword, onNotifications, onSignOut, autoFocusSearch,
+  onProfile, onPassword, onNotifications, onSignOut,
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -127,7 +127,6 @@ function GlassSidebar({
   const searchRef = useRef(null);
   const focusAfterOpen = useRef(false);
   useEffect(() => setQuery(''), [pathname]);
-  useEffect(() => { if (autoFocusSearch) searchRef.current?.focus(); }, [autoFocusSearch]);
 
   // ⌘K reaches the search from anywhere; [ folds and unfolds the panel.
   useEffect(() => {
@@ -765,7 +764,7 @@ export default function Layout() {
                three quarters of a phone for no reason (owner, 9 Nov 2026). */
             className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-3 top-[calc(0.75rem+env(safe-area-inset-top))] w-[12.75rem] max-w-[62vw]"
           >
-            <GlassSidebar mode="sheet" {...shared} onNavigate={() => setDrawer(null)} autoFocusSearch={drawer === 'search'} />
+            <GlassSidebar mode="sheet" {...shared} onNavigate={() => setDrawer(null)} />
           </motion.div>
         </div>
       )}
@@ -864,9 +863,12 @@ export default function Layout() {
             </NavLink>
           );
         })}
-        {/* The menu opens on its own search box, so there is no sixth tab for
-            searching: five is what a thumb finds without looking. */}
-        <button type="button" onClick={() => setDrawer('search')}
+        {/* Opens the menu, and nothing else. It used to open ON the search box
+            with the field already focused, so a phone threw the keyboard up
+            over half the menu before anyone had asked to type (owner, 9 Nov
+            2026: "when I open it, it pushes me to search — when I want to
+            search I will click search"). */}
+        <button type="button" onClick={() => setDrawer('menu')}
           className="flex flex-1 cursor-pointer flex-col items-center gap-0.5 py-2 text-[10px] font-medium text-faint transition">
           <Menu className="h-[19px] w-[19px]" /> Menu
         </button>
