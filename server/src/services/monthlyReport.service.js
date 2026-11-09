@@ -191,7 +191,7 @@ function buildWhatsAppText(d, link) {
   const growthLine = g == null ? null : `${g >= 0 ? '📈' : '📉'} Revenue ${g >= 0 ? '+' : ''}${g}% vs ${d.growth.prevLabel}`;
   const top = (d.topProducts || [])[0];
   const lines = [
-    `📊 *THE LAB — MONTHLY REPORT*`,
+    `📊 *ZELAB — MONTHLY REPORT*`,
     `_${d.period.label}_`,
     '',
     `💰 Revenue: ${fmt(d.finance.revenue)}`,

@@ -130,7 +130,7 @@ function monthlyStatementPdf(d) {
     `${d.accounts.length} account(s) and ${d.inventory.closingBoxes} box(es) in stock.`,
   );
 
-  return s.done('Generated automatically by The Lab · Monthly financial report · Figures derive from recorded transactions.');
+  return s.done('Generated automatically by ZELab · Monthly financial report · Figures derive from recorded transactions.');
 }
 
 module.exports = { monthlyStatementPdf };

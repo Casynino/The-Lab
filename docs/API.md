@@ -1,4 +1,4 @@
-# The Lab — API Reference
+# ZELab — API Reference
 
 Base URL: `/api` (e.g. `http://localhost:4000/api`).
 

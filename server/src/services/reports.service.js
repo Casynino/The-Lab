@@ -183,7 +183,7 @@ async function regionalPerformance(params = {}) {
     prisma.warehouse.findFirst({ where: { isActive: true }, orderBy: { isPrimary: 'desc' }, select: { region: true } }),
   ]);
 
-  // Direct (no-rep) sales come straight from The Lab — a normal cash sale from
+  // Direct (no-rep) sales come straight from ZELab — a normal cash sale from
   // the warehouse — so they belong to the warehouse's region. Rep sales use the
   // rep's CURRENT region (live).
   // The warehouse is in Dar es Salaam, so when it has no region of its own the

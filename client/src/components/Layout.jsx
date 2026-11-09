@@ -496,7 +496,7 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
    one after another (hello-in, index.css): small, quick, and still for
    anybody who has asked their phone for less motion. */
 function Banner({ user, unread, onBell }) {
-  const name = (user?.name || 'The Lab').trim().split(/\s+/)[0] || user?.name;
+  const name = (user?.name || 'ZELab').trim().split(/\s+/)[0] || user?.name;
   const regions = user?.role === ROLES.SALES_REP ? sayRegions(repRegions(user?.salesRep)) : '';
   const line = regions ? `Keep ${regions} stocked.` : 'Keep the stores stocked.';
   // "Mambo vipi? " is already twelve letters, so a long name would be cut off

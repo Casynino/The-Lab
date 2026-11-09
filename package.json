@@ -2,7 +2,7 @@
   "name": "the-lab",
   "version": "1.0.0",
   "private": true,
-  "description": "The Lab — Distribution ERP (Vercel deploy root: builds the static SPA and runs the Express API as a serverless function).",
+  "description": "ZELab — Distribution ERP (Vercel deploy root: builds the static SPA and runs the Express API as a serverless function).",
   "scripts": {
     "build": "prisma migrate deploy --schema=server/prisma/schema.prisma && rm -rf node_modules/.prisma node_modules/.prisma-client server/node_modules/.prisma && prisma generate --schema=server/prisma/schema.prisma && npm --prefix client install --include=dev && npm --prefix client run build",
     "postinstall": "prisma generate --schema=server/prisma/schema.prisma"

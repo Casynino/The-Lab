@@ -6,7 +6,7 @@
 // Every late-settlement fine is a PERSISTED SettlementPenalty row (a permanent
 // transaction). The commission balance is earned − paid − Σ(persisted
 // penalties), so applying a penalty genuinely reduces the rep's balance and may
-// take it negative (the rep then owes The Lab; future earnings offset it).
+// take it negative (the rep then owes ZELab; future earnings offset it).
 //
 // Timing: the first TZS 10,000 lands the moment the 72h deadline passes (no
 // grace), then another TZS 10,000 for every further 24h, until the order is
@@ -33,7 +33,7 @@ const dailyRateFor = (s) => (s && s.selfExtendedAt ? EXTENDED_PENALTY_PER_DAY : 
 const returnFailureRateFor = (s) => (s && s.selfExtendedAt ? EXTENDED_RETURN_FAILURE_PENALTY : RETURN_FAILURE_PENALTY);
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-// When the fine clock starts. Normally the deadline itself — but when The Lab
+// When the fine clock starts. Normally the deadline itself — but when ZELab
 // takes back time it gave by mistake, the deadline moves into the past, and
 // billing the rep for days he was told he had would be inventing debt. The
 // undo stamps penaltyFrom with the moment it happened, and the clock starts
@@ -69,7 +69,7 @@ async function applyDuePenalties() {
     if (pendingReturns > 0) continue;
 
     // Read the order again before pricing anything. The list above is a
-    // snapshot, and between it and this line The Lab may have taken back an
+    // snapshot, and between it and this line ZELab may have taken back an
     // extension — which changes the rate, the clock and whether a fine is owed
     // at all. A fine written from the snapshot would be priced against a
     // deadline that no longer exists.
@@ -208,7 +208,7 @@ async function adjustCommission({ salesRepId, amount, reason }, actor) {
       kind: 'ADJUSTMENT',
       amount: amt,
       daysOverdue: 0,
-      notes: reason || `Commission deduction by The Lab.`,
+      notes: reason || `Commission deduction by ZELab.`,
     },
   });
 
@@ -217,7 +217,7 @@ async function adjustCommission({ salesRepId, amount, reason }, actor) {
       type: 'GENERAL',
       severity: 'WARNING',
       title: `${formatCurrency(amt)} deducted from your commission`,
-      message: `The Lab deducted ${formatCurrency(amt)} from your commission balance.${reason ? ` Reason: ${reason}` : ''} Future commission is not affected.`,
+      message: `ZELab deducted ${formatCurrency(amt)} from your commission balance.${reason ? ` Reason: ${reason}` : ''} Future commission is not affected.`,
       entityType: 'Commission',
       entityId: row.id,
     }).catch(() => {});
@@ -257,7 +257,7 @@ async function waivePenalty(id, actor, reason) {
       type: 'GENERAL',
       severity: 'INFO',
       title: `${formatCurrency(p.amount)} fine forgiven`,
-      message: `The Lab forgave your late-settlement fine on order ${p.settlement?.settlementNumber || ''}. ${formatCurrency(p.amount)} has been returned to your commission balance.`,
+      message: `ZELab forgave your late-settlement fine on order ${p.settlement?.settlementNumber || ''}. ${formatCurrency(p.amount)} has been returned to your commission balance.`,
       entityType: 'Settlement',
       entityId: p.settlementId,
     }).catch(() => {});

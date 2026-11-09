@@ -1,7 +1,7 @@
 'use strict';
 
 // ===========================================================================
-// REAL-TIME WHATSAPP NOTIFICATIONS — The Lab's live business feed
+// REAL-TIME WHATSAPP NOTIFICATIONS — ZELab's live business feed
 //
 // Every important business event queues a professional, sectioned WhatsApp
 // message to the owner's phone (CallMeBot). The whatsapp_notifications table
@@ -200,7 +200,7 @@ async function deliver(row) {
       lastError: result.sent ? null : String(result.reason || result.provider || 'send failed').slice(0, 300),
     },
   });
-  // Out of retries — surface it inside The Lab so the owner knows a WhatsApp
+  // Out of retries — surface it inside ZELab so the owner knows a WhatsApp
   // message was lost (reliability rule: log, retry, then notify the admin).
   if (status === 'FAILED') {
     require('./notification.service').notifyAdmins({
@@ -300,7 +300,7 @@ async function stockRequestSubmitted(req) {
     who: `${repName} (${req.salesRep?.code || 'rep'})`,
     lines: [...itemLines, `*Total:* ${boxes} box(es) worth ${fmt(req.totalValue)}`],
     status: 'Pending approval',
-    action: 'Approve or reject in The Lab',
+    action: 'Approve or reject in ZELab',
   });
   return queue('STOCK_REQUEST', { dedupeKey: `stockreq:${req.id}`, refType: 'StockRequest', refId: req.id, text });
 }
@@ -610,7 +610,7 @@ async function dailySummary({ force = false } = {}) {
   if (negAccounts.length) alerts.push(`Account below zero: ${negAccounts.map((a) => a.name).join(', ')}`);
 
   const lines = [
-    '🟢 *THE LAB — DAILY REPORT*',
+    '🟢 *ZELAB — DAILY REPORT*',
     `_${nowEAT().format('dddd, D MMM YYYY')}_`,
     '',
     '💰 *TODAY*',
@@ -670,7 +670,7 @@ async function repCreds(salesRepId) {
 async function notifyRep(salesRepId, { title, message, severity = 'INFO', dedupeKey = null }) {
   const creds = await repCreds(salesRepId);
   if (!creds) return { queued: false, reason: 'no-whatsapp' };
-  const text = [`${PRIORITY_ICON[SEVERITY_PRIORITY[severity]] || '🟢'} *${title}*`, '', message, '', '_The Lab_'].join('\n');
+  const text = [`${PRIORITY_ICON[SEVERITY_PRIORITY[severity]] || '🟢'} *${title}*`, '', message, '', '_ZELab_'].join('\n');
   return queue('REP_ALERT', {
     priority: SEVERITY_PRIORITY[severity] || 'INFO',
     dedupeKey,
@@ -700,7 +700,7 @@ async function mirrorToRep(userId, data) {
       severity: data.severity || 'INFO',
       // Dedupe on the linked entity so a retried in-app notify never double-texts.
       // dedupeSalt lets a caller send the same words twice on purpose — an
-      // extension taken again after The Lab cancelled the first one.
+      // extension taken again after ZELab cancelled the first one.
       dedupeKey: data.entityId
         ? `rep:${rep.id}:${data.entityType || 'x'}:${data.entityId}:${data.title}${data.dedupeSalt ? `:${data.dedupeSalt}` : ''}`
         : null,
@@ -714,7 +714,7 @@ async function mirrorToRep(userId, data) {
 async function testRep(salesRepId) {
   const creds = await repCreds(salesRepId);
   if (!creds) return { sent: false, reason: 'no-whatsapp' };
-  const text = ['🟢 *THE LAB*', '', 'WhatsApp alerts are now active for you. You will get a message here whenever something important happens with your stock, settlements and commission.', '', '_The Lab_'].join('\n');
+  const text = ['🟢 *ZELAB*', '', 'WhatsApp alerts are now active for you. You will get a message here whenever something important happens with your stock, settlements and commission.', '', '_ZELab_'].join('\n');
   const result = await sendRaw(text, creds);
   await prisma.whatsAppNotification.create({
     data: {

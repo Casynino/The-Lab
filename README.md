@@ -1,8 +1,10 @@
-# The Lab — Distribution ERP
+# ZELab — Distribution ERP
+
+**Live:** [www.zelab.site](https://www.zelab.site)
 
 The operating system for a Tanzanian distribution business: stock leaves the warehouse with
 field sales representatives, and every box must come back as **money or returned stock**
-within 72 hours. The Lab tracks that contract end to end — inventory, settlements,
+within 72 hours. ZELab tracks that contract end to end — inventory, settlements,
 commissions, finance and automated WhatsApp reporting.
 
 Two decisions define the architecture:
@@ -295,4 +297,4 @@ Base URL: `/api`. Auth via `Authorization: Bearer <accessToken>`. Responses use 
 
 ---
 
-© The Lab. Built for real-world distribution in Tanzania.
+© ZELab. Built for real-world distribution in Tanzania.

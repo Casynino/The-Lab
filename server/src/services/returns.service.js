@@ -400,7 +400,7 @@ async function rejectReturn(id, actor, reason) {
           data: {
               deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
               // The fine clock moves with it — but only by the part of the
-              // pause it could have charged for. After The Lab takes back time
+              // pause it could have charged for. After ZELab takes back time
               // it gave by mistake the clock already forgives everything before
               // that moment, and crediting those hours again would pay the rep
               // for them twice.
@@ -449,7 +449,7 @@ async function cancelReturn(id, actor, { asRep = false } = {}) {
       status: 'CANCELLED',
       decidedById: actor ? actor.id : null,
       decidedAt: new Date(),
-      rejectionReason: asRep ? 'Cancelled by the sales rep before approval.' : 'Cancelled by The Lab before approval.',
+      rejectionReason: asRep ? 'Cancelled by the sales rep before approval.' : 'Cancelled by ZELab before approval.',
     },
     include: RETURN_INCLUDE,
   });
@@ -467,7 +467,7 @@ async function cancelReturn(id, actor, { asRep = false } = {}) {
           data: {
               deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
               // The fine clock moves with it — but only by the part of the
-              // pause it could have charged for. After The Lab takes back time
+              // pause it could have charged for. After ZELab takes back time
               // it gave by mistake the clock already forgives everything before
               // that moment, and crediting those hours again would pay the rep
               // for them twice.
@@ -494,7 +494,7 @@ async function cancelReturn(id, actor, { asRep = false } = {}) {
       type: 'GENERAL',
       severity: 'INFO',
       title: 'Return request cancelled',
-      message: `The Lab cancelled return ${updated.returnNumber}. The boxes remain on your order — settle or resubmit the return.`,
+      message: `ZELab cancelled return ${updated.returnNumber}. The boxes remain on your order — settle or resubmit the return.`,
       entityType: 'Return',
       entityId: id,
     }).catch(() => {});
@@ -546,7 +546,7 @@ async function expireStaleReturns() {
             data: {
               deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
               // The fine clock moves with it — but only by the part of the
-              // pause it could have charged for. After The Lab takes back time
+              // pause it could have charged for. After ZELab takes back time
               // it gave by mistake the clock already forgives everything before
               // that moment, and crediting those hours again would pay the rep
               // for them twice.

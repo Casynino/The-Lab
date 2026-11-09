@@ -852,14 +852,14 @@ const resetData = asyncHandler(async (req, res) => {
   return ok(res, { repId, code: rep.code, reset: true, ...summary });
 });
 
-// Admin adds boxes to a rep, issued OUT of The Lab's primary warehouse. Attaches
+// Admin adds boxes to a rep, issued OUT of ZELab's primary warehouse. Attaches
 // to the rep's active order (or opens a fresh one), recalculates the order,
 // notifies the rep, and records an audit entry. See settlement.addStockToRep.
 const addStock = asyncHandler(async (req, res) => {
   const rep = await prisma.salesRepresentative.findUnique({ where: { id: req.params.id } });
   if (!rep) throw ApiError.notFound('Sales representative not found');
 
-  // Issue from the primary active warehouse (The Lab).
+  // Issue from the primary active warehouse (ZELab).
   const wh = await prisma.warehouse.findFirst({ where: { isActive: true }, orderBy: { isPrimary: 'desc' } });
   if (!wh) throw ApiError.badRequest('No active warehouse available to issue from');
 

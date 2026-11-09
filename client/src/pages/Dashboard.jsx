@@ -885,7 +885,7 @@ export default function Dashboard() {
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Inventory · where every box is</h2>
-            <p className="text-xs text-faint">Everything The Lab is carrying, in the warehouse and out with the reps.</p>
+            <p className="text-xs text-faint">Everything ZELab is carrying, in the warehouse and out with the reps.</p>
           </div>
           <button type="button" onClick={() => navigate('/inventory')} className="shrink-0 text-xs font-medium text-brand-500 hover:underline">
             Inventory →

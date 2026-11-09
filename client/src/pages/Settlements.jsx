@@ -94,7 +94,7 @@ function ActiveOrderCard({ s, onClick }) {
 
       {/* Footer */}
       <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
-        {/* The same pill the admin table uses, so a rep and The Lab are
+        {/* The same pill the admin table uses, so a rep and ZELab are
             reading the identical signal about the same order. */}
         <span className="inline-flex items-center gap-2">
           <Remaining hours={s.hoursRemaining} />

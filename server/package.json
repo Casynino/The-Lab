@@ -2,7 +2,7 @@
   "name": "the-lab-server",
   "version": "1.0.0",
   "private": true,
-  "description": "The Lab — Ledger-based Distribution ERP (backend API)",
+  "description": "ZELab — Ledger-based Distribution ERP (backend API)",
   "license": "UNLICENSED",
   "type": "commonjs",
   "main": "src/server.js",

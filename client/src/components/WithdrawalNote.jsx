@@ -84,7 +84,7 @@ export function withdrawalState({ commission = {}, latest = null, firstName = ''
   if (latest?.status === 'PENDING') {
     return {
       key: 'pending', tone: 'amber', icon: Clock,
-      title: forOwner ? `${they} is waiting on you` : 'Your request is with The Lab',
+      title: forOwner ? `${they} is waiting on you` : 'Your request is with ZELab',
       value: formatCurrency(latest.amount),
       line: forOwner
         ? `Requested ${formatDateTime(latest.requestedAt)}. Approve or decline it on the Commissions page.`
@@ -98,7 +98,7 @@ export function withdrawalState({ commission = {}, latest = null, firstName = ''
       value: formatCurrency(latest.amount),
       line: forOwner
         ? 'You have approved this. Mark it paid once the money is in their hand.'
-        : 'The Lab has approved it. You will be notified again once the money is in your hand.',
+        : 'ZELab has approved it. You will be notified again once the money is in your hand.',
     };
   }
   if (latest?.status === 'PAID' && isRecent(latest.paidAt || latest.decidedAt)) {
@@ -116,7 +116,7 @@ export function withdrawalState({ commission = {}, latest = null, firstName = ''
       key: 'rejected', tone: 'rose', icon: ShieldAlert,
       title: 'That request was not approved',
       value: formatCurrency(latest.amount),
-      line: 'Your balance is untouched — nothing was taken. Ask The Lab what happened, then request again.',
+      line: 'Your balance is untouched — nothing was taken. Ask ZELab what happened, then request again.',
     };
   }
   if (available < 0) {

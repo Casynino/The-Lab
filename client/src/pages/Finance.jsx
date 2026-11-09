@@ -2471,7 +2471,7 @@ export default function Finance() {
 
   return (
     <div>
-      <PageHeader title="Finance" subtitle="The accounting department of The Lab — accounts, profit, cash flow, suppliers and reports.">
+      <PageHeader title="Finance" subtitle="The accounting department of ZELab — accounts, profit, cash flow, suppliers and reports.">
         <div className="flex gap-2">
           <Button variant="secondary" onClick={() => setMoney('income')}><ArrowDownLeft className="h-4 w-4" /> Income</Button>
           <Button onClick={() => setMoney('expense')}><ArrowUpRight className="h-4 w-4" /> Expense</Button>

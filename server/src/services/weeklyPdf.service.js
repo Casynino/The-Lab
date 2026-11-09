@@ -1,6 +1,6 @@
 'use strict';
 
-// Weekly bank-statement PDF for The Lab. Consumes weeklyReport.buildWeeklyData()
+// Weekly bank-statement PDF for ZELab. Consumes weeklyReport.buildWeeklyData()
 // and renders: financial summary, accounts, brand performance, top products,
 // rep performance, commission summary, inventory movement, stock, settlements
 // and alerts. Pagination is handled by the statement kit.
@@ -96,7 +96,7 @@ function weeklyStatementPdf(data) {
     ['Inventory value (selling)', fmt(data.stock.retailValue)],
     ['Potential profit in stock', fmt(data.stock.potential)],
     ['Total boxes', String(data.stock.units)],
-    ['In The Lab (warehouse)', `${data.stock.warehouseBoxes} boxes`],
+    ['In ZELab (warehouse)', `${data.stock.warehouseBoxes} boxes`],
     ['With sales reps', `${data.stock.repBoxes} boxes`],
   ], { bold: ['Potential profit in stock'] });
 
@@ -118,7 +118,7 @@ function weeklyStatementPdf(data) {
     s.bullets(data.attention);
   }
 
-  return s.done('Generated automatically by The Lab · Figures derive from recorded transactions from the Finance go-live onward.');
+  return s.done('Generated automatically by ZELab · Figures derive from recorded transactions from the Finance go-live onward.');
 }
 
 module.exports = { weeklyStatementPdf };

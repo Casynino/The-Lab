@@ -102,18 +102,17 @@ export default function RepDashboard() {
           shows in the payouts list on the Commissions page with its own status,
           so this was the same thing said twice and the bigger of the two. */}
 
-      {/* Card grid. The two "The Lab" titles carry a non-breaking space before
-          "Lab" so the line can only break in front of the whole name: "Order
-          from / The Lab", not "Order from The / Lab". text-wrap: balance was
-          the obvious fix and changes nothing here — measured in a browser
-          rather than assumed. Every hint is short enough to survive the
+      {/* Card grid. The two "ZELab" titles ("Order from ZELab", "Return to ZELab") are
+          one word at the end of the line, so they can only break in front of it. They
+          used to say "The Lab" with a non-breaking space for the same reason. Every
+          hint is short enough to survive the
           one-line clamp on a 390px phone; the settlement one was not, and was
           eating the box count. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <DashCard
           icon={ClipboardList}
           label="Request stock"
-          value={'Order from The\u00A0Lab'}
+          value={'Order from ZELab'}
           hint="Request new inventory"
           badge={pendingRequests > 0 ? pendingRequests : undefined}
           onClick={() => navigate('/stock-requests')}
@@ -137,7 +136,7 @@ export default function RepDashboard() {
         <DashCard
           icon={Undo2}
           label="Return stock"
-          value={'Return to The\u00A0Lab'}
+          value={'Return to ZELab'}
           hint="Send back unsold boxes"
           onClick={() => navigate('/settlements')}
         />

@@ -426,7 +426,7 @@ async function computeForRep(salesRepId) {
     : rule.amountPerThreshold;
   // Penalties are REAL applied deductions (persisted transactions). The balance
   // is earned − paid − pending withdrawals − penalties, and is NOT clamped, so a
-  // rep with more fines than earnings goes negative (owes The Lab). Future
+  // rep with more fines than earnings goes negative (owes ZELab). Future
   // earnings raise `earned`, automatically offsetting the debt.
   const penalties = penaltyData.total;
   const pending = round2(earned - wt.paid);
@@ -753,7 +753,7 @@ async function setEmergencyWindow({ salesRepId, open, reason }, actor) {
       severity: 'INFO',
       title: open ? 'You can withdraw now' : 'Withdrawal window closed',
       message: open
-        ? 'The Lab has opened a one-off withdrawal for you. Your usual minimum does not apply — request it from your Commission page within the next two days.'
+        ? 'ZELab has opened a one-off withdrawal for you. Your usual minimum does not apply — request it from your Commission page within the next two days.'
         : 'The one-off withdrawal opened for you has been closed. Your usual minimum applies again.',
       entityType: 'SalesRepresentative',
       // The WhatsApp mirror deduplicates on rep + entity + title, all of which

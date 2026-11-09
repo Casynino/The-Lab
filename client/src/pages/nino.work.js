@@ -18,7 +18,7 @@ const GH = 'https://github.com/Casynino';
 export const LIVE = [
   {
     name: 'ZELab', kind: 'Stock, settlement & commission system',
-    line: "You're on it. Every box that leaves the Lab is on the system — who took it, what came back, what is still owed, and what each rep has earned. We keep Tanzania stocked.",
+    line: "You're on it. Every box that leaves ZELab is on the system — who took it, what came back, what is still owed, and what each rep has earned. We keep Tanzania stocked.",
     url: 'https://www.zelab.site', domain: 'zelab.site', shot: '/nino/haolabs.webp',
     tags: ['Stock control', 'Settlements', 'Commission', 'Reports'],
   },

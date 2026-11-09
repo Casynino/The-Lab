@@ -213,7 +213,7 @@ function buildWhatsAppText(d, link) {
     ? `⚠️ ${d.attention.length} alert(s) — details in the PDF`
     : '✅ Nothing needs attention';
   const lines = [
-    '📊 *THE LAB — WEEKLY REPORT*',
+    '📊 *ZELAB — WEEKLY REPORT*',
     `_${d.period.label}_`,
     '',
     `💰 Revenue: ${fmt(d.finance.revenue)}`,

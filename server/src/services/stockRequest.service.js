@@ -85,7 +85,7 @@ async function create(salesRepId, payload) {
       });
     }
 
-    // Can't request products/quantities beyond what The Lab currently holds.
+    // Can't request products/quantities beyond what ZELab currently holds.
     await assertWithinStock(tx, payload.warehouseId, requestedByProduct, STOCK_EXCEEDED_MSG);
 
     const requestNumber = await nextDocNumber(tx.stockRequest, 'requestNumber', 'REQ');

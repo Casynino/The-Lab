@@ -100,7 +100,7 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
         {isLoading || !ret ? <PageSpinner /> : (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-              <div><div className="text-xs text-faint">Type</div><div className="font-medium">{ret.type === 'CUSTOMER_RETURN' ? 'Customer return' : 'Rep → The Lab'}</div></div>
+              <div><div className="text-xs text-faint">Type</div><div className="font-medium">{ret.type === 'CUSTOMER_RETURN' ? 'Customer return' : 'Rep → ZELab'}</div></div>
               <div><div className="text-xs text-faint">Status</div><Badge className={meta.cls}>{meta.label}</Badge></div>
               <div><div className="text-xs text-faint">Rep / Customer</div><div className="font-medium">{ret.salesRep?.user?.name || ret.customer?.name || '—'}</div></div>
               <div><div className="text-xs text-faint">Warehouse</div><div className="font-medium">{ret.warehouse?.name || '—'}</div></div>
@@ -166,7 +166,7 @@ function ReturnModal({ onClose }) {
   const { data: reps = [] } = useSalesReps();
   const { data: warehouses = [] } = useWarehouses();
 
-  // Reps only ever return stock TO The Lab; the server auto-matches the boxes
+  // Reps only ever return stock TO ZELab; the server auto-matches the boxes
   // to their open orders. Customer returns are a staff flow.
   const [type, setType] = useState(isRep ? 'SALES_RETURN' : 'CUSTOMER_RETURN');
   const [customerId, setCustomerId] = useState('');
@@ -210,7 +210,7 @@ function ReturnModal({ onClose }) {
       const related = d?.related || [];
       toast.success(related.length > 1
         ? `Return submitted as ${related.join(' + ')} (matched to your open orders)`
-        : 'Return submitted — awaiting The Lab approval');
+        : 'Return submitted — awaiting ZELab approval');
       qc.invalidateQueries({ queryKey: ['returns'] });
       onClose();
     },
@@ -236,10 +236,10 @@ function ReturnModal({ onClose }) {
   return (
     <Modal open onClose={onClose} size="lg" title="Submit a return" footer={footer}>
       <div className="space-y-4">
-        {/* Type toggle — staff only; reps always return to The Lab */}
+        {/* Type toggle — staff only; reps always return to ZELab */}
         {!isRep && (
           <div className="flex gap-2">
-            {[['CUSTOMER_RETURN', 'Customer return'], ['SALES_RETURN', 'Rep → The Lab']].map(([k, label]) => (
+            {[['CUSTOMER_RETURN', 'Customer return'], ['SALES_RETURN', 'Rep → ZELab']].map(([k, label]) => (
               <button key={k} onClick={() => { setType(k); setCart({}); }}
                 className={`flex-1 rounded-lg border px-4 py-2 text-sm font-semibold transition ${type === k ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-muted hover:bg-elevated'}`}>
                 {label}
@@ -251,7 +251,7 @@ function ReturnModal({ onClose }) {
         {/* Pending-approval notice */}
         <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
           {isRep
-            ? 'Your boxes go back to The Lab and are cleared off your open orders once approved. Submitted boxes are locked, and the request must be decided within 24 hours or it expires with a TSh 15,000 delay fine.'
+            ? 'Your boxes go back to ZELab and are cleared off your open orders once approved. Submitted boxes are locked, and the request must be decided within 24 hours or it expires with a TSh 15,000 delay fine.'
             : 'Returns are pending until verified by the warehouse. Inventory updates only after approval. Pending returns expire after 24 hours.'}
         </div>
 
@@ -275,7 +275,7 @@ function ReturnModal({ onClose }) {
             </Field>
           )}
           {!isRep && (
-            <Field label="Into The Lab" required={type === 'SALES_RETURN'}
+            <Field label="Into ZELab" required={type === 'SALES_RETURN'}
               hint={type === 'CUSTOMER_RETURN' ? 'Or pick a rep ←' : undefined}>
               <Select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
                 <option value="">{type === 'SALES_RETURN' ? 'Select warehouse…' : '— None —'}</option>
@@ -479,12 +479,12 @@ export default function Returns() {
     {
       // The number this page is a record of. A count of returns says how many
       // times it happened; it never says how much stock moved.
-      label: isRep ? 'Boxes The Lab took back' : 'Boxes back on the shelf',
+      label: isRep ? 'Boxes ZELab took back' : 'Boxes back on the shelf',
       value: formatNumber(summary.boxesBack), icon: PackageCheck, sub: period,
       ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300',
     },
     {
-      label: isRep ? 'Waiting on The Lab' : 'Waiting your approval',
+      label: isRep ? 'Waiting on ZELab' : 'Waiting your approval',
       value: formatNumber(summary.pending), icon: Clock,
       sub: summary.pending > 0
         ? `${formatNumber(summary.pendingBoxes)} box${plural(summary.pendingBoxes)} held right now, not on a shelf yet`
@@ -521,7 +521,7 @@ export default function Returns() {
   // one kind of return, so the choice is not offered to them.
   const chips = [
     { key: '', label: 'All returns', count: summary?.totalReturns, tone: 'bg-white/10 text-foreground ring-white/20' },
-    { key: 'SALES_RETURN', label: 'Rep → The Lab', count: summary?.salesReturns, tone: 'bg-sky-500/15 text-sky-300 ring-sky-500/30' },
+    { key: 'SALES_RETURN', label: 'Rep → ZELab', count: summary?.salesReturns, tone: 'bg-sky-500/15 text-sky-300 ring-sky-500/30' },
     { key: 'CUSTOMER_RETURN', label: 'Customer returns', count: summary?.customerReturns, tone: 'bg-sky-500/15 text-sky-300 ring-sky-500/30' },
   ];
 
@@ -529,7 +529,7 @@ export default function Returns() {
     <div>
       <PageHeader
         title="Returns"
-        subtitle={isRep ? 'Your returns — what you sent back, and whether The Lab accepted it.' : 'Who returned stock, what, how many boxes — and what needs your action.'}
+        subtitle={isRep ? 'Your returns — what you sent back, and whether ZELab accepted it.' : 'Who returned stock, what, how many boxes — and what needs your action.'}
       >
         <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New return</Button>
       </PageHeader>
@@ -559,11 +559,11 @@ export default function Returns() {
             <>
               Stock has come back <b className="text-foreground">{formatNumber(summary.totalReturns)}</b> time{summary.totalReturns === 1 ? '' : 's'}
               {span && <> ({span})</>}. <b className="text-emerald-400">{formatNumber(summary.approved)}</b> of those were accepted, putting
-              {' '}<b className="text-foreground">{formatNumber(summary.boxesBack)}</b> box{plural(summary.boxesBack)} back {isRep ? 'with The Lab' : 'on the shelf'}.
+              {' '}<b className="text-foreground">{formatNumber(summary.boxesBack)}</b> box{plural(summary.boxesBack)} back {isRep ? 'with ZELab' : 'on the shelf'}.
               {summary.pending > 0 && (
                 <> <b className="text-amber-400">{formatNumber(summary.pending)}</b> return{summary.pending === 1 ? '' : 's'} holding
                   {' '}<b className="text-amber-400">{formatNumber(summary.pendingBoxes)}</b> box{plural(summary.pendingBoxes)}
-                  {' '}{isRep ? 'are still waiting on The Lab' : 'still need your decision'}.</>
+                  {' '}{isRep ? 'are still waiting on ZELab' : 'still need your decision'}.</>
               )}
               {summary.refused > 0 && (
                 <> <b className="text-foreground">{formatNumber(summary.refused)}</b> {summary.refused === 1 ? 'was' : 'were'} rejected, cancelled or expired, so those boxes never moved.</>

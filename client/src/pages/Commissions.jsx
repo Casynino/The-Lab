@@ -26,7 +26,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
   // an empty box asks the rep to do arithmetic to arrive at their own number.
   const [amount, setAmount] = useState(String(Math.floor(available)));
   // Where the money should go. A free-text note asked the rep to think of
-  // something to say; what The Lab actually needs is an address to send to, and
+  // something to say; what ZELab actually needs is an address to send to, and
   // what the rep needs is to be asked for it rather than to remember.
   const [via, setVia] = useState('mobile');
   const [payNumber, setPayNumber] = useState('');
@@ -167,7 +167,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
 
             {/* The money goes exactly where this says. Reading it back large
                 is the only chance to catch a wrong digit, and the warning is
-                what makes clear whose mistake it is — The Lab pays what it is
+                what makes clear whose mistake it is — ZELab pays what it is
                 told to pay and cannot pull it back afterwards. */}
             <Field label="Name on the account" required
               hint={via === 'mobile' ? 'The name that shows when the money is sent' : 'Exactly as the bank has it'}>
@@ -186,7 +186,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
             <div className="flex gap-2.5 rounded-xl bg-amber-500/[0.07] px-3.5 py-3 ring-1 ring-amber-500/25">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
               <p className="text-[12px] leading-relaxed text-amber-200/90">
-                Check the number and the name before you send this. The Lab pays exactly what you write here — if it
+                Check the number and the name before you send this. ZELab pays exactly what you write here — if it
                 is wrong the money goes to whoever owns that number, and <b className="text-amber-200">it cannot be
                 brought back</b>. Getting it right is on you.
               </p>
@@ -196,8 +196,8 @@ function WithdrawModal({ commission, firstName, onClose }) {
 
         <p className="text-xs text-faint">
           {floor > 0
-            ? <>The Lab has opened this one for you, so your usual {formatCurrency(minWithdrawal)} minimum does not apply. It still has to be at least {formatCurrency(floor)}, and no more than you have.</>
-            : <>The Lab reviews every request. The minimum balance to request one is {formatCurrency(minWithdrawal)}.</>}
+            ? <>ZELab has opened this one for you, so your usual {formatCurrency(minWithdrawal)} minimum does not apply. It still has to be at least {formatCurrency(floor)}, and no more than you have.</>
+            : <>ZELab reviews every request. The minimum balance to request one is {formatCurrency(minWithdrawal)}.</>}
         </p>
       </div>
     </Modal>
@@ -658,7 +658,7 @@ function RepView() {
               {windowOpen
                 ? (
                   <span className="font-semibold text-amber-400">
-                    The Lab has opened one withdrawal for you — your usual minimum does not apply
+                    ZELab has opened one withdrawal for you — your usual minimum does not apply
                     until {formatDateTime(c.emergency.until)}.
                   </span>
                 )
@@ -781,7 +781,7 @@ function DeductModal({ reps, onClose }) {
           <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         <Field label="Reason" required hint="Shown to the rep and kept in the record">
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Commission removed by The Lab" />
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Commission removed by ZELab" />
         </Field>
         <p className="text-xs text-faint">
           This removes the amount from the rep's available balance only — future commission keeps accruing normally.

@@ -366,7 +366,7 @@ function DeductCommissionModal({ rep, available, onClose }) {
           </button>
         )}
         <Field label="Reason" required hint="Shown to the rep and kept in the record">
-          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Commission removed by The Lab" />
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Commission removed by ZELab" />
         </Field>
         <p className="text-xs text-faint">
           Removes the amount from available balance only — future commission keeps accruing normally.
@@ -461,9 +461,9 @@ function EditRepModal({ rep, onClose }) {
 }
 
 // ── Add stock to a rep (admin) ───────────────────────────────────────────────
-// Issues boxes OUT of The Lab and attaches them to the rep's active order (or
+// Issues boxes OUT of ZELab and attaches them to the rep's active order (or
 // opens a new one). The product list is the warehouse's live stock so the admin
-// can only pick what The Lab actually holds.
+// can only pick what ZELab actually holds.
 function AddStockModal({ repId, repName, onClose }) {
   const qc = useQueryClient();
   const [productId, setProductId] = useState('');
@@ -514,10 +514,10 @@ function AddStockModal({ repId, repName, onClose }) {
     >
       <div className="space-y-4">
         <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
-          Boxes are issued out of The Lab and attached to {repName}'s latest active order (a new order opens if they have none).
+          Boxes are issued out of ZELab and attached to {repName}'s latest active order (a new order opens if they have none).
           Their order value, outstanding balance and stock-held all update, and they get a notification.
         </p>
-        <Field label="Product (from The Lab)" required hint={isLoading ? 'Loading stock…' : `${rows.length} product${rows.length !== 1 ? 's' : ''} in stock`}>
+        <Field label="Product (from ZELab)" required hint={isLoading ? 'Loading stock…' : `${rows.length} product${rows.length !== 1 ? 's' : ''} in stock`}>
           <Select value={productId} onChange={(e) => { setProductId(e.target.value); setBoxes(''); }}>
             <option value="">Select a product…</option>
             {rows.map((r) => (
@@ -528,7 +528,7 @@ function AddStockModal({ repId, repName, onClose }) {
         <Field
           label="Boxes to add"
           required
-          error={overMax ? `Only ${formatNumber(available)} box(es) in The Lab` : undefined}
+          error={overMax ? `Only ${formatNumber(available)} box(es) in ZELab` : undefined}
           hint={selected && !overMax ? `${formatCurrency(selected.sellingPrice)}/box · adds ${formatCurrency((selected.sellingPrice || 0) * n)} to the order` : undefined}
         >
           <NumberInput min="1" max={available || undefined} value={boxes} disabled={!productId}

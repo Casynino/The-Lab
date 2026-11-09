@@ -68,7 +68,7 @@ function pkgPrice(product, pkg) {
 function CartOrderSheet({ onClose, existing }) {
   const editing = !!existing;
   const { data: products = [], isLoading: productsLoading } = useProducts();
-  // Only products currently in stock at The Lab can be ordered (ids only — no
+  // Only products currently in stock at ZELab can be ordered (ids only — no
   // counts, so stock levels stay hidden from reps). Refreshes in real time.
   const { data: availableIds = [], isLoading: availLoading } = useQuery({
     queryKey: ['stock-requests', 'available-products'],
@@ -499,7 +499,7 @@ function RepRequestsView({ onView }) {
           <div className="rounded-2xl border border-border bg-surface">
             <EmptyState
               title="No requests waiting"
-              message="When you submit a stock request, it shows here until The Lab approves it."
+              message="When you submit a stock request, it shows here until ZELab approves it."
               icon={ClipboardList}
             />
           </div>
@@ -760,7 +760,7 @@ export default function StockRequests() {
     <div>
       <PageHeader
         title="Stock Requests"
-        subtitle={isRep ? 'Request stock from The Lab — tap a request to view details.' : "Approve or reject reps' stock requests."}
+        subtitle={isRep ? 'Request stock from ZELab — tap a request to view details.' : "Approve or reject reps' stock requests."}
       >
         {isRep && (
           <Button onClick={() => setCartOpen(true)}>

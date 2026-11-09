@@ -38,7 +38,7 @@ const INCLUDE_HISTORY = {
 // Orders whose changes were made before this app recorded them have no rows,
 // and what it did keep is read back instead: a self-extension has always
 // stored the deadline the order held before it, and the one-step columns hold
-// the last change The Lab made. Anything still unaccounted for between those
+// the last change ZELab made. Anything still unaccounted for between those
 // and where the deadline stands is shown as "unrecorded" — the hours are real,
 // but the app cannot say who added them, and they may include time credited
 // back for a return that waited on us.
@@ -64,7 +64,7 @@ function historyOf(s) {
   const legacy = [];
   const add = (kind, fromAt, toAt, madeAt, byName, unrecorded = false) => {
     const seconds = Math.round((new Date(toAt) - new Date(fromAt)) / 1000);
-    // A minute either way is rounding, not a change. A change The Lab recorded
+    // A minute either way is rounding, not a change. A change ZELab recorded
     // may be negative — a deadline pulled in — and can still be taken back;
     // but time that only shows up as a gap cannot be: a negative gap means the
     // deadline sits EARLIER than the last change left it, and "taking that
@@ -573,7 +573,7 @@ async function settleBoxesTx(tx, { settlementId, productId, packagingUnitId, box
   return { sale, settlement: dec };
 }
 
-// Admin issues additional boxes to a rep, OUT of The Lab's warehouse. If the
+// Admin issues additional boxes to a rep, OUT of ZELab's warehouse. If the
 // rep already has an active (unsettled) order the boxes are appended to that
 // order: the stock moves warehouse→rep, the order's linked transfer records the
 // extra boxes (so the box-by-box breakdown stays exact), the order value grows,
@@ -623,7 +623,7 @@ async function addStockToRep(salesRepId, payload, actor) {
       let mode;
 
       if (active) {
-        // Move the boxes warehouse→rep (asserts The Lab actually has them),
+        // Move the boxes warehouse→rep (asserts ZELab actually has them),
         // tied to the order's existing transfer.
         await inventory.transferStock(tx, {
           productId,
@@ -999,7 +999,7 @@ async function selfExtend(id, actor) {
   // The extension is the REP'S to spend, and only on their own order. It can be
   // taken once, it doubles their own daily fine for the rest of the order, and
   // it cannot be undone — so it is a decision the person who pays for it makes,
-  // not one The Lab makes for them.
+  // not one ZELab makes for them.
   //
   // The old test read `if (actor?.salesRepId && ...)`, which skipped itself
   // entirely for anyone without a salesRepId. Staff and admins have none, so
@@ -1030,7 +1030,7 @@ async function selfExtend(id, actor) {
       preExtensionDeadline: previous,
       selfExtendedAt: takenAt,
       selfExtendedById: actor ? actor.id : null,
-      // What it replaced, so The Lab can take the time back if it was a
+      // What it replaced, so ZELab can take the time back if it was a
       // mistake — the fine rate and the rep's one use come back with it.
       deadlineBefore: previous,
       deadlineChangedAt: takenAt,
@@ -1168,7 +1168,7 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
       type: 'GENERAL',
       severity: 'WARNING',
       title: `Order ${updated.settlementNumber} extended to ${dl}`,
-      message: `The Lab extended your deadline on order ${updated.settlementNumber}. New deadline: ${dl} (EAT). Settle your boxes or return unsold stock BEFORE then — after the deadline the daily fine applies.`,
+      message: `ZELab extended your deadline on order ${updated.settlementNumber}. New deadline: ${dl} (EAT). Settle your boxes or return unsold stock BEFORE then — after the deadline the daily fine applies.`,
       entityType: 'Settlement',
       entityId: updated.id,
     }).catch(() => {});
@@ -1181,7 +1181,7 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
 // that still stands.
 //
 // Time given used to be permanent. The rep's own 96 hours could not be undone
-// at all, and they carry a doubled daily fine, so a wrong tap cost The Lab the
+// at all, and they carry a doubled daily fine, so a wrong tap cost ZELab the
 // fine rate as well as the days. This puts the deadline back where it was, and
 // when what it undoes includes the rep's extension it also gives back the
 // normal fine rate and the one use — the order returns to the deal it was on.
@@ -1332,7 +1332,7 @@ async function undoDeadlineChange(id, actor, { all = false } = {}) {
       type: 'GENERAL',
       severity: 'WARNING',
       title: `Order ${updated.settlementNumber} deadline back to ${when}`,
-      message: `The Lab moved the deadline on order ${updated.settlementNumber} back to ${when} (EAT).${back}${
+      message: `ZELab moved the deadline on order ${updated.settlementNumber} back to ${when} (EAT).${back}${
         overdueNow
           ? ` That time has already passed, so the order is overdue now — the daily fine runs from today rather than from ${when}, and a return waiting for our approval pauses it. Settle or return to stop it.`
           : ''

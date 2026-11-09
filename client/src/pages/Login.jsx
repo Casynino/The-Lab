@@ -290,7 +290,7 @@ export default function Login() {
       <Scene />
 
       {/* One centred column at every size: the brand, one line, one button.
-          The Lab, the port and the sea fill the rest of the glass, so the
+          ZELab, the port and the sea fill the rest of the glass, so the
           sections are as short as the words need and the room under them is
           the picture's. */}
       <div className="relative z-10 flex min-h-dvh flex-col">

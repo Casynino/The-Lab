@@ -186,7 +186,7 @@ function SettleBoxesModal({ order, onClose, onDone }) {
       }>
       <div className="space-y-5">
         <p className="text-[13px] leading-snug text-muted">
-          Send the money, then submit. Your sale and commission are recorded <b className="text-foreground">once The Lab approves</b>.
+          Send the money, then submit. Your sale and commission are recorded <b className="text-foreground">once ZELab approves</b>.
         </p>
         {lines.length === 0 ? (
           <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-faint">Every outstanding box is already submitted and awaiting approval.</p>
@@ -227,7 +227,7 @@ function SettleBoxesModal({ order, onClose, onDone }) {
                and say who can fix it. */
             <p className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2.5 text-sm text-amber-200">
               There is no account set up for {line?.brandName || 'this brand'} to settle into yet, so this cannot be
-              submitted. Ask The Lab to add one.
+              submitted. Ask ZELab to add one.
             </p>
           ) : (
             <Field label="Where was it paid?" required hint={account?.notes || 'Select the account the money went to'}>
@@ -286,7 +286,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
         reason: `Return on order ${order.settlementNumber}`,
       });
     },
-    onSuccess: () => { toast.success('Return submitted — awaiting The Lab approval'); onDone(); onClose(); },
+    onSuccess: () => { toast.success('Return submitted — awaiting ZELab approval'); onDone(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
 
@@ -299,13 +299,13 @@ function RecordReturnModal({ order, onClose, onDone }) {
       )}
       <Button variant="secondary" onClick={onClose}>Cancel</Button>
       <Button loading={create.isPending} disabled={!warehouseId || !hasCart} onClick={() => create.mutate()}>
-        <Undo2 className="h-4 w-4" /> Return to The Lab
+        <Undo2 className="h-4 w-4" /> Return to ZELab
       </Button>
     </>
   );
 
   return (
-    <Modal open onClose={onClose} size="lg" title={`Return to The Lab · ${order.settlementNumber}`} footer={footer}>
+    <Modal open onClose={onClose} size="lg" title={`Return to ZELab · ${order.settlementNumber}`} footer={footer}>
       {returnableLines.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">No boxes left to return on this order.</p>
       ) : (
@@ -972,7 +972,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
             });
           }
           // isOwnRep, not canAct: the 96 hours are the rep's one use, they
-          // double the rep's own fines, and they cannot be given back. The Lab
+          // double the rep's own fines, and they cannot be given back. ZELab
           // sees whether it has been taken — that is in the header — but does
           // not get to take it for them.
           if (isOwnRep && active && order.canSelfExtend) {
@@ -1096,7 +1096,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               )}
 
               <DeadlineHistory order={order} />
-              {/* The Lab's own note. A rep has no use for a countdown of the
+              {/* ZELab's own note. A rep has no use for a countdown of the
                   time that might be taken off his order. */}
               {staff && order.canUndoDeadline && (
                 <p className="mt-1 text-[11px] leading-snug text-faint">
@@ -1124,7 +1124,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
             {order.pendingReturns > 0 && (
               <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-400">
                 <Clock className="h-4 w-4 shrink-0" />
-                <span>{order.pendingReturns} return{order.pendingReturns !== 1 ? 's' : ''} awaiting The Lab approval — boxes remain outstanding until approved.</span>
+                <span>{order.pendingReturns} return{order.pendingReturns !== 1 ? 's' : ''} awaiting ZELab approval — boxes remain outstanding until approved.</span>
               </div>
             )}
 

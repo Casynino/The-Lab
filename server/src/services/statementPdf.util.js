@@ -1,6 +1,6 @@
 'use strict';
 
-// Shared kit for The Lab's bank-statement-style PDFs (weekly + monthly).
+// Shared kit for ZELab's bank-statement-style PDFs (weekly + monthly).
 // Handles the header band, section styling, key/value rows, tables and —
 // crucially — pagination: every block checks remaining space and opens a new
 // page instead of colliding with the footer.
@@ -33,7 +33,7 @@ function createStatement({ title, periodLabel, generatedAt }) {
 
   // ── Header band (first page) ──
   doc.rect(0, 0, doc.page.width, 92).fill(BAND);
-  doc.fill('#ffffff').font('Helvetica-Bold').fontSize(20).text('THE LAB', left, 26);
+  doc.fill('#ffffff').font('Helvetica-Bold').fontSize(20).text('ZELAB', left, 26);
   doc.font('Helvetica').fontSize(10).fillColor('#a3e635').text(title, left, 52);
   doc.fillColor('#cbd5e1').fontSize(9).text(`Period: ${periodLabel}`, left, 66);
   doc.text(`Generated: ${generatedAt}`, right - 220, 26, { width: 220, align: 'right' });

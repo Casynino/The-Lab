@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "The Lab — Distribution ERP (frontend)",
+  "description": "ZELab — Distribution ERP (frontend)",
   "scripts": {
     "dev": "vite",
     "build": "node scripts/check-jsx-imports.mjs && npm run check:undef && vite build",

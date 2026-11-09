@@ -13,7 +13,7 @@ const create = asyncHandler(async (req, res) => {
   if (req.user.role === ROLES.SALES_REP) {
     if (!req.user.salesRepId) throw ApiError.forbidden('Your account has no sales-rep profile');
     payload.salesRepId = req.user.salesRepId;
-    // A rep returning stock is ALWAYS giving it back to The Lab. The customer-
+    // A rep returning stock is ALWAYS giving it back to ZELab. The customer-
     // return type would ADD boxes to their own van (that's how phantom stock
     // was born once) — never allow it from a rep account.
     payload.type = 'SALES_RETURN';
