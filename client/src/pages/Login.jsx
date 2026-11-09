@@ -39,33 +39,22 @@ const rise = (s) => ({ '--rd': `${s}s` });
 
 // ── The mark ─────────────────────────────────────────────────────────────────
 
-/** The open carton, drawn exactly as client/public/favicon.svg draws it. */
-function Carton({ className }) {
-  return (
-    <svg viewBox="0 0 64 64" className={className} fill="none" stroke="currentColor"
-      strokeWidth="3.2" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true">
-      <path d="M32 13 L51 24 V40 L32 51 L13 40 V24 Z" />
-      <path d="M32 13 V32 M32 32 L51 24 M32 32 L13 24" />
-    </svg>
-  );
-}
-
+/**
+ * Hao Labs' own lockup, the official artwork — the red hǎo and the word in
+ * Nino's own lettering, cut out of the brand files by docs/mockups/brand.py.
+ * It was a drawn cube in a tile before, which is a picture of a box, not a
+ * logo (Nino, 9 Nov 2026).
+ */
 function Mark({ size = 'md' }) {
   const big = size === 'lg';
   return (
-    <div className="flex items-center gap-3 sm:gap-4">
-      <span className={`grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-[0_14px_38px_-12px_rgba(238,49,36,0.7)] ${big ? 'h-16 w-16 sm:h-[4.5rem] sm:w-[4.5rem]' : 'h-14 w-14'}`}>
-        <Carton className={big ? 'h-9 w-9 sm:h-10 sm:w-10' : 'h-8 w-8'} />
-      </span>
-      <span className="leading-none">
-        <span className={`block font-black uppercase tracking-[0.12em] text-white ${big ? 'text-3xl sm:text-4xl' : 'text-2xl'}`}>
-          Hao Labs
-        </span>
-        <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.34em] text-brand-600 sm:text-[11px]">
-          Hao Stock
-        </span>
-      </span>
-    </div>
+    <img
+      src="/brand/hao-labs-dark.png"
+      alt="Hao Labs"
+      width="1071"
+      height="320"
+      className={`w-auto drop-shadow-[0_10px_30px_rgba(0,0,0,0.65)] ${big ? 'h-[4.25rem] sm:h-20' : 'h-14 sm:h-16'}`}
+    />
   );
 }
 
@@ -91,21 +80,10 @@ const MOTES = [
   { x: '91%', d: '16s', s: '-4s', dx: '-12px' },
 ];
 
-/** A carton on the move: a box, its lid band, and the horizon's red on its seam. */
-function Crate() {
-  return (
-    <svg viewBox="0 0 28 38" aria-hidden="true">
-      {/* Lit from the horizon behind them, so a box reads as a box on a black
-          floor rather than a hole in it. */}
-      <rect x="0" y="6" width="28" height="32" rx="1.5" fill="#2e211c" />
-      <rect x="0" y="6" width="28" height="6.4" rx="1.5" fill="#46322a" />
-      <rect x="0" y="11.6" width="28" height="1.1" fill="rgba(255,95,75,0.75)" />
-      <rect x="9" y="20" width="10" height="2.6" rx="1.3" fill="rgba(255,138,115,0.45)" />
-      <rect x="0" y="6" width="1.4" height="32" fill="rgba(255,255,255,0.10)" />
-      <rect x="26.6" y="6" width="1.4" height="32" fill="rgba(0,0,0,0.35)" />
-    </svg>
-  );
-}
+/* The three cartons that cross the floor. Real plates, cut out small by
+   docs/mockups/login_shelf.py, so the traffic is Pepa, OHIS and Civlily
+   rather than a grey rectangle pretending to be a box. */
+const CRATES = ['/crate-pepa.webp', '/crate-ohis.webp', '/crate-civlily.webp'];
 
 function Scene() {
   return (
@@ -120,12 +98,12 @@ function Scene() {
       <div className="ls-shelf">
         <img src="/login-shelf.webp" alt="" width="1560" height="720" fetchpriority="high" />
       </div>
-      {LANES.map((lane) => (
+      {LANES.map((lane, i) => (
         <div key={lane.b}>
           <div className="ls-lane" style={{ '--b': lane.b }} />
           {lane.at.map((at) => (
             <div key={at} className="ls-crate" style={{ '--b': lane.b, '--k': lane.k, '--d': lane.d, '--s': at, '--o': lane.o }}>
-              <Crate />
+              <img src={CRATES[(i + lane.at.indexOf(at)) % CRATES.length]} alt="" loading="lazy" />
             </div>
           ))}
         </div>

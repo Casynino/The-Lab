@@ -183,13 +183,17 @@ function GlassSidebar({
   const brand = (compact) => (
     <NavLink to="/" onClick={onNavigate} data-hint="Hao Labs"
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
-      <span className={clsx('grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 ring-2 ring-brand-500/40', sheet ? 'size-9' : 'size-10')}>
-        <Boxes className={clsx('text-slate-950', sheet ? 'size-4' : 'h-[18px] w-[18px]')} />
-      </span>
-      {compact ? null : (
+      {/* The mark alone on the rail, the whole lockup when there is room —
+          the lockup already carries the mark, so never both (owner, 9 Nov
+          2026). Official artwork either way: docs/mockups/brand.py. */}
+      {compact ? (
+        <img src="/brand/hao-mark.png" alt="Hao Labs" width="894" height="512"
+          className={clsx('w-auto shrink-0', sheet ? 'h-[22px]' : 'h-6')} />
+      ) : (
         <span className="min-w-0 leading-tight">
-          <span className={clsx('block truncate font-semibold tracking-tight g-strong', sheet ? 'text-[13px]' : 'text-sm')}>Hao Labs</span>
-          <span className={clsx('mt-0.5 block truncate g-soft', sheet ? 'text-[11px]' : 'text-xs')}>Hao Stock</span>
+          <img src="/brand/hao-labs-dark.png" alt="Hao Labs" width="1071" height="320"
+            className={clsx('block w-auto', sheet ? 'h-[19px]' : 'h-[22px]')} />
+          <span className={clsx('mt-1.5 block truncate g-soft', sheet ? 'text-[11px]' : 'text-xs')}>Hao Stock</span>
         </span>
       )}
     </NavLink>

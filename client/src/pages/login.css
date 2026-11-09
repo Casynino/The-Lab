@@ -208,7 +208,7 @@
   pointer-events: none;
 }
 
-.ls-crate svg { display: block; width: 100%; height: auto; }
+.ls-crate img { display: block; width: 100%; height: auto; }
 
 /* The dark it presses into the floor, directly under it. */
 .ls-crate::after {

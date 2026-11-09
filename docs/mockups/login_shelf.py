@@ -121,3 +121,22 @@ shelf = ImageEnhance.Contrast(shelf).enhance(1.08)
 out = os.path.join(PUB, "login-shelf.webp")
 shelf.save(out, "WEBP", quality=88, method=6, lossless=False)
 print(out, shelf.size, os.path.getsize(out))
+
+
+# ── the traffic on the near floor ───────────────────────────────────────────
+# Nino, 9 Nov 2026: the boxes crossing the sign-in floor were grey rectangles
+# drawn in SVG and they looked it. These are the real cartons, the same plates
+# as the shelf above, cut out small — so what moves across the floor is Pepa,
+# OHIS and Civlily, not a shape standing in for them.
+CRATES = {"pepa": (hero, 150), "ohis": (oh, 140), "civlily": (civ, 110)}
+
+for name, (plate, h) in CRATES.items():
+    s = plate.resize((max(1, int(plate.width * h / plate.height)), h), Image.LANCZOS)
+    # Lit from the horizon they are walking away from, so they read on a dark
+    # floor without being brighter than the shelf behind them.
+    warm = Image.new("RGBA", s.size, (255, 120, 92, 26))
+    s = Image.alpha_composite(s, warm)
+    s = ImageEnhance.Brightness(s).enhance(0.86)
+    p = os.path.join(PUB, f"crate-{name}.webp")
+    s.save(p, "WEBP", quality=90, method=6)
+    print(p, s.size, os.path.getsize(p))
