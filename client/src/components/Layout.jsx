@@ -182,18 +182,14 @@ function GlassSidebar({
   const brand = (compact) => (
     <NavLink to="/" onClick={onNavigate} data-hint="Hao Labs"
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
-      {/* The mark on its own, and the words set beside it. The full hǎo Labs
-          lockup belongs on the sign-in screen, where it is big enough to read
-          — at sidebar size its "Labs" shrinks to nothing (owner, 9 Nov 2026).
-          Official artwork: docs/mockups/brand.py. */}
+      {/* The mark, and nothing else. Spelling out "Hao Labs" and "Hao Stock"
+          beside it said twice what the logo already says, and at this size the
+          words were the loudest thing in the panel (owner, 9 Nov 2026: "just
+          keep the hǎo logo"). It stands bigger now that it stands alone. The
+          full lockup lives on the sign-in screen. Artwork: docs/mockups/brand.py.
+          The name is still here for a screen reader and for the rail's tooltip. */}
       <img src="/brand/hao-mark.png" alt="Hao Labs" width="894" height="512"
-        className={clsx('w-auto shrink-0', sheet ? 'h-[19px]' : 'h-[22px]')} />
-      {compact ? null : (
-        <span className="min-w-0 leading-tight">
-          <span className={clsx('block truncate font-semibold tracking-tight g-strong', sheet ? 'text-[13px]' : 'text-sm')}>Hao Labs</span>
-          <span className={clsx('mt-0.5 block truncate g-soft', sheet ? 'text-[10.5px]' : 'text-xs')}>Hao Stock</span>
-        </span>
-      )}
+        className={clsx('w-auto shrink-0', compact ? 'h-6' : sheet ? 'h-7' : 'h-8')} />
     </NavLink>
   );
 
