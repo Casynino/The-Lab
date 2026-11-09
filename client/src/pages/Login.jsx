@@ -76,7 +76,92 @@ function Mark({ size = 'md' }) {
 /* The real cartons, cut out small by docs/mockups/login_shelf.py. */
 const CRATES = ['/crate-pepa.webp', '/crate-ohis.webp', '/crate-civlily.webp'];
 
-/* Where the stock goes, how long a run takes, and how far into it each box
+/* ── who is on the road ────────────────────────────────────────────────────
+   Nino, 9 Nov 2026: "some people in a car, some people carrying the boxes,
+   some taking the boxes from the warehouse — show the movement, like team
+   work". So the lanes carry the people who actually do this: a van on the
+   long runs, a boda with a box strapped on, a porter on foot, and the stock
+   itself. Each is drawn from its own feet, so animateMotion stands it on the
+   road rather than hanging it from a corner.
+
+   Silhouettes, filled — an outline figure at thirty pixels reads as scribble.
+   Lit in the coral the horizon is, so they sit in the same light as the map. */
+
+const SKIN = '#ffb6ab';
+const DARK = '#7a1a12';
+
+/** A delivery van: the long runs, Dar to Mwanza, Dar to Mbeya. */
+function Van() {
+  return (
+    <g transform="translate(-26,-28)">
+      <rect x="1" y="5" width="29" height="15" rx="2.5" fill={SKIN} />
+      <path d="M30 9 h8.5 L47 15.5 V20 H30 Z" fill={SKIN} />
+      <path d="M32 11 h5.5 L42 15 H32 Z" fill={DARK} />
+      <rect x="5" y="8.5" width="9" height="2" rx="1" fill={DARK} opacity="0.55" />
+      <circle cx="11" cy="21.5" r="4.6" fill={SKIN} />
+      <circle cx="11" cy="21.5" r="1.9" fill={DARK} />
+      <circle cx="40" cy="21.5" r="4.6" fill={SKIN} />
+      <circle cx="40" cy="21.5" r="1.9" fill={DARK} />
+    </g>
+  );
+}
+
+/** A boda with a box strapped on the back: how most of it really moves. */
+function Boda() {
+  return (
+    <g transform="translate(-21,-28)">
+      <circle cx="6.5" cy="20" r="5.6" fill="none" stroke={SKIN} strokeWidth="2.4" />
+      <circle cx="34" cy="20" r="5.6" fill="none" stroke={SKIN} strokeWidth="2.4" />
+      <path d="M6.5 20 L15 12 h9 l10 8" fill="none" stroke={SKIN} strokeWidth="2.6"
+        strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="6" y="6" width="11" height="8.5" rx="1.2" fill={SKIN} />
+      <path d="M22 12 L24.5 5" stroke={SKIN} strokeWidth="2.8" strokeLinecap="round" />
+      <circle cx="25.5" cy="2.6" r="3.1" fill={SKIN} />
+      <path d="M24.5 6 L31 9.5" stroke={SKIN} strokeWidth="2.4" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/** A porter with a carton on the shoulder: the last few hundred metres. */
+function Porter() {
+  return (
+    <g transform="translate(-11,-30)">
+      <rect x="0" y="0" width="13" height="9.5" rx="1.2" fill={SKIN} />
+      <rect x="0" y="4" width="13" height="1.4" fill={DARK} opacity="0.5" />
+      <circle cx="15" cy="7" r="3.2" fill={SKIN} />
+      <path d="M15 10.5 L15 19" stroke={SKIN} strokeWidth="3.1" strokeLinecap="round" />
+      <path d="M15 12 L9 8" stroke={SKIN} strokeWidth="2.5" strokeLinecap="round" />
+      <path d="M15 19 L11 29" stroke={SKIN} strokeWidth="2.7" strokeLinecap="round" />
+      <path d="M15 19 L20 28" stroke={SKIN} strokeWidth="2.7" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/** The Lab itself: a shed with its doors open, standing in Dar. */
+function Warehouse({ x, y }) {
+  return (
+    <g transform={`translate(${x - 21},${y - 26})`}>
+      <path d="M2 14 L21 3 L40 14 V26 H2 Z" fill="#ee3124" />
+      <path d="M2 14 L21 3 L40 14 Z" fill="#ff8d7d" />
+      <rect x="14" y="17" width="14" height="9" rx="0.8" fill="#2a0a06" />
+      <rect x="16.5" y="19.5" width="9" height="6.5" fill="#ffb6ab" opacity="0.45" />
+    </g>
+  );
+}
+
+/** A region taking stock in: a small depot beside its name. */
+function Depot({ x, y }) {
+  return (
+    <g transform={`translate(${x - 9},${y - 12})`}>
+      <path d="M1 6 L9 1 L17 6 V12 H1 Z" fill="#ff5f4b" />
+      <rect x="6" y="7.5" width="6" height="4.5" fill="#2a0a06" />
+    </g>
+  );
+}
+
+const MOVERS = [Van, Porter, Boda, Van, Porter, Boda, Van, Porter];
+
+/* Where the stock goes, how long a run takes, and how far into it each one
    already is. Staggered on purpose: eight lorries leaving at once is a parade,
    not a distribution network. */
 const RUNS = [
@@ -124,23 +209,21 @@ function Scene() {
               className="ls-road" style={{ '--d': r.d }} />
           ))}
 
-          {/* Where the stock lands. */}
+          {/* Where the stock lands: a depot, and the ring it puts out when a
+              delivery arrives. */}
           {RUNS.map((r, i) => {
             const [cx, cy] = cities[r.to];
             return (
-              <g key={r.to} className="ls-stop" style={{ '--s': `${i * 0.9}s` }}>
-                <circle cx={cx} cy={cy} r="15" className="ls-stop-ring" />
-                <circle cx={cx} cy={cy} r="4.5" fill="#ff5f4b" />
+              <g key={r.to}>
+                <circle cx={cx} cy={cy} r="15" className="ls-stop-ring" style={{ '--s': `${i * 0.9}s` }} />
+                <Depot x={cx} y={cy} />
               </g>
             );
           })}
 
-          {/* The Lab itself, in Dar. */}
-          <g>
-            <circle cx={dar[0]} cy={dar[1]} r="32" className="ls-hub-ring" />
-            <circle cx={dar[0]} cy={dar[1]} r="17" fill="none" stroke="#ff8d7d" strokeWidth="2" opacity="0.65" />
-            <circle cx={dar[0]} cy={dar[1]} r="9" fill="#ee3124" />
-          </g>
+          {/* The Lab itself, in Dar: everything leaves from here. */}
+          <circle cx={dar[0]} cy={dar[1]} r="34" className="ls-hub-ring" />
+          <Warehouse x={dar[0]} y={dar[1]} />
           {/* The stock on the road: the real cartons, small, walking the lanes.
 
               Inside the SVG, riding the road's own path. They were HTML
@@ -148,13 +231,35 @@ function Scene() {
               pixels — so the boxes kept their 1000-unit scale while the map
               shrank to fit the screen, and came out 0.05px wide. In here they
               share the viewBox and scale with it for nothing. */}
+          {RUNS.map((r, i) => {
+            const Mover = MOVERS[i % MOVERS.length];
+            return (
+              <g key={r.to} className="ls-mover">
+                <animateMotion dur={r.d} begin={r.at} repeatCount="indefinite" rotate="0">
+                  <mpath href={`#ls-road-${r.to}`} />
+                </animateMotion>
+                <animate attributeName="opacity" dur={r.d} begin={r.at} repeatCount="indefinite"
+                  values="0;1;1;0" keyTimes="0;0.08;0.9;1" />
+                {/* The walk: the figure itself rises and falls inside the run,
+                    so a porter trudges and a van takes the bumps. Scaled up a
+                    little — at the map's own units a van is 50 wide against a
+                    1000-wide country, which is true to life and too small to
+                    read as a van. */}
+                <g className="ls-step"><g transform="scale(1.4)"><Mover /></g></g>
+              </g>
+            );
+          })}
+
+          {/* And the stock going with them, a little behind. */}
           {RUNS.map((r, i) => (
-            <image key={r.to} href={CRATES[i % CRATES.length]} width="54" x="-27" y="-54"
+            <image key={`${r.to}-box`} href={CRATES[i % CRATES.length]} width="42" x="-21" y="-42"
               className="ls-parcel" preserveAspectRatio="xMidYMax meet">
-              <animateMotion dur={r.d} begin={r.at} repeatCount="indefinite" rotate="0">
+              <animateMotion dur={r.d} begin={`${parseFloat(r.at) - parseFloat(r.d) * 0.42}s`}
+                repeatCount="indefinite" rotate="0">
                 <mpath href={`#ls-road-${r.to}`} />
               </animateMotion>
-              <animate attributeName="opacity" dur={r.d} begin={r.at} repeatCount="indefinite"
+              <animate attributeName="opacity" dur={r.d}
+                begin={`${parseFloat(r.at) - parseFloat(r.d) * 0.42}s`} repeatCount="indefinite"
                 values="0;1;1;0" keyTimes="0;0.08;0.9;1" />
             </image>
           ))}

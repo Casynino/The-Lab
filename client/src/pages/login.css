@@ -136,12 +136,29 @@
   100% { transform: scale(1.8); opacity: 0; }
 }
 
-/* ── the stock on the road ────────────────────────────────────────────────
-   The cartons live inside the SVG now and ride the road's own path, so they
-   scale with the viewBox and need no sizing of their own. All that is left
-   here is how they sit in the dark. */
+/* ── the people on the road ───────────────────────────────────────────────
+   The movers and the stock live inside the SVG and ride the road's own path,
+   so they scale with the viewBox and need no sizing of their own. All that is
+   left here is how they sit in the dark, and the walk. */
 .ls-parcel {
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.8));
+}
+
+.ls-mover {
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, 0.85));
+}
+
+/* A short rise and fall under the figure: a porter trudges, a van takes the
+   bumps. Transform only, on its own element inside the one animateMotion is
+   already moving — the two do not fight. */
+.ls-step {
+  animation: ls-step 0.62s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+@keyframes ls-step {
+  50% { transform: translateY(-1.6px); }
 }
 
 /* Dark at the edges, so nothing competes with the words. */
@@ -171,7 +188,7 @@
 /* Somebody who has asked their phone to stop moving things gets the map
    standing still — it is a picture, not information. */
 @media (prefers-reduced-motion: reduce) {
-  .ls-glow, .ls-road, .ls-stop-ring, .ls-hub-ring { animation: none; }
+  .ls-glow, .ls-road, .ls-stop-ring, .ls-hub-ring, .ls-step { animation: none; }
   .ls-border { stroke-dashoffset: 0; animation: none; }
   .ls-parcel { opacity: 0.9; }
   .ls-up, .ls-pop { animation-duration: 0.01ms; }
