@@ -14,12 +14,12 @@
 
 const GH = 'https://github.com/Casynino';
 
-/** Live, in production. Hao Labs first: the visitor is standing on it. */
+/** Live, in production. ZELab (it was Hao Labs until 10 Nov 2026) first: the visitor is standing on it. */
 export const LIVE = [
   {
-    name: 'Hao Labs', kind: 'Stock, settlement & commission system',
+    name: 'ZELab', kind: 'Stock, settlement & commission system',
     line: "You're on it. Every box that leaves the Lab is on the system — who took it, what came back, what is still owed, and what each rep has earned. We keep Tanzania stocked.",
-    url: 'https://hao-stock.vercel.app', domain: 'hao-stock.vercel.app', shot: '/nino/haolabs.webp',
+    url: 'https://www.zelab.site', domain: 'zelab.site', shot: '/nino/haolabs.webp',
     tags: ['Stock control', 'Settlements', 'Commission', 'Reports'],
   },
   {

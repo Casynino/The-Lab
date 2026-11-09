@@ -37,7 +37,7 @@ OUT = os.path.normpath(os.path.join(HERE, "..", "..", "client", "public", "nino"
 # HA Group fades its words in, Reckless Lab shows a gate — and a picture taken
 # mid-intro is a picture of the loader, not of the site.
 SITES = {
-    "haolabs":    ("https://hao-stock.vercel.app/login", 6),
+    "haolabs":    ("https://www.zelab.site/login", 6),       # ZELab (was Hao Labs); file name kept
     "vegas":      ("https://www.vegashoteltz.com", 8),
     "superdrive": ("https://super-drive-os.vercel.app", 6),
     "target":     ("https://targetexpressaircargo.com", 8),

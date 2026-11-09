@@ -25,9 +25,15 @@ fs.mkdirSync(OUT, { recursive: true });
 
 // One entry per box. A box with no entry has no code, which is the one thing
 // a carton may not have.
+//
+// 10 Nov 2026: the business is ZELab and the site is www.zelab.site, so a carton
+// now sends people there (it was THE-HAOLAB.VERCEL.APP). Cartons already printed
+// keep working: the old address serves the same site, so keep it attached. At
+// 25 modules this is the same size of code as before. (The bare ZELAB.SITE/P
+// would fit 21 modules — bigger squares on the box — but it redirects to www.)
 const CODES = {
-  'Pepa-QR-70x36': 'HTTPS://THE-HAOLAB.VERCEL.APP/P',
-  'Pepa-QR-77x44': 'HTTPS://THE-HAOLAB.VERCEL.APP/P2',
+  'Pepa-QR-70x36': 'HTTPS://WWW.ZELAB.SITE/P',
+  'Pepa-QR-77x44': 'HTTPS://WWW.ZELAB.SITE/P2',
 };
 
 (async () => {

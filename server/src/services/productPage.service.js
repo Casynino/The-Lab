@@ -106,9 +106,10 @@ const DEFAULT_PATH = 'p';
 // v2 added product keys; v3 took the King Size Slim box back off this page;
 // v4 reworded Pepa Ndogo's note; v5 added the second box, which has a QR and a
 // page of its own; v6 corrected that box to 77 x 44, the size its own die
-// pattern carries; v7 filled that box's counts, which its own artwork states.
-// See upgrade().
-const CONTENT_VERSION = 7;
+// pattern carries; v7 filled that box's counts, which its own artwork states;
+// v8 renamed the maker from Hǎo-Labs to ZELab (the business changed its name,
+// 10 Nov 2026) — where the saved row still says the old name. See upgrade().
+const CONTENT_VERSION = 8;
 const NDOGO_NOTE = 'Brown • Slow burn Unfiltered';
 
 // The frozen fallback. These are also the starting values in the editor.
@@ -118,7 +119,7 @@ const DEFAULTS = {
   v: CONTENT_VERSION,
   name: 'Pepa',
   tagline: 'Natural unrefined rolling papers',
-  maker: 'Hǎo-Labs',
+  maker: 'ZELab',
   city: 'Mbezi Goigi, Dar es Salaam',
   email: 'haodealtz@gmail.com',
   products: [
@@ -327,7 +328,14 @@ function upgrade(raw, { append = true } = {}) {
   for (const d of DEFAULTS.products) {
     if (append && !kept.some((p) => p.key === d.key || sameName(p.name, d.name))) kept.push(d);
   }
-  return { ...raw, v: CONTENT_VERSION, products: kept };
+  // v8: the business is ZELab now (10 Nov 2026: "the brand has changed, everything
+  // has to change to ZELab"). The maker line is the distributor, the trademark
+  // owner and the footer of the page behind every carton's QR code. Only the OLD
+  // name — Hǎo-Labs, however it was spaced — is replaced; a maker he has typed
+  // himself is left exactly as typed.
+  const out = { ...raw, v: CONTENT_VERSION, products: kept };
+  if (from < 8 && /^\s*h[aǎ]o[\s-]*labs?\s*$/i.test(String(raw.maker || ''))) out.maker = DEFAULTS.maker;
+  return out;
 }
 
 // One page's worth of the content: the products whose QR code points at this

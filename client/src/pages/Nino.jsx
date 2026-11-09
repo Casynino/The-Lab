@@ -26,7 +26,7 @@ const ICONS = {
   Smartphone, Globe, PenTool, LayoutDashboard, Plug, CreditCard, MapPin, Bot, Database, Workflow, TrendingUp,
 };
 
-const HELLO = encodeURIComponent('Hi Nino, I found your work through the Hao Labs system. I have a project in mind —');
+const HELLO = encodeURIComponent('Hi Nino, I found your work through the ZELab system. I have a project in mind —');
 const wa = (digits) => `https://wa.me/${digits}?text=${HELLO}`;
 
 const wrap = 'relative z-10 mx-auto w-full max-w-[1320px] px-4 sm:px-8';
@@ -59,7 +59,7 @@ export default function Nino() {
           </a>
           <nav aria-label="Page" className="flex items-center gap-1 sm:gap-2">
             <Link to="/login" className={`hidden h-9 items-center gap-1.5 rounded-full px-3 text-[13px] text-[var(--n-muted)] transition-colors hover:text-[var(--n-ink)] sm:inline-flex ${focus}`}>
-              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Hao Labs
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />ZELab
             </Link>
             <a href="#work" className={`hidden h-9 items-center rounded-full px-3 text-[13px] text-[var(--n-muted)] transition-colors hover:text-[var(--n-ink)] md:inline-flex ${focus}`}>Work</a>
             <a href="#contact" className={`inline-flex h-9 items-center rounded-full bg-[var(--n-accent)] px-4 text-[13px] font-semibold text-[var(--n-accent-ink)] transition hover:brightness-110 ${focus}`}>Work with me</a>
@@ -205,7 +205,7 @@ export default function Nino() {
             {' · © '}{new Date().getFullYear()}{' · Designed & built by Nino'}
           </p>
           <Link to="/login" className={`inline-flex min-h-11 items-center gap-1.5 transition-colors hover:text-[var(--n-ink)] ${focus}`}>
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Back to Hao Labs
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Back to ZELab
           </Link>
         </div>
       </footer>

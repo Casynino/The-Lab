@@ -66,20 +66,20 @@ const stagger = (n) => ({ '--i': n });
 // ── The mark ─────────────────────────────────────────────────────────────────
 
 /**
- * Hao Labs' own lockup, the official artwork — the red hǎo and the word in
- * Nino's own lettering, cut out of the brand files by docs/mockups/brand.py.
- * It was a drawn cube in a tile before, which is a picture of a box, not a
- * logo (Nino, 9 Nov 2026).
+ * ZELab's lockup — the old hǎo Labs logo in the same style and colours, renamed
+ * (Nino, 10 Nov 2026): a red "ZE" where the red hǎo stood, and "Lab" in Nino's own
+ * lettering with a tone mark on its "a". Built by docs/mockups/brand.py. (It was a
+ * drawn cube in a tile before that, which is a picture of a box, not a logo.)
  */
 function Mark({ size = 'md' }) {
   const big = size === 'lg';
   return (
     <img
-      src="/brand/hao-labs-dark.png"
-      alt="Hao Labs"
-      width="1071"
+      src="/brand/zelab-dark.png"
+      alt="ZELab"
+      width="911"
       height="320"
-      className={`w-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${big ? 'h-11 sm:h-14 lg:h-[3.75rem]' : 'h-14 sm:h-16'}`}
+      className={`w-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${big ? 'h-12 sm:h-16 lg:h-[4.25rem]' : 'h-16 sm:h-[4.5rem]'}`}
     />
   );
 }

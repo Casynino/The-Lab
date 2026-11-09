@@ -36,7 +36,7 @@ jobs:
           code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
             --max-time 60 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "https://hao-stock.vercel.app/api/cron/deadline-watch")
+            "https://www.zelab.site/api/cron/deadline-watch")
           echo "HTTP $code"
           cat /tmp/out.json || true
           # A non-2xx is a real failure worth seeing in the Actions log.

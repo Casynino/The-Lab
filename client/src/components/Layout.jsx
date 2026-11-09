@@ -176,16 +176,20 @@ function GlassSidebar({
   };
 
   const brand = (compact) => (
-    <NavLink to="/" onClick={onNavigate} data-hint="Hao Labs"
+    <NavLink to="/" onClick={onNavigate} data-hint="ZELab"
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
-      {/* The mark, and nothing else. Spelling out "Hao Labs" and "Hao Stock"
-          beside it said twice what the logo already says, and at this size the
-          words were the loudest thing in the panel (owner, 9 Nov 2026: "just
-          keep the hǎo logo"). It stands bigger now that it stands alone. The
-          full lockup lives on the sign-in screen. Artwork: docs/mockups/brand.py.
-          The name is still here for a screen reader and for the rail's tooltip. */}
-      <img src="/brand/hao-mark.png" alt="Hao Labs" width="894" height="512"
-        className={clsx('w-auto shrink-0', compact ? 'h-6' : sheet ? 'h-7' : 'h-8')} />
+      {/* The name, where there is room: red "ZE" and the white word "Lab" — the main
+          word (Nino, 10 Nov 2026, looking at this panel: "it should say Lab, the main
+          word here is Lab"; the mark alone read "ZEL", which is not a name). In the
+          narrow rail there is no room for the word, so there it is the mark. Artwork:
+          docs/mockups/brand.py. */}
+      {compact ? (
+        <img src="/brand/zel-mark.png" alt="ZELab" width="940" height="512"
+          className="h-6 w-auto shrink-0" />
+      ) : (
+        <img src="/brand/zelab-dark.png" alt="ZELab" width="911" height="320"
+          className={clsx('w-auto shrink-0', sheet ? 'h-8' : 'h-9')} />
+      )}
     </NavLink>
   );
 

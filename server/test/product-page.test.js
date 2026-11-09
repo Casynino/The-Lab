@@ -67,6 +67,39 @@ test('with no saved row the page carries Pepa Ndogo only', async () => {
   assert.equal(c.v, page.CONTENT_VERSION);
 });
 
+// ── The business is ZELab now (v8) ───────────────────────────────────────────
+// The maker line is the distributor, the trademark owner and the footer behind
+// every carton's QR code. Production's saved row still says the old name, so
+// the rename has to arrive by upgrade(), and must never overwrite a name typed
+// by hand.
+test('the default maker is ZELab', async () => {
+  store.row = null;
+  const c = await page.readContent();
+  assert.equal(c.maker, 'ZELab');
+});
+
+test('an older saved row that still says Hǎo-Labs now reads ZELab, on the page and in the footer', async () => {
+  for (const old of ['Hǎo-Labs', 'Hao-Labs', 'Hǎo Labs', 'HAO LABS', ' Hao Labs ']) {
+    seed({ ...clone(V2_ROW), maker: old });
+    const c = await page.readContent();
+    assert.equal(c.maker, 'ZELab', old);
+    const html = page.renderHtml(onP(c), { host: 'www.zelab.site', path: 'p' });
+    assert.match(html, /distributed by ZELab/);
+    assert.match(html, /trademark of ZELab/);
+    assert.equal(/h[aǎ]o[\s-]*labs/i.test(html), false, `old name left on the page for "${old}"`);
+  }
+});
+
+test('a maker typed by hand is left exactly as typed', async () => {
+  seed({ ...clone(V2_ROW), maker: 'Pepa Papers Ltd' });
+  assert.equal((await page.readContent()).maker, 'Pepa Papers Ltd');
+});
+
+test('a row already saved as v8 is not touched again', async () => {
+  seed({ ...clone(V2_ROW), v: page.CONTENT_VERSION, maker: 'Hao Labs', products: [{ key: 'ndogo', name: 'Pepa Ndogo' }] });
+  assert.equal((await page.readContent()).maker, 'Hao Labs');   // saved as current: whatever it says is what he chose
+});
+
 test('a v1 row gains its key, keeps its own wording, and gets Slow burn Unfiltered', async () => {
   seed(V1_ROW);
   const c = await page.readContent();

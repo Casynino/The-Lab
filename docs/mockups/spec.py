@@ -230,7 +230,7 @@ SMALL = dict(
         ("Papers per box", "每盒张数", "2,500"),
         ("Booklet", "内册尺寸", "73 × 22.5 × 5 mm assembled, from a 73 × 93 mm blank"),
         ("Flat sheet", "展开尺寸", "264 × 464 mm, one box plus one booklet per sheet"),
-        ("QR codes", "二维码", "Top panel, bottom panel and booklet — three codes, all https://the-haolab.vercel.app/p"),
+        ("QR codes", "二维码", "Top panel, bottom panel and booklet — three codes, all https://www.zelab.site/p"),
     ],
     opening=[
         ("Tear along the perforation across the front: 77 mm below the top fold, 78 mm above the "
@@ -268,7 +268,7 @@ KSS = dict(
         ("Booklet", "内册尺寸", "110 × 26 × 4 mm"),
         ("Colours and finish", "印刷工艺（4C 光油）", "4C + gloss varnish, as marked on the die"),
         ("Flat sheet", "展开尺寸", "549 × 431 mm; the booklet is on a second sheet, 401 × 325 mm"),
-        ("QR codes", "二维码", "Front panel, back panel and booklet — three codes, all https://the-haolab.vercel.app/p"),
+        ("QR codes", "二维码", "Front panel, back panel and booklet — three codes, all https://www.zelab.site/p"),
     ],
     opening=[
         ("Lift the lid off the front panel; it stays hinged on the back panel.",
@@ -318,7 +318,7 @@ KUBWA = dict(
         ("Flat sheet", "展开尺寸", "the die measures 446 × 289 mm on a 549 × 436 mm file"),
         ("QR codes", "二维码",
          "Front panel, back panel and booklet. All three read "
-         "HTTPS://HAO-STOCK.VERCEL.APP/P2 — see the checks at the end"),
+         "HTTPS://WWW.ZELAB.SITE/P2"),
     ],
     opening=[],
 )
@@ -428,7 +428,7 @@ def cover_page(deck, design, box):
     y += round(3 * MM)
     d.rectangle([M, y, PW - M, y + round(20 * MM)], fill=PANEL)
     ty = y + round(4 * MM)
-    d.text((M + round(4 * MM), ty), "Pepa is made for Hǎo-Labs (The Lab)", font=F(10, True), fill=INK)
+    d.text((M + round(4 * MM), ty), "Pepa is made for ZELab", font=F(10, True), fill=INK)
     d.text((M + round(4 * MM), ty + round(5.5 * MM)),
            "Mbezi Goigi, Dar es Salaam, Tanzania · 0788 734 003 · haodealtz@gmail.com",
            font=F(10), fill=INK)
@@ -555,9 +555,9 @@ SHARED_NOTES = [
      "两种内册均未印纸张尺寸，且两种 Pepa 规格尺寸接近，散装时无法分辨。建议在内册上加印纸张尺寸。"),
     ("“50 PER BOX” means 50 booklets, not 50 papers. Consider “50 BOOKLETS PER BOX”.",
      "“50 PER BOX”指 50 本内册，而非 50 张纸。建议改为“50 BOOKLETS PER BOX”。"),
-    ("The brand owner, Hǎo-Labs, is not printed anywhere on the box or the booklet. Add it if it "
+    ("The brand owner, ZELab, is not printed anywhere on the box or the booklet. Add it if it "
      "should be there.",
-     "盒体与内册均未印品牌方 Hǎo-Labs，如需请补印。"),
+     "盒体与内册均未印品牌方 ZELab，如需请补印。"),
 ]
 BOX_NOTES = {
     "small": [
@@ -579,15 +579,6 @@ BOX_NOTES = {
          "本文件没有工艺说明框：纸板、颜色、表面处理均未注明，开机前请书面确认。"),
     ],
     "kubwa": [
-        ("Every QR code on this file reads HTTPS://HAO-STOCK.VERCEL.APP/P2. The 70 × 36 box "
-         "prints HTTPS://THE-HAOLAB.VERCEL.APP/P. We scanned this one: it does open this box's "
-         "own page, because hao-stock.vercel.app is another address for the same site. But the "
-         "two boxes will not carry the same brand address, and an address printed on a carton "
-         "cannot be changed afterwards. Please confirm which one is to be printed before the run.",
-         "本文件所有二维码内容为 HTTPS://HAO-STOCK.VERCEL.APP/P2，而 70 × 36 小盒印的是 "
-         "HTTPS://THE-HAOLAB.VERCEL.APP/P。我们已扫描校验：该码确实可打开本盒自己的产品页面，"
-         "因为 hao-stock.vercel.app 是同一网站的另一个域名。但两款盒子将印出不同的品牌网址，"
-         "且盒上网址印后无法更改。开机前请确认印刷哪一个。"),
         ("At 233.30 mm — the top edge of the box — the three line types differ by panel, and "
          "that is how the box is meant to work: the two 126 mm side panels are drawn as a "
          "perforation, the 81 mm front panel as a cut either side of the thumb notch, and the "

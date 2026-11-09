@@ -134,21 +134,21 @@ function steps(browser, ios) {
           : <>Tap {b('Share')} in the address bar or menu.</>}
       </Step>,
       <Step key={2} n={2} icon={SquarePlus}>Tap {b('Add to Home Screen')}.</Step>,
-      <Step key={3} n={3}>Tap {b('Add')}, then open {b('Hao Labs')}.</Step>,
+      <Step key={3} n={3}>Tap {b('Add')}, then open {b('ZELab')}.</Step>,
     ];
   }
   if (browser === 'samsung') {
     return [
       <Step key={1} n={1} icon={Menu}>Tap the menu at the {b('bottom right')}.</Step>,
       <Step key={2} n={2}>Tap {b('Add page to')}, then {b('Home screen')}.</Step>,
-      <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
+      <Step key={3} n={3}>Open {b('ZELab')} from your home screen.</Step>,
     ];
   }
   if (browser === 'huawei') {
     return [
       <Step key={1} n={1} icon={Menu}>Tap the menu at the {b('bottom')} of the browser.</Step>,
       <Step key={2} n={2}>Tap {b('Add to home screen')} (it may sit under {b('Add to')}).</Step>,
-      <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
+      <Step key={3} n={3}>Open {b('ZELab')} from your home screen.</Step>,
     ];
   }
   return [
@@ -156,7 +156,7 @@ function steps(browser, ios) {
       {browser === 'chrome' ? <>Open the menu at the {b('top right')}.</> : <>Open the browser menu.</>}
     </Step>,
     <Step key={2} n={2}>Tap {b('Install app')} or {b('Add to Home screen')}.</Step>,
-    <Step key={3} n={3}>Open {b('Hao Labs')} from your home screen.</Step>,
+    <Step key={3} n={3}>Open {b('ZELab')} from your home screen.</Step>,
   ];
 }
 

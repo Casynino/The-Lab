@@ -60,7 +60,9 @@ const env = {
   // links in WhatsApp reports and the footer of generated PDFs. Set
   // PUBLIC_APP_URL in the host's env vars; renaming the deployment then needs
   // no code change. Trailing slashes are stripped so links never double up.
-  appUrl: String(optional('PUBLIC_APP_URL', 'https://the-lab.vercel.app')).replace(/\/+$/, ''),
+  // The business is ZELab and the site is www.zelab.site (10 Nov 2026) — the
+  // fallback follows; the value that counts in production is the variable.
+  appUrl: String(optional('PUBLIC_APP_URL', 'https://www.zelab.site')).replace(/\/+$/, ''),
 
   business: {
     currency: optional('CURRENCY', 'TZS'),

@@ -91,8 +91,8 @@ def flat(W, D, mat, pos, yaw=0, y0=0, layer=0):
 
 
 # ── the brand, as textures ──────────────────────────────────────────────────
-_mark = Image.open(os.path.join(PUB, "brand", "hao-mark.png")).convert("RGBA")
-_lockup = Image.open(os.path.join(PUB, "brand", "hao-labs-dark.png")).convert("RGBA")
+_mark = Image.open(os.path.join(PUB, "brand", "zel-mark.png")).convert("RGBA")
+_lockup = Image.open(os.path.join(PUB, "brand", "zelab-dark.png")).convert("RGBA")
 # The Pepa label, cut from the top of the 77x44 box render: it goes on the
 # Pepa cartons. Nino, 10 Nov 2026: the brand is not to be shouted from
 # billboards; it is to be on the boxes — big ones and small ones — moving
@@ -112,7 +112,7 @@ def panel_lorry(w=560, h=340):
     d.rectangle([0, int(h * 0.63), w, int(h * 0.71)], fill=(238, 49, 36, 255))
     m = fit(_mark, int(w * 0.30), int(h * 0.42))
     im.alpha_composite(m, (int(w * 0.07), int(h * 0.12)))
-    d.text((int(w * 0.42), int(h * 0.20)), "HAO LABS", font=font(int(h * 0.19)), fill=(26, 18, 17, 255))
+    d.text((int(w * 0.42), int(h * 0.20)), "ZELAB", font=font(int(h * 0.19)), fill=(26, 18, 17, 255))
     d.text((int(w * 0.42), int(h * 0.42)), "DISTRIBUTION", font=font(int(h * 0.10)), fill=(238, 49, 36, 255))
     return im
 
@@ -123,7 +123,7 @@ def panel_wall(w=800, h=260):
     m = fit(_mark, int(w * 0.22), int(h * 0.6))
     im.alpha_composite(m, ((w - m.width) // 2, int(h * 0.12)))
     d = ImageDraw.Draw(im)
-    d.text(((w) // 2, int(h * 0.84)), "HAO LABS", font=font(int(h * 0.11)), fill=(26, 18, 17, 255), anchor="mm")
+    d.text(((w) // 2, int(h * 0.84)), "ZELAB", font=font(int(h * 0.11)), fill=(26, 18, 17, 255), anchor="mm")
     return im
 
 
@@ -260,7 +260,7 @@ def panel_plane(w=560, h=70):
     d.rectangle([0, h * 0.6, w, h * 0.72], fill=(238, 49, 36, 255))
     m = fit(_mark, int(w * 0.09), int(h * 0.5))
     im.alpha_composite(m, (int(w * 0.05), int(h * 0.1)))
-    d.text((int(w * 0.17), int(h * 0.3)), "HAO LABS", font=font(int(h * 0.34)), fill=(26, 18, 17, 255), anchor="lm")
+    d.text((int(w * 0.17), int(h * 0.3)), "ZELAB", font=font(int(h * 0.34)), fill=(26, 18, 17, 255), anchor="lm")
     d.text((int(w * 0.52), int(h * 0.3)), "CARGO", font=font(int(h * 0.22)), fill=(238, 49, 36, 255), anchor="lm")
     for x in range(int(w * 0.66), int(w * 0.96), 22):
         d.rectangle([x, h * 0.26, x + 10, h * 0.42], fill=(40, 48, 70, 255))
@@ -314,7 +314,7 @@ def pepa_faces():
     m = fit(_mark, int(W * 0.1), int(H * 0.12))
     fr.alpha_composite(m, (int(W * 0.04), int(H * 0.82)))
     d = ImageDraw.Draw(fr)
-    d.text((int(W * 0.96), int(H * 0.88)), "HAO LABS", font=font(int(H * 0.06)), fill=(58, 42, 26, 255), anchor="rm")
+    d.text((int(W * 0.96), int(H * 0.88)), "ZELAB", font=font(int(H * 0.06)), fill=(58, 42, 26, 255), anchor="rm")
     dw = int(W * 0.62)
     return {"front": fr, "back": fr.transpose(Image.FLIP_LEFT_RIGHT), "left": ohis.side(dw, H).convert("RGBA"),
             "right": ohis.side(dw, H).convert("RGBA"), "top": ohis.lid(W, dw).convert("RGBA")}

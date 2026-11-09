@@ -2,7 +2,7 @@
 
 /* eslint-disable no-console */
 // ---------------------------------------------------------------------------
-// Hao Stock — LIVE seed.
+// ZELab (was Hao Stock) — LIVE seed.
 // Real opening data only: the 8 OHIS/CIVILLY products with their real box
 // counts and box prices. No demo customers, reps, sales, orders or imports.
 // Everything is stored in BOXES (base unit); 1 Carton = 50 Boxes for receiving.
@@ -53,7 +53,7 @@ const PRODUCTS = [
 const CARTON_BOXES = 50; // 1 Carton = 50 Boxes (used only when receiving cartons)
 
 async function main() {
-  console.log('Seeding Hao Stock (live data)...\n');
+  console.log('Seeding ZELab (live data)...\n');
 
   // Permissions
   for (const [key, description] of PERMISSIONS) {
@@ -141,7 +141,7 @@ async function main() {
 
   // Settings (commission rule + business config)
   const settingDefs = [
-    { key: 'business.name', value: 'Hao Stock Distribution', group: 'business' },
+    { key: 'business.name', value: 'ZELab', group: 'business' },
     { key: 'business.currency', value: env.business.currency, group: 'business' },
     { key: 'business.country', value: 'Tanzania', group: 'business' },
     { key: 'credit.defaultTermDays', value: String(env.business.defaultCreditTermDays), type: 'NUMBER', group: 'credit' },

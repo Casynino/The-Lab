@@ -14,7 +14,7 @@ async function start() {
     logger.info('Database connection established');
 
     server = app.listen(env.port, () => {
-      logger.info(`Hao Stock API listening on http://localhost:${env.port} (${env.nodeEnv})`);
+      logger.info(`ZELab API listening on http://localhost:${env.port} (${env.nodeEnv})`);
     });
   } catch (err) {
     logger.error('Failed to start server:', err.message);
