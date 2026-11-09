@@ -57,9 +57,12 @@ import {
 import { RED } from '@/lib/brand';
 
 // How many attention rows are visible before the list scrolls, and the height
-// of one row: py-2.5 top and bottom (20px) over two leading-tight lines at
-// 13px and 11px (30px). 56 leaves a sliver of the next row showing, which is
-// what tells you the list scrolls at all.
+// of one row. A row is h-12 (48px) with a 1px divider above all but the first;
+// the box is cut at ROWS x 54, which leaves a sliver of the next row showing —
+// and that sliver is what tells you the list scrolls at all. Both numbers come
+// from here, so the box and the "scroll for N more" line can never disagree.
+const ATTENTION_ROWS = 3;
+const ATTENTION_ROW_PX = 54;
 
 const ACCOUNT_ICON = { CASH: Banknote, BANK: Landmark, MOBILE_MONEY: Smartphone, OTHER: Wallet, COMMISSION: Coins };
 
@@ -649,14 +652,13 @@ export default function Dashboard() {
       </div>
 
       {/* ── Attention ──
-          One box with the list inside it. Nino, 10 Nov 2026, from his phone:
-          the filter pills, the count badge, the tinted icon tiles, the line
-          saying why each item was there and the long uppercase heading were
-          "too much" — but the box itself stays ("keep the table around it").
-          So: a short, quiet heading inside the box, then every item on one
-          line (a dot for urgency, the words, the figure, an arrow). Every item
-          is shown — no inner scroll, no "scroll for more"; the reason for an
-          item is still its tooltip. */}
+          The same box as before: three rows showing, the rest by scrolling
+          inside it, a "scroll for N more" line under it — and NOTHING on top of
+          it. Nino, 10 Nov 2026, from his phone: the filter pills, the count
+          badge, the tinted icon tiles, the line saying why each item was there
+          and the heading were "too much". Each item is one line now (a dot for
+          urgency, the words, the figure, an arrow); the reason for an item is
+          still its tooltip. The heading is kept for screen readers only. */}
       {(() => {
         const items = [
           (attention.commissionRequests?.count || 0) > 0 && {
@@ -716,35 +718,41 @@ export default function Dashboard() {
         // a bill that is simply owed.
         const DOT = { rose: 'bg-rose-500', amber: 'bg-amber-400', sky: 'bg-amber-400', violet: 'bg-zinc-400' };
 
-        return (
-          <div className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
-            <div className="flex items-center justify-between gap-2 px-4 pb-2.5 pt-3.5">
-              <h2 className="text-[13px] font-semibold text-muted">Attention</h2>
-              {items.length === 0 && (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> All clear
-                </span>
-              )}
+        // Nothing waiting: one quiet line in the same kind of box.
+        if (items.length === 0) {
+          return (
+            <div className="mb-6 flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3.5 text-sm text-muted">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" /> All clear. Nothing is waiting on you.
             </div>
+          );
+        }
 
-            {items.length === 0 ? (
-              <p className="border-t border-white/[0.06] px-4 py-4 text-sm text-faint">Nothing is waiting on you. Every request, settlement and return has been dealt with.</p>
-            ) : (
-              <ul className="divide-y divide-white/[0.06] border-t border-white/[0.06]">
+        return (
+          <section aria-label="Attention" className="mb-6 overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
+            <h2 className="sr-only">Attention</h2>
+            <div className="overflow-y-auto" style={{ maxHeight: ATTENTION_ROWS * ATTENTION_ROW_PX }}>
+              <ul className="divide-y divide-white/[0.06]">
                 {items.map((i) => (
                   <li key={i.key}>
                     <button type="button" title={i.desc} onClick={() => (i.onOpen ? i.onOpen() : navigate(i.to))}
-                      className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition duration-200 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/60">
+                      className="flex h-12 w-full cursor-pointer items-center gap-3 px-4 text-left transition duration-200 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/60">
                       <span aria-hidden className={clsx('h-1.5 w-1.5 shrink-0 rounded-full', DOT[i.tone])} />
-                      <span className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-foreground">{i.title}</span>
+                      <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-foreground">{i.title}</span>
                       {i.value && <span className="shrink-0 text-[14px] font-semibold tabular-nums text-foreground">{i.value}</span>}
                       <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
                     </button>
                   </li>
                 ))}
               </ul>
+            </div>
+            {/* Say how many are below the fold, so a capped list never hides
+                the fact that there is more. */}
+            {items.length > ATTENTION_ROWS && (
+              <div className="border-t border-white/[0.06] py-1.5 text-center text-[11px] text-faint">
+                scroll for {items.length - ATTENTION_ROWS} more
+              </div>
             )}
-          </div>
+          </section>
         );
       })()}
 
