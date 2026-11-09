@@ -426,10 +426,3 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hello-in { animation: none; }
 }
-
-/* The dim behind the computer's menu comes up gently. Its colour animates, not
-   its opacity — a fading ancestor would stop the panel's frosted glass from
-   blurring what is behind it. */
-.nav-scrim { animation: nav-scrim-in 0.2s ease-out backwards; }
-@keyframes nav-scrim-in { from { background-color: rgba(0, 0, 0, 0); } }
-@media (prefers-reduced-motion: reduce) { .nav-scrim { animation: none; } }
