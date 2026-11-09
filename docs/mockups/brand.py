@@ -18,6 +18,16 @@ Writes into client/public/brand/:
     hao-labs-dark.png     mark + "Labs" in white, for the app's near-black
     hao-labs-light.png    mark + "Labs" in ink, for white paper
     app-180/192/512, maskable, favicon.png, splash/*   the home-screen set
+    favicon-32.png, ../favicon.ico                    the browser-tab icon
+    og-image.jpg                                      the card a shared link shows
+
+10 Nov 2026, Nino, looking at the browser tab: the icon was the red mark, small, on
+a flat WHITE square — harsh on a dark tab strip and hard to read at 16px. The
+tile is now the app's own near-black with the mark large on it (the red reads
+at any size, on a dark or a light browser), and the same tile is used for the
+home-screen icons. The share card (og-image.jpg) puts the Dar coast from the
+sign-in page behind the lockup so a link in WhatsApp or Telegram looks like
+Hao Labs instead of a bare address.
 """
 
 from PIL import Image, ImageChops, ImageDraw, ImageFont
@@ -131,30 +141,77 @@ save(lockup((255, 255, 255)), "hao-labs-dark.png")
 save(lockup(INK), "hao-labs-light.png")
 
 
-def tile(px, glyph=0.70, radius=0.22, bg=(255, 255, 255, 255)):
-    """The mark on its own tile. White, the way the logo is drawn — a red mark
-    on a red tile would disappear."""
+def tile(px, glyph=0.76, radius=0.22, glow=True):
+    """The mark on its own tile: the app's near-black, the red mark large on it.
+    A red mark on white (the old tile) was harsh on a dark browser and small at
+    16px; on ink it reads at any size and sits in the app's own colours. From
+    120px up the tile carries what the launch screen has — the house red,
+    faint, rising from the bottom edge — and a hairline so its edge shows on a
+    dark home screen. Small sizes stay flat and crisp."""
     n = px * SS
-    im = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    if radius:
-        d.rounded_rectangle([0, 0, n - 1, n - 1], radius=int(n * radius), fill=bg)
-    else:
-        d.rectangle([0, 0, n - 1, n - 1], fill=bg)
+    base = Image.new("RGBA", (n, n), INK + (255,))
+    if glow and px >= 120:
+        d = ImageDraw.Draw(base)
+        for y in range(n):
+            t = max(0.0, (y / n - 0.40) / 0.60)
+            v = int(46 * t * t)
+            d.line([(0, y), (n, y)], fill=(10 + v, 10 + v // 5, 11 + v // 6, 255))
     mw = int(n * glyph)
     m = mark.resize((mw, max(1, round(mark.height * mw / mark.width))), Image.LANCZOS)
-    im.alpha_composite(m, ((n - m.width) // 2, (n - m.height) // 2))
-    return im.resize((px, px), Image.LANCZOS)
+    base.alpha_composite(m, ((n - m.width) // 2, (n - m.height) // 2))
+    mask = Image.new("L", (n, n), 0)
+    md = ImageDraw.Draw(mask)
+    if radius:
+        md.rounded_rectangle([0, 0, n - 1, n - 1], radius=int(n * radius), fill=255)
+    else:
+        md.rectangle([0, 0, n - 1, n - 1], fill=255)
+    out = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    out.paste(base, (0, 0), mask)
+    if radius and px >= 120:
+        ring = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+        ImageDraw.Draw(ring).rounded_rectangle(
+            [0, 0, n - 1, n - 1], radius=int(n * radius), outline=(255, 255, 255, 26), width=max(2, n // 128))
+        out.alpha_composite(ring)
+    return out.resize((px, px), Image.LANCZOS)
 
 
 save(tile(192), "app-192.png")
 save(tile(512), "app-512.png")
 # Android cuts its own shape out of a maskable icon, so the mark keeps well
 # inside the circle it may be cut down to, and the tile is full-bleed.
-save(tile(512, glyph=0.52, radius=0), "app-maskable-512.png")
+save(tile(512, glyph=0.58, radius=0), "app-maskable-512.png")
 # iOS rounds the corners itself and puts black behind any transparency.
-save(tile(180, glyph=0.68, radius=0), "apple-touch-icon.png")
-save(tile(64, glyph=0.72, radius=0.22), "favicon.png")
+save(tile(180, glyph=0.70, radius=0), "apple-touch-icon.png")
+
+# The browser tab. Each size is DRAWN at its own size (not shrunk from a big
+# one), so the mark's strokes land on whole pixels; the mark is as wide as the
+# tile allows because at 16px it is the only thing there.
+fav = {n: tile(n, glyph=0.86 if n <= 32 else 0.82, radius=0.22, glow=False) for n in (16, 32, 48, 64)}
+save(fav[64], "favicon.png")
+save(fav[32], "favicon-32.png")
+
+
+def write_ico(path, images):
+    """A real .ico (PNG inside) — browsers ask for /favicon.ico by that name
+    whatever the page says, and the site used to answer with the web page."""
+    import io, struct
+    blobs = []
+    for im in images:
+        b = io.BytesIO()
+        im.save(b, "PNG", optimize=True)
+        blobs.append((im.width, b.getvalue()))
+    head = struct.pack("<HHH", 0, 1, len(blobs))
+    off = 6 + 16 * len(blobs)
+    entries, data = b"", b""
+    for w, blob in blobs:
+        entries += struct.pack("<BBBBHHII", w % 256, w % 256, 0, 0, 1, 32, len(blob), off + len(data))
+        data += blob
+    with open(path, "wb") as f:
+        f.write(head + entries + data)
+    print(path, [i.size for i in images], os.path.getsize(path))
+
+
+write_ico(os.path.join(PUB, "favicon.ico"), [fav[16], fav[32], fav[48]])
 
 # ── the iPhone launch screens ───────────────────────────────────────────────
 SPLASH = [
@@ -182,3 +239,59 @@ for w, h, r in SPLASH:
     im.save(os.path.join(SPLASH_DIR, f"{w}x{h}@{r}.png"), "PNG", optimize=True)
 
 print(f"{len(SPLASH)} launch screens in {SPLASH_DIR}")
+
+
+# ── the card a shared link shows ────────────────────────────────────────────
+# 1200x630 (the size WhatsApp, Telegram, Facebook, LinkedIn and X all draw
+# without cropping the middle). The Dar coast from the sign-in page comes up
+# out of the dark on the right; the lockup and the line sit on the dark on the
+# left. Kept under ~150 KB as a JPEG because WhatsApp drops big previews.
+W, H, K = 1200, 630, 2
+card = Image.new("RGB", (W * K, H * K), INK)
+cd = ImageDraw.Draw(card)
+for y in range(H * K):                        # the house red, faint, as on the launch screen
+    t = 1 - abs(y - H * K * 0.40) / (H * K * 0.80)
+    if t > 0:
+        v = int(26 * t * t)
+        cd.line([(0, y), (W * K, y)], fill=(10 + v, 10 + v // 4, 11 + v // 5))
+
+scene = Image.open(os.path.join(PUB, "scene", "landscape-poster.webp")).convert("RGB")
+sc = 0.9333 * K
+scene = scene.resize((round(scene.width * sc), round(scene.height * sc)), Image.LANCZOS)
+sx, sy = round(83 * K), round(-118 * K)       # the Lab lands right of centre, a little above the middle
+ramp = Image.new("L", scene.size, 0)           # the picture comes up out of the dark, left to right
+rp = ramp.load()
+x0, x1 = round((200 - 83) * K), round((640 - 83) * K)
+for x in range(scene.width):
+    u = min(1.0, max(0.0, (x - x0) / (x1 - x0)))
+    v = int(255 * u * u * (3 - 2 * u))
+    for y in range(scene.height):
+        rp[x, y] = v
+card.paste(scene, (sx, sy), ramp)
+# a little weight at the very bottom and top so the edges settle into the page
+shade = Image.new("L", card.size, 0)
+sp = ImageDraw.Draw(shade)
+for y in range(H * K):
+    e = max(0.0, 1 - y / (H * K * 0.16)) + max(0.0, (y / (H * K) - 0.86) / 0.14)
+    sp.line([(0, y), (W * K, y)], fill=int(110 * min(1.0, e)))
+card.paste(Image.new("RGB", card.size, INK), (0, 0), shade)
+
+lk = lockup((255, 255, 255), height=150 * K)
+lw = round(430 * K)
+lk = lk.resize((lw, round(lk.height * lw / lk.width)), Image.LANCZOS)
+LX = 76 * K
+LY = 178 * K
+card.paste(lk, (LX, LY), lk)
+cd = ImageDraw.Draw(card)
+cd.text((LX + 4 * K, LY + lk.height + 56 * K), "We keep Tanzania stocked.",
+        font=ImageFont.truetype(F + "Avenir Next.ttc", 38 * K, index=5), fill=(236, 236, 238), anchor="ls")
+# "HAO STOCK", letter-spaced by hand (PIL has no tracking)
+tf = ImageFont.truetype(F + "Arial Bold.ttf", 18 * K)
+tx = LX + 6 * K
+for ch in "HAO STOCK":
+    cd.text((tx, LY + lk.height + 108 * K), ch, font=tf, fill=(238, 49, 36), anchor="ls")
+    tx += cd.textlength(ch, font=tf) + 4 * K
+card = card.resize((W, H), Image.LANCZOS)
+og = os.path.join(BRAND, "og-image.jpg")
+card.save(og, "JPEG", quality=88, optimize=True, progressive=True)
+print(og, card.size, os.path.getsize(og))

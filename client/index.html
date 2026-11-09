@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/brand/favicon.png" />
+    <!-- The browser-tab icon: the red mark large on the app's near-black tile.
+         A real .ico too — browsers ask for /favicon.ico by name whatever the
+         page says, and the site used to answer that with the web page itself.
+         Made by docs/mockups/brand.py. -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/brand/favicon.png" />
     <!-- viewport-fit=cover lets the installed app use the whole screen, under
          the notch and the camera hole; the pages keep their own safe margins
          with env(safe-area-inset-*). -->
@@ -16,17 +22,30 @@
     <title>Hao Labs</title>
     <meta name="description" content="We keep Tanzania stocked." />
 
-    <!-- Share preview (Open Graph — WhatsApp, Telegram, Facebook, etc.) -->
+    <!-- Share preview (Open Graph — WhatsApp, Telegram, Facebook, LinkedIn,
+         iMessage, Slack). A link used to show a bare address: there was no
+         image at all. The card is 1200x630, made by docs/mockups/brand.py, and
+         the address must be ABSOLUTE — a crawler cannot resolve /brand/...
+         against a page it is not looking at. WhatsApp keeps a preview it has
+         already drawn for days: a link shared before this shipped may need a
+         new query (…/?v=2) to be fetched again. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Hao Labs" />
     <meta property="og:title" content="Hao Labs" />
     <meta property="og:description" content="We keep Tanzania stocked." />
-    <meta property="og:url" content="https://the-lab.vercel.app" />
+    <meta property="og:url" content="https://hao-stock.vercel.app/" />
+    <meta property="og:image" content="https://hao-stock.vercel.app/brand/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Hao Labs — we keep Tanzania stocked." />
 
-    <!-- Share preview (Twitter / X) -->
-    <meta name="twitter:card" content="summary" />
+    <!-- Share preview (X / Twitter) -->
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Hao Labs" />
     <meta name="twitter:description" content="We keep Tanzania stocked." />
+    <meta name="twitter:image" content="https://hao-stock.vercel.app/brand/og-image.jpg" />
+    <meta name="twitter:image:alt" content="Hao Labs — we keep Tanzania stocked." />
     <!-- Put it on a home screen and it opens full screen, with no address
          bar: an icon on Android, Huawei and the desktop (the manifest), and on
          an iPhone the same through "Add to Home Screen". The launch pictures
