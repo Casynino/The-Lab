@@ -414,3 +414,15 @@ body {
     font-size: 16px;
   }
 }
+
+/* Lines that rise into place one after another — the rep's greeting. Small and
+   quick (7px, half a second, 70ms apart): a touch of life, not a show. Still
+   for anybody who has asked their phone for less motion. */
+.hello-in {
+  animation: hello-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(0.05s + var(--i, 0) * 0.07s);
+}
+@keyframes hello-in { from { opacity: 0; transform: translateY(7px); } }
+@media (prefers-reduced-motion: reduce) {
+  .hello-in { animation: none; }
+}

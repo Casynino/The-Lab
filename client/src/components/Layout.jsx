@@ -431,8 +431,11 @@ function GlassSidebar({
 }
 
 /* The foot of the panel: only the signed-in person, as initials and a first
-   name. The menu that opens from it carries the full name, the role and the
-   way out. In the rail only the initials show. */
+   name — and the menu that opens from it says the same single name, no full
+   name and no role line, for every role including the administrator (Nino,
+   10 Nov 2026: "keep the name simple, just one name, not too many words").
+   The full name and the role are on My profile. In the rail only the initials
+   show. */
 function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotifications, onSignOut }) {
   const [open, setOpen] = useState(false);
   const firstName = (user?.name || '').trim().split(/\s+/)[0] || user?.name;
@@ -448,8 +451,7 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
           rail ? 'bottom-2 left-[calc(100%+0.75rem)]' : 'bottom-[calc(100%-0.5rem)] left-3',
         )}>
           <div className="px-2.5 pb-1.5 pt-1">
-            <span className="block break-words text-[13px] font-semibold leading-snug text-foreground">{user?.name}</span>
-            <span className="block truncate text-[11px] text-faint">{ROLE_LABELS[user?.role] || user?.role}</span>
+            <span className="block truncate text-[13px] font-semibold leading-snug text-foreground">{firstName}</span>
           </div>
           <button className={item} onClick={() => { setOpen(false); onProfile(); }}><User className="h-3.5 w-3.5" /> My profile</button>
           <button className={item} onClick={() => { setOpen(false); onNotifications(); }}>
@@ -470,8 +472,8 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
       )}
       <button
         type="button"
-        title={user?.name}
-        data-hint={user?.name}
+        title={firstName}
+        data-hint={firstName}
         onClick={() => setOpen((v) => !v)}
         className={clsx('glass-row flex w-full cursor-pointer items-center gap-3 rounded-full text-left', FOCUS, rail ? 'justify-center p-1' : 'px-2 py-2')}
       >
@@ -479,7 +481,7 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
           {initials(user?.name)}
           {unread > 0 && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-[#12150f]" />}
         </span>
-        {rail ? <span className="sr-only">{user?.name}</span>
+        {rail ? <span className="sr-only">{firstName}</span>
           : <span className="g-strong min-w-0 flex-1 truncate text-sm font-semibold">{firstName}</span>}
       </button>
     </div>
@@ -492,6 +494,11 @@ function Banner({ user, unread, onBell }) {
   const name = (user?.name || 'The Lab').trim().split(/\s+/)[0] || user?.name;
   // A long name gets narrower letters, or a phone pushes it onto two lines.
   const long = name.length > 10;
+  /* A rep's banner is a greeting, not a name plate (Nino, 10 Nov 2026, holding
+     up KP's: "write the name nicely like Hello KP, no need to write Sales
+     Representative… not in the middle, simple and nice"). The other roles keep
+     the name plate and their title. */
+  const rep = user?.role === ROLES.SALES_REP;
 
   return (
     <section className="relative mb-4 overflow-hidden rounded-2xl text-white ring-1 ring-white/10 shadow-[0_12px_30px_-14px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.10)]"
@@ -530,6 +537,22 @@ function Banner({ user, unread, onBell }) {
         )}
       </button>
 
+      {rep ? (
+        /* Left, where the eye starts; the cartons stay on the right. Three
+           short lines of type rise in one after another (hello-in, index.css):
+           small, quick, and still when somebody has asked their phone for
+           less motion. lg:pl-16 keeps clear of the bell that hangs at the
+           banner's left edge on a computer. */
+        <div className="relative flex min-h-[5.5rem] min-w-0 flex-col justify-center px-5 py-4 text-left sm:min-h-[7rem] sm:px-7 lg:pl-16">
+          <h1 className="hello-in max-w-[62%] truncate text-[1.65rem] leading-tight tracking-tight text-white sm:text-3xl" style={{ '--i': 0 }}>
+            <span className="font-normal text-white/70">Hello,</span>{' '}
+            <span className="font-semibold">{name}</span>
+          </h1>
+          <p className="hello-in mt-1 max-w-[62%] text-[12.5px] leading-snug text-white/60 sm:text-sm" style={{ '--i': 1 }}>
+            Keep the stores stocked.
+          </p>
+        </div>
+      ) : (
       <div className="relative flex min-h-[5.75rem] flex-col items-center justify-center px-5 py-4 text-center sm:min-h-[7.5rem] sm:py-5">
         <h1 className={clsx(
           'flex max-w-full items-center gap-4 font-semibold uppercase text-white',
@@ -553,6 +576,7 @@ function Banner({ user, unread, onBell }) {
           {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         </p>
       </div>
+      )}
     </section>
   );
 }
