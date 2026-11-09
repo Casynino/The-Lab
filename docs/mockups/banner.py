@@ -12,15 +12,10 @@ transparent gaps. The fading is the stylesheet's job, not the picture's.
 """
 
 from PIL import Image, ImageFilter, ImageChops, ImageEnhance
-import glob, os, math, sys
+import os, math, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import r3d
-import ohis
-import civlily
-
-PUB = os.path.join(os.path.dirname(__file__), "..", "..", "client", "public")
-PUB = os.path.normpath(PUB)
+from plates import PEPA_TALL, PEPA_BOX, OHIS, CIVLILY, PUB
 
 W, H = 1440, 380
 
@@ -126,21 +121,12 @@ def drawn_carton(faces, dims, cam_kw, size):
     return out.crop(out.getbbox())
 
 
-hero = key_out(pick("hero-1000.*.webp") or pick("hero-700.*.webp"))
-book = key_out(pick("kubwa-booklets-1000.*.webp") or pick("kubwa-booklets-700.*.webp"))
-oh = drawn_carton(ohis.faces(46 / 74), (74, 115, 46),
-                  dict(dist=330, az=34, el=15, fov=26), (620, 860))
-# 125 x 58 x 112 from the supplier's dimensioned photograph: a low wide tray,
-# which is also what the group needed between two upright cartons.
-civ = drawn_carton(civlily.faces(112 / 125), (125, 58, 112),
-                   dict(dist=430, az=30, el=22, fov=26), (760, 560))
-
 # Left to right, and the stylesheet fades the left away: what must be seen
-# stands furthest right. Three brands, one shelf.
-place(book, 182, 206, 272, dim=0.34)   # Pepa, furthest into the fade
-place(civ, 196, 572, 282, dim=0.10)    # Civlily
-place(oh, 296, 892, 208, dim=0.03)     # OHIS
-place(hero, 342, 1218, 190, dim=0.0)   # the tall Pepa carton
+# stands furthest right. The plates are the real ones — see plates.py.
+place(CIVLILY, 176, 206, 276, dim=0.34)
+place(PEPA_BOX, 196, 560, 274, dim=0.12)
+place(OHIS, 262, 886, 236, dim=0.03)
+place(PEPA_TALL, 330, 1222, 196, dim=0.0)
 
 out = Image.alpha_composite(base, shelf)
 out = ImageEnhance.Contrast(out).enhance(1.10)

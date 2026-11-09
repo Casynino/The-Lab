@@ -8,6 +8,7 @@ import { PageSpinner } from '@/components/ui';
 
 import Login from '@/pages/Login';
 import ThemeColor from '@/components/ThemeColor';
+import Nino from '@/pages/Nino';
 import Dashboard from '@/pages/Dashboard';
 import RepDashboard from '@/pages/RepDashboard';
 import Products from '@/pages/Products';
@@ -65,6 +66,9 @@ export default function App() {
       <div aria-hidden className="status-strip" />
       <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Public on purpose: it hangs off the sign-in screen, so everyone who
+          would ever read it is signed out. It shows nothing of the business. */}
+      <Route path="/nino" element={<Nino />} />
 
       <Route
         element={

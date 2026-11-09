@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Loader2, Eye, EyeOff, ArrowRight, Boxes, Timer, Coins, Smartphone, X } from 'lucide-react';
+import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Boxes, Timer, Coins, Smartphone, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Field, Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
@@ -65,9 +65,9 @@ function Mark({ size = 'md' }) {
    where in that crossing it starts — nearer the eye is lower, bigger and
    quicker, which is the whole of the perspective. */
 const LANES = [
-  { b: '2.5%', k: 0.5, d: '17s', o: 0.45, at: ['-2s', '-11s'] },
-  { b: '7%', k: 0.8, d: '12s', o: 0.72, at: ['-1s', '-7s'] },
-  { b: '12.5%', k: 1.2, d: '8.5s', o: 1, at: ['-3.5s'] },
+  { b: '2.5%', k: 0.8, d: '17s', o: 0.5, at: ['-2s', '-11s'] },
+  { b: '7%', k: 1.25, d: '12s', o: 0.78, at: ['-1s', '-7s'] },
+  { b: '13%', k: 1.9, d: '8.5s', o: 1, at: ['-3.5s'] },
 ];
 
 /* Dust in the light, drifting up off the floor. */
@@ -176,6 +176,22 @@ function Gate({ children }) {
   );
 }
 
+/**
+ * Who built it — one quiet line to Nino's own page and his work.
+ *
+ * Nino, 9 Nov 2026, holding up the same line on the Vegas Luxury Hotel site:
+ * "down there add Developed by Nino… when someone clicks he should get a full
+ * page of my projects". That page is /nino.
+ */
+function Credit() {
+  return (
+    <Link to="/nino" className="group inline-flex items-center gap-1 text-white/45 transition-colors hover:text-white">
+      Developed by <span className="font-semibold text-white/75 transition-colors group-hover:text-[#c6f432]">Nino</span>
+      <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
 // ── The page ─────────────────────────────────────────────────────────────────
 
 export default function Login() {
@@ -241,7 +257,10 @@ export default function Login() {
           {/* The line that names the system. On a computer it stands in the
               corner of the words column; under the card it would print itself
               across a carton. */}
-          <p className="text-xs text-white/40">Hao Labs · Hao Stock Management System</p>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/40">
+            <span>Hao Labs · Hao Stock Management System</span>
+            <Credit />
+          </p>
         </section>
 
         {/* The way in. On a phone this column is the whole screen. */}
@@ -283,8 +302,9 @@ export default function Login() {
           {/* Pinned to the foot of the screen, not left under the card: on a
               tablet the card floats halfway up and the line would print
               itself across a carton. */}
-          <p className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 text-center text-xs text-white/45 lg:hidden">
-            Hao Labs · Hao Stock Management System
+          <p className="absolute inset-x-0 bottom-[max(1rem,env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 text-center text-xs text-white/45 lg:hidden">
+            <span>Hao Labs · Hao Stock Management System</span>
+            <Credit />
           </p>
         </section>
       </div>
