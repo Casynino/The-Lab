@@ -9,7 +9,7 @@ import clsx from 'clsx';
 import {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
   ClipboardCheck, UserCog, Repeat, BarChart3, ScrollText, ShieldCheck, Settings,
-  Bell, Menu, X, LogOut, ChevronDown, ChevronLeft, ChevronRight, User, Lock, Eye, EyeOff, Loader2,
+  Bell, Menu, X, LogOut, ChevronDown, ChevronLeft, User, Lock, Eye, EyeOff, Loader2,
   Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt,
   Wallet, Wrench, QrCode, Search, Smartphone,
 } from 'lucide-react';
@@ -28,16 +28,15 @@ const ICONS = {
   Wrench, QrCode, Wallet,
 };
 
-/* The panel is folded to its rail when the system is first opened and stays
-   however it was last left — the owner asked for it closed until he presses
-   it open (8 Nov 2026). */
-const SIDEBAR_KEY = 'lab.sidebar.collapsed';
+/* On a computer the panel is HIDDEN until it is asked for (owner, 8 Nov 2026:
+   "closed until he presses it open"; 10 Nov 2026: "hiding unless I want to
+   unhide it" — a strip of icons left standing was not hidden). One small
+   button brings it out over the page; it goes away again when a page is chosen,
+   or on Escape, a click outside, or [. It is never remembered open: every visit
+   starts clean. */
 const FOLD_KEY = 'lab.sidebar.folds';
 const LABEL = 'pb-1 text-[10.5px] font-semibold uppercase tracking-[0.18em] g-dim';
 const FOCUS = 'outline-none focus-visible:ring-2 focus-visible:ring-brand-500/60';
-
-/** The room the page leaves for the floating panel, open and folded. */
-const ROOM = { open: '15.5rem', rail: '5.9rem' };
 
 function readStore(key, fallback) {
   try {
@@ -101,7 +100,7 @@ function useFolds(sections, current) {
 // ── The panel ────────────────────────────────────────────────────────────────
 
 function GlassSidebar({
-  mode, items, counts, user, unread, collapsed = false, onCollapsedChange, onNavigate,
+  mode, items, counts, user, unread, onClose, focusSearch = false, onNavigate,
   onProfile, onPassword, onNotifications, onSignOut,
 }) {
   const navigate = useNavigate();
@@ -109,7 +108,6 @@ function GlassSidebar({
   const sections = useSections(items);
   const current = activeTo(items, pathname);
   const folds = useFolds(sections, current);
-  const rail = mode === 'desktop' && collapsed;
   // The phone's drawer is read close up and has no room to spare, so it runs
   // tighter than the panel on a desk — smaller rows, smaller glyphs, less air
   // around everything. The desk panel is untouched by any of this.
@@ -117,32 +115,13 @@ function GlassSidebar({
 
   const [query, setQuery] = useState('');
   const searchRef = useRef(null);
-  const focusAfterOpen = useRef(false);
   useEffect(() => setQuery(''), [pathname]);
 
-  // ⌘K reaches the search from anywhere; [ folds and unfolds the panel.
+  // Opened with ⌘K: the cursor is already in the search. (The keys themselves
+  // are listened for in the shell, which is always there; this panel is not.)
   useEffect(() => {
-    if (mode !== 'desktop') return undefined;
-    const onKey = (e) => {
-      const el = e.target;
-      const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        if (collapsed) { focusAfterOpen.current = true; onCollapsedChange?.(false); }
-        else { searchRef.current?.focus(); searchRef.current?.select(); }
-      } else if (e.key === '[' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        onCollapsedChange?.(!collapsed);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [mode, collapsed, onCollapsedChange]);
-  useEffect(() => {
-    if (!collapsed && focusAfterOpen.current) {
-      focusAfterOpen.current = false;
-      requestAnimationFrame(() => searchRef.current?.focus());
-    }
-  }, [collapsed]);
+    if (focusSearch) requestAnimationFrame(() => searchRef.current?.focus());
+  }, [focusSearch]);
 
   // The search runs over every page this person can open; a group's name finds
   // its pages too, so "money" finds Finance and Commissions.
@@ -160,28 +139,17 @@ function GlassSidebar({
     return out;
   }, [query, sections]);
 
-  /* The name beside a rail icon, fixed to the window and drawn outside the
-     panel: the frosted glass would otherwise trap it and the scrolling list
-     would cut it off at the edge. */
-  const [hint, setHint] = useState(null);
-  const showHint = (target) => {
-    const el = rail ? target?.closest?.('[data-hint]') : null;
-    if (!el) return setHint(null);
-    const box = el.getBoundingClientRect();
-    return setHint({ label: el.dataset.hint, x: box.right + 12, y: box.top + box.height / 2 });
-  };
-
-  const brand = (compact) => (
-    <NavLink to="/" onClick={onNavigate} data-hint="Hao Labs"
+  const brand = () => (
+    <NavLink to="/" onClick={onNavigate}
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
       {/* The mark, and nothing else. Spelling out "Hao Labs" and "Hao Stock"
           beside it said twice what the logo already says, and at this size the
           words were the loudest thing in the panel (owner, 9 Nov 2026: "just
           keep the hǎo logo"). It stands bigger now that it stands alone. The
           full lockup lives on the sign-in screen. Artwork: docs/mockups/brand.py.
-          The name is still here for a screen reader and for the rail's tooltip. */}
+          The name is still here for a screen reader. */}
       <img src="/brand/hao-mark.png" alt="Hao Labs" width="894" height="512"
-        className={clsx('w-auto shrink-0', compact ? 'h-6' : sheet ? 'h-7' : 'h-8')} />
+        className={clsx('w-auto shrink-0', sheet ? 'h-7' : 'h-8')} />
     </NavLink>
   );
 
@@ -213,14 +181,14 @@ function GlassSidebar({
   };
 
   const footer = (
-    <Footer rail={rail} mode={mode} user={user} unread={unread}
+    <Footer mode={mode} user={user} unread={unread}
       onProfile={onProfile} onPassword={onPassword} onNotifications={onNotifications} onSignOut={onSignOut} />
   );
 
   const full = (
     <div className="flex h-full min-h-0 flex-col">
       <div className={clsx('flex items-center justify-between gap-2', sheet ? 'px-3 pb-2 pr-6 pt-3' : 'px-4 pb-2.5 pr-7 pt-3.5')}>
-        {brand(false)}
+        {brand()}
         {mode === 'sheet' ? (
           <button type="button" onClick={onNavigate}
             className={clsx('glass-row grid size-9 shrink-0 place-items-center rounded-full g-text g-hover', FOCUS)}>
@@ -244,7 +212,11 @@ function GlassSidebar({
                 onNavigate?.();
                 navigate(results[0].item.to);
               } else if (e.key === 'Escape') {
-                if (query) setQuery(''); else e.currentTarget.blur();
+                // Text in the box: clear it. Empty: put the menu away (the
+                // computer's; a phone's drawer has its own close button).
+                if (query) setQuery('');
+                else if (onClose) onClose();
+                else e.currentTarget.blur();
               }
             }}
             placeholder="Search pages"
@@ -335,90 +307,36 @@ function GlassSidebar({
     </div>
   );
 
-  const railView = (
-    <div className="flex min-h-0 flex-1 flex-col items-center">
-      <div className="pb-2 pt-4">{brand(true)}</div>
-      <button
-        type="button"
-        data-hint="Search pages"
-        onClick={() => { focusAfterOpen.current = true; onCollapsedChange?.(false); }}
-        className={clsx('glass-row g-text g-hover mb-1 grid size-11 shrink-0 place-items-center rounded-full', FOCUS)}
-      >
-        <Search className="h-[18px] w-[18px]" />
-        <span className="sr-only">Search pages</span>
-      </button>
-      <nav aria-label="Navigation" className="flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {sections.map((s) => (
-          <div key={s.key} className="flex w-full flex-col items-center">
-            <div aria-hidden className="glass-divider my-1.5 w-7" />
-            {s.items.map((item) => {
-              const Icon = ICONS[item.icon] || Package;
-              const active = item.to === current;
-              const count = counts[item.badge] || 0;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  data-hint={item.label}
-                  aria-current={active ? 'page' : undefined}
-                  className={clsx(
-                    'relative mb-0.5 grid size-10 shrink-0 place-items-center rounded-full',
-                    FOCUS,
-                    active ? 'glass-active g-strong' : 'glass-row g-soft g-hover',
-                  )}
-                >
-                  <Icon className={clsx('h-[17px] w-[17px]', active && 'g-lime')} />
-                  {count > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500" />}
-                  <span className="sr-only">{item.label}</span>
-                </NavLink>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-      {footer}
-    </div>
-  );
-
   if (mode === 'sheet') return <div className="glass-panel glass-drawer flex h-full flex-col">{full}</div>;
 
   return (
-    <aside
+    <motion.aside
       aria-label="Navigation"
-      onPointerOver={(e) => showHint(e.target)}
-      onPointerLeave={() => setHint(null)}
-      onFocusCapture={(e) => showHint(e.target)}
-      onBlurCapture={() => setHint(null)}
-      className={clsx('fixed left-3 top-3 z-30 hidden lg:block', rail ? 'w-[4.5rem]' : 'bottom-3 w-56')}
+      /* Slides in by position only — no fade. This panel is frosted glass, and
+         glass does not blur what is behind it while an ancestor is fading. */
+      initial={{ x: -18 }}
+      animate={{ x: 0 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed bottom-3 left-3 top-3 z-10 hidden w-56 lg:block"
     >
-      <div className={clsx('glass-panel flex flex-col', rail ? 'max-h-[calc(100dvh-1.5rem)]' : 'h-full')}>
-        {rail ? railView : full}
-      </div>
+      <div className="glass-panel flex h-full flex-col">{full}</div>
 
-      {/* Fold and unfold, on the panel's own edge. */}
+      {/* Hide, on the panel's own edge. */}
       <div className="group absolute -right-3.5 top-[1.65rem] z-10">
         <button
           type="button"
-          onClick={() => onCollapsedChange?.(!collapsed)}
-          aria-expanded={!collapsed}
+          onClick={onClose}
           className="glass-chip grid size-7 cursor-pointer place-items-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.45)] ring-1 ring-white/10 outline-none transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-brand-500"
         >
-          {collapsed ? <ChevronRight className="h-[15px] w-[15px]" strokeWidth={2.5} /> : <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.5} />}
-          <span className="sr-only">{collapsed ? 'Expand' : 'Collapse'}</span>
+          <ChevronLeft className="h-[15px] w-[15px]" strokeWidth={2.5} />
+          <span className="sr-only">Hide menu</span>
         </button>
         <span className="glass-chip pointer-events-none absolute left-9 top-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold opacity-0 shadow-lg transition group-hover:opacity-100">
-          {collapsed ? 'Expand' : 'Collapse'}
+          Hide
           <kbd className="ml-1 rounded bg-white/10 px-1 font-sans text-[10px] opacity-70">[</kbd>
         </span>
       </div>
-
-      {hint ? (
-        <span role="tooltip" style={{ left: hint.x, top: hint.y }}
-          className="glass-chip pointer-events-none fixed z-50 -translate-y-1/2 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold shadow-lg">
-          {hint.label}
-        </span>
-      ) : null}
-    </aside>
+    </motion.aside>
   );
 }
 
@@ -426,22 +344,18 @@ function GlassSidebar({
    name — and the menu that opens from it says the same single name, no full
    name and no role line, for every role including the administrator (Nino,
    10 Nov 2026: "keep the name simple, just one name, not too many words").
-   The full name and the role are on My profile. In the rail only the initials
-   show. */
-function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotifications, onSignOut }) {
+   The full name and the role are on My profile. */
+function Footer({ mode, user, unread, onProfile, onPassword, onNotifications, onSignOut }) {
   const [open, setOpen] = useState(false);
   const firstName = (user?.name || '').trim().split(/\s+/)[0] || user?.name;
   const item = 'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-muted transition hover:bg-white/[0.06] hover:text-foreground';
 
   return (
-    <div className={clsx('relative shrink-0', rail ? 'flex flex-col items-center pb-3' : 'px-3 pb-3', mode === 'sheet' && 'pb-[max(0.75rem,env(safe-area-inset-bottom))]')}>
+    <div className={clsx('relative shrink-0 px-3 pb-3', mode === 'sheet' && 'pb-[max(0.75rem,env(safe-area-inset-bottom))]')}>
       <div aria-hidden className="glass-divider mb-2 w-full" />
       {open && <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />}
       {open && (
-        <div className={clsx(
-          'absolute z-30 w-48 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-[0_12px_30px_-12px_rgba(0,0,0,0.75)]',
-          rail ? 'bottom-2 left-[calc(100%+0.75rem)]' : 'bottom-[calc(100%-0.5rem)] left-3',
-        )}>
+        <div className="absolute bottom-[calc(100%-0.5rem)] left-3 z-30 w-48 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-[0_12px_30px_-12px_rgba(0,0,0,0.75)]">
           <div className="px-2.5 pb-1.5 pt-1">
             <span className="block truncate text-[13px] font-semibold leading-snug text-foreground">{firstName}</span>
           </div>
@@ -465,16 +379,14 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
       <button
         type="button"
         title={firstName}
-        data-hint={firstName}
         onClick={() => setOpen((v) => !v)}
-        className={clsx('glass-row flex w-full cursor-pointer items-center gap-3 rounded-full text-left', FOCUS, rail ? 'justify-center p-1' : 'px-2 py-2')}
+        className={clsx('glass-row flex w-full cursor-pointer items-center gap-3 rounded-full px-2 py-2 text-left', FOCUS)}
       >
         <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#2b3b20] to-[#141d0e] text-xs font-semibold text-brand-200 ring-1 ring-white/20">
           {initials(user?.name)}
           {unread > 0 && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-[#12150f]" />}
         </span>
-        {rail ? <span className="sr-only">{firstName}</span>
-          : <span className="g-strong min-w-0 flex-1 truncate text-sm font-semibold">{firstName}</span>}
+        <span className="g-strong min-w-0 flex-1 truncate text-sm font-semibold">{firstName}</span>
       </button>
     </div>
   );
@@ -526,23 +438,26 @@ function Banner({ user, unread, onBell }) {
         <img src="/banner.webp" alt="" className="h-full w-full object-cover" />
       </div>
 
+      {/* The bell, on the RIGHT, as its own small glass button — over the
+          cartons, which are only a picture. It used to hang at the left edge,
+          where its badge sat on top of the greeting (Nino, 10 Nov 2026: "the
+          notification is in the way, move it to the other side"). A phone has
+          its bell in the top bar, so this is the computer's. */}
       <button
         type="button"
         onClick={onBell}
         aria-label="Notifications"
-        className="focus-ring absolute left-6 top-1/2 z-10 hidden size-8 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-white/65 transition hover:text-white lg:grid"
+        className="focus-ring absolute right-4 top-4 z-10 hidden size-9 cursor-pointer place-items-center rounded-full bg-black/25 text-white/80 ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-black/40 hover:text-white lg:grid"
       >
-        <Bell className="h-[15px] w-[15px]" />
+        <Bell className="h-[16px] w-[16px]" />
         {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#2a0f0b]">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
-      {/* lg:pl-16 keeps the words clear of the bell that hangs at the banner's
-          left edge on a computer. */}
-      <div className="relative flex min-h-[5.5rem] min-w-0 flex-col justify-center px-5 py-4 text-left sm:min-h-[7rem] sm:px-7 lg:pl-16">
+      <div className="relative flex min-h-[5.5rem] min-w-0 flex-col justify-center px-5 py-4 text-left sm:min-h-[7rem] sm:px-7">
         <h1 className={clsx('hello-in max-w-full truncate leading-tight tracking-tight text-white sm:max-w-[60%] sm:text-3xl', greetSize)} style={{ '--i': 0 }}>
           <span className="font-normal text-white/70">Mambo vipi?</span>{' '}
           <span className="font-semibold">{name}</span>
@@ -652,7 +567,9 @@ export default function Layout() {
   const location = useLocation();
   const qc = useQueryClient();
   const [drawer, setDrawer] = useState(null); // null | 'menu' | 'search'
-  const [collapsed, setCollapsed] = useState(() => readStore(SIDEBAR_KEY, true));
+  // The computer's menu: hidden until asked for, never remembered open.
+  const [navOpen, setNavOpen] = useState(false);
+  const [navSearch, setNavSearch] = useState(false); // opened with ⌘K: cursor in the search
   const [bellOpen, setBellOpen] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
@@ -692,7 +609,32 @@ export default function Layout() {
     };
   }, [drawer]);
 
-  const setFold = (next) => { writeStore(SIDEBAR_KEY, next); setCollapsed(next); };
+  const closeNav = () => { setNavOpen(false); setNavSearch(false); };
+
+  // Choosing a page puts the menu away again.
+  useEffect(() => { closeNav(); }, [location.pathname]);
+
+  // [ shows or hides it, ⌘K shows it with the cursor in the search, Escape
+  // puts it away. Listened for here, because the menu itself is not mounted
+  // while it is hidden.
+  useEffect(() => {
+    const onKey = (e) => {
+      const el = e.target;
+      const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setNavSearch(true);
+        setNavOpen(true);
+      } else if (e.key === '[' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        setNavOpen((v) => !v);
+        setNavSearch(false);
+      } else if (e.key === 'Escape' && navOpen && !typing) {
+        closeNav();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   const { data: unread = 0 } = useQuery({
     queryKey: ['notifications', 'unread'],
@@ -728,9 +670,9 @@ export default function Layout() {
     counts: pendingActions,
     user,
     unread,
-    onProfile: () => { setDrawer(null); navigate('/profile'); },
-    onPassword: () => { setDrawer(null); setShowPasswordModal(true); },
-    onNotifications: () => { setDrawer(null); navigate('/notifications'); },
+    onProfile: () => { setDrawer(null); closeNav(); navigate('/profile'); },
+    onPassword: () => { setDrawer(null); closeNav(); setShowPasswordModal(true); },
+    onNotifications: () => { setDrawer(null); closeNav(); navigate('/notifications'); },
     onSignOut: logout,
   };
 
@@ -744,7 +686,27 @@ export default function Layout() {
 
   return (
     <div className="min-h-dvh bg-background">
-      <GlassSidebar mode="desktop" {...shared} collapsed={collapsed} onCollapsedChange={setFold} />
+      {/* The computer's menu. Hidden: one small button at the top left. Asked
+          for: the panel comes out over the page, which dims a little behind it
+          — the page does not move, so nothing jumps. A phone has its own drawer
+          and bar below, and none of this. */}
+      {!navOpen && (
+        <button
+          type="button"
+          onClick={() => setNavOpen(true)}
+          aria-label="Open menu"
+          title="Menu ( [ )"
+          className="glass-chip fixed left-3 top-3 z-30 hidden size-10 cursor-pointer place-items-center rounded-full shadow-[0_4px_14px_rgba(0,0,0,0.45)] ring-1 ring-white/10 outline-none transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-brand-500 lg:grid"
+        >
+          <Menu className="h-[18px] w-[18px]" />
+        </button>
+      )}
+      {navOpen && (
+        <div className="fixed inset-0 z-40 hidden lg:block">
+          <div className="nav-scrim absolute inset-0 bg-black/35" onClick={closeNav} />
+          <GlassSidebar mode="desktop" {...shared} focusSearch={navSearch} onClose={closeNav} />
+        </div>
+      )}
 
       {/* The phone's drawer */}
       {drawer && (
@@ -767,11 +729,9 @@ export default function Layout() {
         </div>
       )}
 
-      <div
-        className="transition-[padding] duration-200"
-        style={{ '--sidebar-room': collapsed ? ROOM.rail : ROOM.open }}
-      >
-        <div className="lg:pl-[var(--sidebar-room)]">
+      <div>
+        {/* lg:pl-10: just the strip the menu button stands in. */}
+        <div className="lg:pl-10">
           {/* On a phone the menu and the bell have to stay reachable, so they
               sit in a small bar of their own above everything. */}
           {/* calc, not max: on a phone with a camera hole the inset IS the
@@ -809,7 +769,7 @@ export default function Layout() {
               tablet. The room under the page is a spacer now, below. */}
           <main className="overflow-x-clip px-3 pb-3 pt-1 sm:px-4 sm:pb-4 lg:px-6 lg:pb-8 lg:pt-6">
             {/* 1400px was a cap for a laptop. On the owner's own screen it
-                left a hand's width of empty page between the rail and the
+                left a hand's width of empty page between the menu and the
                 banner, and the same again on the right — the panel looked
                 marooned. Target Express caps at 1920, which fills a wide
                 screen and still stops text running away on an ultra-wide. */}
@@ -818,7 +778,7 @@ export default function Layout() {
                 {atHome && <Banner user={user} unread={unread} onBell={() => setBellOpen((v) => !v)} />}
                 {bellOpen && (
                   <BellPanel
-                    position="max-lg:fixed max-lg:inset-x-3 max-lg:top-[4.25rem] max-lg:w-auto lg:left-3 lg:top-14"
+                    position="max-lg:fixed max-lg:inset-x-3 max-lg:top-[4.25rem] max-lg:w-auto lg:right-3 lg:top-16"
                     unread={unread} notes={recentNotes} onClose={() => setBellOpen(false)}
                     onReadAll={() => markAllRead.mutate()} onReadOne={(id) => markOneRead.mutate(id)}
                     onViewAll={() => { setBellOpen(false); navigate('/notifications'); }} />
