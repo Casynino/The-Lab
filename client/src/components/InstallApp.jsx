@@ -101,20 +101,20 @@ export function useInstall() {
   return { ...state, install };
 }
 
-/** One step, with the button it names drawn at the end of the row. Kept small:
-    Nino, 10 Nov 2026, holding up the iPhone's: "it should be small and nice,
-    don't make it big and bad". */
+/** One step: a plain line — a small red number, the words, the button it names
+    drawn faint at the end. No box round it, no red disc: Nino, 10 Nov 2026,
+    holding up the card for the second time — "it looks like too much". */
 function Step({ n, icon: Icon, children }) {
   return (
-    <li className="flex items-center gap-2.5 rounded-lg border border-border bg-elevated px-2.5 py-2 text-[12.5px] leading-snug text-muted">
-      <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-brand-500 text-[10px] font-bold text-white">{n}</span>
+    <li className="flex items-center gap-3 py-2.5 text-[13px] leading-snug text-white/65">
+      <span className="w-2.5 shrink-0 text-center font-mono text-[11px] text-brand-500">{n}</span>
       <span className="min-w-0 flex-1">{children}</span>
-      {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-faint" /> : null}
+      {Icon ? <Icon className="h-3.5 w-3.5 shrink-0 text-white/30" /> : null}
     </li>
   );
 }
 
-const b = (text) => <b className="font-semibold text-foreground">{text}</b>;
+const b = (text) => <b className="font-medium text-white">{text}</b>;
 
 function steps(browser, ios) {
   if (browser === 'in-app') {
@@ -172,41 +172,37 @@ export function InstallSheet({ open, onClose }) {
 
   if (!open) return null;
 
+  /* Frosted glass, so the scene stays there behind it instead of being covered
+     by a slab: a light scrim, and a card that blurs what is under it. Only a
+     title and the steps. What was here before also had a subtitle, a footnote
+     for WhatsApp (the in-app steps already say so) and a full-width button,
+     and the card read as too much. Closing is the X, a tap outside, or Escape. */
   return (
     <div
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-5 backdrop-blur-[2px]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-5"
     >
       <div role="dialog" aria-modal="true" aria-label="Use it like an app"
-        className="w-full max-w-[19.5rem] rounded-2xl border border-border bg-surface p-4 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)]">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-[15px] font-semibold leading-tight text-foreground">Use it like an app</h3>
-            <p className="mt-0.5 text-[12px] text-faint">Full screen, no browser bar, its own icon.</p>
-          </div>
+        className="w-full max-w-[17.5rem] rounded-2xl border border-white/10 bg-[#0c0c0d]/70 px-4 pb-2 pt-3.5 shadow-[0_30px_80px_-30px_rgba(0,0,0,0.9)] backdrop-blur-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-[14px] font-medium tracking-tight text-white">Use it like an app</h3>
           <button type="button" onClick={onClose} aria-label="Close"
-            className="-mr-1 -mt-1 grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-full text-faint transition hover:bg-elevated hover:text-muted">
-            <X className="h-4 w-4" />
+            className="-mr-1.5 grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white/80">
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {canPrompt ? (
-          <div className="mt-3.5 flex flex-col gap-1.5">
-            <button type="button" className="btn-primary w-full !py-2 text-[13px]" onClick={async () => { if (await install()) onClose(); }}>
+          <div className="mb-1.5 mt-3 flex flex-col items-stretch">
+            <button type="button"
+              className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/10 text-[13px] font-medium text-white ring-1 ring-inset ring-white/15 transition hover:bg-white/15"
+              onClick={async () => { if (await install()) onClose(); }}>
               <Download className="h-3.5 w-3.5" /> Install the app
             </button>
-            <button type="button" className="btn-secondary w-full !py-1.5 text-[12.5px]" onClick={onClose}>Not now</button>
+            <button type="button" className="h-8 cursor-pointer text-[12px] text-white/45 transition hover:text-white/75" onClick={onClose}>Not now</button>
           </div>
         ) : (
-          <>
-            <ol className="mt-3 space-y-1.5">{steps(browser, ios)}</ol>
-            {browser !== 'in-app' && (
-              <p className="mt-2 text-[11px] leading-snug text-faint">
-                Opened in WhatsApp? Open it in {ios ? 'Safari' : 'your browser'} first.
-              </p>
-            )}
-            <button type="button" className="btn-secondary mt-3 w-full !py-1.5 text-[12.5px]" onClick={onClose}>Got it</button>
-          </>
+          <ol className="mt-1.5 divide-y divide-white/[0.07]">{steps(browser, ios)}</ol>
         )}
       </div>
 
@@ -214,8 +210,8 @@ export function InstallSheet({ open, onClose }) {
           sheet is open in Safari, a small arrow bounces over the toolbar
           where Share actually is, so nobody hunts for it. */}
       {ios && browser === 'safari' && !canPrompt && (
-        <div aria-hidden className="pointer-events-none fixed inset-x-0 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-[60] flex justify-center">
-          <span className="flex animate-bounce flex-col items-center gap-0.5 text-[10px] font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+        <div aria-hidden className="pointer-events-none fixed inset-x-0 bottom-[calc(max(0.5rem,env(safe-area-inset-bottom))+2.4rem)] z-[60] flex justify-center">
+          <span className="flex animate-bounce flex-col items-center gap-0.5 text-[10px] font-medium text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             Share
             <ArrowDown className="h-3.5 w-3.5 text-brand-500" />
           </span>
