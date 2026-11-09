@@ -1,14 +1,18 @@
-/* The sign-in scene: the country, and the work.
+/* The sign-in scene: the Lab's loading dock.
 
-   Nino, 9 Nov 2026: "show a map of Tanzania, moving boxes — this is a world
-   class distribution channel". So this is the business drawn once — the Lab in
-   Dar es Salaam, the regions it supplies, and stock on the road between them.
-   The geometry is real coordinates from docs/mockups/tanzania.py; everything
-   here is the lighting and the motion.
+   Nino, 9 Nov 2026: "I want to see the machine, I want to see people, I want
+   to see real movement". The objects are rendered in 3D (docs/mockups/dock.py)
+   and the browser moves them — 76 KB for the whole scene, against the 5.6 MB
+   video the site he pointed at downloads every visit.
 
-   Every animation is a transform, an opacity or a dash offset, which the
-   compositor can do on its own. Nothing animates a filter, a blur or a layout
-   property — that is what made the last version stutter on a phone. */
+   SLIDING ALONG THE GROUND is not sliding sideways. On this camera, 100 units
+   of dock floor move a thing 6.47% of the frame across and 2.42% of it up. So
+   a lorry pulling 900 units up the apron travels translate(58.2%, -21.8%),
+   and every movement below is built from that pair. Get it wrong and things
+   float off the floor.
+
+   Everything animated here is a transform or an opacity: the compositor's
+   work, not the main thread's. */
 
 .ls {
   position: fixed;
@@ -39,135 +43,90 @@
 
 .ls-glow.b {
   right: -20%;
-  bottom: -18%;
-  width: 62%;
-  height: 54%;
-  background: rgba(var(--coral), 0.09);
+  bottom: -22%;
+  width: 66%;
+  height: 56%;
+  background: rgba(var(--coral), 0.1);
   animation: ls-drift-b 26s ease-in-out infinite;
 }
 
 @keyframes ls-drift-a { 50% { transform: translate3d(8%, 6%, 0) scale(1.1); } }
 @keyframes ls-drift-b { 50% { transform: translate3d(-7%, -6%, 0) scale(1.08); } }
 
-/* ── the map ──────────────────────────────────────────────────────────────
-   A square-ish box the country is drawn inside. The parcels are positioned
-   against this same box, so the SVG and the moving cartons share one
-   coordinate space and a box cannot drift off its own road. */
-.ls-map {
+/* ── the dock ─────────────────────────────────────────────────────────────
+   A band across the foot of the screen on a phone, so the brand and the way
+   in own the top. On a computer it sits low and left of the sign-in card. */
+.ls-dock {
   position: absolute;
-  /* Low on a phone: the brand, the line and the button own the top of the
-     screen, and the country fills the air under them. */
-  top: 69%;
   left: 50%;
-  width: min(54vh, 86vw);
-  aspect-ratio: 1000 / 974;
-  transform: translate(-50%, -50%);
+  /* The rendered frame carries air around the dock, so 128% of the screen is
+     what puts the shed at one edge and the lorry at the other without
+     clipping either. */
+  bottom: -2%;
+  width: 128%;
+  aspect-ratio: 1500 / 950;
+  transform: translateX(-50%);
   pointer-events: none;
 }
 
-/* On a computer the country sits low and to the LEFT of centre, not hard
-   right. The sign-in card lives on the right, and with the map over there the
-   card covered the Lab and most of the fleet — the one part worth looking at.
-   The Lab stands nine tenths of the way across the map, so pulling the map
-   left lands it in the gap between the words and the card. */
+@media (min-width: 640px) {
+  .ls-dock { width: 104%; bottom: -4%; }
+}
+
 @media (min-width: 1024px) {
-  .ls-map {
-    left: 6%;
-    right: auto;
-    top: 70%;
-    width: min(64vh, 40vw);
-    transform: translateY(-50%);
+  .ls-dock {
+    left: 2%;
+    width: min(72%, 1180px);
+    bottom: -10%;
+    transform: none;
   }
 }
 
-.ls-svg {
+.ls-layer {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  object-fit: contain;
+  will-change: transform;
 }
 
-/* The border draws itself once, on arrival. */
-.ls-border {
-  stroke-dasharray: 4200;
-  stroke-dashoffset: 4200;
-  animation: ls-draw 2.8s cubic-bezier(0.3, 0.8, 0.3, 1) 0.2s forwards;
-  filter: drop-shadow(0 0 18px rgba(var(--red), 0.35));
+/* The lorry loads, then pulls out up the apron and the next one rolls in.
+   Long and slow: a loaded lorry does not leave in a hurry. */
+.ls-lorry { animation: ls-pullout 17s cubic-bezier(0.5, 0, 0.6, 1) infinite; }
+
+@keyframes ls-pullout {
+  0%, 34% { transform: translate(0, 0); opacity: 1; }
+  72% { transform: translate(58.2%, -21.8%); opacity: 1; }
+  80%, 88% { transform: translate(72.8%, -27.2%); opacity: 0; }
+  96% { transform: translate(-19.4%, 7.3%); opacity: 0; }
+  100% { transform: translate(0, 0); opacity: 1; }
 }
 
-@keyframes ls-draw { to { stroke-dashoffset: 0; } }
+/* The forklift shuttles a pallet from the stacks to the lorry and goes back
+   for the next one. */
+.ls-forklift { animation: ls-shuttle 13s ease-in-out infinite; }
 
-/* A road being worked: the dash crawls from the Lab outwards. */
-.ls-road {
-  stroke-dasharray: 10 14;
-  animation: ls-crawl var(--d, 7s) linear infinite;
+@keyframes ls-shuttle {
+  0%, 8% { transform: translate(0, 0); }
+  42%, 56% { transform: translate(19.4%, -7.3%); }
+  92%, 100% { transform: translate(0, 0); }
 }
 
-@keyframes ls-crawl { to { stroke-dashoffset: -24; } }
+/* Two people walking boxes across the apron, out of step with each other. */
+.ls-worker1 { animation: ls-walk-a 11s ease-in-out infinite; }
+.ls-worker2 { animation: ls-walk-b 9s ease-in-out infinite; }
 
-/* A region taking delivery. */
-.ls-stop-ring {
-  fill: none;
-  stroke: rgba(var(--coral), 0.75);
-  stroke-width: 1.5;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ls-land 3.6s ease-out infinite;
-  animation-delay: var(--s, 0s);
+@keyframes ls-walk-a {
+  0%, 6% { transform: translate(0, 0); }
+  46%, 54% { transform: translate(16.8%, -6.3%); }
+  94%, 100% { transform: translate(0, 0); }
 }
 
-@keyframes ls-land {
-  0% { transform: scale(0.35); opacity: 0; }
-  30% { opacity: 0.9; }
-  100% { transform: scale(1.5); opacity: 0; }
-}
-
-/* The Lab, breathing. */
-.ls-hub-ring {
-  fill: none;
-  stroke: rgba(var(--red), 0.9);
-  stroke-width: 2;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: ls-hub 3s ease-out infinite;
-}
-
-@keyframes ls-hub {
-  0% { transform: scale(0.45); opacity: 0.95; }
-  100% { transform: scale(1.8); opacity: 0; }
-}
-
-/* ── the fleet ────────────────────────────────────────────────────────────
-   The vehicles, the shed and the ship are rendered pictures (fleet.py) living
-   inside the SVG, so they ride the roads' own paths and scale with the
-   viewBox. All that is left here is how they sit in the dark. */
-.ls-mover {
-  filter: drop-shadow(0 4px 9px rgba(0, 0, 0, 0.8));
-}
-
-/* The road under a lorry: a long haul is never perfectly level. A hair of
-   movement, slowly — anything more and it reads as a toy being shaken. */
-.ls-step {
-  animation: ls-step 2.6s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-}
-
-@keyframes ls-step {
-  50% { transform: translateY(-1.1px); }
-}
-
-/* The ship riding the swell, slower still. */
-.ls-ship {
-  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.85));
-  animation: ls-swell 9s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-}
-
-@keyframes ls-swell {
-  50% { transform: translateY(-3px); }
+@keyframes ls-walk-b {
+  0%, 5% { transform: translate(0, 0); }
+  48%, 56% { transform: translate(-13.6%, 5.1%); }
+  95%, 100% { transform: translate(0, 0); }
 }
 
 /* Dark at the edges, so nothing competes with the words. */
@@ -175,8 +134,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(140% 100% at 58% 48%, transparent 38%, rgba(4, 3, 3, 0.62) 100%),
-    linear-gradient(to bottom, rgba(4, 3, 3, 0.5), transparent 22%, transparent 70%, rgba(4, 3, 3, 0.5));
+    radial-gradient(135% 100% at 50% 72%, transparent 32%, rgba(4, 3, 3, 0.68) 100%),
+    linear-gradient(to bottom, rgba(4, 3, 3, 0.72), rgba(4, 3, 3, 0.2) 34%, transparent 62%);
   pointer-events: none;
 }
 
@@ -194,10 +153,9 @@
 
 @keyframes ls-pop { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
 
-/* Somebody who has asked their phone to stop moving things gets the map
+/* Somebody who has asked their phone to stop moving things gets the dock
    standing still — it is a picture, not information. */
 @media (prefers-reduced-motion: reduce) {
-  .ls-glow, .ls-road, .ls-stop-ring, .ls-hub-ring, .ls-step, .ls-ship { animation: none; }
-  .ls-border { stroke-dashoffset: 0; animation: none; }
+  .ls-glow, .ls-lorry, .ls-forklift, .ls-worker1, .ls-worker2 { animation: none; }
   .ls-up, .ls-pop { animation-duration: 0.01ms; }
 }

@@ -1,5 +1,9 @@
 """The fleet, the warehouse and the ship, rendered in 3D.
 
+NOT WIRED TO ANYTHING SINCE 9 Nov 2026 — these sprites belonged to the map
+scene, which the loading dock (docs/mockups/dock.py) replaced, so they are no
+longer committed. Run this to bring them back.
+
 Nino, 9 Nov 2026, holding up bongolife.app: the sign-in scene should look
 real, not like flat drawings. Bongo Life gets that with a 5.6 MB video that
 downloads on every visit — too much for a tool his reps open several times a

@@ -1,5 +1,9 @@
 """Tanzania, simplified, projected into an SVG box.
 
+NOT WIRED TO ANYTHING SINCE 9 Nov 2026 — the sign-in scene is the loading
+dock now (docs/mockups/dock.py), so client/src/pages/tanzania.js is no longer
+committed. Run this to bring the map back.
+
 The sign-in scene is the business: product leaving the Lab in Dar es Salaam
 and going out to the regions (Nino, 9 Nov 2026 — "show a map of Tanzania,
 moving boxes… this is a distribution channel"). This writes the geometry the

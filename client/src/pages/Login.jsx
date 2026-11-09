@@ -7,7 +7,6 @@ import toast from 'react-hot-toast';
 import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, Boxes, Timer, Coins, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Field, Input } from '@/components/ui';
-import TZ from './tanzania';
 import './login.css';
 
 /**
@@ -60,137 +59,35 @@ function Mark({ size = 'md' }) {
 
 // ── The scene ────────────────────────────────────────────────────────────────
 
-/* The country, and the work.
- *
- * Nino, 9 Nov 2026: "show a map of Tanzania, moving boxes — this is a world
- * class distribution channel". So the sign-in screen is the business drawn
- * once: the Lab in Dar es Salaam, the regions it supplies, and stock on the
- * road between them. The outline is real coordinates, simplified and
- * projected by docs/mockups/tanzania.py — not a doodle of a country shape.
- *
- * Every moving part is a transform or an opacity on its own layer, so the
- * whole thing is the compositor's work and none of it is the main thread's.
- */
+/* ── the dock ──────────────────────────────────────────────────────────────
+   Nino, 9 Nov 2026: "I want to see the machine, I want to see people, I want
+   to see real movement". So the sign-in scene is the Lab's own loading dock,
+   rendered in 3D by docs/mockups/dock.py — the shed with its bays open and
+   racking inside, pallets of stock on the apron, a forklift working, two
+   people carrying boxes, and a lorry that loads and pulls out.
 
-/* ── the fleet ─────────────────────────────────────────────────────────────
-   Nino, 9 Nov 2026, holding up bongolife.app: the scene should look real, not
-   like flat drawings. Bongo Life gets that with a 5.6 MB video on every visit,
-   which is too much for a tool his reps open several times a day on mobile
-   data. So the objects are RENDERED in 3D — lit, with real shadows, by
-   docs/mockups/fleet.py — and the browser moves them. The whole set is about
-   50 KB and stays sharp at any size.
+   Every layer is the SAME frame rendered through the SAME camera, so stacking
+   them needs no alignment: each object is already in its right place in the
+   picture. The actors are their own layers, and the browser slides them along
+   the ground. 76 KB for the lot.
 
-   Everything is drawn facing left, which is the way out of Dar on every route
-   but Mtwara; that one is mirrored. */
+   Sliding along the ground is not sliding sideways: on this camera 100 units
+   of dock move a thing 6.47% of the frame across and 2.42% up. Those two
+   numbers are in login.css, and every movement here is built from them. */
 
-const FLEET = {
-  lorry: { src: '/fleet/lorry.webp', w: 300, h: 209, on: 96 },
-  van: { src: '/fleet/van.webp', w: 230, h: 167, on: 78 },
-  warehouse: { src: '/fleet/warehouse.webp', w: 340, h: 206, on: 170 },
-  depot: { src: '/fleet/depot.webp', w: 170, h: 125, on: 58 },
-  ship: { src: '/fleet/ship.webp', w: 380, h: 234, on: 170 },
-};
-
-/** One rendered object, standing on the point given. */
-function Piece({ of, x, y, flip = false, className }) {
-  const p = FLEET[of];
-  const w = p.on;
-  const h = (p.h / p.w) * w;
-  return (
-    <image href={p.src} width={w} height={h} x={-w / 2} y={-h}
-      transform={`translate(${x},${y})${flip ? ' scale(-1,1)' : ''}`}
-      className={className} preserveAspectRatio="xMidYMax meet" />
-  );
-}
-
-/* Where the stock goes, how long a run takes, how far into it each lorry
-   already is, and what is driving it. Staggered on purpose: eight lorries
-   leaving at once is a parade, not a distribution network. */
-const RUNS = [
-  { to: 'arusha', d: '17s', at: '-2s', of: 'lorry' },
-  { to: 'mwanza', d: '23s', at: '-13s', of: 'lorry' },
-  { to: 'dodoma', d: '13s', at: '-7s', of: 'van' },
-  { to: 'mbeya', d: '21s', at: '-17s', of: 'lorry' },
-  { to: 'tanga', d: '11s', at: '-1.5s', of: 'van' },
-  { to: 'morogoro', d: '10s', at: '-8s', of: 'van' },
-  { to: 'mtwara', d: '19s', at: '-11s', of: 'lorry' },
-  { to: 'kigoma', d: '27s', at: '-22s', of: 'lorry' },
-];
+const LAYERS = ['bg', 'stacks', 'lorry', 'forklift', 'worker1', 'worker2'];
 
 function Scene() {
-  const { w, h, border, victoria, cities, routes } = TZ;
-  const dar = cities.dar;
-
   return (
     <div className="ls" aria-hidden="true">
       <span className="ls-glow a" />
       <span className="ls-glow b" />
 
-      <div className="ls-map">
-        <svg viewBox={`0 0 ${w} ${h}`} className="ls-svg" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <linearGradient id="ls-land" x1="0" y1="0" x2="0.35" y2="1">
-              <stop offset="0%" stopColor="rgb(238 49 36 / 0.26)" />
-              <stop offset="60%" stopColor="rgb(238 49 36 / 0.09)" />
-              <stop offset="100%" stopColor="rgb(255 95 75 / 0.02)" />
-            </linearGradient>
-          </defs>
-
-          {/* The country: filled faintly, drawn in the house red. */}
-          <path d={border} fill="url(#ls-land)" stroke="rgb(255 95 75 / 0.8)" strokeWidth="2.5"
-            strokeLinejoin="round" className="ls-border" />
-          {/* Lake Victoria, cut out of the north so the shape is readable. */}
-          <path d={victoria} fill="#070606" stroke="rgb(255 95 75 / 0.22)" strokeWidth="1.6" />
-
-          {/* The roads out of the Lab. The dash crawls, so a lane reads as a
-              route being worked rather than a line drawn on a map. Each one is
-              named, because the cartons below ride these exact paths. */}
-          {RUNS.map((r) => (
-            <path key={r.to} id={`ls-road-${r.to}`} d={routes[r.to]} fill="none"
-              stroke="rgb(255 95 75 / 0.30)" strokeWidth="1.6" strokeLinecap="round"
-              className="ls-road" style={{ '--d': r.d }} />
-          ))}
-
-          {/* Where the stock lands: a depot, and the ring it puts out when a
-              delivery arrives. */}
-          {RUNS.map((r, i) => {
-            const [cx, cy] = cities[r.to];
-            return (
-              <g key={r.to}>
-                <circle cx={cx} cy={cy} r="16" className="ls-stop-ring" style={{ '--s': `${i * 1.1}s` }} />
-                <Piece of="depot" x={cx} y={cy + 4} />
-              </g>
-            );
-          })}
-
-          {/* A ship standing off the coast: what arrives before any of this. */}
-          <g className="ls-ship">
-            <Piece of="ship" x={w - 18} y={h * 0.78} />
-          </g>
-
-          {/* The fleet on the road, each riding its own route. The whole run
-              is slow — a lorry crossing Tanzania should take its time, and
-              slow motion is what he asked for. */}
-          {RUNS.map((r) => {
-            const east = cities[r.to][0] > dar[0];   // Mtwara, and only Mtwara
-            return (
-              <g key={r.to} className="ls-mover">
-                <animateMotion dur={r.d} begin={r.at} repeatCount="indefinite" rotate="0">
-                  <mpath href={`#ls-road-${r.to}`} />
-                </animateMotion>
-                <animate attributeName="opacity" dur={r.d} begin={r.at} repeatCount="indefinite"
-                  values="0;1;1;0" keyTimes="0;0.06;0.92;1" />
-                {/* The road under it: a long haul is never perfectly level. */}
-                <g className="ls-step"><Piece of={r.of} x={0} y={0} flip={east} /></g>
-              </g>
-            );
-          })}
-
-          {/* The Lab itself, in Dar: everything leaves from here, so it is
-              painted last and the fleet pulls out from behind it. */}
-          <circle cx={dar[0]} cy={dar[1]} r="46" className="ls-hub-ring" />
-          <Piece of="warehouse" x={dar[0] - 6} y={dar[1] + 10} />
-        </svg>
+      <div className="ls-dock">
+        {LAYERS.map((n) => (
+          <img key={n} src={`/dock/${n}.webp`} alt="" width="1500" height="950"
+            className={`ls-layer ls-${n}`} fetchpriority={n === 'bg' ? 'high' : undefined} />
+        ))}
       </div>
 
       <div className="ls-vignette" />
