@@ -545,7 +545,11 @@ function Banner({ user, unread, onBell }) {
         <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.32em] text-brand-600 sm:mt-2 sm:text-[11px]">
           {bannerTitle(user?.role)}
         </p>
-        <p className="mt-1 text-xs text-white/65 sm:mt-1.5 sm:text-sm">
+        {/* Computers only. A phone already carries the date in its own top
+            bar a few pixels above this, and saying it twice on one screen is
+            just a line of the banner spent on nothing (owner, 9 Nov 2026).
+            That bar is lg:hidden, so this is its exact opposite. */}
+        <p className="mt-1 hidden text-xs text-white/65 sm:mt-1.5 sm:text-sm lg:block">
           {tzDateLabel({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
         </p>
       </div>
