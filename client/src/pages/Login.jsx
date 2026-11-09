@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
+import { flushSync } from 'react-dom';
 import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -159,6 +160,21 @@ function Gate({ children }) {
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
+  /* Open the card AND put the cursor in the email box, in the same tap. That is
+     what makes the phone offer the saved login straight away — the suggestion
+     appears when a field is focused, so a card that opens with nothing selected
+     makes the person tap again first (Nino, 10 Nov 2026: with a saved password,
+     signing in "should just be easy, like normal"). It has to happen inside the
+     tap: iOS only raises the keyboard, and the saved-login bar above it, for a
+     focus made by the person's own touch — so the card is put on screen
+     synchronously (flushSync) and focused before the tap is over. */
+  const openGate = () => {
+    window.clearTimeout(timer.current);
+    setClosing(false);
+    flushSync(() => setOpen(true));
+    document.getElementById('login-email')?.focus({ preventScroll: true });
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => e.key === 'Escape' && close();
@@ -170,7 +186,7 @@ function Gate({ children }) {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openGate}
         style={rise(0.5)}
         className="ls-up group inline-flex h-10 cursor-pointer items-center rounded px-2 text-[15px] font-semibold tracking-[0.02em] text-white outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/60 md:h-11 md:text-base"
       >
