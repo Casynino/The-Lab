@@ -381,7 +381,29 @@ body {
   textarea.text-sm,
   textarea.text-xs,
   select.text-sm,
-  select.text-xs {
+  select.text-xs,
+  /* Arbitrary sizes have to be named one by one. `text-[13px]` is a class, so
+     a plain `input { font-size: 16px }` loses to it on specificity and the
+     field stays at 13 — which is exactly how the drawer's search box slipped
+     through and kept zooming the page. Same list as Target Express's. */
+  input[class*='text-[10px]'],
+  input[class*='text-[11px]'],
+  input[class*='text-[12px]'],
+  input[class*='text-[12.5px]'],
+  input[class*='text-[13px]'],
+  input[class*='text-[13.5px]'],
+  input[class*='text-[14px]'],
+  input[class*='text-[15px]'],
+  textarea[class*='text-[11px]'],
+  textarea[class*='text-[12px]'],
+  textarea[class*='text-[13px]'],
+  textarea[class*='text-[14px]'],
+  textarea[class*='text-[15px]'],
+  select[class*='text-[11px]'],
+  select[class*='text-[12px]'],
+  select[class*='text-[13px]'],
+  select[class*='text-[14px]'],
+  select[class*='text-[15px]'] {
     font-size: 16px;
   }
 }

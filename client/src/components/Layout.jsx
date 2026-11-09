@@ -262,7 +262,12 @@ function GlassSidebar({
             }}
             placeholder="Search pages"
             aria-label="Search pages"
-            className={clsx('g-input g-strong min-w-0 flex-1 bg-transparent outline-none', sheet ? 'text-[13px]' : 'text-sm')}
+            /* 16px on the phone, always. An iPhone zooms the whole page into
+               any field under that and never zooms back out — which is the
+               "it zooms out and bounces big" the owner kept hitting when he
+               opened this drawer (9 Nov 2026). The stylesheet has a net under
+               this too, but the field should be right on its own. */
+            className={clsx('g-input g-strong min-w-0 flex-1 bg-transparent outline-none', sheet ? 'text-[16px]' : 'text-sm')}
           />
           {query ? (
             <button type="button" onClick={() => { setQuery(''); searchRef.current?.focus(); }}
