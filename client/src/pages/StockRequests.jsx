@@ -761,21 +761,15 @@ export default function StockRequests() {
     <div>
       {isRep ? (
         // A rep's page opens on the one thing they come here to do — the menu already says Requests.
-        // The action is a bold label with a small red "+" and a soft glow, no filled pill (Nino, 11 Nov
-        // 2026: the button was "bad" — the same plain style as Withdraw on the wallet).
+        // The action is a premium card of its own: the label on the left, a bare "+" on the right, no round
+        // shape round it (Nino, 11 Nov 2026: "more good, not too plain — and no round thing").
         <button
           type="button"
           onClick={() => setCartOpen(true)}
-          className="mb-6 flex h-11 items-center gap-3 px-1 text-[15px] font-semibold text-foreground transition active:opacity-70"
+          className="premium-card premium-card--sm mb-7 flex h-14 w-full items-center justify-between px-5 text-left transition hover:brightness-110 active:scale-[0.99]"
         >
-          <span
-            aria-hidden="true"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white"
-            style={{ boxShadow: '0 0 16px rgba(238, 49, 36, 0.38)' }}
-          >
-            <Plus className="h-[18px] w-[18px]" strokeWidth={2.6} />
-          </span>
-          New request
+          <span className="text-[17px] font-bold tracking-tight text-white">New request</span>
+          <Plus className="h-6 w-6 text-brand-500" strokeWidth={2.4} aria-hidden="true" />
         </button>
       ) : (
         <PageHeader title="Stock Requests" subtitle="Approve or reject reps' stock requests." />
