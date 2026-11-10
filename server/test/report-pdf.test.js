@@ -175,7 +175,7 @@ const dayData = () => ({
 test('daily message: Nino\'s format, PDF link last, inside the 700 characters CallMeBot keeps', () => {
   const text = daily.buildWhatsAppText(dayData(), LINK);
   const lines = text.split('\n');
-  assert.equal(lines[0], 'ZELAB — DAILY REPORT');
+  assert.equal(lines[0], '*ZELAB — DAILY REPORT*');
   assert.equal(lines[1], '10 November 2026');
   assert.equal(lines[lines.length - 2], 'Full Report (PDF):');
   assert.equal(lines[lines.length - 1], LINK);

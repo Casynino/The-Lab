@@ -15,7 +15,7 @@ const at = new Date('2026-11-10T11:32:00Z'); // 14:32 in Tanzania
 // ── to the owner ─────────────────────────────────────────────────────────────
 test('STOCK REQUEST', () => {
   assert.equal(t.owner.stockRequest({ by: 'Asha Mwinyi', items: [{ name: 'Pepa King Size', qty: 20 }], total: 760000, when: at }),
-`STOCK REQUEST
+`*STOCK REQUEST*
 10 Nov 2026 | 14:32 EAT
 
 By: Asha Mwinyi
@@ -31,7 +31,7 @@ test('STOCK REQUEST with a single box and several products', () => {
 
 test('SETTLEMENT SUBMITTED', () => {
   assert.equal(t.owner.settlementSubmitted({ by: 'Asha Mwinyi', order: 'STL-20261110-0001', product: 'Pepa King Size', boxes: 10, amount: 380000, method: 'CRDB', commission: 20000, when: at }),
-`SETTLEMENT SUBMITTED
+`*SETTLEMENT SUBMITTED*
 10 Nov 2026
 
 By: Asha Mwinyi
@@ -51,7 +51,7 @@ test('SETTLEMENT SUBMITTED without a payment method or a commission rule leaves 
 
 test('RETURN REQUEST', () => {
   assert.equal(t.owner.returnRequest({ by: 'Asha Mwinyi', order: 'STL-20261110-0001', items: [{ name: 'Pepa Roll', quantity: 4 }], reason: 'Damaged' }),
-`RETURN REQUEST
+`*RETURN REQUEST*
 
 By: Asha Mwinyi
 Order: STL-20261110-0001
@@ -62,12 +62,12 @@ Reason: Damaged`);
 
 test('RETURN REQUEST with several products gives each its own Product / Quantity', () => {
   const text = t.owner.returnRequest({ by: 'W', order: null, items: [{ name: 'A', quantity: 1 }, { name: 'B', quantity: 2 }], reason: null });
-  assert.equal(text, 'RETURN REQUEST\n\nBy: W\n\nProduct: A\nQuantity: 1 Box\n\nProduct: B\nQuantity: 2 Boxes');
+  assert.equal(text, '*RETURN REQUEST*\n\nBy: W\n\nProduct: A\nQuantity: 1 Box\n\nProduct: B\nQuantity: 2 Boxes');
 });
 
 test('COMMISSION READY', () => {
   assert.equal(t.owner.commissionReady({ rep: 'Asha Mwinyi', available: 210000, earned: 460000, penalties: 10000, minimum: 100000 }),
-`COMMISSION READY
+`*COMMISSION READY*
 
 Rep: Asha Mwinyi
 Available: TSh 210,000
@@ -79,7 +79,7 @@ Minimum Withdrawal: TSh 100,000`);
 
 test('LOW STOCK', () => {
   assert.equal(t.owner.lowStock({ product: 'Pepa Roll', remaining: 6, level: 10, suggested: 14, high: true }),
-`LOW STOCK
+`*LOW STOCK*
 
 Product: Pepa Roll
 Remaining: 6 Boxes
@@ -91,7 +91,7 @@ Priority: High`);
 
 test('OUT OF STOCK', () => {
   assert.equal(t.owner.outOfStock({ product: 'Pepa Roll', brand: 'Pepa', lastSale: new Date('2026-11-09T13:10:00Z'), suggested: 20 }),
-`OUT OF STOCK
+`*OUT OF STOCK*
 
 Product: Pepa Roll
 Brand: Pepa
@@ -104,7 +104,7 @@ Suggested Restock: 20 Boxes`);
 
 test('SETTLEMENT DEADLINE', () => {
   assert.equal(t.owner.settlementDeadline({ order: 'STL-20261110-0001', rep: 'Paul', minutes: 8, outstanding: 30000, rate: 10000 }),
-`SETTLEMENT DEADLINE
+`*SETTLEMENT DEADLINE*
 STL-20261110-0001
 
 Rep: Paul
@@ -116,7 +116,7 @@ Daily Fine: TSh 10,000`);
 
 test('EXTENSION GRANTED', () => {
   assert.equal(t.owner.extensionGranted({ rep: 'Paul', deadline: new Date('2026-11-14T11:32:00Z'), rate: 20000 }),
-`EXTENSION GRANTED
+`*EXTENSION GRANTED*
 
 Rep: Paul
 Extension: 96 Hours
@@ -125,7 +125,7 @@ Daily Fine: TSh 20,000`);
 });
 
 test('TEST NOTIFICATION', () => {
-  assert.equal(t.owner.test(), 'ZELAB — TEST NOTIFICATION\n\nWhatsApp notifications are working.');
+  assert.equal(t.owner.test(), '*ZELAB — TEST NOTIFICATION*\n\nWhatsApp notifications are working.');
 });
 
 // ── the reports ──────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ const daily = (over = {}) => ({
 
 test('DAILY REPORT', () => {
   assert.equal(t.owner.dailyReport(daily()),
-`ZELAB — DAILY REPORT
+`*ZELAB — DAILY REPORT*
 10 November 2026
 
 Sales: TSh 1,342,800 (35 Boxes)
@@ -181,7 +181,7 @@ const weekly = (over = {}) => ({
 
 test('WEEKLY REPORT', () => {
   assert.equal(t.owner.weeklyReport(weekly()),
-`ZELAB — WEEKLY REPORT
+`*ZELAB — WEEKLY REPORT*
 3 Nov – 9 Nov 2026
 
 Revenue: TSh 7,460,000
@@ -214,7 +214,7 @@ test('WEEKLY REPORT: a fall shows as -8%, no earlier week to compare shows no gr
 
 test('MONTHLY REPORT uses the same shape under its own title', () => {
   const text = t.owner.monthlyReport(weekly({ period: 'October 2026' }));
-  assert.ok(text.startsWith('ZELAB — MONTHLY REPORT\nOctober 2026\n\nRevenue: '));
+  assert.ok(text.startsWith('*ZELAB — MONTHLY REPORT*\nOctober 2026\n\nRevenue: '));
   assert.match(text, /Full Report \(PDF\):\nhttps:\/\//);
 });
 
@@ -242,7 +242,7 @@ test('reports always keep the PDF link, even with huge numbers and long names, w
 // ── to a rep ─────────────────────────────────────────────────────────────────
 test('SETTLEMENT APPROVED (rep)', () => {
   assert.equal(t.repText({ kind: 'SETTLEMENT_APPROVED', boxes: 10, product: 'Pepa King Size', amount: 380000, earned: 20000, available: 210000, closed: false, order: 'STL-20261110-0001' }),
-`SETTLEMENT APPROVED
+`*SETTLEMENT APPROVED*
 
 10 Boxes of Pepa King Size
 Payment: TSh 380,000
@@ -254,25 +254,25 @@ ZELab`);
 
 test('SETTLEMENT APPROVED says when the order is now closed, and copes with no commission figures', () => {
   const text = t.repText({ kind: 'SETTLEMENT_APPROVED', boxes: 1, product: 'P', amount: 1000, earned: null, available: null, closed: true, order: 'STL-1' });
-  assert.equal(text, 'SETTLEMENT APPROVED\n\n1 Box of P\nPayment: TSh 1,000\n\nOrder STL-1 is now fully closed.\n\nZELab');
+  assert.equal(text, '*SETTLEMENT APPROVED*\n\n1 Box of P\nPayment: TSh 1,000\n\nOrder STL-1 is now fully closed.\n\nZELab');
 });
 
 test('SETTLEMENT DEADLINE NEAR (rep) — first reminder is Nino\'s text; the later two are firmer', () => {
   assert.equal(t.repText({ kind: 'DEADLINE_NEAR', order: 'STL-20261110-0001', stage: 1 }),
-`SETTLEMENT DEADLINE NEAR
+`*SETTLEMENT DEADLINE NEAR*
 
 Order: STL-20261110-0001
 
 Your settlement deadline is approaching. Please settle your order.
 
 ZELab`);
-  assert.match(t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage: 2 }), /^SETTLEMENT FINAL REMINDER\n\nOrder: O\n\n/);
-  assert.match(t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage: 3 }), /^SETTLEMENT DEADLINE URGENT\n\nOrder: O\n\n/);
+  assert.match(t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage: 2 }), /^\*SETTLEMENT FINAL REMINDER\*\n\nOrder: O\n\n/);
+  assert.match(t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage: 3 }), /^\*SETTLEMENT DEADLINE URGENT\*\n\nOrder: O\n\n/);
 });
 
 test('LATE SETTLEMENT FINE (rep)', () => {
   assert.equal(t.repText({ kind: 'LATE_FINE', fine: 10000, order: 'STL-20261110-0001', days: 1 }),
-`LATE SETTLEMENT FINE
+`*LATE SETTLEMENT FINE*
 
 Fine Applied: TSh 10,000
 Order: STL-20261110-0001
@@ -284,7 +284,7 @@ ZELab`);
 
 test('STOCK REQUEST APPROVED (rep)', () => {
   assert.equal(t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'SR-0001' }),
-`STOCK REQUEST APPROVED
+`*STOCK REQUEST APPROVED*
 
 Request: SR-0001
 Your stock request has been approved and issued.
@@ -312,7 +312,7 @@ test('every rep template is plain text in the same frame: capitals title, blank 
 });
 
 test('an alert nobody wrote a template for still goes out in the same shape, without the bell emoji', () => {
-  assert.equal(t.repText(undefined, { title: '📦 New thing', message: 'Something happened.' }), 'NEW THING\n\nSomething happened.\n\nZELab');
+  assert.equal(t.repText(undefined, { title: '📦 New thing', message: 'Something happened.' }), '*NEW THING*\n\nSomething happened.\n\nZELab');
 });
 
 test('no owner template contains an emoji either', () => {
@@ -328,4 +328,40 @@ test('no owner template contains an emoji either', () => {
     t.owner.dailyReport(daily()), t.owner.weeklyReport(weekly()), t.owner.monthlyReport(weekly()), t.owner.test(),
   ];
   for (const text of all) assert.ok(!/[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}️]/u.test(text), text.split('\n')[0]);
+});
+
+// ── the heading is bold (Nino, 10 Nov 2026) ──────────────────────────────────
+test('the heading of every message is bold in WhatsApp (*TITLE*) and nothing else is', () => {
+  const sample = {
+    request: 'SR-1', reason: 'r', product: 'P', boxes: 2, order: 'STL-1', attached: true, amount: 1000, earned: 1, available: 1, closed: true,
+    stage: 1, fine: 1, days: 1, deadline: at, rate: 1, returnFine: 1, extensionCancelled: true, dailyFine: 1, overdueNow: true,
+    number: 'RET-1', hours: 24, minimum: 1, bonus: 1, target: 1, nextTarget: 2, nextBonus: 3,
+  };
+  const texts = Object.keys(t.repTexts).map((kind) => [`rep ${kind}`, t.repText({ kind, ...sample })]);
+  texts.push(['rep fallback', t.repText(undefined, { title: 'Anything', message: 'Words.' })]);
+  texts.push(
+    ['stockRequest', t.owner.stockRequest({ by: 'A', items: [{ name: 'P', qty: 1 }], total: 1, when: at })],
+    ['settlementSubmitted', t.owner.settlementSubmitted({ by: 'A', order: 'O', product: 'P', boxes: 1, amount: 1, method: 'x', commission: 1, when: at })],
+    ['returnRequest', t.owner.returnRequest({ by: 'A', order: 'O', items: [{ name: 'P', quantity: 1 }], reason: 'r' })],
+    ['returnRequest (several)', t.owner.returnRequest({ by: 'A', items: [{ name: 'P', quantity: 1 }, { name: 'Q', quantity: 2 }] })],
+    ['commissionReady', t.owner.commissionReady({ rep: 'A', available: 1, earned: 1, penalties: 1, minimum: 1 })],
+    ['lowStock', t.owner.lowStock({ product: 'P', remaining: 1, level: 1, suggested: 1, high: true })],
+    ['outOfStock', t.owner.outOfStock({ product: 'P', brand: 'B', lastSale: at, suggested: 1 })],
+    ['settlementDeadline', t.owner.settlementDeadline({ order: 'O', rep: 'R', minutes: 1, outstanding: 1, rate: 1 })],
+    ['extensionGranted', t.owner.extensionGranted({ rep: 'R', deadline: at, rate: 1 })],
+    ['dailyReport', t.owner.dailyReport(daily())],
+    ['weeklyReport', t.owner.weeklyReport(weekly())],
+    ['monthlyReport', t.owner.monthlyReport(weekly())],
+    ['test', t.owner.test()],
+  );
+  for (const [name, text] of texts) {
+    const [first, ...rest] = text.split('\n');
+    assert.match(first, /^\*[^*\n]+\*$/, `${name}: the first line is the bold heading`);
+    assert.ok(!rest.join('\n').includes('*'), `${name}: nothing below the heading is bold`);
+  }
+});
+
+test('the bold heading changes nothing else: the rest of Nino\'s sample is untouched', () => {
+  const text = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'SR-0001' });
+  assert.equal(text.replace(/\*/g, ''), 'STOCK REQUEST APPROVED\n\nRequest: SR-0001\nYour stock request has been approved and issued.\n\nZELab');
 });

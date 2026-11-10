@@ -58,14 +58,14 @@ test('a rep event: the bell row has no WhatsApp field, and the rep\'s phone gets
   assert.equal(saved[0].title, 'TSh 10,000 late settlement fine applied', 'the in-app bell keeps its own words');
   assert.equal(sent.length, 1);
   assert.match(sent[0], /phone=255711111111&apikey=repkey/, 'goes to the rep\'s own number and key');
-  assert.equal(textOf(sent[0]), 'LATE SETTLEMENT FINE\n\nFine Applied: TSh 10,000\nOrder: STL-20261110-0001\nOverdue: 1 Day\n\nZELab');
+  assert.equal(textOf(sent[0]), '*LATE SETTLEMENT FINE*\n\nFine Applied: TSh 10,000\nOrder: STL-20261110-0001\nOverdue: 1 Day\n\nZELab');
 });
 
 test('a rep alert with no template yet still goes out in the new shape, never the old emoji one', async () => {
   reset();
   await notification.notifyUser('user1', { type: 'GENERAL', severity: 'INFO', title: '📦 Something new', message: 'It happened.', entityType: 'X', entityId: 'e2' });
   await settle();
-  assert.equal(textOf(sent[0]), 'SOMETHING NEW\n\nIt happened.\n\nZELab');
+  assert.equal(textOf(sent[0]), '*SOMETHING NEW*\n\nIt happened.\n\nZELab');
 });
 
 test('createIfAbsent (used by the commission-ready and bonus alerts) strips the field too and mirrors the right text', async () => {
@@ -77,7 +77,7 @@ test('createIfAbsent (used by the commission-ready and bonus alerts) strips the 
   });
   await settle();
   assert.ok(!('whatsapp' in saved[0]));
-  assert.equal(textOf(sent[0]), 'COMMISSION READY\n\nAvailable: TSh 210,000\nMinimum Withdrawal: TSh 100,000\n\nYou can request a withdrawal.\n\nZELab');
+  assert.equal(textOf(sent[0]), '*COMMISSION READY*\n\nAvailable: TSh 210,000\nMinimum Withdrawal: TSh 100,000\n\nYou can request a withdrawal.\n\nZELab');
 });
 
 test('an admin notice carries no WhatsApp field into the table either', async () => {
@@ -94,7 +94,7 @@ test('owner alerts go to the owner\'s number in the new shape', async () => {
     items: [{ product: { name: 'Pepa King Size' }, quantityRequested: 20, packagingUnit: null }],
   });
   assert.match(sent[0], /phone=255700000000&apikey=ownerkey/);
-  assert.equal(textOf(sent[0]), 'STOCK REQUEST\n10 Nov 2026 | 14:32 EAT\n\nBy: Asha Mwinyi\n\nPepa King Size: 20 Boxes\nTotal Value: TSh 760,000');
+  assert.equal(textOf(sent[0]), '*STOCK REQUEST*\n10 Nov 2026 | 14:32 EAT\n\nBy: Asha Mwinyi\n\nPepa King Size: 20 Boxes\nTotal Value: TSh 760,000');
   assert.equal(logged[0].type, 'STOCK_REQUEST');
   assert.equal(logged[0].priority, 'ACTION', 'priority still decides quiet-hours and budget; only the emoji is gone');
 });
@@ -102,10 +102,10 @@ test('owner alerts go to the owner\'s number in the new shape', async () => {
 test('the test message and the samples use the new text', async () => {
   reset();
   await wa.test();
-  assert.equal(textOf(sent[0]), 'ZELAB — TEST NOTIFICATION\n\nWhatsApp notifications are working.');
+  assert.equal(textOf(sent[0]), '*ZELAB — TEST NOTIFICATION*\n\nWhatsApp notifications are working.');
   reset();
   await wa.test('deadline');
-  assert.match(textOf(sent[0]), /^SETTLEMENT DEADLINE\nSTL-20261110-0001\n\nRep: Paul\nTime Remaining: 8 Minutes/);
+  assert.match(textOf(sent[0]), /^\*SETTLEMENT DEADLINE\*\nSTL-20261110-0001\n\nRep: Paul\nTime Remaining: 8 Minutes/);
 });
 
 test('no text that reaches WhatsApp has an emoji, in any of the paths above', async () => {

@@ -5,7 +5,7 @@
 //
 // Nino, 10 Nov 2026: clean, well arranged, no emoji. One shape for all of them:
 //
-//   TITLE IN CAPITALS
+//   *TITLE IN CAPITALS*      <- bold in WhatsApp (the asterisks make it bold)
 //   (date or reference, when the message has one)
 //
 //   Label: value
@@ -40,6 +40,9 @@ const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const count = (n, word) => `${Math.round(Number(n) || 0)} ${plural(word, Math.round(Number(n) || 0))}`; // 1 Box, 4 Boxes
 const boxes = (n, unit) => count(n, cap(unit || 'Box'));
 
+// WhatsApp shows *text* in bold. Only the heading of a message is bold.
+const bold = (s) => `*${s}*`;
+
 // lines() keeps the lines that have something in them; doc() joins the parts with a blank line
 const lines = (...l) => l.filter((x) => x !== null && x !== undefined && x !== false && x !== '').join('\n');
 const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p !== false && p !== '').join('\n\n');
@@ -48,13 +51,13 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 
 const owner = {
   stockRequest: ({ by, items = [], total, when }) => doc(
-    lines('STOCK REQUEST', dateTime(when)),
+    lines(bold('STOCK REQUEST'), dateTime(when)),
     `By: ${by}`,
     lines(...items.map((i) => `${i.name}: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`),
   ),
 
   settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when }) => doc(
-    lines('SETTLEMENT SUBMITTED', dateOnly(when)),
+    lines(bold('SETTLEMENT SUBMITTED'), dateOnly(when)),
     lines(
       `By: ${by}`,
       `Order: ${order}`,
@@ -69,13 +72,13 @@ const owner = {
   returnRequest: ({ by, order, items = [], reason }) => {
     const item = (i) => lines(`Product: ${i.name}`, `Quantity: ${boxes(i.quantity)}`);
     if (items.length <= 1) {
-      return doc('RETURN REQUEST', lines(`By: ${by}`, order && `Order: ${order}`, items[0] && item(items[0]), reason && `Reason: ${reason}`));
+      return doc(bold('RETURN REQUEST'), lines(`By: ${by}`, order && `Order: ${order}`, items[0] && item(items[0]), reason && `Reason: ${reason}`));
     }
-    return doc('RETURN REQUEST', lines(`By: ${by}`, order && `Order: ${order}`), ...items.map(item), reason && `Reason: ${reason}`);
+    return doc(bold('RETURN REQUEST'), lines(`By: ${by}`, order && `Order: ${order}`), ...items.map(item), reason && `Reason: ${reason}`);
   },
 
   commissionReady: ({ rep, available, earned, penalties, minimum }) => doc(
-    'COMMISSION READY',
+    bold('COMMISSION READY'),
     lines(
       `Rep: ${rep}`,
       `Available: ${money(available)}`,
@@ -86,7 +89,7 @@ const owner = {
   ),
 
   lowStock: ({ product, remaining, level, suggested, high }) => doc(
-    'LOW STOCK',
+    bold('LOW STOCK'),
     lines(
       `Product: ${product}`,
       `Remaining: ${boxes(remaining)}`,
@@ -97,7 +100,7 @@ const owner = {
   ),
 
   outOfStock: ({ product, brand, lastSale, suggested }) => doc(
-    'OUT OF STOCK',
+    bold('OUT OF STOCK'),
     lines(
       `Product: ${product}`,
       brand && `Brand: ${brand}`,
@@ -108,7 +111,7 @@ const owner = {
   ),
 
   settlementDeadline: ({ order, rep, minutes, outstanding, rate }) => doc(
-    lines('SETTLEMENT DEADLINE', order),
+    lines(bold('SETTLEMENT DEADLINE'), order),
     lines(
       `Rep: ${rep}`,
       `Time Remaining: ${count(minutes, 'Minute')}`,
@@ -118,7 +121,7 @@ const owner = {
   ),
 
   extensionGranted: ({ rep, hours = 96, deadline, rate }) => doc(
-    'EXTENSION GRANTED',
+    bold('EXTENSION GRANTED'),
     lines(
       `Rep: ${rep}`,
       `Extension: ${count(hours, 'Hour')}`,
@@ -127,7 +130,7 @@ const owner = {
     ),
   ),
 
-  test: () => doc('ZELAB — TEST NOTIFICATION', 'WhatsApp notifications are working.'),
+  test: () => doc(bold('ZELAB — TEST NOTIFICATION'), 'WhatsApp notifications are working.'),
 };
 
 // ═══ The reports (daily, weekly, monthly) ════════════════════════════════════
@@ -148,7 +151,7 @@ function fitted(build, steps) {
 
 owner.dailyReport = (d) => {
   const build = ({ reps }) => doc(
-    lines('ZELAB — DAILY REPORT', d.date),
+    lines(bold('ZELAB — DAILY REPORT'), d.date),
     lines(`Sales: ${money(d.sales)} (${boxes(d.boxesSold)})`, `Net Profit: ${money(d.netProfit)}`, `Expenses: ${money(d.expenses)}`),
     lines(`Cash In: ${money(d.cashIn)}`, `Cash Out: ${money(d.cashOut)}`, `Cash Balance: ${money(d.cashBalance)}`),
     `Orders: ${d.orders} | Settlements: ${d.settlements} | Returns: ${d.returns}`,
@@ -164,7 +167,7 @@ owner.dailyReport = (d) => {
 const periodReport = (title, linkLabel) => (d) => {
   const growth = d.growthPct == null ? null : Math.round(d.growthPct);
   const build = ({ brands, product }) => doc(
-    lines(title, d.period),
+    lines(bold(title), d.period),
     lines(`Revenue: ${money(d.revenue)}`, `Net Profit: ${money(d.netProfit)}`, `Expenses: ${money(d.expenses)}`, `Cash Balance: ${money(d.cashBalance)}`),
     growth !== null && `Revenue Growth: ${growth > 0 ? '+' : ''}${growth}%`,
     lines(
@@ -188,7 +191,7 @@ owner.monthlyReport = periodReport('ZELAB — MONTHLY REPORT', 'Full Report (PDF
 // Same shape, and a plain "ZELab" at the foot so they know whom it is from.
 
 const FOOT = 'ZELab';
-const rep = (title, ...parts) => doc(title, ...parts, FOOT);
+const rep = (title, ...parts) => doc(bold(title), ...parts, FOOT);
 
 const repTexts = {
   STOCK_REQUEST_APPROVED: ({ request }) => rep('STOCK REQUEST APPROVED', lines(`Request: ${request}`, 'Your stock request has been approved and issued.')),
