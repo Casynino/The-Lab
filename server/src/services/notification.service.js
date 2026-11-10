@@ -50,8 +50,12 @@ async function markAllRead(user) {
   return { updated: result.count };
 }
 
+// `whatsapp` rides along on the same object as the in-app notification: it is the
+// structured version of the event that the WhatsApp text is built from (see
+// whatsappText.js). It is not a column, so it never goes into the database.
 async function create(data) {
-  return prisma.notification.create({ data });
+  const { whatsapp, ...row } = data; // eslint-disable-line no-unused-vars
+  return prisma.notification.create({ data: row });
 }
 
 // Create a notification only if an equivalent unread one does not already
@@ -61,7 +65,7 @@ async function createIfAbsent(data) {
     where: { type: data.type, entityId: data.entityId ?? null, isRead: false },
   });
   if (existing) return existing;
-  const created = await prisma.notification.create({ data });
+  const created = await create(data);
   // Mirror rep-targeted alerts (e.g. commission-ready) to WhatsApp too.
   if (data.userId) {
     const wa = require('./whatsappNotify.service');

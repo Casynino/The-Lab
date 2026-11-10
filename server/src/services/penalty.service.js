@@ -117,6 +117,7 @@ async function applyDuePenalties() {
         message: s.selfExtendedAt
           ? `${formatCurrency(fineValue)} has been deducted from your commission: the EXTENDED settlement period (168 hours) on order ${s.settlementNumber} has expired (${due} day${due !== 1 ? 's' : ''} late). ${formatCurrency(rate)} applies every further day until you settle or return.`
           : `${formatCurrency(fineValue)} has been deducted from your commission because order ${s.settlementNumber} is overdue (${due} day${due !== 1 ? 's' : ''}). Settle or return to stop the daily fine.`,
+        whatsapp: { kind: 'LATE_FINE', fine: fineValue, order: s.settlementNumber, days: due },
         entityType: 'Settlement',
         entityId: s.id,
       }).catch(() => {});
@@ -218,6 +219,7 @@ async function adjustCommission({ salesRepId, amount, reason }, actor) {
       severity: 'WARNING',
       title: `${formatCurrency(amt)} deducted from your commission`,
       message: `ZELab deducted ${formatCurrency(amt)} from your commission balance.${reason ? ` Reason: ${reason}` : ''} Future commission is not affected.`,
+      whatsapp: { kind: 'COMMISSION_DEDUCTED', amount: amt, reason },
       entityType: 'Commission',
       entityId: row.id,
     }).catch(() => {});
@@ -258,6 +260,7 @@ async function waivePenalty(id, actor, reason) {
       severity: 'INFO',
       title: `${formatCurrency(p.amount)} fine forgiven`,
       message: `ZELab forgave your late-settlement fine on order ${p.settlement?.settlementNumber || ''}. ${formatCurrency(p.amount)} has been returned to your commission balance.`,
+      whatsapp: { kind: 'FINE_FORGIVEN', amount: p.amount, order: p.settlement?.settlementNumber },
       entityType: 'Settlement',
       entityId: p.settlementId,
     }).catch(() => {});

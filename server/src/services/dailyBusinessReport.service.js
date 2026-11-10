@@ -79,7 +79,7 @@ async function buildDailyData(dateKey) {
   if (supplierDue > 0) attention.push(`Owed to suppliers: ${fmt(supplierDue)}`);
 
   return {
-    period: { label: day.eatStart.format('dddd D MMMM YYYY'), key, start: day.start, end: day.end },
+    period: { label: day.eatStart.format('dddd D MMMM YYYY'), shortLabel: day.eatStart.format('D MMMM YYYY'), key, start: day.start, end: day.end },
     generatedAt: `${eatNow().format('D MMM YYYY, HH:mm')} EAT`,
     number: `ZL-D-${key}`,
     extras,
@@ -114,28 +114,30 @@ async function buildDailyData(dateKey) {
   };
 }
 
-// The WhatsApp summary. CallMeBot cuts messages at about 700 characters and
-// 403s anything that looks spammy, so: the PDF link sits right under the
-// header (a cut tail can never remove it), there are no divider runs, and the
-// detail stays in the PDF. `link` is the archived report's signed https URL.
+// The WhatsApp summary: wording and the 700-character fitting live in
+// whatsappText.js, which keeps the PDF link (at the foot) and drops optional
+// lines first. `link` is the archived report's signed https URL, or null when
+// the PDF could not be made.
 function buildWhatsAppText(d, link) {
   const f = d.finance;
-  const reps = d.extras.reps.slice(0, 3).map((r) => `${String(r.name).split(' ')[0]} ${fmt(r.revenue)}`);
-  const lines = [
-    '🟢 *ZELAB — DAILY REPORT*',
-    `_${d.period.label}_`,
-    '',
-    ...(link ? ['📄 *Full report (PDF):*', link, ''] : []),
-    `💰 Sales: ${fmt(f.revenue)} (${f.boxesSold} boxes)`,
-    `*Net profit: ${fmt(f.netProfit)}* (expenses ${fmt(f.expenses)})`,
-    `💵 In ${fmt(f.moneyIn)} / Out ${fmt(f.moneyOut)}`,
-    `🏦 Cash: *${fmt(d.cashPosition)}*`,
-    `📋 Orders ${d.activity.newOrders} / Settlements ${d.activity.settlements} / Returns ${d.activity.returns}`,
-    ...(reps.length ? [`⭐ ${reps.join(' · ')}`] : []),
-    `📦 Stock: ${fmt(d.stock.costValue)} (${d.stock.units} boxes)`,
-    d.attention.length ? `⚠️ ${d.attention.length} item(s) need attention, see the PDF` : '✅ All clear',
-  ];
-  return lines.join('\n');
+  return require('./whatsappText').owner.dailyReport({
+    date: d.period.shortLabel,
+    sales: f.revenue,
+    boxesSold: f.boxesSold,
+    netProfit: f.netProfit,
+    expenses: f.expenses,
+    cashIn: f.moneyIn,
+    cashOut: f.moneyOut,
+    cashBalance: d.cashPosition,
+    orders: d.activity.newOrders,
+    settlements: d.activity.settlements,
+    returns: d.activity.returns,
+    reps: d.extras.reps,
+    stockValue: d.stock.costValue,
+    stockBoxes: d.stock.units,
+    alerts: d.attention.length,
+    link,
+  });
 }
 
 /**

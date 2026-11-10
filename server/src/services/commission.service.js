@@ -638,6 +638,7 @@ async function requestWithdrawal(salesRepId, amount, notes, actor) {
       severity: 'INFO',
       title: 'Withdrawal request submitted',
       message: `Your withdrawal request of ${formatCurrency(amt)} has been submitted and is pending approval.`,
+      whatsapp: { kind: 'WITHDRAWAL_REQUESTED', amount: amt },
       entityType: 'CommissionWithdrawal',
       entityId: w.id,
     }).catch(() => {});
@@ -696,9 +697,9 @@ async function decideWithdrawal(id, action, actor) {
 
   const repUserId = updated.salesRep?.user?.id;
   const decisionMsgs = {
-    APPROVED: { title: 'Withdrawal approved', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} has been approved.`, severity: 'INFO' },
-    REJECTED: { title: 'Withdrawal rejected', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} was not approved.`, severity: 'WARNING' },
-    PAID: { title: 'Commission payment received', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} has been paid out.`, severity: 'INFO' },
+    APPROVED: { kind: 'WITHDRAWAL_APPROVED', title: 'Withdrawal approved', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} has been approved.`, severity: 'INFO' },
+    REJECTED: { kind: 'WITHDRAWAL_REJECTED', title: 'Withdrawal rejected', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} was not approved.`, severity: 'WARNING' },
+    PAID: { kind: 'WITHDRAWAL_PAID', title: 'Commission payment received', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} has been paid out.`, severity: 'INFO' },
   };
   const dm = decisionMsgs[t.to];
   if (dm && repUserId) {
@@ -707,6 +708,7 @@ async function decideWithdrawal(id, action, actor) {
       severity: dm.severity,
       title: dm.title,
       message: dm.message,
+      whatsapp: { kind: dm.kind, amount: updated.amount },
       entityType: 'CommissionWithdrawal',
       entityId: id,
     }).catch(() => {});
@@ -755,6 +757,7 @@ async function setEmergencyWindow({ salesRepId, open, reason }, actor) {
       message: open
         ? 'ZELab has opened a one-off withdrawal for you. Your usual minimum does not apply — request it from your Commission page within the next two days.'
         : 'The one-off withdrawal opened for you has been closed. Your usual minimum applies again.',
+      whatsapp: { kind: open ? 'WINDOW_OPEN' : 'WINDOW_CLOSED' },
       entityType: 'SalesRepresentative',
       // The WhatsApp mirror deduplicates on rep + entity + title, all of which
       // would be identical every time — so a rep's SECOND window would never

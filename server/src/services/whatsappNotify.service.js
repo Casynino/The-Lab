@@ -10,9 +10,10 @@
 // rows are re-attempted from the daily crons and from admin-polling
 // piggybacks, so a failed delivery heals itself.
 //
-// Formatting rules are deliberately conservative (no divider runs, no
-// https:// links): CallMeBot fronts its API with a scoring firewall that
-// silently 403s messages that look bot-spammy. See weeklyReport.service.
+// The WORDING of every message lives in whatsappText.js (plain text, no emoji,
+// one shape for all). This file decides who gets what, when, and how often.
+// Keep it conservative (no divider runs): CallMeBot fronts its API with a
+// scoring firewall that silently 403s messages that look bot-spammy.
 //
 // Admin controls (Settings → group "whatsapp"):
 //   whatsapp.phone / whatsapp.apikey        — CallMeBot credentials
@@ -23,6 +24,7 @@
 
 const prisma = require('../config/prisma');
 const { dayjs } = require('../utils/dates');
+const wt = require('./whatsappText');
 const { toNumber, round2 } = require('../utils/money');
 
 const MAX_ATTEMPTS = 5;
@@ -49,8 +51,6 @@ const TYPES = {
   TEST: { label: 'Test message', priority: 'INFO' },
 };
 
-const PRIORITY_ICON = { INFO: '🟢', ACTION: '🟡', WARNING: '🟠', CRITICAL: '🔴' };
-
 // ── Settings helpers ─────────────────────────────────────────────────────────
 async function getSetting(key) {
   const row = await prisma.setting.findUnique({ where: { key } }).catch(() => null);
@@ -69,7 +69,6 @@ async function isEnabled(type) {
 
 // East Africa Time (UTC+3, no DST) — the business's clock.
 const nowEAT = () => dayjs().utc().add(3, 'hour');
-const fmtWhen = (d) => (d ? dayjs(d) : dayjs()).utc().add(3, 'hour').format('D MMM YYYY, HH:mm') + ' EAT';
 const dateEAT = () => nowEAT().format('YYYY-MM-DD');
 
 async function inQuietHours() {
@@ -79,21 +78,6 @@ async function inQuietHours() {
   if (Number.isNaN(from) || Number.isNaN(to) || from === to) return false;
   const h = nowEAT().hour();
   return from < to ? h >= from && h < to : h >= from || h < to;
-}
-
-// ── Message composer (the notification standard) ─────────────────────────────
-// Title → date/time → person → reference → details → status → action.
-function compose({ priority = 'INFO', title, ref, when, who, lines = [], status, action }) {
-  const out = [
-    `${PRIORITY_ICON[priority] || PRIORITY_ICON.INFO} *${title}*${ref ? ` — ${ref}` : ''}`,
-    `_${fmtWhen(when)}_`,
-  ];
-  if (who) out.push('', `*By:* ${who}`);
-  if (lines.length) out.push('', ...lines);
-  if (status || action) out.push('');
-  if (status) out.push(`*Status:* ${status}`);
-  if (action) out.push(`*Action:* ${action}`);
-  return out.join('\n');
 }
 
 // ── Delivery ─────────────────────────────────────────────────────────────────
@@ -290,19 +274,13 @@ async function flush({ throttleMs = 60000 } = {}) {
 // 1. Stock request submitted (rep asks for stock). `req` is the created
 // request including items+product and salesRep.user.
 async function stockRequestSubmitted(req) {
-  const repName = req.salesRep?.user?.name || 'A rep';
-  const boxes = (req.items || []).reduce((s, i) => s + (i.quantityRequested || 0), 0);
-  const itemLines = (req.items || []).map((i) => `${i.product?.name}: ${i.quantityRequested} ${i.packagingUnit?.name || 'box'}(s)`);
-  const text = compose({
-    priority: 'ACTION',
-    title: 'STOCK REQUEST',
-    ref: req.requestNumber,
-    who: `${repName} (${req.salesRep?.code || 'rep'})`,
-    lines: [...itemLines, `*Total:* ${boxes} box(es) worth ${fmt(req.totalValue)}`],
-    status: 'Pending approval',
-    action: 'Approve or reject in ZELab',
+  const text = wt.owner.stockRequest({
+    by: req.salesRep?.user?.name || req.salesRep?.code || 'A rep',
+    items: (req.items || []).map((i) => ({ name: i.product?.name, qty: i.quantityRequested, unit: i.packagingUnit?.name })),
+    total: req.totalValue,
+    when: req.createdAt,
   });
-  return queue('STOCK_REQUEST', { dedupeKey: `stockreq:${req.id}`, refType: 'StockRequest', refId: req.id, text });
+  return queue('STOCK_REQUEST', { priority: 'ACTION', dedupeKey: `stockreq:${req.id}`, refType: 'StockRequest', refId: req.id, text });
 }
 
 // 4. Settlement submitted (rep reports boxes sold + money paid in).
@@ -310,49 +288,34 @@ async function settlementSubmitted({ sub, settlement, product, repName }) {
   const commission = require('./commission.service');
   let perBox = 0;
   try { perBox = toNumber(await commission.rateForProductOnOrder(settlement.id, product.id)); } catch { /* rule optional */ }
-  const text = compose({
-    priority: 'ACTION',
-    title: 'SETTLEMENT SUBMITTED',
-    ref: sub.submissionNumber,
-    who: repName,
-    lines: [
-      `*Order:* ${settlement.settlementNumber}`,
-      `*Product:* ${product.name}`,
-      `*Boxes sold:* ${sub.boxes}`,
-      `*Payment:* ${fmt(sub.amount)} via ${sub.method || 'the brand account'}`,
-      perBox > 0 ? `*Commission if approved:* ${fmt(round2(sub.boxes * perBox))}` : null,
-    ].filter(Boolean),
-    status: 'Pending approval — no business impact yet',
-    action: 'Verify the money arrived, then approve',
+  const text = wt.owner.settlementSubmitted({
+    by: repName,
+    order: settlement.settlementNumber,
+    product: product.name,
+    boxes: sub.boxes,
+    amount: sub.amount,
+    method: sub.method,
+    commission: perBox > 0 ? round2(sub.boxes * perBox) : 0,
+    when: sub.createdAt,
   });
-  return queue('SETTLEMENT_SUBMITTED', { dedupeKey: `stlsub:${sub.id}`, refType: 'SettlementSubmission', refId: sub.id, text });
+  return queue('SETTLEMENT_SUBMITTED', { priority: 'ACTION', dedupeKey: `stlsub:${sub.id}`, refType: 'SettlementSubmission', refId: sub.id, text });
 }
 
 // 6. Return request submitted.
 async function returnSubmitted(ret) {
   const repName = ret.salesRep?.user?.name || 'Warehouse';
-  const boxes = (ret.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
-  const itemLines = (ret.items || []).map((i) => `${i.product?.name}: ${i.quantity} box(es)`);
   let orderNumber = null;
   if (ret.settlementId) {
     const s = await prisma.settlement.findUnique({ where: { id: ret.settlementId }, select: { settlementNumber: true } }).catch(() => null);
     orderNumber = s?.settlementNumber || null;
   }
-  const text = compose({
-    priority: 'ACTION',
-    title: 'RETURN REQUEST',
-    ref: ret.returnNumber,
-    who: repName,
-    lines: [
-      orderNumber ? `*Order:* ${orderNumber}` : null,
-      ...itemLines,
-      `*Total returned:* ${boxes} box(es)`,
-      ret.reason ? `*Reason:* ${ret.reason}` : null,
-    ].filter(Boolean),
-    status: 'Pending inspection',
-    action: 'Inspect the goods, then approve or reject',
+  const text = wt.owner.returnRequest({
+    by: repName,
+    order: orderNumber,
+    items: (ret.items || []).map((i) => ({ name: i.product?.name, quantity: i.quantity })),
+    reason: ret.reason,
   });
-  return queue('RETURN_SUBMITTED', { dedupeKey: `return:${ret.id}`, refType: 'Return', refId: ret.id, text });
+  return queue('RETURN_SUBMITTED', { priority: 'ACTION', dedupeKey: `return:${ret.id}`, refType: 'Return', refId: ret.id, text });
 }
 
 // 8. Commission ready — a rep's available balance reached the withdrawal
@@ -379,19 +342,15 @@ async function commissionReadyCheck(salesRepId) {
     entityType: 'Commission',
     entityId: `commready-${salesRepId}`,
     userId: rep.user?.id || null,
+    whatsapp: { kind: 'COMMISSION_READY', available: c.available, minimum: threshold },
   }).catch(() => {});
 
-  const text = compose({
-    priority: 'INFO',
-    title: 'COMMISSION READY',
-    who: `${rep.user?.name || rep.code} (${rep.code})`,
-    lines: [
-      `*Available commission:* ${fmt(c.available)}`,
-      `*Earned to date:* ${fmt(c.earned)}`,
-      c.penalties > 0 ? `*Penalties applied:* ${fmt(c.penalties)}` : null,
-      `*Withdrawal minimum:* ${fmt(threshold)}`,
-    ].filter(Boolean),
-    status: 'Eligible for withdrawal',
+  const text = wt.owner.commissionReady({
+    rep: rep.user?.name || rep.code,
+    available: c.available,
+    earned: c.earned,
+    penalties: c.penalties,
+    minimum: threshold,
   });
   return queue('COMMISSION_READY', {
     dedupeKey: `commready:${salesRepId}:${dateEAT()}`,
@@ -420,33 +379,21 @@ async function stockAlertForProduct(productId) {
       orderBy: { sale: { soldAt: 'desc' } },
       select: { sale: { select: { soldAt: true } } },
     }).catch(() => null);
-    const text = compose({
-      priority: 'CRITICAL',
-      title: 'OUT OF STOCK',
-      lines: [
-        `*Product:* ${product.name}`,
-        `*Brand:* ${product.brand?.name || '-'}`,
-        `*Warehouse stock:* 0 boxes`,
-        lastSale?.sale?.soldAt ? `*Last sale:* ${fmtWhen(lastSale.sale.soldAt)}` : null,
-        `*Suggested purchase:* ${recommended} box(es)`,
-      ].filter(Boolean),
-      status: 'Sales of this product are blocked',
-      action: 'Restock immediately',
+    const text = wt.owner.outOfStock({
+      product: product.name,
+      brand: product.brand?.name,
+      lastSale: lastSale?.sale?.soldAt,
+      suggested: recommended,
     });
     return queue('OUT_OF_STOCK', { dedupeKey: `outofstock:${productId}:${dateEAT()}`, refType: 'Product', refId: productId, text });
   }
 
-  const text = compose({
-    priority: 'WARNING',
-    title: 'LOW STOCK',
-    lines: [
-      `*Product:* ${product.name}`,
-      `*Remaining:* ${onHand} box(es)`,
-      `*Reorder level:* ${product.minStockLevel}`,
-      `*Suggested purchase:* ${recommended} box(es)`,
-    ],
-    status: onHand <= product.minStockLevel / 2 ? 'High priority' : 'Medium priority',
-    action: 'Plan a restock',
+  const text = wt.owner.lowStock({
+    product: product.name,
+    remaining: onHand,
+    level: product.minStockLevel,
+    suggested: recommended,
+    high: onHand <= product.minStockLevel / 2,
   });
   return queue('LOW_STOCK', { dedupeKey: `lowstock:${productId}:${dateEAT()}`, refType: 'Product', refId: productId, text });
 }
@@ -455,18 +402,11 @@ async function stockAlertForProduct(productId) {
 // A rep bought themselves 96 more hours. The owner does not decide it and
 // cannot undo it, so the only thing the app owes him is to say it happened.
 async function extensionTaken(settlement, { newDeadline, rate }) {
-  const who = `${settlement.salesRep?.user?.name || 'A rep'} (${settlement.salesRep?.code || '—'})`;
-  const text = compose({
-    priority: 'ACTION',
-    title: 'EXTENSION TAKEN',
-    ref: settlement.settlementNumber,
-    who,
-    lines: [
-      '*Extra time:* 96 hours',
-      `*New deadline:* ${fmtWhen(newDeadline)}`,
-      `*Late fine after it:* ${fmt(rate)} per day (doubled)`,
-    ],
-    status: 'No fine until the new deadline',
+  const text = wt.owner.extensionGranted({
+    rep: settlement.salesRep?.user?.name || settlement.salesRep?.code || 'A rep',
+    hours: 96,
+    deadline: newDeadline,
+    rate,
   });
   return queue('EXTENSION_TAKEN', {
     // The extension can be cancelled and taken again, so the key carries the
@@ -524,18 +464,12 @@ async function deadlineWarnings(withinMinutes = DEADLINE_WARN_MINUTES) {
       entityId: `deadlinewarn-${s.id}`,
     }).catch(() => {});
 
-    const text = compose({
-      priority: 'WARNING',
-      title: 'FINE ABOUT TO START',
-      ref: s.settlementNumber,
-      who,
-      lines: [
-        `*Time left:* ${mins} minute${mins === 1 ? '' : 's'}`,
-        `*Still outstanding:* ${fmt(outstanding)}`,
-        `*Fine once it passes:* ${fmt(rate)} per day`,
-        s.selfExtendedAt ? '_This order already used its 96-hour extension._' : null,
-      ].filter(Boolean),
-      status: 'Not settled yet',
+    const text = wt.owner.settlementDeadline({
+      order: s.settlementNumber,
+      rep: s.salesRep?.user?.name || s.salesRep?.code || 'A rep',
+      minutes: mins,
+      outstanding,
+      rate,
     });
     const r = await queue('DEADLINE_IMMINENT', {
       dedupeKey: `deadlinewarn:${s.id}`,
@@ -603,10 +537,12 @@ async function repCreds(salesRepId) {
 
 // Queue a message to a specific rep's WhatsApp. Returns {queued:false} when the
 // rep has no WhatsApp configured (caller ignores — in-app notice still stands).
-async function notifyRep(salesRepId, { title, message, severity = 'INFO', dedupeKey = null }) {
+async function notifyRep(salesRepId, { title, message, severity = 'INFO', dedupeKey = null, whatsapp = null }) {
   const creds = await repCreds(salesRepId);
   if (!creds) return { queued: false, reason: 'no-whatsapp' };
-  const text = [`${PRIORITY_ICON[SEVERITY_PRIORITY[severity]] || '🟢'} *${title}*`, '', message, '', '_ZELab_'].join('\n');
+  // `whatsapp` is the structured version of the event (see whatsappText.js). Without one, the
+  // in-app title and message go out in the same shape, never raw.
+  const text = wt.repText(whatsapp, { title, message });
   return queue('REP_ALERT', {
     priority: SEVERITY_PRIORITY[severity] || 'INFO',
     dedupeKey,
@@ -634,6 +570,7 @@ async function mirrorToRep(userId, data) {
       title: data.title,
       message: data.message,
       severity: data.severity || 'INFO',
+      whatsapp: data.whatsapp || null,
       // Dedupe on the linked entity so a retried in-app notify never double-texts.
       // dedupeSalt lets a caller send the same words twice on purpose — an
       // extension taken again after ZELab cancelled the first one.
@@ -650,7 +587,7 @@ async function mirrorToRep(userId, data) {
 async function testRep(salesRepId) {
   const creds = await repCreds(salesRepId);
   if (!creds) return { sent: false, reason: 'no-whatsapp' };
-  const text = ['🟢 *ZELAB*', '', 'WhatsApp alerts are now active for you. You will get a message here whenever something important happens with your stock, settlements and commission.', '', '_ZELab_'].join('\n');
+  const text = wt.repText({ kind: 'TEST' });
   const result = await sendRaw(text, creds);
   await prisma.whatsAppNotification.create({
     data: {
@@ -693,40 +630,13 @@ async function history(limit = 30) {
 // Sent with a fresh dedupe key every time, or the second press would be
 // swallowed as a duplicate and look like a failure.
 const SAMPLES = {
-  deadline: () => compose({
-    priority: 'WARNING',
-    title: 'FINE ABOUT TO START',
-    ref: 'STL-20260911-0001',
-    who: 'Paul (REP-002)',
-    lines: [
-      '*Time left:* 8 minutes',
-      `*Still outstanding:* ${fmt(30000)}`,
-      `*Fine once it passes:* ${fmt(10000)} per day`,
-    ],
-    status: 'Not settled yet',
-  }),
-  extension: () => compose({
-    priority: 'ACTION',
-    title: 'EXTENSION TAKEN',
-    ref: 'STL-20260911-0001',
-    who: 'Paul (REP-002)',
-    lines: [
-      '*Extra time:* 96 hours',
-      `*New deadline:* ${fmtWhen(new Date(Date.now() + 96 * 3600_000))}`,
-      `*Late fine after it:* ${fmt(20000)} per day (doubled)`,
-    ],
-    status: 'No fine until the new deadline',
-  }),
+  deadline: () => wt.owner.settlementDeadline({ order: 'STL-20261110-0001', rep: 'Paul', minutes: 8, outstanding: 30000, rate: 10000 }),
+  extension: () => wt.owner.extensionGranted({ rep: 'Paul', hours: 96, deadline: new Date(Date.now() + 96 * 3600_000), rate: 20000 }),
 };
 
 async function test(kind) {
   const sample = SAMPLES[kind];
-  const text = sample ? sample() : compose({
-    priority: 'INFO',
-    title: 'TEST NOTIFICATION',
-    lines: ['WhatsApp notifications are working.', 'This is how live business alerts will look.'],
-    status: 'Delivered',
-  });
+  const text = sample ? sample() : wt.owner.test();
   return queue('TEST', { text, dedupeKey: `test:${kind || 'plain'}:${Date.now()}` });
 }
 
@@ -737,7 +647,6 @@ module.exports = {
   DEADLINE_WARN_MINUTES,
   providerBudgetCap,
   TYPES,
-  compose,
   background,
   sendRaw,
   queue,

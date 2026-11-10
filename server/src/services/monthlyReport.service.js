@@ -190,29 +190,24 @@ async function buildMonthlyData(monthKey) {
   };
 }
 
-// WhatsApp: executive summary + growth + archived PDF link.
+// WhatsApp: the short summary, same shape as the weekly one, PDF link at the foot.
+// Wording and fitting live in whatsappText.js.
 function buildWhatsAppText(d, link) {
-  const g = d.growth.revenuePct;
-  const growthLine = g == null ? null : `${g >= 0 ? '📈' : '📉'} Revenue ${g >= 0 ? '+' : ''}${g}% vs ${d.growth.prevLabel}`;
-  const top = (d.topProducts || [])[0];
-  const lines = [
-    `📊 *ZELAB — MONTHLY REPORT*`,
-    `_${d.period.label}_`,
-    '',
-    `💰 Revenue: ${fmt(d.finance.revenue)}`,
-    `*Net profit: ${fmt(d.finance.netProfit)}* (expenses ${fmt(d.finance.expenses)})`,
-    `🏦 Cash: *${fmt(d.cashPosition)}*`,
-    ...(growthLine ? [growthLine] : []),
-    ...(top ? [`🏆 ${top.name}: ${fmt(top.revenue)}`] : []),
-    ...(d.repPerformance[0] ? [`⭐ Top rep: ${d.repPerformance[0].name} (${fmt(d.repPerformance[0].revenue)})`] : []),
-    '',
-    '📄 *Full monthly report (PDF):*',
+  return require('./whatsappText').owner.monthlyReport({
+    period: d.period.label,
+    revenue: d.finance.revenue,
+    netProfit: d.finance.netProfit,
+    expenses: d.finance.expenses,
+    cashBalance: d.cashPosition,
+    growthPct: d.growth.revenuePct,
+    topProduct: (d.topProducts || [])[0] || null,
+    topRep: d.repPerformance[0] || null,
+    brands: [...(d.brands || [])].sort((a, b) => b.revenue - a.revenue),
+    stockValue: d.stock.costValue,
+    stockBoxes: d.stock.units,
+    alerts: d.attention.length,
     link,
-    '',
-    `📦 Boxes sold: ${d.finance.boxesSold} / Stock now: ${d.inventory.closingBoxes} boxes`,
-    d.attention.length ? `⚠️ ${d.attention.length} alert(s) — details in the PDF` : '✅ Nothing needs attention',
-  ];
-  return lines.join('\n');
+  });
 }
 
 // Generate → archive → send. Deduped per month; `force` bypasses for tests;

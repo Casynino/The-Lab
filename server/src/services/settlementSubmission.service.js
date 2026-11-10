@@ -147,11 +147,13 @@ async function approve(submissionId, actor) {
   // Commission the rep just earned on these boxes + their new available balance,
   // so the "settlement approved" message shows the money — in-app and WhatsApp.
   let earnedLine = 'Commission has been credited.';
+  let figures = { earned: null, available: null }; // for the WhatsApp text; null leaves those two lines out
   try {
     const commission = require('./commission.service');
     const perBox = toNumber(await commission.rateForProductOnOrder(sub.settlementId, sub.productId));
     const earned = round2(sub.boxes * perBox);
     const c = await commission.computeForRep(sub.salesRepId);
+    figures = { earned, available: c.available };
     earnedLine = `You earned ${formatCurrency(earned)} commission (${sub.boxes} box(es) × ${formatCurrency(perBox)}). Available balance: ${formatCurrency(c.available)}.`;
   } catch { /* rule optional */ }
   notification.notifyUser(rep?.userId, {
@@ -161,6 +163,16 @@ async function approve(submissionId, actor) {
     message: closed
       ? `Your settlement of ${sub.boxes} box(es) of ${sub.productName} was approved and order ${out.dec.settlementNumber} is now fully closed. ${earnedLine}`
       : `Your settlement of ${sub.boxes} box(es) of ${sub.productName} (${formatCurrency(sub.amount)}) was approved. ${earnedLine}`,
+    whatsapp: {
+      kind: 'SETTLEMENT_APPROVED',
+      boxes: sub.boxes,
+      product: sub.productName,
+      amount: sub.amount,
+      earned: figures.earned,
+      available: figures.available,
+      closed,
+      order: out.dec.settlementNumber,
+    },
     entityType: 'Settlement',
     entityId: sub.settlementId,
   }).catch(() => {});
@@ -195,6 +207,7 @@ async function reject(submissionId, actor, reason) {
     severity: 'WARNING',
     title: 'Settlement rejected',
     message: `Your settlement of ${sub.boxes} box(es) of ${sub.productName} was rejected. Please review and resubmit.${reason ? ` Reason: ${reason}` : ''}`,
+    whatsapp: { kind: 'SETTLEMENT_REJECTED', boxes: sub.boxes, product: sub.productName, reason },
     entityType: 'Settlement',
     entityId: sub.settlementId,
   }).catch(() => {});

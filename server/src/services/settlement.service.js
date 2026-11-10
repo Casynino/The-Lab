@@ -709,6 +709,7 @@ async function addStockToRep(salesRepId, payload, actor) {
       result.mode === 'attached'
         ? `The Doctor added ${result.boxes} box(es) of ${result.productName} to your active order ${result.settlementNumber}. Your settlement has been updated.`
         : `The Doctor issued ${result.boxes} box(es) of ${result.productName} to you — new order ${result.settlementNumber}.`,
+    whatsapp: { kind: 'STOCK_ADDED', product: result.productName, boxes: result.boxes, order: result.settlementNumber, attached: result.mode === 'attached' },
     entityType: 'Settlement',
     entityId: result.settlement.id,
   }).catch(() => {});
@@ -751,6 +752,7 @@ async function settle(id, actor, { notes } = {}) {
     severity: 'INFO',
     title: `Order closed: ${s.settlementNumber}`,
     message: `Order ${s.settlementNumber} is fully settled. All boxes accounted for.`,
+    whatsapp: { kind: 'ORDER_CLOSED', order: s.settlementNumber },
     entityType: 'Settlement',
     entityId: id,
   }).catch(() => {});
@@ -829,6 +831,7 @@ async function sendDueReminders() {
         severity: def.severity,
         title: def.title,
         message: def.msg(s.settlementNumber),
+        whatsapp: { kind: 'DEADLINE_NEAR', order: s.settlementNumber, stage },
         entityType: 'Settlement',
         entityId: s.id,
       }).catch(() => {});
@@ -1067,6 +1070,14 @@ async function selfExtend(id, actor) {
       dedupeSalt: String(new Date(updated.selfExtendedAt).getTime()),
       title: `Order ${updated.settlementNumber} extended to ${when}`,
       message: `You activated the ${SELF_EXTENSION_HOURS}-hour extension on order ${updated.settlementNumber}. New deadline: ${when} (EAT). No fine until then — but after it, the late fine is ${formatCurrency(penalty.EXTENDED_PENALTY_PER_DAY)} per day, and a return not completed within 24 hours costs ${formatCurrency(penalty.EXTENDED_RETURN_FAILURE_PENALTY)}.`,
+      whatsapp: {
+        kind: 'EXTENSION_ACTIVATED',
+        order: updated.settlementNumber,
+        deadline: newDeadline,
+        hours: SELF_EXTENSION_HOURS,
+        rate: penalty.EXTENDED_PENALTY_PER_DAY,
+        returnFine: penalty.EXTENDED_RETURN_FAILURE_PENALTY,
+      },
       entityType: 'Settlement',
       entityId: updated.id,
     }).catch(() => {});
@@ -1169,6 +1180,7 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
       severity: 'WARNING',
       title: `Order ${updated.settlementNumber} extended to ${dl}`,
       message: `ZELab extended your deadline on order ${updated.settlementNumber}. New deadline: ${dl} (EAT). Settle your boxes or return unsold stock BEFORE then — after the deadline the daily fine applies.`,
+      whatsapp: { kind: 'DEADLINE_EXTENDED', order: updated.settlementNumber, deadline: newDeadline },
       entityType: 'Settlement',
       entityId: updated.id,
     }).catch(() => {});
@@ -1337,6 +1349,14 @@ async function undoDeadlineChange(id, actor, { all = false } = {}) {
           ? ` That time has already passed, so the order is overdue now — the daily fine runs from today rather than from ${when}, and a return waiting for our approval pauses it. Settle or return to stop it.`
           : ''
       }`,
+      whatsapp: {
+        kind: 'DEADLINE_MOVED_BACK',
+        order: updated.settlementNumber,
+        deadline: restored,
+        extensionCancelled: undoingSelfExtension,
+        dailyFine: penalty.PENALTY_PER_DAY,
+        overdueNow,
+      },
       entityType: 'Settlement',
       entityId: updated.id,
       dedupeSalt: String(now.getTime()),

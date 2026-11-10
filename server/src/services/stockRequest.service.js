@@ -390,6 +390,7 @@ async function approve(id, actor, approvals = []) {
     severity: 'INFO',
     title: 'Stock request approved',
     message: `Your request (${request.requestNumber}) has been approved and issued. Check your open orders.`,
+    whatsapp: { kind: 'STOCK_REQUEST_APPROVED', request: request.requestNumber },
     entityType: 'StockRequest',
     entityId: id,
   }).catch(() => {});
@@ -420,6 +421,7 @@ async function reject(id, actor, notes) {
     severity: 'WARNING',
     title: 'Stock request not approved',
     message: `Your request (${request.requestNumber}) was not approved.${notes ? ' Reason: ' + notes : ''}`,
+    whatsapp: { kind: 'STOCK_REQUEST_REJECTED', request: request.requestNumber, reason: notes },
     entityType: 'StockRequest',
     entityId: id,
   }).catch(() => {});

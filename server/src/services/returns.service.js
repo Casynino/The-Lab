@@ -359,6 +359,7 @@ async function approveReturn(id, actor) {
       severity: 'INFO',
       title: 'Return approved',
       message: `Your return of ${totalBoxes} box(es) (${ret.returnNumber}) has been approved and added to inventory.`,
+      whatsapp: { kind: 'RETURN_APPROVED', number: ret.returnNumber, boxes: totalBoxes },
       entityType: 'Return',
       entityId: id,
     }).catch(() => {});
@@ -421,6 +422,7 @@ async function rejectReturn(id, actor, reason) {
       severity: 'WARNING',
       title: 'Return rejected',
       message: `Your return of ${totalBoxes} box(es) (${updated.returnNumber}) was not accepted.${reason ? ` Reason: ${reason}` : ' Please contact the administrator.'}`,
+      whatsapp: { kind: 'RETURN_REJECTED', number: updated.returnNumber, boxes: totalBoxes, reason },
       entityType: 'Return',
       entityId: id,
     }).catch(() => {});
@@ -495,6 +497,7 @@ async function cancelReturn(id, actor, { asRep = false } = {}) {
       severity: 'INFO',
       title: 'Return request cancelled',
       message: `ZELab cancelled return ${updated.returnNumber}. The boxes remain on your order — settle or resubmit the return.`,
+      whatsapp: { kind: 'RETURN_CANCELLED', number: updated.returnNumber },
       entityType: 'Return',
       entityId: id,
     }).catch(() => {});
@@ -583,6 +586,7 @@ async function expireStaleReturns() {
         severity: 'CRITICAL',
         title: `Return ${ret.returnNumber} expired — TSh ${fineApplied.toLocaleString('en-US')} fine`,
         message: `Your return was not completed within ${RETURN_WINDOW_HOURS} hours, so it was cancelled automatically and a TSh ${fineApplied.toLocaleString('en-US')} delay fine was applied. The boxes are back on your order — settle them or submit a new return.`,
+        whatsapp: { kind: 'RETURN_EXPIRED', number: ret.returnNumber, fine: fineApplied, hours: RETURN_WINDOW_HOURS },
         entityType: 'Return',
         entityId: ret.id,
       }).catch(() => {});

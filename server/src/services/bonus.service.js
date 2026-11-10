@@ -127,6 +127,13 @@ async function checkAndAward(salesRepId) {
     severity: 'INFO',
     title: `Bonus unlocked — ${formatCurrency(p.claimable.bonusAmount)}`,
     message: `You reached ${formatCurrency(p.claimable.target)} in sales.${stretch}`,
+    whatsapp: {
+      kind: 'BONUS_UNLOCKED',
+      bonus: p.claimable.bonusAmount,
+      target: p.claimable.target,
+      nextTarget: p.next ? p.next.target : null,
+      nextBonus: p.next ? p.next.bonusAmount : null,
+    },
     entityType: 'BonusAward',
     entityId: `bonus:${salesRepId}:${cycleKey}:${p.claimable.ruleId}`,
     userId: rep?.user?.id || null,
@@ -189,6 +196,7 @@ async function payTier({ salesRepId, bonusRuleId }, actor, notes) {
     severity: 'INFO',
     title: `Bonus paid — ${formatCurrency(tier.bonusAmount)}`,
     message: `Your ${formatCurrency(tier.bonusAmount)} sales bonus has been paid. Your sales count starts again from zero for the next one.`,
+    whatsapp: { kind: 'BONUS_PAID', bonus: tier.bonusAmount },
     entityType: 'BonusAward',
     entityId: award.id,
   }).catch(() => {});

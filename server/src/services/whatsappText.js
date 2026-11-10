@@ -1,0 +1,291 @@
+'use strict';
+
+// ===========================================================================
+// EVERY WHATSAPP TEXT ZELab SENDS — the wording lives here and nowhere else.
+//
+// Nino, 10 Nov 2026: clean, well arranged, no emoji. One shape for all of them:
+//
+//   TITLE IN CAPITALS
+//   (date or reference, when the message has one)
+//
+//   Label: value
+//   Label: value
+//
+//   (reps only) ZELab
+//
+// This file only turns data into text. It sends nothing and reads nothing, so
+// every template can be checked by test against the exact samples Nino wrote.
+// Who gets what, when, and how often is decided in whatsappNotify.service.js.
+//
+// CallMeBot keeps about 700 characters and cuts the rest, so the reports (which
+// end with the PDF link) are fitted to MAX_REPORT_CHARS by dropping their
+// optional lines, never the link.
+// ===========================================================================
+
+const { dayjs } = require('../utils/dates');
+
+const MAX_REPORT_CHARS = 690;
+
+// ── small words ──────────────────────────────────────────────────────────────
+const money = (n) => `TSh ${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
+const eat = (d) => dayjs.utc(d || new Date()).add(3, 'hour'); // the business's clock (UTC+3)
+const dateTime = (d) => eat(d).format('D MMM YYYY | HH:mm [EAT]'); // 10 Nov 2026 | 14:32 EAT
+const dateOnly = (d) => eat(d).format('D MMM YYYY'); // 10 Nov 2026
+
+const plural = (word, n) => {
+  if (Number(n) === 1) return word;
+  return /(s|x|z|ch|sh)$/i.test(word) ? `${word}es` : `${word}s`;
+};
+const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+const count = (n, word) => `${Math.round(Number(n) || 0)} ${plural(word, Math.round(Number(n) || 0))}`; // 1 Box, 4 Boxes
+const boxes = (n, unit) => count(n, cap(unit || 'Box'));
+
+// lines() keeps the lines that have something in them; doc() joins the parts with a blank line
+const lines = (...l) => l.filter((x) => x !== null && x !== undefined && x !== false && x !== '').join('\n');
+const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p !== false && p !== '').join('\n\n');
+
+// ═══ To the owner ════════════════════════════════════════════════════════════
+
+const owner = {
+  stockRequest: ({ by, items = [], total, when }) => doc(
+    lines('STOCK REQUEST', dateTime(when)),
+    `By: ${by}`,
+    lines(...items.map((i) => `${i.name}: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`),
+  ),
+
+  settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when }) => doc(
+    lines('SETTLEMENT SUBMITTED', dateOnly(when)),
+    lines(
+      `By: ${by}`,
+      `Order: ${order}`,
+      `Product: ${product}`,
+      `Boxes Sold: ${Math.round(Number(n) || 0)}`,
+      `Payment: ${money(amount)}${method ? ` (${method})` : ''}`,
+      Number(commission) > 0 && `Commission: ${money(commission)}`,
+    ),
+  ),
+
+  // One item reads as Product / Quantity. Several items each get their own pair.
+  returnRequest: ({ by, order, items = [], reason }) => {
+    const item = (i) => lines(`Product: ${i.name}`, `Quantity: ${boxes(i.quantity)}`);
+    if (items.length <= 1) {
+      return doc('RETURN REQUEST', lines(`By: ${by}`, order && `Order: ${order}`, items[0] && item(items[0]), reason && `Reason: ${reason}`));
+    }
+    return doc('RETURN REQUEST', lines(`By: ${by}`, order && `Order: ${order}`), ...items.map(item), reason && `Reason: ${reason}`);
+  },
+
+  commissionReady: ({ rep, available, earned, penalties, minimum }) => doc(
+    'COMMISSION READY',
+    lines(
+      `Rep: ${rep}`,
+      `Available: ${money(available)}`,
+      `Earned: ${money(earned)}`,
+      Number(penalties) > 0 && `Penalties: ${money(penalties)}`,
+      `Minimum Withdrawal: ${money(minimum)}`,
+    ),
+  ),
+
+  lowStock: ({ product, remaining, level, suggested, high }) => doc(
+    'LOW STOCK',
+    lines(
+      `Product: ${product}`,
+      `Remaining: ${boxes(remaining)}`,
+      `Reorder Level: ${boxes(level)}`,
+      `Suggested Restock: ${boxes(suggested)}`,
+      `Priority: ${high ? 'High' : 'Medium'}`,
+    ),
+  ),
+
+  outOfStock: ({ product, brand, lastSale, suggested }) => doc(
+    'OUT OF STOCK',
+    lines(
+      `Product: ${product}`,
+      brand && `Brand: ${brand}`,
+      'Warehouse Stock: 0 Boxes',
+      lastSale && `Last Sale: ${dateTime(lastSale)}`,
+      `Suggested Restock: ${boxes(suggested)}`,
+    ),
+  ),
+
+  settlementDeadline: ({ order, rep, minutes, outstanding, rate }) => doc(
+    lines('SETTLEMENT DEADLINE', order),
+    lines(
+      `Rep: ${rep}`,
+      `Time Remaining: ${count(minutes, 'Minute')}`,
+      `Outstanding: ${money(outstanding)}`,
+      `Daily Fine: ${money(rate)}`,
+    ),
+  ),
+
+  extensionGranted: ({ rep, hours = 96, deadline, rate }) => doc(
+    'EXTENSION GRANTED',
+    lines(
+      `Rep: ${rep}`,
+      `Extension: ${count(hours, 'Hour')}`,
+      `New Deadline: ${dateTime(deadline)}`,
+      `Daily Fine: ${money(rate)}`,
+    ),
+  ),
+
+  test: () => doc('ZELAB — TEST NOTIFICATION', 'WhatsApp notifications are working.'),
+};
+
+// ═══ The reports (daily, weekly, monthly) ════════════════════════════════════
+// The tail of each is optional and is dropped, a little at a time, until the
+// whole message fits; the PDF link is last and is never the thing that goes.
+
+const topList = (title, rows, n) => (n > 0 && rows.length ? lines(title, ...rows.slice(0, n).map((r) => `${r.name} ${money(r.revenue)}`)) : '');
+const firstName = (name) => String(name || '').trim().split(/\s+/)[0] || 'Rep';
+
+function fitted(build, steps) {
+  let text = '';
+  for (const s of steps) {
+    text = build(s);
+    if (text.length <= MAX_REPORT_CHARS) return text;
+  }
+  return text; // nothing optional left to drop
+}
+
+owner.dailyReport = (d) => {
+  const build = ({ reps }) => doc(
+    lines('ZELAB — DAILY REPORT', d.date),
+    lines(`Sales: ${money(d.sales)} (${boxes(d.boxesSold)})`, `Net Profit: ${money(d.netProfit)}`, `Expenses: ${money(d.expenses)}`),
+    lines(`Cash In: ${money(d.cashIn)}`, `Cash Out: ${money(d.cashOut)}`, `Cash Balance: ${money(d.cashBalance)}`),
+    `Orders: ${d.orders} | Settlements: ${d.settlements} | Returns: ${d.returns}`,
+    topList('Top Reps:', (d.reps || []).map((r) => ({ name: firstName(r.name), revenue: r.revenue })), reps),
+    lines(`Stock Value: ${money(d.stockValue)}`, `Stock Quantity: ${boxes(d.stockBoxes)}`),
+    `Alerts: ${d.alerts}`,
+    d.link && lines('Full Report (PDF):', d.link),
+  );
+  return fitted(build, [{ reps: 3 }, { reps: 2 }, { reps: 1 }, { reps: 0 }]);
+};
+
+// weekly and monthly share one shape; only the title, period and link label differ
+const periodReport = (title, linkLabel) => (d) => {
+  const growth = d.growthPct == null ? null : Math.round(d.growthPct);
+  const build = ({ brands, product }) => doc(
+    lines(title, d.period),
+    lines(`Revenue: ${money(d.revenue)}`, `Net Profit: ${money(d.netProfit)}`, `Expenses: ${money(d.expenses)}`, `Cash Balance: ${money(d.cashBalance)}`),
+    growth !== null && `Revenue Growth: ${growth > 0 ? '+' : ''}${growth}%`,
+    lines(
+      product && d.topProduct && `Top Product: ${d.topProduct.name} — ${money(d.topProduct.revenue)}`,
+      d.topRep && `Top Rep: ${d.topRep.name} — ${money(d.topRep.revenue)}`,
+    ),
+    topList('Brand Sales:', d.brands || [], brands),
+    lines(`Stock Value: ${money(d.stockValue)}`, `Stock Quantity: ${boxes(d.stockBoxes)}`),
+    `Alerts: ${d.alerts}`,
+    d.link && lines(linkLabel, d.link),
+  );
+  return fitted(build, [
+    { brands: 3, product: true }, { brands: 2, product: true }, { brands: 1, product: true },
+    { brands: 0, product: true }, { brands: 0, product: false },
+  ]);
+};
+owner.weeklyReport = periodReport('ZELAB — WEEKLY REPORT', 'Full Statement (PDF):');
+owner.monthlyReport = periodReport('ZELAB — MONTHLY REPORT', 'Full Report (PDF):');
+
+// ═══ To a rep ════════════════════════════════════════════════════════════════
+// Same shape, and a plain "ZELab" at the foot so they know whom it is from.
+
+const FOOT = 'ZELab';
+const rep = (title, ...parts) => doc(title, ...parts, FOOT);
+
+const repTexts = {
+  STOCK_REQUEST_APPROVED: ({ request }) => rep('STOCK REQUEST APPROVED', lines(`Request: ${request}`, 'Your stock request has been approved and issued.')),
+  STOCK_REQUEST_REJECTED: ({ request, reason }) => rep('STOCK REQUEST REJECTED', lines(`Request: ${request}`, 'Your stock request was not approved.', reason && `Reason: ${reason}`)),
+  STOCK_ADDED: ({ product, boxes: n, order, attached }) => rep(
+    'NEW STOCK ADDED',
+    lines(`Product: ${product}`, `Quantity: ${boxes(n)}`, `Order: ${order}`),
+    attached ? 'Added to your active order. Your settlement has been updated.' : 'Issued to you as a new order.',
+  ),
+  SETTLEMENT_APPROVED: ({ boxes: n, product, amount, earned, available, closed, order }) => rep(
+    'SETTLEMENT APPROVED',
+    lines(
+      `${boxes(n)} of ${product}`,
+      `Payment: ${money(amount)}`,
+      earned != null && `Commission Earned: ${money(earned)}`,
+      available != null && `Available Balance: ${money(available)}`,
+    ),
+    closed && `Order ${order} is now fully closed.`,
+  ),
+  SETTLEMENT_REJECTED: ({ boxes: n, product, reason }) => rep(
+    'SETTLEMENT REJECTED',
+    lines(`${boxes(n)} of ${product}`, reason && `Reason: ${reason}`, 'Please review and resubmit.'),
+  ),
+  ORDER_CLOSED: ({ order }) => rep('ORDER CLOSED', lines(`Order: ${order}`, 'Fully settled. All boxes accounted for.')),
+  DEADLINE_NEAR: ({ order, stage = 1 }) => {
+    if (stage >= 3) return rep('SETTLEMENT DEADLINE URGENT', `Order: ${order}`, 'Your settlement deadline is almost reached. Settle or return your order immediately.');
+    if (stage === 2) return rep('SETTLEMENT FINAL REMINDER', `Order: ${order}`, 'Your settlement deadline is very close. Settle or return your order now.');
+    return rep('SETTLEMENT DEADLINE NEAR', `Order: ${order}`, 'Your settlement deadline is approaching. Please settle your order.');
+  },
+  LATE_FINE: ({ fine, order, days }) => rep('LATE SETTLEMENT FINE', lines(`Fine Applied: ${money(fine)}`, `Order: ${order}`, `Overdue: ${count(days, 'Day')}`)),
+  FINE_FORGIVEN: ({ amount, order }) => rep('FINE FORGIVEN', lines(`Amount: ${money(amount)}`, order && `Order: ${order}`, 'Returned to your commission balance.')),
+  COMMISSION_DEDUCTED: ({ amount, reason }) => rep('COMMISSION DEDUCTED', lines(`Amount: ${money(amount)}`, reason && `Reason: ${reason}`, 'Future commission is not affected.')),
+  EXTENSION_ACTIVATED: ({ order, deadline, hours = 96, rate, returnFine }) => rep(
+    'EXTENSION ACTIVATED',
+    lines(
+      `Order: ${order}`,
+      `Extension: ${count(hours, 'Hour')}`,
+      `New Deadline: ${dateTime(deadline)}`,
+      `Daily Fine After Deadline: ${money(rate)}`,
+      `Return Delay Fine: ${money(returnFine)}`,
+    ),
+    'No fine until the new deadline. A return not completed within 24 Hours is fined.',
+  ),
+  DEADLINE_EXTENDED: ({ order, deadline }) => rep(
+    'DEADLINE EXTENDED',
+    lines(`Order: ${order}`, `New Deadline: ${dateTime(deadline)}`),
+    'Settle your boxes or return unsold stock before then. After the deadline the daily fine applies.',
+  ),
+  DEADLINE_MOVED_BACK: ({ order, deadline, extensionCancelled, dailyFine, overdueNow }) => rep(
+    'DEADLINE MOVED BACK',
+    lines(
+      `Order: ${order}`,
+      `New Deadline: ${dateTime(deadline)}`,
+      extensionCancelled && 'Extension: Cancelled',
+      extensionCancelled && `Daily Fine: ${money(dailyFine)}`,
+      overdueNow && 'Status: Overdue',
+    ),
+    extensionCancelled && 'The extension is yours again. You can take it whenever this order is not overdue.',
+    overdueNow && 'That time has already passed, so the order is overdue now. The daily fine runs from today. A return waiting for approval pauses it. Settle or return to stop it.',
+  ),
+  RETURN_APPROVED: ({ number, boxes: n }) => rep('RETURN APPROVED', lines(`Return: ${number}`, `Quantity: ${boxes(n)}`, 'Added back to inventory.')),
+  RETURN_REJECTED: ({ number, boxes: n, reason }) => rep('RETURN REJECTED', lines(`Return: ${number}`, `Quantity: ${boxes(n)}`, reason ? `Reason: ${reason}` : 'Please contact the administrator.')),
+  RETURN_CANCELLED: ({ number }) => rep('RETURN CANCELLED', lines(`Return: ${number}`, 'The boxes remain on your order. Settle or resubmit the return.')),
+  RETURN_EXPIRED: ({ number, fine, hours }) => rep(
+    'RETURN EXPIRED',
+    lines(`Return: ${number}`, Number(fine) > 0 && `Fine Applied: ${money(fine)}`),
+    `Your return was not completed within ${count(hours, 'Hour')} and was cancelled automatically. The boxes are back on your order. Settle them or submit a new return.`,
+  ),
+  WITHDRAWAL_REQUESTED: ({ amount }) => rep('WITHDRAWAL REQUESTED', lines(`Amount: ${money(amount)}`, 'Status: Pending approval')),
+  WITHDRAWAL_APPROVED: ({ amount }) => rep('WITHDRAWAL APPROVED', lines(`Amount: ${money(amount)}`, 'Status: Approved')),
+  WITHDRAWAL_REJECTED: ({ amount }) => rep('WITHDRAWAL REJECTED', lines(`Amount: ${money(amount)}`, 'Status: Not approved')),
+  WITHDRAWAL_PAID: ({ amount }) => rep('COMMISSION PAID', lines(`Amount: ${money(amount)}`, 'Status: Paid out')),
+  WINDOW_OPEN: () => rep('WITHDRAWAL WINDOW OPEN', 'A one-off withdrawal has been opened for you. Your usual minimum does not apply. Request it from your Commission page within the next 2 Days.'),
+  WINDOW_CLOSED: () => rep('WITHDRAWAL WINDOW CLOSED', 'The one-off withdrawal opened for you has been closed. Your usual minimum applies again.'),
+  COMMISSION_READY: ({ available, minimum }) => rep('COMMISSION READY', lines(`Available: ${money(available)}`, `Minimum Withdrawal: ${money(minimum)}`), 'You can request a withdrawal.'),
+  BONUS_UNLOCKED: ({ bonus, target, nextTarget, nextBonus }) => rep(
+    'BONUS UNLOCKED',
+    lines(`Bonus: ${money(bonus)}`, `Sales Reached: ${money(target)}`),
+    nextTarget != null && `Keep going: ${money(nextTarget)} earns ${money(nextBonus)} instead. Taking a bonus starts your count again from zero.`,
+  ),
+  BONUS_PAID: ({ bonus }) => rep('BONUS PAID', `Bonus: ${money(bonus)}`, 'Your sales count starts again from zero for the next one.'),
+  PASSWORD_CHANGED: () => rep('PASSWORD CHANGED', 'Your account password was changed. If you did not do this, contact your administrator immediately.'),
+  TEST: () => rep('ZELAB', 'WhatsApp alerts are now active for you. You will get a message here whenever something important happens with your stock, settlements and commission.'),
+};
+
+// An emoji or symbol in a title (the in-app bell still has one) must never reach WhatsApp.
+const noEmoji = (s) => String(s || '').replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}️‍]/gu, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * The text for a rep from a structured `whatsapp: { kind, ...data }`. A kind
+ * nobody has written a template for falls back to the in-app title and message
+ * in the same shape, so a new alert is never silently lost.
+ */
+function repText(whatsapp, fallback = {}) {
+  const make = whatsapp && repTexts[whatsapp.kind];
+  if (make) return make(whatsapp);
+  return rep(noEmoji(fallback.title).toUpperCase() || 'ZELAB', noEmoji(fallback.message));
+}
+
+module.exports = { owner, repText, repTexts, money, boxes, count, dateTime, dateOnly, MAX_REPORT_CHARS };

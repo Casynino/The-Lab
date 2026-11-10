@@ -106,6 +106,7 @@ async function changePassword(userId, currentPassword, newPassword) {
     severity: 'WARNING',
     title: 'Password changed',
     message: 'Your account password was changed. If you did not do this, contact your administrator immediately.',
+    whatsapp: { kind: 'PASSWORD_CHANGED' },
     entityType: 'User',
     entityId: userId,
   }).catch(() => {});

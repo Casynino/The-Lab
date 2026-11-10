@@ -168,23 +168,26 @@ test('a long table runs onto more pages instead of off the page', async () => {
 const LINK = 'https://www.zelab.site/api/public/report/ckabcdefghijklmnopqrstuvw.pdf?sig=0123456789abcdef0123456789abcdef';
 const dayData = () => ({
   ...report(),
-  period: { label: 'Tuesday 10 November 2026', key: '2026-11-10' },
+  period: { label: 'Tuesday 10 November 2026', shortLabel: '10 November 2026', key: '2026-11-10' },
   activity: { newOrders: 12, settlements: 3, returns: 1 },
 });
 
-test('daily message: link right under the header, inside the 700 characters CallMeBot keeps', () => {
+test('daily message: Nino\'s format, PDF link last, inside the 700 characters CallMeBot keeps', () => {
   const text = daily.buildWhatsAppText(dayData(), LINK);
   const lines = text.split('\n');
-  assert.equal(lines[0], '🟢 *ZELAB — DAILY REPORT*');
-  assert.ok(lines.indexOf(LINK) > 0 && lines.indexOf(LINK) <= 5, 'the link is within the first few lines');
+  assert.equal(lines[0], 'ZELAB — DAILY REPORT');
+  assert.equal(lines[1], '10 November 2026');
+  assert.equal(lines[lines.length - 2], 'Full Report (PDF):');
+  assert.equal(lines[lines.length - 1], LINK);
   assert.ok(text.length <= 700, `message is ${text.length} characters`);
-  assert.ok(!/[-=_*~]{6,}/.test(text.replace(/\*ZELAB[^*]*\*/, '')), 'no divider runs (CallMeBot 403s them)');
+  assert.match(text, /Net Profit: TSh 1,730,000/);
+  assert.match(text, /Top Reps:\nAsha TSh 3,100,000\nJohn TSh 1,900,000/);
 });
 
-test('daily message without a PDF (it failed to build) still carries the numbers', () => {
+test('daily message without a PDF (it failed to build) still carries the numbers and no link line', () => {
   const text = daily.buildWhatsAppText(dayData(), null);
-  assert.ok(!text.includes('https://'));
-  assert.match(text, /Net profit: TSh 1,730,000/);
+  assert.ok(!text.includes('https://') && !text.includes('PDF'));
+  assert.match(text, /Net Profit: TSh 1,730,000/);
 });
 
 test('the archive lists weekly and monthly by default; a daily report every day must not bury them', async () => {

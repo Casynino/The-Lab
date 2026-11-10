@@ -186,41 +186,28 @@ async function buildWeeklyData(weekKey) {
   };
 }
 
-// ── WhatsApp message: the quick, sectioned business health check ─────────────
-// Two hard delivery constraints shape this format:
-// 1. CallMeBot's firewall 403s "spammy" tokens — no divider runs, and the PDF
-//    link is scheme-less (WhatsApp still makes bare domains tappable).
-// 2. CallMeBot TRUNCATES messages at roughly 700–750 characters. The PDF link
-//    therefore sits right under the header (a cut tail can never remove it)
-//    and the body is kept compact — the PDF carries the full detail.
-// Executive summary first (understand the business in seconds), then the PDF
-// link, then a compact detail block. `link` is the archived report's signed
-// URL; kept as a full https:// URL so WhatsApp renders it tappable.
+// ── WhatsApp message: the short summary, with the PDF link at the foot ───────
+// The wording and the 700-character fitting live in whatsappText.js (the link
+// is never the part that gets cut). `link` is the archived report's signed
+// https URL.
 function buildWhatsAppText(d, link) {
-  const top = (d.topProducts || [])[0];
-  const alertLine = d.attention.length
-    ? `⚠️ ${d.attention.length} alert(s) — details in the PDF`
-    : '✅ Nothing needs attention';
-  const lines = [
-    '📊 *ZELAB — WEEKLY REPORT*',
-    `_${d.period.label}_`,
-    '',
-    `💰 Revenue: ${fmt(d.finance.revenue)}`,
-    `*Net profit: ${fmt(d.finance.netProfit)}* (expenses ${fmt(d.finance.expenses)})`,
-    `🏦 Cash: *${fmt(d.cashPosition)}*`,
-    ...(top ? [`🏆 ${top.name}: ${fmt(top.revenue)}`] : []),
-    ...(d.topRep ? [`⭐ Top rep: ${d.topRep.name} (${fmt(d.topRep.revenue)})`] : []),
-    '',
-    '📄 *Full statement (PDF):*',
-    link || pdfLink(d.period.weekKey),
-    '',
-    ...(d.brands.length
-      ? [`🏷️ ${d.brands.map((b) => `${b.name} ${fmt(b.revenue)}`).join(' / ')}`]
-      : []),
-    `📦 Stock: ${fmt(d.stock.costValue)} (${d.stock.units} boxes)`,
-    alertLine,
-  ];
-  return lines.join('\n');
+  const { pct } = require('./reportKit');
+  const prev = d.extras && d.extras.prev;
+  return require('./whatsappText').owner.weeklyReport({
+    period: d.period.label,
+    revenue: d.finance.revenue,
+    netProfit: d.finance.netProfit,
+    expenses: d.finance.expenses,
+    cashBalance: d.cashPosition,
+    growthPct: prev ? pct(d.finance.revenue, prev.revenue) : null,
+    topProduct: (d.topProducts || [])[0] || null,
+    topRep: d.topRep,
+    brands: [...(d.brands || [])].sort((a, b) => b.revenue - a.revenue),
+    stockValue: d.stock.costValue,
+    stockBoxes: d.stock.units,
+    alerts: d.attention.length,
+    link: link || pdfLink(d.period.weekKey),
+  });
 }
 
 // ── Delivery ──────────────────────────────────────────────────────────────────
