@@ -77,13 +77,35 @@ const owner = {
     return fitted(build, steps);
   },
 
-  // Who and which order / the product / the money: three small groups, not one block.
-  settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when }) => doc(
-    lines(bold('SETTLEMENT SUBMITTED'), dateOnly(when)),
-    lines(`By: ${by}`, `Order: ${order}`),
-    lines(`Product: ${product}`, `Boxes Sold: ${Math.round(Number(n) || 0)}`),
-    lines(`Payment: ${money(amount)}${method ? ` (${method})` : ''}`, Number(commission) > 0 && `Commission: ${money(commission)}`),
-  ),
+  // Who and which order / the product / the money: small groups, not one block.
+  // Several products sent together (`items`) are "Product 1:", "Product 2:" each with its Boxes
+  // Sold, then the total boxes, then what was paid to each account and the commission. Like a long
+  // stock request, a very long one drops lines from the LIST and never from the money.
+  settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when, items, payments }) => {
+    const head = [lines(bold('SETTLEMENT SUBMITTED'), dateOnly(when)), lines(`By: ${by}`, `Order: ${order}`)];
+    if (!items || items.length <= 1) {
+      return doc(
+        ...head,
+        lines(`Product: ${product}`, `Boxes Sold: ${Math.round(Number(n) || 0)}`),
+        lines(`Payment: ${money(amount)}${method ? ` (${method})` : ''}`, Number(commission) > 0 && `Commission: ${money(commission)}`),
+      );
+    }
+    const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes) || 0), 0);
+    const paid = lines(
+      ...(payments || []).map((p) => `Payment: ${money(p.amount)}${p.method ? ` (${p.method})` : ''}`),
+      Number(commission) > 0 && `Commission: ${money(commission)}`,
+    );
+    const build = ({ gap, shown }) => doc(
+      ...head,
+      items.slice(0, shown).map((i, k) => lines(`Product ${k + 1}: ${i.product}`, `Boxes Sold: ${Math.round(Number(i.boxes) || 0)}`)).join(gap ? '\n\n' : '\n'),
+      shown < items.length && `+${items.length - shown} more, see ZELab`,
+      `Total Boxes: ${Math.round(totalBoxes)}`,
+      paid,
+    );
+    const steps = [{ gap: true, shown: items.length }, { gap: false, shown: items.length }];
+    for (let k = items.length - 1; k >= 1; k -= 1) steps.push({ gap: false, shown: k });
+    return fitted(build, steps);
+  },
 
   // Who and which order, then each product with its quantity, then the reason.
   returnRequest: ({ by, order, items = [], reason }) => doc(

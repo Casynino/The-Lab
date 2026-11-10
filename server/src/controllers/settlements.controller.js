@@ -58,6 +58,21 @@ const submitSettlement = asyncHandler(async (req, res) => {
   return created(res, sub);
 });
 
+// Several products at once. One audit row per submission, so each can be traced on its own.
+const submitSettlements = asyncHandler(async (req, res) => {
+  const subs = await submission.submitMany(req.params.id, req.body, req.user);
+  for (const sub of subs) {
+    // eslint-disable-next-line no-await-in-loop
+    await audit.record(req, {
+      action: 'SUBMIT_SETTLEMENT',
+      entityType: 'SettlementSubmission',
+      entityId: sub.id,
+      newValues: { settlementId: req.params.id, productId: sub.productId, boxes: sub.boxes, amount: sub.amount, batch: subs.length },
+    });
+  }
+  return created(res, subs);
+});
+
 // Where a rep's settlement money goes — names and payment details only, never
 // balances (those are The Doctor's business).
 //
@@ -154,5 +169,5 @@ const undoDeadlineChange = asyncHandler(async (req, res) => {
 
 module.exports = {
   list, summary, analytics, get, settle, refreshOverdue, extendDeadline, undoDeadlineChange, selfExtend,
-  submitSettlement, pendingApprovals, approveSubmission, rejectSubmission, paymentAccounts,
+  submitSettlement, submitSettlements, pendingApprovals, approveSubmission, rejectSubmission, paymentAccounts,
 };

@@ -130,6 +130,17 @@ const settlementSettleBoxes = {
   }),
 };
 
+// Several products at once: the same per-line fields as one settle-boxes call.
+const settlementSettleMany = {
+  body: z.object({
+    items: z.array(z.object({
+      productId: id,
+      boxes: z.number().int().positive(),
+      accountId: id.optional().nullable(),
+    })).min(1).max(20),
+  }),
+};
+
 // --- Commissions -----------------------------------------------------------
 const withdrawRequest = { body: z.object({ amount: money, notes: z.string().max(500).optional() }) };
 const withdrawDecide = { body: z.object({ action: z.enum(['APPROVE', 'REJECT', 'PAY']) }) };
@@ -165,7 +176,7 @@ module.exports = {
   supplierCreate, supplierUpdate, supplierQuery,
   poCreate, poUpdate, poReceive, poQuery,
   stockRequestCreate, stockRequestUpdate, stockRequestApprove, stockRequestReject, stockRequestQuery,
-  settlementQuery, settlementSettle, settlementSettleBoxes,
+  settlementQuery, settlementSettle, settlementSettleBoxes, settlementSettleMany,
   withdrawRequest, withdrawDecide, withdrawalQuery,
   dailyReportSubmit, dailyReportQuery,
 };

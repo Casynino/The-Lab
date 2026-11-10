@@ -16,95 +16,143 @@ const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2, formatCurrency } = require('../utils/money');
 
 // ── Submit (PENDING — no Sale, no impact) ────────────────────────────────────
-async function submit(settlementId, payload, actor) {
+
+// ONE line of a submission, inside a transaction: every check, and the PENDING
+// row. Shared by the single submit and the several-at-once submit below, so a
+// product can never be accepted by one and refused by the other.
+async function submitLineTx(tx, settlementId, payload, actor) {
   const productId = payload.productId;
   const boxes = Math.trunc(Number(payload.boxes));
   if (!productId) throw ApiError.badRequest('Select a product to settle');
   if (!Number.isInteger(boxes) || boxes <= 0) throw ApiError.badRequest('Boxes settled must be a positive whole number');
 
-  const result = await prisma.$transaction(async (tx) => {
-    const s = await tx.settlement.findUnique({
-      where: { id: settlementId },
-      include: { salesRep: { include: { user: { select: { id: true, name: true } } } } },
-    });
-    if (!s) throw ApiError.notFound('Settlement not found');
-    if (s.status === 'SETTLED') throw ApiError.badRequest('This order is already closed');
-    // Reps may only submit against their own order.
-    if (actor?.salesRepId && s.salesRepId !== actor.salesRepId) {
-      throw ApiError.forbidden('This order is not yours');
+  const s = await tx.settlement.findUnique({
+    where: { id: settlementId },
+    include: { salesRep: { include: { user: { select: { id: true, name: true } } } } },
+  });
+  if (!s) throw ApiError.notFound('Settlement not found');
+  if (s.status === 'SETTLED') throw ApiError.badRequest('This order is already closed');
+  // Reps may only submit against their own order.
+  if (actor?.salesRepId && s.salesRepId !== actor.salesRepId) {
+    throw ApiError.forbidden('This order is not yours');
+  }
+
+  const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, name: true, sellingPrice: true, brandId: true } });
+  if (!product) throw ApiError.badRequest('Product not found');
+
+  // Where the rep says the money went. Stored on the submission; on approval
+  // the income lands in THIS account. A brand settles to ONE account — OHIS
+  // to M-Pesa, Civlily to Airtel Money — so what may be ACCEPTED here is
+  // exactly what the rep was OFFERED, read from the same function rather
+  // than re-derived: a second copy of the rule is a second rule.
+  let account = null;
+  if (payload.accountId) {
+    const allowed = await finance.paymentAccountsForBrand(product.brandId || null);
+    account = allowed.find((a) => a.id === payload.accountId) || null;
+    if (!account) {
+      const one = allowed[0];
+      throw ApiError.badRequest(one
+        ? `${product.name} settles to ${one.name}. Submit the money there.`
+        : 'Select a valid payment account');
     }
+  }
+  const pkg = await tx.productPackaging.findFirst({ where: { productId, isBaseUnit: true } });
+  if (!pkg) throw ApiError.badRequest(`${product.name} has no base (Box) packaging configured`);
+  const { baseQuantity } = await inventory.convertToBase(tx, productId, pkg.packagingUnitId, boxes);
 
-    const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, name: true, sellingPrice: true, brandId: true } });
-    if (!product) throw ApiError.badRequest('Product not found');
+  // Outstanding boxes, minus boxes already sitting on PENDING submissions for
+  // the same product (so a rep can't submit the same boxes twice).
+  const outstanding = await settlement.productOutstanding(tx, s, productId);
+  const pendingAgg = await tx.settlementSubmission.aggregate({
+    where: { settlementId, productId, status: 'PENDING' },
+    _sum: { boxes: true },
+  });
+  const available = outstanding - (pendingAgg._sum.boxes || 0);
+  if (boxes > available) {
+    throw ApiError.badRequest(`Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order`);
+  }
 
-    // Where the rep says the money went. Stored on the submission; on approval
-    // the income lands in THIS account. A brand settles to ONE account — OHIS
-    // to M-Pesa, Civlily to Airtel Money — so what may be ACCEPTED here is
-    // exactly what the rep was OFFERED, read from the same function rather
-    // than re-derived: a second copy of the rule is a second rule.
-    let account = null;
-    if (payload.accountId) {
-      const allowed = await finance.paymentAccountsForBrand(product.brandId || null);
-      account = allowed.find((a) => a.id === payload.accountId) || null;
-      if (!account) {
-        const one = allowed[0];
-        throw ApiError.badRequest(one
-          ? `${product.name} settles to ${one.name}. Submit the money there.`
-          : 'Select a valid payment account');
-      }
-    }
-    const pkg = await tx.productPackaging.findFirst({ where: { productId, isBaseUnit: true } });
-    if (!pkg) throw ApiError.badRequest(`${product.name} has no base (Box) packaging configured`);
-    const { baseQuantity } = await inventory.convertToBase(tx, productId, pkg.packagingUnitId, boxes);
+  const amount = round2(baseQuantity * toNumber(product.sellingPrice));
+  const submissionNumber = await nextDocNumber(tx.settlementSubmission, 'submissionNumber', 'SUB');
+  const sub = await tx.settlementSubmission.create({
+    data: {
+      submissionNumber,
+      settlementId,
+      salesRepId: s.salesRepId,
+      productId,
+      packagingUnitId: pkg.packagingUnitId,
+      productName: product.name,
+      boxes,
+      baseQuantity,
+      amount,
+      method: account ? account.name : payload.method || null,
+      accountId: account ? account.id : null,
+      status: 'PENDING',
+      submittedById: actor ? actor.id : null,
+    },
+  });
+  return { sub, settlement: s, product };
+}
 
-    // Outstanding boxes, minus boxes already sitting on PENDING submissions for
-    // the same product (so a rep can't submit the same boxes twice).
-    const outstanding = await settlement.productOutstanding(tx, s, productId);
-    const pendingAgg = await tx.settlementSubmission.aggregate({
-      where: { settlementId, productId, status: 'PENDING' },
-      _sum: { boxes: true },
-    });
-    const available = outstanding - (pendingAgg._sum.boxes || 0);
-    if (boxes > available) {
-      throw ApiError.badRequest(`Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order`);
-    }
-
-    const amount = round2(baseQuantity * toNumber(product.sellingPrice));
-    const submissionNumber = await nextDocNumber(tx.settlementSubmission, 'submissionNumber', 'SUB');
-    const sub = await tx.settlementSubmission.create({
-      data: {
-        submissionNumber,
-        settlementId,
-        salesRepId: s.salesRepId,
-        productId,
-        packagingUnitId: pkg.packagingUnitId,
-        productName: product.name,
-        boxes,
-        baseQuantity,
-        amount,
-        method: account ? account.name : payload.method || null,
-        accountId: account ? account.id : null,
-        status: 'PENDING',
-        submittedById: actor ? actor.id : null,
-      },
-    });
-    return { sub, settlement: s, product };
-  }, { timeout: 30000 });
-
-  // Notify The Doctor that a settlement awaits approval.
-  const repName = result.settlement.salesRep?.user?.name || actor?.name || 'A rep';
+// The owner is told once per submission: a bell notice and a WhatsApp message.
+// Several products sent together are ONE notice and ONE message, not one each.
+function tellOwner(results, actor) {
+  const { settlement: s } = results[0];
+  const repName = s.salesRep?.user?.name || actor?.name || 'A rep';
+  const wa = require('./whatsappNotify.service');
+  if (results.length === 1) {
+    const { sub, product } = results[0];
+    notification.notifyAdmins({
+      type: 'GENERAL',
+      severity: 'INFO',
+      title: 'New settlement awaiting approval',
+      message: `${repName} submitted ${sub.boxes} box(es) of ${product.name} (${formatCurrency(sub.amount)}) on order ${s.settlementNumber}. Verify the money and approve.`,
+      entityType: 'Settlement',
+      entityId: s.id,
+    }).catch(() => {});
+    wa.background(wa.settlementSubmitted({ sub, settlement: s, product, repName }));
+    return;
+  }
+  const boxes = results.reduce((n, r) => n + r.sub.boxes, 0);
+  const total = results.reduce((n, r) => n + toNumber(r.sub.amount), 0);
   notification.notifyAdmins({
     type: 'GENERAL',
     severity: 'INFO',
     title: 'New settlement awaiting approval',
-    message: `${repName} submitted ${result.sub.boxes} box(es) of ${result.product.name} (${formatCurrency(result.sub.amount)}) on order ${result.settlement.settlementNumber}. Verify the money and approve.`,
+    message: `${repName} submitted ${results.length} products (${boxes} box(es), ${formatCurrency(total)}) on order ${s.settlementNumber}. Verify the money and approve.`,
     entityType: 'Settlement',
-    entityId: settlementId,
+    entityId: s.id,
   }).catch(() => {});
-  const wa = require('./whatsappNotify.service');
-  wa.background(wa.settlementSubmitted({ sub: result.sub, settlement: result.settlement, product: result.product, repName }));
+  wa.background(wa.settlementSubmittedBatch({ results, settlement: s, repName }));
+}
 
+async function submit(settlementId, payload, actor) {
+  const result = await prisma.$transaction((tx) => submitLineTx(tx, settlementId, payload, actor), { timeout: 30000 });
+  tellOwner([result], actor);
   return result.sub;
+}
+
+// Several products on one order in one go ("submit what I sold" as a list, not one
+// at a time). Each line is its own PENDING submission — approving, rejecting and
+// commission work exactly as they do for a single one — but all of them are
+// created in ONE transaction, so a line that fails (too many boxes, a wrong
+// payment account) saves none of the others, and the owner gets one message.
+const MAX_LINES = 20;
+async function submitMany(settlementId, payload, actor) {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (!items.length) throw ApiError.badRequest('Choose at least one product to settle');
+  if (items.length > MAX_LINES) throw ApiError.badRequest(`Submit at most ${MAX_LINES} products at once`);
+  const ids = items.map((i) => i?.productId);
+  if (new Set(ids).size !== ids.length) throw ApiError.badRequest('Each product can be listed once');
+
+  const results = await prisma.$transaction(async (tx) => {
+    const done = [];
+    for (const item of items) done.push(await submitLineTx(tx, settlementId, item, actor));
+    return done;
+  }, { timeout: 30000 });
+
+  tellOwner(results, actor);
+  return results.map((r) => r.sub);
 }
 
 // ── Approve — run the real settle effect (sale + commission + all metrics) ────
@@ -240,4 +288,4 @@ async function listPending() {
   }));
 }
 
-module.exports = { submit, approve, reject, listPending };
+module.exports = { submit, submitMany, approve, reject, listPending };

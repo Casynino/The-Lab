@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { motion, useReducedMotion } from 'motion/react';
 import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCcw, ChevronDown } from 'lucide-react';
@@ -14,6 +14,7 @@ import {
   BoxCount, Remaining,
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
+import StepperLines from '@/components/StepperLines';
 
 // --- Submit settlement: the rep submits boxes + cash for The Doctor's approval
 // Nothing is recorded (no sale, commission, revenue or profit) until approved.
@@ -110,7 +111,7 @@ function SettleDone({ amount, boxes, productName, onClose }) {
   );
 }
 
-function SettleBoxesModal({ order, onClose, onDone }) {
+function SettleOneModal({ order, onClose, onDone }) {
   const pendingMap = pendingBoxesByProduct(order);
   // Locked boxes: pending settlement submissions AND pending returns.
   const availFor = (l) => Math.max(0, l.remaining - (pendingMap[l.productId] || 0) - (l.pendingReturn || 0));
@@ -243,6 +244,164 @@ function SettleBoxesModal({ order, onClose, onDone }) {
 }
 
 // --- Return unsold boxes (rep → warehouse) against this order --------------
+// The product a rep can still settle: boxes left, less those already waiting for approval or
+// locked in a return.
+const settleAvail = (order, l) => Math.max(0, l.remaining - (pendingBoxesByProduct(order)[l.productId] || 0) - (l.pendingReturn || 0));
+
+// Where to pay, for one brand's share of a settlement. One account is stated, not offered as a
+// dropdown that cannot change; several are a choice; none says so out loud.
+function PayBlock({ step, brandName, amount, options, picked, onPick, labelled }) {
+  const only = options && options.length === 1 ? options[0] : null;
+  return (
+    <div>
+      <StepHead n={step} right={labelled ? formatCurrency(amount) : undefined}>
+        {labelled ? `Pay ${brandName || 'this brand'}` : 'Where to pay it'}
+      </StepHead>
+      {!options ? (
+        <p className="text-[13px] text-faint">Loading…</p>
+      ) : only ? (
+        <PayTo account={only} brandName={brandName} />
+      ) : options.length === 0 ? (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2.5 text-sm text-amber-200">
+          There is no account set up for {brandName || 'this brand'} yet, so this cannot be submitted. Ask ZELab to add one.
+        </p>
+      ) : (
+        <Select value={picked || ''} onChange={(e) => onPick(e.target.value)}>
+          <option value="">Select payment account…</option>
+          {options.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </Select>
+      )}
+    </div>
+  );
+}
+
+// Settling SEVERAL products at once: a numbered list with a small stepper on each row, then what
+// to collect, then where each brand's share is paid (OHIS and Civlily settle to different wallets,
+// so a mixed list shows one payment block per brand). Each line still becomes its own submission
+// for approval — they are just sent together, and saved all or none.
+function SettleManyModal({ order, onClose, onDone }) {
+  const lines = order.order.lines.filter((l) => settleAvail(order, l) > 0);
+  const [cart, setCart] = useState({}); // productId -> boxes
+  const [picked, setPicked] = useState({}); // brandId -> accountId, where a brand has more than one
+  const setQty = (id, qty) => {
+    const line = lines.find((l) => l.productId === id);
+    const capped = Math.min(Math.max(0, qty), line ? settleAvail(order, line) : 0);
+    setCart((prev) => {
+      if (capped <= 0) { const n = { ...prev }; delete n[id]; return n; }
+      return { ...prev, [id]: capped };
+    });
+  };
+
+  const chosen = lines.filter((l) => cart[l.productId] > 0);
+  const totalBoxes = chosen.reduce((n, l) => n + cart[l.productId], 0);
+  const lineValue = (l) => cart[l.productId] * (l.sellingPrice || 0);
+  const total = chosen.reduce((n, l) => n + lineValue(l), 0);
+
+  // One payment block per brand among the chosen products.
+  const brands = [...new Set(chosen.map((l) => l.brandId || ''))];
+  const accountQs = useQueries({
+    queries: brands.map((b) => ({
+      queryKey: ['settlements', 'payment-accounts', b],
+      queryFn: async () => unwrap(await api.get('/settlements/payment-accounts', { params: b ? { brandId: b } : undefined })).data,
+    })),
+  });
+  const optionsFor = (b) => accountQs[brands.indexOf(b)]?.data;
+  const accountFor = (b) => {
+    const opts = optionsFor(b);
+    return opts && opts.length === 1 ? opts[0].id : picked[b] || '';
+  };
+  const brandName = (b) => chosen.find((l) => (l.brandId || '') === b)?.brandName;
+  const brandAmount = (b) => chosen.filter((l) => (l.brandId || '') === b).reduce((n, l) => n + lineValue(l), 0);
+
+  const [sent, setSent] = useState(null);
+  const settle = useMutation({
+    mutationFn: () => api.post(`/settlements/${order.id}/settle-many`, {
+      items: chosen.map((l) => ({ productId: l.productId, boxes: cart[l.productId], accountId: accountFor(l.brandId || '') || undefined })),
+    }),
+    onSuccess: () => {
+      setSent({ amount: total, boxes: totalBoxes, productName: chosen.length > 1 ? `${chosen.length} products` : chosen[0]?.name });
+      onDone();
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
+
+  if (sent) {
+    return (
+      <Modal open onClose={onClose} title="Settlement">
+        <SettleDone {...sent} onClose={onClose} />
+      </Modal>
+    );
+  }
+
+  const ready = chosen.length > 0 && brands.every((b) => accountFor(b));
+  return (
+    <Modal open onClose={onClose} title="Submit settlement"
+      footer={
+        <div className="flex w-full items-center gap-3">
+          <button type="button" onClick={onClose}
+            className="shrink-0 rounded-xl px-4 py-3 text-sm font-medium text-muted transition hover:text-foreground">
+            Cancel
+          </button>
+          <Button className="flex-1 justify-center py-3 text-[15px]" loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
+            {ready ? `Submit ${formatCurrency(total)}` : 'Submit for approval'}
+          </Button>
+        </div>
+      }>
+      <div className="space-y-5">
+        <p className="text-[13px] leading-snug text-muted">Pay first, then submit for approval.</p>
+
+        <div>
+          <StepHead n="1" right={chosen.length ? `${chosen.length} chosen` : undefined}>What you sold</StepHead>
+          <StepperLines
+            items={lines.map((l) => ({
+              key: l.productId,
+              name: l.name,
+              max: settleAvail(order, l),
+              qty: cart[l.productId] || 0,
+              sub: `${formatNumber(settleAvail(order, l))} left · ${formatCurrency(l.sellingPrice || 0)} a box`,
+            }))}
+            onChange={setQty}
+          />
+        </div>
+
+        {chosen.length > 0 && (
+          <>
+            <div className="rounded-xl bg-elevated/60 p-4 ring-1 ring-white/[0.07]">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">To collect</p>
+              <div className="mt-2 flex items-baseline justify-between gap-3">
+                <span className="min-w-0 text-sm text-muted">
+                  {formatNumber(totalBoxes)} {totalBoxes === 1 ? 'box' : 'boxes'} · {chosen.length} {chosen.length === 1 ? 'product' : 'products'}
+                </span>
+                <span className="shrink-0 text-2xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
+              </div>
+            </div>
+            {brands.map((b, i) => (
+              <PayBlock
+                key={b || 'none'}
+                step={String(i + 2)}
+                labelled={brands.length > 1}
+                brandName={brandName(b)}
+                amount={brandAmount(b)}
+                options={optionsFor(b)}
+                picked={picked[b]}
+                onPick={(id) => setPicked((p) => ({ ...p, [b]: id }))}
+              />
+            ))}
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// One product left to settle keeps the simple form; two or more get the list. Decided once when
+// the form opens, so submitting (which refreshes the order) cannot swap the form under the rep
+// and lose the confirmation.
+function SettleBoxesModal(props) {
+  const [many] = useState(() => props.order.order.lines.filter((l) => settleAvail(props.order, l) > 0).length > 1);
+  return many ? <SettleManyModal {...props} /> : <SettleOneModal {...props} />;
+}
+
 function RecordReturnModal({ order, onClose, onDone }) {
   const { data: allProducts = [] } = useProducts();
   const { data: warehouses = [] } = useWarehouses();
@@ -308,64 +467,21 @@ function RecordReturnModal({ order, onClose, onDone }) {
       {returnableLines.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">No boxes left to return on this order.</p>
       ) : (
-        <div className="-mx-1 divide-y divide-border">
-          {returnableLines.map((line) => {
-            const qty = cart[line.productId] || 0;
-            const inCart = qty > 0;
-            return (
-              <div key={line.productId} className={`flex items-center gap-3 px-1 py-3 transition ${inCart ? 'bg-brand-500/5' : ''}`}>
-                <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-medium leading-snug ${inCart ? 'text-foreground' : 'text-muted'}`}>{line.name}</div>
-                  <div className="mt-0.5 text-xs text-faint">
-                    {formatNumber(returnAvail(line))} box{returnAvail(line) !== 1 ? 'es' : ''} available to return
-                    {(line.pendingReturn || 0) > 0 && <span className="text-amber-500"> · {formatNumber(line.pendingReturn)} locked in a pending return</span>}
-                  </div>
-                </div>
-                {/* −  input  + */}
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => dec(line.productId)}
-                    disabled={qty === 0}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-elevated text-lg font-bold text-muted transition hover:bg-surface disabled:opacity-30"
-                  >−</button>
-                  <input
-                    type="number"
-                    min="0"
-                    max={returnAvail(line)}
-                    value={qty === 0 ? '' : qty}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      setQty(line.productId, isNaN(v) || v < 0 ? 0 : v);
-                    }}
-                    placeholder="0"
-                    className="h-8 w-14 rounded-lg border border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                  <button
-                    onClick={() => inc(line.productId)}
-                    disabled={qty >= returnAvail(line)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-lg font-bold text-white transition hover:bg-brand-400 disabled:opacity-40"
-                  >+</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* What is going back, numbered — check it here before pressing Return. */}
-      {hasCart && (
-        <div className="mt-4">
-          <div className="mb-2 text-sm font-semibold text-foreground">
-            Boxes to return · {Object.keys(cart).length} product{Object.keys(cart).length !== 1 ? 's' : ''}
-          </div>
-          <NumberedLines
-            items={returnableLines.filter((l) => cart[l.productId] > 0).map((l) => ({
-              key: l.productId,
-              name: l.name,
-              detail: `${formatNumber(cart[l.productId])} box${cart[l.productId] !== 1 ? 'es' : ''}`,
-            }))}
-          />
-        </div>
+        <StepperLines
+          items={returnableLines.map((line) => ({
+            key: line.productId,
+            name: line.name,
+            max: returnAvail(line),
+            qty: cart[line.productId] || 0,
+            sub: (
+              <>
+                {formatNumber(returnAvail(line))} available
+                {(line.pendingReturn || 0) > 0 && <span className="text-amber-500"> · {formatNumber(line.pendingReturn)} locked</span>}
+              </>
+            ),
+          }))}
+          onChange={setQty}
+        />
       )}
     </Modal>
   );

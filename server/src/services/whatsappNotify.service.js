@@ -305,6 +305,32 @@ async function settlementSubmitted({ sub, settlement, product, repName }) {
   return queue('SETTLEMENT_SUBMITTED', { priority: 'ACTION', dedupeKey: `stlsub:${sub.id}`, refType: 'SettlementSubmission', refId: sub.id, text });
 }
 
+// 4b. Several products submitted together: ONE message for the lot, with each product,
+// the total boxes, what was paid to each account, and the commission if approved.
+async function settlementSubmittedBatch({ results, settlement, repName }) {
+  const commission = require('./commission.service');
+  let total = 0;
+  for (const { sub } of results) {
+    try {
+      const perBox = toNumber(await commission.rateForProductOnOrder(settlement.id, sub.productId));
+      if (perBox > 0) total += sub.boxes * perBox;
+    } catch { /* rule optional */ }
+  }
+  // What was paid, by account: the rep sends one amount per wallet, not per product.
+  const byMethod = new Map();
+  for (const { sub } of results) byMethod.set(sub.method || '', round2((byMethod.get(sub.method || '') || 0) + toNumber(sub.amount)));
+  const text = wt.owner.settlementSubmitted({
+    by: repName,
+    order: settlement.settlementNumber,
+    items: results.map(({ sub, product }) => ({ product: product.name, boxes: sub.boxes })),
+    payments: [...byMethod.entries()].map(([method, amount]) => ({ method, amount })),
+    commission: round2(total),
+    when: results[0].sub.createdAt,
+  });
+  const first = results[0].sub;
+  return queue('SETTLEMENT_SUBMITTED', { priority: 'ACTION', dedupeKey: `stlsub:${first.id}:batch`, refType: 'SettlementSubmission', refId: first.id, text });
+}
+
 // 6. Return request submitted.
 async function returnSubmitted(ret) {
   const repName = ret.salesRep?.user?.name || 'Warehouse';
@@ -657,6 +683,7 @@ module.exports = {
   flush,
   stockRequestSubmitted,
   settlementSubmitted,
+  settlementSubmittedBatch,
   returnSubmitted,
   commissionReadyCheck,
   stockAlertForProduct,

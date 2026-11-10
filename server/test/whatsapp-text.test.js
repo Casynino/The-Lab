@@ -444,3 +444,36 @@ test('no alert is a wall of text: every block is at most 4 lines, with a blank l
     }
   }
 });
+
+// ── several products in one settlement message ───────────────────────────────
+test('SETTLEMENT SUBMITTED with several products: Product 1 / Boxes Sold, the total, then the money', () => {
+  assert.equal(t.owner.settlementSubmitted({
+    by: 'Mrema', order: 'STL-20261101-0001', when: at, commission: 15000,
+    items: [{ product: 'OHIS Pepa Ndogo (White) – Bila Filter', boxes: 2 }, { product: 'Civlily Pepa Kubwa (Brown) – Bila Filter', boxes: 1 }],
+    payments: [{ method: 'M-Pesa', amount: 60000 }, { method: 'Airtel Money', amount: 35000 }],
+  }),
+`*SETTLEMENT SUBMITTED*
+10 Nov 2026
+
+By: Mrema
+Order: STL-20261101-0001
+
+Product 1: OHIS Pepa Ndogo (White) – Bila Filter
+Boxes Sold: 2
+
+Product 2: Civlily Pepa Kubwa (Brown) – Bila Filter
+Boxes Sold: 1
+
+Total Boxes: 3
+
+Payment: TSh 60,000 (M-Pesa)
+Payment: TSh 35,000 (Airtel Money)
+Commission: TSh 15,000`);
+});
+
+test('SETTLEMENT SUBMITTED, a very long batch keeps the total and the money; only the list gives way', () => {
+  const items = Array.from({ length: 16 }, (_, n) => ({ product: `OHIS Pepa Ndogo (Colour ${n + 1}) – Bila Filter`, boxes: 2 }));
+  const text = t.owner.settlementSubmitted({ by: 'Mrema', order: 'STL-1', when: at, commission: 160000, items, payments: [{ method: 'M-Pesa', amount: 960000 }] });
+  assert.ok(text.length <= t.MAX_REPORT_CHARS, `${text.length} characters`);
+  assert.match(text, /\+\d+ more, see ZELab\n\nTotal Boxes: 32\n\nPayment: TSh 960,000 \(M-Pesa\)\nCommission: TSh 160,000$/);
+});
