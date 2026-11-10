@@ -50,11 +50,20 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  stockRequest: ({ by, items = [], total, when }) => doc(
-    lines(bold('STOCK REQUEST'), dateTime(when)),
-    `By: ${by}`,
-    lines(...items.map((i) => `${i.name}: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`),
-  ),
+  // One product reads as "Name: 20 Boxes". Several are numbered, one per line, then the
+  // box count of the whole request (a carton counts as the boxes it holds: `boxes`).
+  stockRequest: ({ by, items = [], total, when }) => {
+    const head = [lines(bold('STOCK REQUEST'), dateTime(when)), `By: ${by}`];
+    if (items.length <= 1) {
+      return doc(...head, lines(...items.map((i) => `${i.name}: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`));
+    }
+    const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes ?? i.qty) || 0), 0);
+    return doc(
+      ...head,
+      lines(...items.map((i, n) => `${n + 1}-${i.name}: ${boxes(i.qty, i.unit)}`)),
+      lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`),
+    );
+  },
 
   settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when }) => doc(
     lines(bold('SETTLEMENT SUBMITTED'), dateOnly(when)),

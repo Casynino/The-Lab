@@ -24,9 +24,29 @@ Pepa King Size: 20 Boxes
 Total Value: TSh 760,000`);
 });
 
-test('STOCK REQUEST with a single box and several products', () => {
-  const text = t.owner.stockRequest({ by: 'Asha', items: [{ name: 'A', qty: 1 }, { name: 'B', qty: 3, unit: 'Carton' }], total: 5, when: at });
-  assert.match(text, /\nA: 1 Box\nB: 3 Cartons\nTotal Value: TSh 5$/);
+test('STOCK REQUEST with several products: numbered list, then the box total and the value (Nino\'s own example)', () => {
+  const item = { name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', qty: 1 };
+  assert.equal(t.owner.stockRequest({ by: 'Nyoya', items: [item, item, item, item], total: 30000, when: new Date('2026-11-10T16:01:00Z') }),
+`*STOCK REQUEST*
+10 Nov 2026 | 19:01 EAT
+
+By: Nyoya
+
+1-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
+2-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
+3-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
+4-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
+
+Total Boxes: 4
+Total Value: TSh 30,000`);
+});
+
+test('STOCK REQUEST: one product stays a single line with no number; a carton counts as the boxes it holds', () => {
+  const one = t.owner.stockRequest({ by: 'Nyoya', items: [{ name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', qty: 1 }], total: 7500, when: at });
+  assert.match(one, /\n\nOHIS Pepa Ndogo \(Brown\) – Bila Filter: 1 Box\nTotal Value: TSh 7,500$/);
+  assert.ok(!one.includes('Total Boxes') && !one.includes('1-'));
+  const mixed = t.owner.stockRequest({ by: 'A', items: [{ name: 'A', qty: 1 }, { name: 'B', qty: 3, unit: 'Carton', boxes: 30 }], total: 5, when: at });
+  assert.match(mixed, /\n1-A: 1 Box\n2-B: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
 });
 
 test('SETTLEMENT SUBMITTED', () => {

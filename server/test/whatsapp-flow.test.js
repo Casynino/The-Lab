@@ -112,3 +112,18 @@ test('no text that reaches WhatsApp has an emoji, in any of the paths above', as
   const everything = logged.map((r) => r.text).concat(sent.map(textOf));
   for (const text of everything) assert.ok(!/[\u{1F000}-\u{1FFFF}\u{2190}-\u{2BFF}️]/u.test(text));
 });
+
+test('a stock request with several products arrives numbered, with the boxes of every carton counted', async () => {
+  reset();
+  const pk = (unitId, base) => ({ packagingUnitId: unitId, baseQuantity: base });
+  await wa.stockRequestSubmitted({
+    id: 'sr2', requestNumber: 'SR-0002', totalValue: 30000, createdAt: new Date('2026-11-10T16:01:00Z'),
+    salesRep: { code: 'REP-009', user: { name: 'Nyoya' } },
+    items: [
+      { product: { name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', packagings: [pk('box', 1), pk('ctn', 10)] }, packagingUnitId: 'box', quantityRequested: 1, packagingUnit: { name: 'Box' } },
+      { product: { name: 'OHIS Pepa Ndogo (Blue)', packagings: [pk('box', 1), pk('ctn', 10)] }, packagingUnitId: 'ctn', quantityRequested: 2, packagingUnit: { name: 'Carton' } },
+    ],
+  });
+  assert.equal(textOf(sent[0]),
+    '*STOCK REQUEST*\n10 Nov 2026 | 19:01 EAT\n\nBy: Nyoya\n\n1-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box\n2-OHIS Pepa Ndogo (Blue): 2 Cartons\n\nTotal Boxes: 21\nTotal Value: TSh 30,000');
+});
