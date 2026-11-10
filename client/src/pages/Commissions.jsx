@@ -495,36 +495,36 @@ function FinesHistory({ admin }) {
   );
 }
 
-// The fine rules, as a short list on the page itself — no amber box, no icon, no bullets (Nino,
-// 11 Nov 2026: "too much shape for no reason, match the page"). Every rule and number is the old
-// policy text, unchanged; only the arrangement is new: what it is on the left, the figure on the right.
-function FineRule({ children, note, value, tone }) {
+// The rules as figures, not sentences (Nino, 11 Nov 2026: "not well designed, too much info"). One small
+// label and one bold value per rule, two to a row, straight on the page — no box, no lines, no paragraph.
+// Both rate and fine rules use it, so the whole tab reads as one design.
+function Figure({ label, value, tone }) {
   return (
-    <li className="flex items-start justify-between gap-4 py-3">
-      <div className="min-w-0">
-        <p className="text-[13px] leading-snug text-foreground">{children}</p>
-        {note && <p className="mt-0.5 text-xs leading-snug text-muted">{note}</p>}
-      </div>
-      <p className={clsx('shrink-0 pt-px text-sm font-semibold tabular-nums', tone === 'rose' ? 'text-rose-300' : 'text-foreground')}>{value}</p>
-    </li>
+    <div className="min-w-0">
+      <p className="text-[11px] leading-snug text-muted">{label}</p>
+      <p className={clsx(
+        'mt-1 text-xl font-bold leading-tight tabular-nums',
+        tone === 'rose' ? 'text-rose-300' : tone === 'emerald' ? 'text-emerald-300' : 'text-foreground',
+      )}>
+        {value}
+      </p>
+    </div>
   );
 }
 
 function PenaltyPolicyCard() {
   return (
-    <section className="mt-8 px-1">
-      <h2 className="text-xs font-medium text-muted">Settlement fines</h2>
-      <ul className="mt-1 divide-y divide-white/[0.06]">
-        <FineRule note="after stock is issued" value="72 hours">Settle or return an order within</FineRule>
-        <FineRule value="TZS 10,000 / day" tone="rose">After that, taken from your wallet</FineRule>
-        <FineRule note="Expires automatically; the boxes go back on your order." value="TZS 15,000" tone="rose">A return not completed within 24 hours</FineRule>
-        <FineRule note="7 days in total, from the order screen — no approval needed. No fine during it." value="+96 hours">One extension per order</FineRule>
-        <FineRule value="TZS 20,000 / day" tone="rose">After an extension, the daily fine</FineRule>
-        <FineRule value="TZS 30,000" tone="rose">After an extension, a return not completed in 24 hours</FineRule>
-      </ul>
-      <p className="mt-3 text-[11px] leading-snug text-faint">
-        No fine while a return waits for review (the review window is 24 hours). Fines stop once everything is settled or returned.
-      </p>
+    <section className="mt-9 px-1">
+      <h2 className="text-xs font-medium text-muted">Fines</h2>
+      <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-6">
+        <Figure label="Settle or return within" value="72 hours" />
+        <Figure label="Fine after that" value="TZS 10,000 / day" tone="rose" />
+        <Figure label="One extension, no fine" value="+96 hours" />
+        <Figure label="Fine after an extension" value="TZS 20,000 / day" tone="rose" />
+        <Figure label="Return not done in 24 hours" value="TZS 15,000" tone="rose" />
+        <Figure label="Same, after an extension" value="TZS 30,000" tone="rose" />
+      </div>
+      <p className="mt-6 text-[11px] text-faint">Fines stop once everything is settled or returned.</p>
     </section>
   );
 }
@@ -534,19 +534,13 @@ function PenaltyPolicyCard() {
 function RatesCard({ rates }) {
   if (!rates?.perBrand?.length) return null;
   return (
-    <section className="mt-5 px-1">
-      <h2 className="text-xs font-medium text-muted">What you earn per box</h2>
-      <ul className="mt-1 divide-y divide-white/[0.06]">
+    <section className="mt-6 px-1">
+      <h2 className="text-xs font-medium text-muted">You earn per box</h2>
+      <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-6">
         {rates.perBrand.map((r) => (
-          <li key={r.brand} className="flex items-baseline justify-between gap-4 py-3">
-            <span className="text-sm text-foreground">{r.brand}</span>
-            <span className="text-lg font-semibold tabular-nums text-emerald-300">{formatCurrency(r.perBox)}</span>
-          </li>
+          <Figure key={r.brand} label={r.brand} value={formatCurrency(r.perBox)} tone="emerald" />
         ))}
-      </ul>
-      <p className="mt-2 text-[11px] leading-snug text-faint">
-        Orders you already have keep the rate they were issued with.
-      </p>
+      </div>
     </section>
   );
 }
@@ -652,7 +646,7 @@ function RepView() {
       />
 
       {tab === 'overview' && (
-        <div className="mt-4 space-y-4">
+        <div className="mt-6 space-y-9">
           {!insights ? (
             <PageSpinner />
           ) : (
@@ -672,20 +666,22 @@ function RepView() {
           : <Card className="mt-4"><EmptyState title="No bonus running" description="Nothing to chase right now." /></Card>
       )}
 
-      {tab === 'withdrawals' && <div className="mt-4"><PayoutsCard items={withdrawals} /></div>}
-
       {tab === 'withdrawals' && (
-        <Card className="mt-4">
-          <CardHeader title="My withdrawal requests" subtitle={`Minimum ${formatCurrency(c.minWithdrawal)}`} />
-          {!withdrawals.length ? (
-            <EmptyState title="No withdrawals yet" description="Settle boxes and the first request will appear here." />
-          ) : (
-            // A table of three columns for what is really a list of one fact
-            // each: how much, what happened to it, when. The date now says PAID
-            // when it was paid — the one thing a rep opens this list to check.
-            <div className="p-4"><PayoutHistory items={withdrawals} /></div>
-          )}
-        </Card>
+        <div className="mt-6 space-y-9">
+          <PayoutsCard items={withdrawals} />
+          {/* Plain rows on the page, no card and no box per request: how much, when, and a coloured
+              word for what happened. The date says PAID when it was paid — the one thing a rep opens
+              this list to check. */}
+          <section className="px-1">
+            <h3 className="text-sm font-semibold text-foreground">My withdrawal requests</h3>
+            <p className="mt-0.5 text-xs text-muted">Minimum {formatCurrency(c.minWithdrawal)}</p>
+            {!withdrawals.length ? (
+              <p className="mt-4 text-sm text-muted">No withdrawals yet. Settle boxes and the first request will appear here.</p>
+            ) : (
+              <div className="mt-2"><PayoutHistory flat items={withdrawals} /></div>
+            )}
+          </section>
+        </div>
       )}
 
       {tab === 'fines' && (

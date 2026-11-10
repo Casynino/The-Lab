@@ -21,10 +21,12 @@ const AMBER = '#fbbf24';
 const ROSE = '#fb7185';
 const compact = (v) => formatNumber(v, { compact: true });
 
-/** A card with a title, one plain sentence about what the picture says, and the picture. */
+/** A title, one plain sentence about what the picture says, and the picture — straight on the page,
+ *  no card round it (Nino, 11 Nov 2026: "no need of too much shape; design the info nicely on that
+ *  background"). */
 export function InsightCard({ title, said, children, className }) {
   return (
-    <section className={clsx('rounded-2xl border border-border bg-surface p-4', className)}>
+    <section className={clsx('px-1', className)}>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       {said && <p className="mt-0.5 text-xs leading-snug text-muted">{said}</p>}
       <div className="mt-3">{children}</div>

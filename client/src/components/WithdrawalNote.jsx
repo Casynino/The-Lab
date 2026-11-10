@@ -179,8 +179,33 @@ export default function WithdrawalNote({ commission, latest, firstName, audience
 // The last few requests, newest first — the history behind the note above.
 // Used on the rep's own page and on the admin's view of that rep, so a
 // conversation about a payout is had over one list, not two.
-export function PayoutHistory({ items = [], empty = 'No withdrawals yet' }) {
+export function PayoutHistory({ items = [], empty = 'No withdrawals yet', flat = false }) {
   if (!items.length) return <p className="text-xs text-faint">{empty}</p>;
+  // `flat`: plain rows on the page with the status as a coloured word — the rep's wallet. The default
+  // (a small card per row, a pill for the status) is the owner's view of a rep and is unchanged.
+  if (flat) {
+    return (
+      <ul className="divide-y divide-white/[0.06]">
+        {items.map((w) => {
+          const meta = WITHDRAWAL_STATUS_META[w.status];
+          const tone = meta?.cls?.split(' ').find((c) => c.startsWith('text-')) || 'text-muted';
+          return (
+            <li key={w.id} className="flex items-center justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {w.status === 'PAID' && w.paidAt
+                    ? formatDateTime(w.paidAt)
+                    : `Requested ${formatDateTime(w.requestedAt)}`}
+                </p>
+              </div>
+              <span className={clsx('shrink-0 text-[13px] font-medium', tone)}>{meta?.label}</span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
   return (
     <ul className="space-y-1.5">
       {items.map((w) => (
