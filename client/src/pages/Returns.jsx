@@ -219,12 +219,12 @@ function ReturnModal({ onClose }) {
   );
 
   const footer = (
-    <div className="flex w-full items-center gap-2">
+    <div className="flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
       <button type="button" onClick={onClose}
-        className="h-10 shrink-0 rounded-lg px-4 text-[13px] font-medium text-foreground/80 ring-1 ring-white/[0.1] transition hover:bg-elevated/70 active:scale-[0.98]">
+        className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]">
         Cancel
       </button>
-      <Button className="h-10 flex-1 justify-center text-sm font-semibold" loading={create.isPending} disabled={!valid} onClick={() => create.mutate()}>
+      <Button className="h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold" loading={create.isPending} disabled={!valid} onClick={() => create.mutate()}>
         {hasCart ? `Return ${formatNumber(totalBoxes)} box${totalBoxes !== 1 ? 'es' : ''}` : 'Submit return'}
       </Button>
     </div>

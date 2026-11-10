@@ -165,15 +165,15 @@ function SettleOneModal({ order, onClose, onDone }) {
 
   const ready = productId && Number(boxes) > 0 && Number(boxes) <= max && accountId;
   return (
-    <Modal open onClose={onClose} title="Submit settlement"
+    <Modal open onClose={onClose} title="Settle"
       footer={
         /* On a phone the action wants the width and the thumb wants the right
            hand side. Cancel stays quiet — it is the rarer choice, and it was
            competing with the button that matters. */
-        <div className="flex w-full items-center gap-2">
+        <div className={BAR_CLS}>
           <button type="button" onClick={onClose} className={CANCEL_CLS}>Cancel</button>
           <Button className={PRIMARY_CLS} loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
-            {ready ? `Submit ${formatCurrency(value)}` : 'Submit for approval'}
+            {ready ? `Settle ${formatCurrency(value)}` : 'Settle'}
           </Button>
         </div>
       }>
@@ -240,10 +240,12 @@ function SettleOneModal({ order, onClose, onDone }) {
 // locked in a return.
 const settleAvail = (order, l) => Math.max(0, l.remaining - (pendingBoxesByProduct(order)[l.productId] || 0) - (l.pendingReturn || 0));
 
-// The footer of a form: Cancel (outlined, quiet) and the one button that does the thing, which takes
-// the rest of the width. Same height as the buttons on the order screen.
-const CANCEL_CLS = 'h-10 shrink-0 rounded-lg px-4 text-[13px] font-medium text-foreground/80 ring-1 ring-white/[0.1] transition hover:bg-elevated/70 active:scale-[0.98]';
-const PRIMARY_CLS = 'h-10 flex-1 justify-center text-sm font-semibold';
+// The action bar, here and on the order screen: ONE pill-shaped bar with the actions inside it. The
+// quiet ones are plain words; the one that does the thing is a filled pill inside the bar and takes
+// the rest of the width. (It replaced rows of separate rounded rectangles, which all looked alike.)
+const BAR_CLS = 'flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]';
+const CANCEL_CLS = 'h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]';
+const PRIMARY_CLS = 'h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold';
 
 // Where to pay, for one brand's share of a settlement. One account is stated, not offered as a
 // dropdown that cannot change; several are a choice; none says so out loud.
@@ -342,12 +344,12 @@ function SettleManyModal({ order, onClose, onDone }) {
 
   const ready = chosen.length > 0 && brandsChosen.every((g) => accountFor(g.brandId));
   return (
-    <Modal open onClose={onClose} title="Submit settlement"
+    <Modal open onClose={onClose} title="Settle"
       footer={
-        <div className="flex w-full items-center gap-2">
+        <div className={BAR_CLS}>
           <button type="button" onClick={onClose} className={CANCEL_CLS}>Cancel</button>
           <Button className={PRIMARY_CLS} loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
-            {ready ? `Submit ${formatCurrency(total)}` : 'Submit for approval'}
+            {ready ? `Settle ${formatCurrency(total)}` : 'Settle'}
           </Button>
         </div>
       }>
@@ -468,7 +470,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
   });
 
   const footer = (
-    <div className="flex w-full items-center gap-2">
+    <div className={BAR_CLS}>
       <button type="button" onClick={onClose} className={CANCEL_CLS}>Cancel</button>
       <Button className={PRIMARY_CLS} loading={create.isPending} disabled={!warehouseId || !hasCart} onClick={() => create.mutate()}>
         {hasCart ? `Return ${formatNumber(totalBoxes)} box${totalBoxes !== 1 ? 'es' : ''}` : 'Return boxes'}
@@ -1180,7 +1182,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           const actions = [];
           if (canAct && active && remaining > 0) {
             actions.push({
-              key: 'settle', label: 'Submit settlement', Icon: Wallet, onClick: () => setSub('settle'),
+              key: 'settle', label: 'Settle', Icon: Wallet, onClick: () => setSub('settle'),
               cls: 'bg-brand-500 text-white ring-brand-500 font-bold', icon: 'text-white',
             });
           }
@@ -1226,21 +1228,20 @@ export default function OrderDetailModal({ settlementId, onClose }) {
 
           const [primary, ...rest] = actions;
 
-          // ONE slim row. The other actions are plain words, no frame and no icon; the
-          // one you came for is a single small filled button on the right (where the thumb is).
-          // No full-width slab, no stack of three — the bar was taking a third of a phone screen.
-          // If a screen is too narrow for it all, the row wraps instead of squeezing.
-          const side = 'flex h-10 shrink-0 items-center rounded-lg px-3 text-[13px] font-medium text-foreground/85 ring-1 ring-white/[0.1] transition hover:bg-elevated/70 active:scale-[0.98] disabled:opacity-60';
+          // ONE pill-shaped bar (the same one the forms use, BAR_CLS): the other actions are plain
+          // words inside it, and the one you came for is a filled pill that takes a little more room.
+          // If a screen is too narrow for it all, the bar wraps instead of squeezing.
+          const quiet = 'h-9 min-w-0 flex-1 rounded-full px-3 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97] disabled:opacity-60';
           return (
-            <div className="flex w-full flex-wrap items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-1 rounded-[22px] bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
               {rest.map((a) => (
-                <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy} className={side}>
+                <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy} className={quiet}>
                   {a.short || a.label}
                 </button>
               ))}
               {primary && (
                 <button type="button" onClick={primary.onClick} disabled={primary.busy}
-                  className={`flex h-10 min-w-[8.5rem] flex-1 items-center justify-center rounded-lg px-3 text-[13px] font-semibold transition active:scale-[0.98] disabled:opacity-60 ${primary.cls}`}>
+                  className={`h-9 min-w-0 flex-[1.4] rounded-full px-4 text-[13px] font-semibold transition active:scale-[0.97] disabled:opacity-60 ${primary.cls}`}>
                   {primary.label}
                 </button>
               )}
