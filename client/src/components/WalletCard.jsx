@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import { Eye, EyeOff } from 'lucide-react';
+import { ArrowUpRight, Eye, EyeOff } from 'lucide-react';
 
 // The rep's balance as a small digital wallet card (Nino, 10 Nov 2026: "a nice
 // digital card, like a wallet, well designed, premium look, small — show the
@@ -76,7 +76,7 @@ export default function WalletCard({
 
       {/* The balance, and the one action beside it. They wrap onto two lines only
           when a very long figure meets a very narrow phone. */}
-      <div className="mt-2 flex flex-wrap items-end justify-between gap-x-3 gap-y-2.5">
+      <div className="-mt-0.5 flex flex-wrap items-center justify-between gap-x-3">
         <p
           className={clsx(
             'min-w-0 text-[27px] font-bold leading-none tabular-nums',
@@ -86,16 +86,19 @@ export default function WalletCard({
         >
           {hidden ? DOTS : balance}
         </p>
+        {/* A word, not a pill: bold white and an arrow, no fill, no outline. The
+            height is only for the thumb — nothing of it shows. */}
         <button
           type="button"
           onClick={onWithdraw}
           disabled={!canWithdraw}
           className={clsx(
-            'h-10 shrink-0 rounded-full px-[18px] text-[13px] font-semibold transition active:scale-[0.97]',
-            canWithdraw ? 'bg-white text-neutral-900 hover:bg-white/90' : 'cursor-not-allowed bg-white/10 text-white/35',
+            'flex h-11 shrink-0 items-center gap-1 text-[15px] font-semibold transition active:opacity-70',
+            canWithdraw ? 'text-white' : 'cursor-not-allowed text-white/45',
           )}
         >
           Withdraw
+          <ArrowUpRight className="h-[17px] w-[17px]" strokeWidth={2.4} />
         </button>
       </div>
 
