@@ -750,6 +750,10 @@ export default function Layout() {
     { to: '/stock-requests', label: 'Requests', icon: ClipboardList, badge: pendingActions.stockRequests },
     { to: '/settlements', label: 'Settle', icon: Timer, badge: pendingActions.settlements },
     { to: '/finance', label: 'Money', icon: Wallet },
+    // A rep has no Finance; their money is the wallet, one tap from anywhere. It takes
+    // the place of the bottom "Menu" for them — the burger at the top already opens
+    // the same menu (Nino, 11 Nov 2026), so the two were the same thing twice.
+    ...(isRep ? [{ to: '/commissions', label: 'Wallet', icon: Wallet }] : []),
   ].filter((t) => items.some((i) => i.to === t.to));
 
   return (
@@ -876,10 +880,12 @@ export default function Layout() {
             over half the menu before anyone had asked to type (owner, 9 Nov
             2026: "when I open it, it pushes me to search — when I want to
             search I will click search"). */}
-        <button type="button" onClick={() => setDrawer('menu')}
-          className="flex flex-1 cursor-pointer flex-col items-center gap-0.5 py-2 text-[10px] font-medium text-faint transition">
-          <Menu className="h-[19px] w-[19px]" /> Menu
-        </button>
+        {!isRep && (
+          <button type="button" onClick={() => setDrawer('menu')}
+            className="flex flex-1 cursor-pointer flex-col items-center gap-0.5 py-2 text-[10px] font-medium text-faint transition">
+            <Menu className="h-[19px] w-[19px]" /> Menu
+          </button>
+        )}
       </nav>
 
       {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
