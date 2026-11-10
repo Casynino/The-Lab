@@ -66,20 +66,19 @@ const stagger = (n) => ({ '--i': n });
 // ── The mark ─────────────────────────────────────────────────────────────────
 
 /**
- * ZELab's lockup — the old hǎo Labs logo in the same style and colours, renamed
- * (Nino, 10 Nov 2026): a red "ZE" where the red hǎo stood, and "Lab" in Nino's own
- * lettering with a tone mark on its "a". Built by docs/mockups/brand.py. (It was a
- * drawn cube in a tile before that, which is a picture of a box, not a logo.)
+ * The OFFICIAL ZELab logo (Nino's own vector file, 10 Nov 2026), in its version for a
+ * dark page: his red, his black parts turned white. An SVG, so it is sharp at every
+ * size and costs 9 KB. Cut from the PDF by docs/mockups/official_logo.py.
  */
 function Mark({ size = 'md' }) {
   const big = size === 'lg';
   return (
     <img
-      src="/brand/zelab-dark.png"
+      src="/brand/zelab-dark.svg"
       alt="ZELab"
-      width="911"
-      height="320"
-      className={`w-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${big ? 'h-12 sm:h-16 lg:h-[4.25rem]' : 'h-16 sm:h-[4.5rem]'}`}
+      width="678"
+      height="264"
+      className={`w-auto drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)] ${big ? 'h-16 sm:h-20 lg:h-24' : 'h-20 sm:h-24'}`}
     />
   );
 }

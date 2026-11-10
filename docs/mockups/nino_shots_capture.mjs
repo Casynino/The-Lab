@@ -60,14 +60,20 @@ const send = (method, params = {}) => new Promise((res) => {
 });
 
 await send('Page.enable');
-await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-
-for (const { slug, url, settle } of sites) {
+for (const { slug, url, settle, w = 1440, h = 900, mobile = false, dpr = 1, full = false } of sites) {
+  // each site may ask for its own window: a phone size, a taller picture of the whole page
+  await send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: dpr, mobile });
   events.length = 0;
   await send('Page.navigate', { url });
   for (let i = 0; i < 120 && !events.includes('Page.loadEventFired'); i++) await sleep(250); // up to 30 s to load
   await sleep((settle ?? 8) * 1000);
-  const shot = await send('Page.captureScreenshot', { format: 'png', fromSurface: true });
+  const opts = { format: 'png', fromSurface: true };
+  if (full) {
+    const lm = await send('Page.getLayoutMetrics');
+    const ch = Math.ceil(lm.result.cssContentSize.height);
+    Object.assign(opts, { captureBeyondViewport: true, clip: { x: 0, y: 0, width: w, height: ch, scale: 1 } });
+  }
+  const shot = await send('Page.captureScreenshot', opts);
   if (shot.result?.data) {
     writeFileSync(join(outDir, `${slug}.png`), Buffer.from(shot.result.data, 'base64'));
     console.log(`  ${slug}: captured (${events.includes('Page.loadEventFired') ? 'loaded' : 'load event never fired'})`);

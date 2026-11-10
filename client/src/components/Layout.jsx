@@ -178,12 +178,12 @@ function GlassSidebar({
   const brand = (compact) => (
     <NavLink to="/" onClick={onNavigate} data-hint="ZELab"
       className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
-      {/* Just "Lab" — the big L and the small "ab" of the logo, in white. Nino, 10 Nov 2026,
-          looking at this panel: "it should just say Lab, no need for ZELab up there"
-          (the red ZE is on the sign-in page, the tab and the home-screen icon). The
-          same word in the folded rail, smaller. The name is still here for a screen
-          reader and for the rail's tooltip. Artwork: docs/mockups/brand.py. */}
-      <img src="/brand/lab-dark.png" alt="ZELab" width="473" height="320"
+      {/* Just "Lab" — the letters of the OFFICIAL logo, white. Nino, 10 Nov 2026, looking at
+          this panel: "it should just say Lab, no need for ZELab up there" (the whole logo
+          is on the sign-in page, the tab and the home-screen icon). The same word in the
+          folded rail, smaller. The name is still here for a screen reader and for the
+          rail's tooltip. Artwork: docs/mockups/official_logo.py. */}
+      <img src="/brand/lab-dark.svg" alt="ZELab" width="330" height="194"
         className={clsx('w-auto shrink-0', compact ? 'h-6' : sheet ? 'h-7' : 'h-8')} />
     </NavLink>
   );

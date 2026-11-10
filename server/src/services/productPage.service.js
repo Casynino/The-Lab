@@ -456,6 +456,9 @@ function picture(name, { eager = false } = {}) {
     + `${eager ? ' fetchpriority="high"' : ' loading="lazy"'}></picture>`;
 }
 
+// The maker's own address, as configured (www.zelab.site), shown in the footer.
+const OFFICIAL_SITE = String(env.appUrl).replace(/^https?:\/\//, '').replace(/\/+$/, '');
+
 function renderHtml(c, { host, path = DEFAULT_PATH } = {}) {
   const phones = c.phones.map(phoneParts);
   const waMsg = encodeURIComponent(c.waText);
@@ -515,6 +518,16 @@ ${host && ASSETS[showcaseFor(c)] ? `<meta property="og:image" content="${esc(`ht
   body{background:var(--paper);color:var(--ink);
     font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     padding:28px 20px 44px;max-width:520px;margin:0 auto}
+  /* The maker's name, first thing on the page: ZELab's OFFICIAL logo (Nino, 10 Nov
+     2026: the page behind the box's QR code "should have our logo too"). The light
+     version — his red and his black — because this page is paper. It is not a link:
+     the site behind it is the staff system, not a shop. */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding-bottom:16px;margin-bottom:26px;border-bottom:1px solid var(--line)}
+  .top img{display:block;height:40px;width:auto}
+  /* The address, not a claim: the page never says a box is genuine (a static QR is a
+     shopfront, not a seal) — it shows where it lives, which anyone can check. */
+  .top span{font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--soft);text-align:right}
   h1{font-size:clamp(44px,17vw,76px);line-height:.92;letter-spacing:-.03em;font-weight:800}
   h1 sup{font-size:.24em;font-weight:600;letter-spacing:0;vertical-align:super;margin-left:.12em}
   .say{margin-top:12px;font-size:17px;font-weight:600}
@@ -543,6 +556,7 @@ ${host && ASSETS[showcaseFor(c)] ? `<meta property="og:image" content="${esc(`ht
     border-bottom:1px solid var(--line)}
   dt{color:var(--soft);font-size:14px;flex:none}
   dd{text-align:right;font-size:14px;font-weight:600}
+  .made .logo{display:block;height:58px;width:auto;margin:2px 0 16px}
   .made p{font-size:15px}
   .made .lead{font-weight:700;font-size:17px}
   .made .lead + .lead{margin-top:8px}
@@ -559,13 +573,18 @@ ${host && ASSETS[showcaseFor(c)] ? `<meta property="og:image" content="${esc(`ht
     letter-spacing:.02em;opacity:.92}
   .btn.wa{background:#128c4a;color:#fff}
   footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);
-    font-size:12px;color:var(--soft)}
+    font-size:12px;line-height:1.7;color:var(--soft)}
+  footer b{color:var(--ink);font-weight:700}
   /* Deliberately light in every case, including on a phone set to dark mode.
      This page is read outdoors in a market in direct sun, where a near-black
      screen is a mirror — and the page is the packaging, which is paper. */
 </style>
 </head>
 <body>
+  <header class="top">
+    <img src="/brand/zelab-light.svg" width="678" height="264" alt="${esc(c.maker)}">
+    <span>${esc(OFFICIAL_SITE)}</span>
+  </header>
   <h1>${esc(c.name)}<sup>™</sup></h1>
   <p class="say">${esc(c.tagline)}</p>
 
@@ -577,6 +596,7 @@ ${host && ASSETS[showcaseFor(c)] ? `<meta property="og:image" content="${esc(`ht
 
   <h2>Made by</h2>
   <div class="made">
+    <img class="logo" src="/brand/zelab-light.svg" width="678" height="264" alt="${esc(c.maker)}">
     <p class="lead">${esc(c.name)} is distributed by ${esc(c.maker)}.</p>
     <p class="lead">${esc(c.maker)} is the only distributor.</p>
     <p class="tm">${esc(c.name)}™ is a trademark of ${esc(c.maker)}.</p>
@@ -595,7 +615,7 @@ ${host && ASSETS[showcaseFor(c)] ? `<meta property="og:image" content="${esc(`ht
   <p class="say">Call us and say where you bought it.</p>
 
   <div class="bead"></div>
-  <footer>${esc(c.maker)} · ${esc(c.city)}</footer>
+  <footer><b>${esc(c.maker)}</b> · ${esc(c.city)}<br>${esc(OFFICIAL_SITE)}</footer>
 </body>
 </html>`;
 }

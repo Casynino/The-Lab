@@ -62,7 +62,9 @@ function pdfBuffer({ title, subtitle, columns, rows, totalsRow }) {
       ((columns[i].width || 1) / totalWeight) * pageWidth - 6;
 
     // Header block
-    doc.fontSize(18).fillColor('#0F172A').text('ZELab', { continued: false });
+    // The official ZELab logo (the paper version: his red and black) instead of the name in text.
+    doc.image(require('../assets/zelabLogo').light, doc.page.margins.left, doc.y, { height: 30 });
+    doc.y += 38;
     doc.fontSize(13).fillColor('#334155').text(title);
     if (subtitle) doc.fontSize(9).fillColor('#64748B').text(subtitle);
     doc.fontSize(8).fillColor('#94A3B8').text(

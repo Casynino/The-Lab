@@ -216,6 +216,22 @@ test('all three pictures sit together under Pepa Ndogo, none above it', async ()
   assert.equal((html.match(/loading="lazy"/g) || []).length, 2);
 });
 
+// ── The page wears ZELab's official logo ─────────────────────────────────────
+// Nino, 10 Nov 2026: the page behind the box's QR code "should have our logo too".
+// The light version (his red and black) because the page is paper; it must be a
+// file that actually ships, named with the maker's name for a screen reader, and
+// must not be a link into the staff system.
+test('the page carries the official ZELab logo, at the top and under "Made by"', async () => {
+  store.row = null;
+  const html = page.renderHtml(onP(await page.readContent()), { host: 'www.zelab.site', path: 'p' });
+  const logos = [...html.matchAll(/<img[^>]*src="(\/brand\/zelab-light\.svg)"[^>]*alt="ZELab"/g)];
+  assert.equal(logos.length, 2, 'one in the header, one under Made by');
+  assert.ok(fs.existsSync(path.join(__dirname, '../../client/public', logos[0][1])), 'the logo file ships');
+  assert.ok(html.indexOf('class="top"') < html.indexOf('<h1>'), 'the logo comes before the product name');
+  assert.doesNotMatch(html, /<a[^>]*>\s*<img[^>]*zelab-light/, 'the logo is not a link');
+  assert.match(html, /<footer><b>ZELab<\/b> · [^<]+<br>www\.zelab\.site/);
+});
+
 test('the page references only pictures that ship, and carries no script', async () => {
   seed(V1_ROW);
   const html = page.renderHtml(await page.readContent(), { host: 'www.zelab.site' });

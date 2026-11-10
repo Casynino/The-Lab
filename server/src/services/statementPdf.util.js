@@ -33,9 +33,12 @@ function createStatement({ title, periodLabel, generatedAt }) {
 
   // ── Header band (first page) ──
   doc.rect(0, 0, doc.page.width, 92).fill(BAND);
-  doc.fill('#ffffff').font('Helvetica-Bold').fontSize(20).text('ZELAB', left, 26);
-  doc.font('Helvetica').fontSize(10).fillColor('#a3e635').text(title, left, 52);
-  doc.fillColor('#cbd5e1').fontSize(9).text(`Period: ${periodLabel}`, left, 66);
+  // The official ZELab logo (the dark-band version: his red, the black parts white),
+  // where this used to be the name in plain text. Required here, not at the top of the
+  // file, so a report run is the only thing that ever loads its 80 KB.
+  doc.image(require('../assets/zelabLogo').dark, left, 15, { height: 38 });
+  doc.font('Helvetica').fontSize(10).fillColor('#a3e635').text(title, left, 58);
+  doc.fillColor('#cbd5e1').fontSize(9).text(`Period: ${periodLabel}`, left, 72);
   doc.text(`Generated: ${generatedAt}`, right - 220, 26, { width: 220, align: 'right' });
   doc.text(require('../config/env').appUrl.replace(/^https?:\/\//, ''), right - 220, 40, { width: 220, align: 'right' });
   doc.y = 112;
