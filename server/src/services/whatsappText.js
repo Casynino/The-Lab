@@ -52,29 +52,26 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  // One product: "Product:" and "Quantity:". Several: "Product 1:", "Product 2:", each with its own
-  // "Quantity:" line, so no bare number is ever left to be read as a number of boxes
-  // ("1-Name: 2 Boxes / 2-Name: 3 Boxes" read as a muddle of 1, 2, 2, 3). Then the box count of
-  // the whole request (a carton counts as the boxes it holds: `boxes`) and the value.
-  // The totals are what the owner needs most, so a very long request drops lines from the LIST
-  // (blank lines first, then the last products, "+3 more") and never from the totals.
+  // The products are a list of arrows, one line each: "» Name: 2 Boxes" — no numbers, so nothing
+  // in front of a name can be read as a number of boxes (Nino tried "1-Name: 2 Boxes" and
+  // "Product 1:" first; the arrows are what he chose). Then, for several products, the box count
+  // of the whole request (a carton counts as the boxes it holds: `boxes`), and the value.
+  // The totals are what the owner needs most, so a very long request drops products from the
+  // END of the list ("+3 more, see ZELab") and never the totals.
   stockRequest: ({ by, items = [], total, when }) => {
     const head = [lines(bold('STOCK REQUEST'), dateTime(when)), `By: ${by}`];
-    if (items.length <= 1) {
-      const i = items[0];
-      return doc(...head, i && lines(`Product: ${i.name}`, `Quantity: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`);
-    }
     const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes ?? i.qty) || 0), 0);
-    const tail = lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`);
-    const build = ({ gap, shown }) => doc(
+    const tail = items.length > 1
+      ? lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`)
+      : `Total Value: ${money(total)}`;
+    const build = ({ shown }) => doc(
       ...head,
-      items.slice(0, shown).map((i, n) => lines(`Product ${n + 1}: ${i.name}`, `Quantity: ${boxes(i.qty, i.unit)}`)).join(gap ? '\n\n' : '\n'),
-      shown < items.length && `+${items.length - shown} more, see ZELab`,
+      lines(...items.slice(0, shown).map((i) => `» ${i.name}: ${boxes(i.qty, i.unit)}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
       tail,
     );
-    const steps = [{ gap: true, shown: items.length }, { gap: false, shown: items.length }];
-    for (let k = items.length - 1; k >= 1; k -= 1) steps.push({ gap: false, shown: k });
-    return fitted(build, steps);
+    const steps = [];
+    for (let k = items.length; k >= 1; k -= 1) steps.push({ shown: k });
+    return fitted(build, steps.length ? steps : [{ shown: 0 }]);
   },
 
   // Who and which order / the product / the money: small groups, not one block.
