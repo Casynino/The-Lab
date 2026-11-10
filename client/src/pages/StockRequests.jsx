@@ -135,7 +135,7 @@ function CartOrderSheet({ onClose, existing }) {
         : api.post('/stock-requests', body);
     },
     onSuccess: () => {
-      toast.success(editing ? 'Order updated' : 'Order submitted for approval!');
+      toast.success(editing ? 'Order updated' : 'Request sent');
       qc.invalidateQueries({ queryKey: ['stock-requests'] });
       qc.invalidateQueries({ queryKey: ['dashboard', 'me'] });
       onClose();
@@ -143,26 +143,34 @@ function CartOrderSheet({ onClose, existing }) {
     onError: (e) => toast.error(apiError(e)),
   });
 
+  // The same pill bar as the Settle and Return windows (Nino, 11 Nov 2026: "say Request, not Submit for
+  // approval — a nice button and a simple word like Settle"): Cancel, then one word. What the order adds up
+  // to sits on a line above it.
   const footerContent = (
-    <>
+    <div className="flex w-full flex-col gap-3">
       {cartCount > 0 && (
-        <div className="flex flex-1 flex-col">
-          <span className="text-sm font-semibold text-foreground">{formatCurrency(totalAmount)}</span>
-          <span className="text-xs text-muted">
+        <div className="flex items-baseline justify-between gap-3 px-1">
+          <span className="text-[13px] text-muted">
             {formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} · {cartCount} product{cartCount !== 1 ? 's' : ''}
           </span>
+          <span className="text-base font-bold tabular-nums text-foreground">{formatCurrency(totalAmount)}</span>
         </div>
       )}
-      <Button variant="secondary" onClick={onClose}>Cancel</Button>
-      <Button
-        disabled={cartCount === 0 || create.isPending}
-        onClick={() => create.mutate()}
-      >
-        {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-        <ShoppingCart className="h-4 w-4" />
-        {editing ? 'Save changes' : 'Submit for approval'}
-      </Button>
-    </>
+      <div className="flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
+        <button type="button" onClick={onClose}
+          className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]">
+          Cancel
+        </button>
+        <Button
+          className="h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold"
+          disabled={cartCount === 0 || create.isPending}
+          onClick={() => create.mutate()}
+        >
+          {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {editing ? 'Save' : 'Request'}
+        </Button>
+      </div>
+    </div>
   );
 
   return (

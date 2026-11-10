@@ -108,7 +108,7 @@ export default function RepDashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <DashCard
           icon={ClipboardList}
-          label="Requests"
+          label="Request"
           badge={pendingRequests > 0 ? pendingRequests : undefined}
           onClick={() => navigate('/stock-requests')}
         />
