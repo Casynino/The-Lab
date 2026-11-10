@@ -9,6 +9,8 @@ import clsx from 'clsx';
 //   items: [{ key, name, sub?, max, qty }]      onChange(key, nextQty)  — the caller clamps
 export default function StepperLines({ items, onChange }) {
   const btn = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-elevated text-base font-bold text-foreground ring-1 ring-white/[0.08] transition active:scale-95 disabled:opacity-30';
+  // A list of one has nothing to number.
+  const numbered = items.length > 1;
   return (
     <ol className="divide-y divide-border overflow-hidden rounded-xl border border-border">
       {items.map((it, i) => {
@@ -19,20 +21,28 @@ export default function StepperLines({ items, onChange }) {
             {/* The product name has the whole width and stays on ONE line (it is cut with … only if it
                 cannot fit at all); what is left and the stepper sit on the line below it. */}
             <div className="flex items-center gap-3">
-              <span
-                aria-hidden="true"
-                className={clsx(
-                  'flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-[11px] font-bold tabular-nums',
-                  on ? 'bg-brand-500/20 text-brand-600' : 'bg-elevated text-muted',
-                )}
-              >
-                {i + 1}
-              </span>
+              {numbered && (
+                <span
+                  aria-hidden="true"
+                  className={clsx(
+                    'flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-[11px] font-bold tabular-nums',
+                    on ? 'bg-brand-500/20 text-brand-600' : 'bg-elevated text-muted',
+                  )}
+                >
+                  {i + 1}
+                </span>
+              )}
               <div title={it.name} className={clsx('min-w-0 flex-1 truncate text-[13px] font-medium', on ? 'text-foreground' : 'text-muted')}>{it.name}</div>
             </div>
-            <div className="mt-1.5 flex items-center gap-3 pl-8">
+            <div className={clsx('mt-1.5 flex items-center gap-3', numbered && 'pl-8')}>
               <div className="min-w-0 flex-1 text-[11px] text-faint">{it.sub}</div>
               <div className="flex shrink-0 items-center gap-1">
+                {it.max > 1 && qty < it.max && (
+                  <button type="button" onClick={() => onChange(it.key, it.max)}
+                    className="mr-1 px-1 text-[11px] font-semibold text-brand-600 transition hover:text-brand-500" aria-label={`All ${it.max} of ${it.name}`}>
+                    All
+                  </button>
+                )}
                 <button type="button" className={btn} onClick={() => onChange(it.key, qty - 1)} disabled={qty <= 0} aria-label={`One fewer ${it.name}`}>−</button>
                 <input
                   type="number"

@@ -170,52 +170,44 @@ function SettleOneModal({ order, onClose, onDone }) {
         /* On a phone the action wants the width and the thumb wants the right
            hand side. Cancel stays quiet — it is the rarer choice, and it was
            competing with the button that matters. */
-        <div className="flex w-full items-center justify-end gap-2">
-          <button type="button" onClick={onClose}
-            className="h-9 shrink-0 rounded-md px-3 text-[13px] font-medium text-muted transition hover:text-foreground">
-            Cancel
-          </button>
-          <Button
-            className="h-9 shrink-0 px-4 text-[13px]"
-            loading={settle.isPending}
-            disabled={!ready}
-            onClick={() => settle.mutate()}
-          >
+        <div className="flex w-full items-center gap-2">
+          <button type="button" onClick={onClose} className={CANCEL_CLS}>Cancel</button>
+          <Button className={PRIMARY_CLS} loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
             {ready ? `Submit ${formatCurrency(value)}` : 'Submit for approval'}
           </Button>
         </div>
       }>
       <div className="space-y-4">
-        <p className="text-[13px] leading-snug text-muted">Pay first, then submit for approval.</p>
         {lines.length === 0 ? (
           <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-faint">Every outstanding box is already submitted and awaiting approval.</p>
         ) : (<>
-          <div>
-            {/* One product is not a choice, so it is stated — as plain text, not a card. */}
-            {lines.length === 1 ? (
-              <div>
-                <p title={line?.name} className="truncate text-sm font-semibold text-foreground">{line?.name}</p>
-                <p className="mt-0.5 text-xs text-faint">
-                  {formatNumber(max)} left · {formatCurrency(line?.sellingPrice || 0)} a box
-                </p>
-              </div>
-            ) : (
+          {/* One product: the same row as in the list for several — the name, what is left, and the
+              stepper (with an "All" shortcut) — so there is one way to say how many. */}
+          {lines.length === 1 ? (
+            <StepperLines
+              items={[{
+                key: line?.productId,
+                name: line?.name,
+                max,
+                qty: Number(boxes) || 0,
+                sub: `${formatNumber(max)} left · ${formatCurrency(line?.sellingPrice || 0)}`,
+              }]}
+              onChange={(_, q) => setBoxes(String(Math.max(0, Math.min(max, q))))}
+            />
+          ) : (
+            <>
               <Select value={productId} onChange={(e) => { setProductId(e.target.value); setBoxes('1'); setPicked(''); }}>
                 {lines.map((l) => <option key={l.productId} value={l.productId}>{l.name} — {formatNumber(availFor(l))} left</option>)}
               </Select>
-            )}
-          </div>
-
-          <div>
-            <StepHead right={lines.length > 1 ? `${formatNumber(max)} left · ${formatCurrency(line?.sellingPrice || 0)} a box` : undefined}>How many boxes</StepHead>
-            <BoxStepper value={boxes} max={max} onChange={setBoxes} />
-          </div>
+              <BoxStepper value={boxes} max={max} onChange={setBoxes} />
+            </>
+          )}
 
           <SettleSummary boxes={boxes} unitPrice={line?.sellingPrice || 0} productName={lines.length > 1 ? line?.name : null} />
 
           {only ? (
             <div>
-              <StepHead>Pay to</StepHead>
+              <StepHead>Pay first to</StepHead>
               <PayTo account={only} brandName={line?.brandName} />
             </div>
           ) : accountsLoading ? (
@@ -248,6 +240,11 @@ function SettleOneModal({ order, onClose, onDone }) {
 // locked in a return.
 const settleAvail = (order, l) => Math.max(0, l.remaining - (pendingBoxesByProduct(order)[l.productId] || 0) - (l.pendingReturn || 0));
 
+// The footer of a form: Cancel (outlined, quiet) and the one button that does the thing, which takes
+// the rest of the width. Same height as the buttons on the order screen.
+const CANCEL_CLS = 'h-10 shrink-0 rounded-lg px-4 text-[13px] font-medium text-foreground/80 ring-1 ring-white/[0.1] transition hover:bg-elevated/70 active:scale-[0.98]';
+const PRIMARY_CLS = 'h-10 flex-1 justify-center text-sm font-semibold';
+
 // Where to pay, for one brand's share of a settlement. One account is stated, not offered as a
 // dropdown that cannot change; several are a choice; none says so out loud.
 function PayBlock({ step, brandName, amount, options, picked, onPick, labelled }) {
@@ -255,7 +252,7 @@ function PayBlock({ step, brandName, amount, options, picked, onPick, labelled }
   return (
     <div>
       <StepHead right={labelled ? formatCurrency(amount) : undefined}>
-        {labelled ? `Pay ${brandName || 'this brand'}` : 'Pay to'}
+        {labelled ? `Pay ${brandName || 'this brand'}` : 'Pay first to'}
       </StepHead>
       {!options ? (
         <p className="text-[13px] text-faint">Loading…</p>
@@ -347,19 +344,14 @@ function SettleManyModal({ order, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} title="Submit settlement"
       footer={
-        <div className="flex w-full items-center justify-end gap-2">
-          <button type="button" onClick={onClose}
-            className="h-9 shrink-0 rounded-md px-3 text-[13px] font-medium text-muted transition hover:text-foreground">
-            Cancel
-          </button>
-          <Button className="h-9 shrink-0 px-4 text-[13px]" loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
+        <div className="flex w-full items-center gap-2">
+          <button type="button" onClick={onClose} className={CANCEL_CLS}>Cancel</button>
+          <Button className={PRIMARY_CLS} loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
             {ready ? `Submit ${formatCurrency(total)}` : 'Submit for approval'}
           </Button>
         </div>
       }>
       <div className="space-y-6">
-        <p className="text-[13px] leading-snug text-muted">Pay first, then submit for approval.</p>
-
         {groups.map((g) => {
           const gc = chosenIn(g);
           const opts = optionsFor(g.brandId);
@@ -380,7 +372,7 @@ function SettleManyModal({ order, onClose, onDone }) {
                   name: l.name,
                   max: settleAvail(order, l),
                   qty: cart[l.productId] || 0,
-                  sub: `${formatNumber(settleAvail(order, l))} left · ${formatCurrency(l.sellingPrice || 0)} a box`,
+                  sub: `${formatNumber(settleAvail(order, l))} left · ${formatCurrency(l.sellingPrice || 0)}`,
                 }))}
                 onChange={setQty}
               />
@@ -476,20 +468,12 @@ function RecordReturnModal({ order, onClose, onDone }) {
   });
 
   const footer = (
-    <>
-      {hasCart && (
-        <div className="flex flex-1 flex-col">
-          <span className="text-sm font-semibold text-foreground">{formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} to return</span>
-        </div>
-      )}
-      <button type="button" onClick={onClose}
-        className="h-9 shrink-0 rounded-md px-3 text-[13px] font-medium text-muted transition hover:text-foreground">
-        Cancel
-      </button>
-      <Button className="h-9 shrink-0 px-4 text-[13px]" loading={create.isPending} disabled={!warehouseId || !hasCart} onClick={() => create.mutate()}>
-        <Undo2 className="h-3.5 w-3.5" /> Return boxes
+    <div className="flex w-full items-center gap-2">
+      <button type="button" onClick={onClose} className={CANCEL_CLS}>Cancel</button>
+      <Button className={PRIMARY_CLS} loading={create.isPending} disabled={!warehouseId || !hasCart} onClick={() => create.mutate()}>
+        {hasCart ? `Return ${formatNumber(totalBoxes)} box${totalBoxes !== 1 ? 'es' : ''}` : 'Return boxes'}
       </Button>
-    </>
+    </div>
   );
 
   return (
@@ -1077,7 +1061,7 @@ function PayTo({ account, brandName }) {
   };
 
   return (
-    <div className="rounded-lg bg-elevated/50 px-3 py-2.5">
+    <div className="rounded-xl bg-elevated/60 px-3.5 py-3 ring-1 ring-white/[0.08]">
       <div className="flex items-center gap-2">
         {/* White plate behind the logo: both are drawn for light backgrounds. */}
         {Logo ? (
@@ -1092,20 +1076,24 @@ function PayTo({ account, brandName }) {
 
       {number ? (
         <>
-          <div className="mt-2 flex items-center gap-3">
-            <span className="select-all font-mono text-lg font-bold leading-none tracking-wide text-foreground">{number}</span>
+          {/* The number is what the rep came for: easy to read without shouting — 17px, a little
+              letter spacing, selectable, and one tap to copy. */}
+          <div className="mt-2.5 flex items-center gap-3">
+            <div className="min-w-0">
+              <span className="select-all font-mono text-[17px] font-semibold leading-none tracking-[0.08em] text-foreground">{number}</span>
+              {holder && <p className="mt-1.5 text-[11px] font-medium uppercase tracking-wide text-muted">{holder}</p>}
+            </div>
             <button
               type="button"
               onClick={copy}
-              className="ml-auto h-8 shrink-0 rounded-lg bg-elevated px-3 text-xs font-semibold text-foreground ring-1 ring-white/[0.10] transition active:scale-95"
+              className="ml-auto h-8 shrink-0 rounded-lg bg-brand-500/15 px-3 text-xs font-semibold text-brand-600 ring-1 ring-brand-500/30 transition active:scale-95"
             >
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          {holder && <p className="mt-1 text-xs text-muted">{holder}</p>}
         </>
       ) : (
-        <p className="mt-1.5 text-[13px] font-semibold text-foreground">{account?.name}</p>
+        <p className="mt-2 text-sm font-semibold text-foreground">{account?.name}</p>
       )}
     </div>
   );
@@ -1242,19 +1230,17 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           // one you came for is a single small filled button on the right (where the thumb is).
           // No full-width slab, no stack of three — the bar was taking a third of a phone screen.
           // If a screen is too narrow for it all, the row wraps instead of squeezing.
-          const side = 'flex h-9 items-center rounded-md px-2.5 text-[13px] font-medium text-muted transition hover:bg-elevated/70 hover:text-foreground active:scale-[0.98] disabled:opacity-60';
+          const side = 'flex h-10 shrink-0 items-center rounded-lg px-3 text-[13px] font-medium text-foreground/85 ring-1 ring-white/[0.1] transition hover:bg-elevated/70 active:scale-[0.98] disabled:opacity-60';
           return (
-            <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-              <div className="flex min-w-0 flex-wrap items-center">
-                {rest.map((a) => (
-                  <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy} className={side}>
-                    {a.short || a.label}
-                  </button>
-                ))}
-              </div>
+            <div className="flex w-full flex-wrap items-center gap-2">
+              {rest.map((a) => (
+                <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy} className={side}>
+                  {a.short || a.label}
+                </button>
+              ))}
               {primary && (
                 <button type="button" onClick={primary.onClick} disabled={primary.busy}
-                  className={`ml-auto flex h-9 shrink-0 items-center rounded-md px-3.5 text-[13px] font-semibold transition active:scale-[0.98] disabled:opacity-60 ${primary.cls}`}>
+                  className={`flex h-10 min-w-[8.5rem] flex-1 items-center justify-center rounded-lg px-3 text-[13px] font-semibold transition active:scale-[0.98] disabled:opacity-60 ${primary.cls}`}>
                   {primary.label}
                 </button>
               )}
