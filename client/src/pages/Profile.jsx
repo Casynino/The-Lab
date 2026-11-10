@@ -9,6 +9,7 @@ import { ROLES, ROLE_LABELS } from '@/lib/constants';
 import { RED } from '@/lib/brand';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
 import { PageSpinner, Field, Input, Button } from '@/components/ui';
+import { repRegions, shortRegion } from '@/lib/repRegions';
 import CollapsibleList from '@/components/CollapsibleList';
 import WalletCard from '@/components/WalletCard';
 import { Ring } from '@/components/RepCharts';
@@ -196,7 +197,12 @@ export default function Profile() {
   });
 
   const repInfo = user?.salesRep;
-  const sub = [ROLE_LABELS[user?.role] || user?.role, repInfo?.code, repInfo?.region].filter(Boolean).join(' · ');
+  // A rep's line is their number and their cities (Nino, 11 Nov 2026: "no need of Sales Representative, just the
+  // rep number and name and cities"); anybody else keeps their role.
+  const cities = repRegions(repInfo).map(shortRegion).join(', ');
+  const sub = isRep
+    ? [repInfo?.code, cities].filter(Boolean).join(' · ')
+    : (ROLE_LABELS[user?.role] || user?.role);
 
   // The wallet card, fed exactly as on the wallet page (same rule for "can withdraw", same progress).
   const canWithdraw = c ? (c.eligible ?? (c.available >= c.minWithdrawal)) : false;
