@@ -1136,6 +1136,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
   const { hasRole, user } = useAuth();
   const staff = hasRole(ROLES.WAREHOUSE_STAFF);
   const [sub, setSub] = useState(null); // 'settle' | 'return' | 'flag' | 'extend'
+  const [detailsOpen, setDetailsOpen] = useState(false); // issued date, extension, fine rate, time added
   const [rejectingReturn, setRejectingReturn] = useState(null); // pending return being rejected
   const [rejectingSubmission, setRejectingSubmission] = useState(null); // pending settlement being rejected
 
@@ -1263,88 +1264,98 @@ export default function OrderDetailModal({ settlementId, onClose }) {
       >
         {isLoading || !order ? <PageSpinner /> : (
           <div className="space-y-4">
-            {/* The top of the order: who and what state, with the time left beside it; then the four
-                facts as a plain 2x2 — no rules between them. */}
+            {/* The top of the order says only what a rep needs at a glance: the deadline and the time
+                left. It stays calm until it matters, and turns red — with the fine — when the order is
+                overdue; that colour IS the status, so there is no "Open" / "Partial" badge (the ring
+                below already shows how far it is). Issued, extension, the fine rate and time added are
+                one tap away under "Details". ZELab staff see whose order it is. */}
             <div>
-              <div className="flex items-center gap-3">
-                {/* A rep opening their own order already knows whose it is.
-                    Staff are looking at someone else's, so they still need it. */}
-                {isOwnRep ? (
-                  <div className="text-[13px] font-semibold text-muted">This order</div>
-                ) : (
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Rep</div>
-                    <div className="truncate text-[15px] font-semibold text-foreground">{order.salesRep?.user?.name}</div>
-                  </div>
-                )}
-                <div className="ml-auto flex shrink-0 items-center gap-2.5">
-                  {active && <Remaining hours={order.hoursRemaining} />}
-                  <Badge className={SETTLEMENT_STATUS_META[order.status]?.cls}>
-                    {SETTLEMENT_STATUS_META[order.status]?.label}
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Issued</div>
-                  <div className="mt-0.5 text-[13px] font-medium text-muted">{formatDateTime(order.issuedAt)}</div>
-                </div>
-                <div>
+              {!isOwnRep && order.salesRep?.user?.name && (
+                <div className="mb-2 text-[13px] font-medium text-muted">{order.salesRep.user.name}</div>
+              )}
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">
                     {order.status === 'SETTLED' ? 'Settled' : 'Deadline'}
                   </div>
-                  <div className={`mt-0.5 text-[13px] font-medium ${
-                    order.status === 'SETTLED' ? 'text-emerald-400'
-                      : overdue ? 'text-rose-400' : 'text-foreground'}`}>
+                  <div className={`mt-0.5 text-[15px] font-semibold ${
+                    order.status === 'SETTLED' ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-foreground'}`}>
                     {order.status === 'SETTLED'
                       ? (order.settledAt ? formatDateTime(order.settledAt) : '—')
                       : formatDateTime(order.deadlineAt)}
                   </div>
                 </div>
-                {active && (
-                  <>
-                    <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Extension</div>
-                      <div className={`mt-0.5 text-[13px] font-medium ${
-                        order.extensionStatus === 'ACTIVE' ? 'text-brand-600'
-                          : order.extensionStatus === 'EXPIRED' ? 'text-rose-400' : 'text-muted'}`}>
-                        {order.extensionStatus === 'ACTIVE' ? 'Active'
-                          : order.extensionStatus === 'EXPIRED' ? 'Expired' : 'Not used'}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Late penalty</div>
-                      <div className={`mt-0.5 text-[13px] font-medium ${order.extensionUsed ? 'text-rose-400' : 'text-muted'}`}>
-                        {formatCurrency(order.penaltyPerDay)}/day
-                      </div>
-                    </div>
-                  </>
-                )}
+                {active && <Remaining hours={order.hoursRemaining} />}
               </div>
 
-              <DeadlineHistory order={order} />
-              {/* ZELab's own note. A rep has no use for a countdown of the
-                  time that might be taken off his order. */}
-              {staff && order.canUndoDeadline && (
-                <p className="mt-2 text-[11px] leading-snug text-faint">
-                  This can be taken back — the last lot returns the deadline to {formatDateTime(order.undoDeadlineTo)}
-                  {order.undoAllCount > 1 ? `, or all ${order.undoAllCount} lots return it to ${formatDateTime(order.undoAllDeadlineTo)}` : ''}.
+              {/* One line, and only when it matters. */}
+              {active && overdue && (
+                <p className="mt-2 rounded-lg bg-rose-500/10 px-3 py-2 text-[13px] text-rose-300">
+                  Overdue · fine {formatCurrency(order.penaltyPerDay)} a day
                 </p>
               )}
-              {/* And why it cannot, when it cannot: the button simply going
-                  missing reads as a bug. */}
-              {staff && !order.canUndoDeadline && order.undoDeadlineTo && order.finesCharged > 0 && (
-                <p className="mt-2 text-[11px] leading-snug text-faint">
-                  This cannot be taken back — {order.finesCharged} fine{order.finesCharged !== 1 ? 's' : ''} already charged against this
-                  deadline. Set a new deadline instead.
-                </p>
+              {active && !overdue && order.extensionStatus === 'ACTIVE' && (
+                <p className="mt-1.5 text-xs text-brand-600">Extension active · fine {formatCurrency(order.penaltyPerDay)} a day</p>
               )}
-              {/* An order can be overdue while the fine only starts later. */}
-              {order.finesFrom && (
-                <p className="mt-2 text-[11px] leading-snug text-amber-400/80">
-                  Daily fine runs from {formatDateTime(order.finesFrom)} — the time that was taken back is not charged.
-                </p>
+
+              <button type="button" onClick={() => setDetailsOpen((v) => !v)} aria-expanded={detailsOpen}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-faint transition hover:text-muted">
+                Details
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+              </button>
+
+              {detailsOpen && (
+                <div className="mt-2">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Issued</div>
+                      <div className="mt-0.5 text-[13px] font-medium text-muted">{formatDateTime(order.issuedAt)}</div>
+                    </div>
+                    {active && (
+                      <>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Extension</div>
+                          <div className={`mt-0.5 text-[13px] font-medium ${
+                            order.extensionStatus === 'ACTIVE' ? 'text-brand-600'
+                              : order.extensionStatus === 'EXPIRED' ? 'text-rose-400' : 'text-muted'}`}>
+                            {order.extensionStatus === 'ACTIVE' ? 'Active'
+                              : order.extensionStatus === 'EXPIRED' ? 'Expired' : 'Not used'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Late penalty</div>
+                          <div className={`mt-0.5 text-[13px] font-medium ${order.extensionUsed ? 'text-rose-400' : 'text-muted'}`}>
+                            {formatCurrency(order.penaltyPerDay)}/day
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <DeadlineHistory order={order} />
+                  {/* ZELab's own note. A rep has no use for a countdown of the
+                      time that might be taken off his order. */}
+                  {staff && order.canUndoDeadline && (
+                    <p className="mt-2 text-[11px] leading-snug text-faint">
+                      This can be taken back — the last lot returns the deadline to {formatDateTime(order.undoDeadlineTo)}
+                      {order.undoAllCount > 1 ? `, or all ${order.undoAllCount} lots return it to ${formatDateTime(order.undoAllDeadlineTo)}` : ''}.
+                    </p>
+                  )}
+                  {/* And why it cannot, when it cannot: the button simply going
+                      missing reads as a bug. */}
+                  {staff && !order.canUndoDeadline && order.undoDeadlineTo && order.finesCharged > 0 && (
+                    <p className="mt-2 text-[11px] leading-snug text-faint">
+                      This cannot be taken back — {order.finesCharged} fine{order.finesCharged !== 1 ? 's' : ''} already charged against this
+                      deadline. Set a new deadline instead.
+                    </p>
+                  )}
+                  {/* An order can be overdue while the fine only starts later. */}
+                  {order.finesFrom && (
+                    <p className="mt-2 text-[11px] leading-snug text-amber-400/80">
+                      Daily fine runs from {formatDateTime(order.finesFrom)} — the time that was taken back is not charged.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 
