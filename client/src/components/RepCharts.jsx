@@ -192,31 +192,51 @@ export function SettlementCard({ insights }) {
   );
 }
 
-/** The products that earn the most, with a share bar so the order is visible at a glance. */
+/** The best seller as a hero card, the next ones as a short quiet list (Nino, 11 Nov 2026: "four heavy rows
+ *  looks overwhelming — present it another way"). One name, one amount and its share of everything earned for
+ *  the leader; for the rest only a name, an amount and a thin bar against the leader. */
 export function TopProductsCard({ insights }) {
   const rows = insights.topProducts;
   if (!rows.length) return null;
-  const top = Math.max(1, ...rows.map((r) => r.earned));
+  const [first, ...rest] = rows;
+  const share = Number.isFinite(first.share) ? first.share : 0;
   return (
-    <InsightCard title="Products that earn the most" said={`Your top ${rows.length === 1 ? 'product' : `${rows.length} products`} by what they earned you.`}>
-      <ol className="divide-y divide-white/[0.06]">
-        {rows.map((r, i) => (
-          <li key={r.name} className="py-2.5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md bg-elevated px-1 text-[11px] font-bold tabular-nums text-muted">{i + 1}</span>
-              <span title={r.name} className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{r.name}</span>
-            </div>
-            <div className="mt-1.5 flex items-center gap-3 pl-8">
-              <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
-                <div className="h-full rounded-full" style={{ width: `${(r.earned / top) * 100}%`, background: SERIES[i % SERIES.length] }} />
+    <section className="px-1">
+      <h3 className="text-sm font-semibold text-foreground">Best sellers</h3>
+
+      <div className="premium-card mt-3 p-5">
+        <div className="flex items-center gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium text-white/50">Best seller</p>
+            <p className="mt-1 text-[15px] font-semibold leading-snug text-white">{first.name}</p>
+            <p className="mt-3 text-[24px] font-bold leading-none tabular-nums text-white">{formatCurrency(first.earned)}</p>
+            <p className="mt-1 text-[11px] text-white/45">{formatNumber(first.boxes)} boxes</p>
+          </div>
+          <div style={{ filter: 'drop-shadow(0 0 8px rgba(238,49,36,0.4))' }}>
+            <Ring size={76} stroke={7} total={100} segments={[{ value: share, color: RED }]}>
+              <span className="text-base font-bold leading-none tabular-nums text-white">{Math.round(share)}%</span>
+              <span className="mt-1 text-[9px] text-white/45">of earned</span>
+            </Ring>
+          </div>
+        </div>
+      </div>
+
+      {rest.length > 0 && (
+        <ul className="mt-2 divide-y divide-white/[0.06]">
+          {rest.map((r) => (
+            <li key={r.name} className="py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <span title={r.name} className="min-w-0 flex-1 truncate text-[13px] text-muted">{r.name}</span>
+                <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(r.earned)}</span>
               </div>
-              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(r.earned)}</span>
-              <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-faint">{formatNumber(r.boxes)} boxes</span>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </InsightCard>
+              <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-white/[0.07]">
+                <div className="h-full rounded-full bg-white/35" style={{ width: `${Math.max(3, (r.earned / Math.max(1, first.earned)) * 100)}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
