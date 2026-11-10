@@ -109,15 +109,14 @@ function CompletedRow({ s, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl px-2 py-3 text-left transition hover:bg-elevated"
+      className="flex w-full items-center gap-3 rounded-xl px-1 py-3.5 text-left transition hover:bg-elevated"
     >
-      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+      {/* No tick and no eye: the heading already says these are completed, and the whole row is the button. */}
       <div className="min-w-0 flex-1">
-        <span className="text-sm font-medium text-muted">{s.settlementNumber}</span>
-        <span className="ml-2 text-sm text-faint">{formatCurrency(s.assignedValue)}</span>
+        <p className="truncate text-sm font-medium text-foreground">{s.settlementNumber}</p>
+        <p className="mt-0.5 text-xs tabular-nums text-muted">{formatCurrency(s.assignedValue)}</p>
       </div>
-      <span className="shrink-0 text-xs text-faint">{formatDateTime(s.issuedAt)}</span>
-      <Eye className="h-3.5 w-3.5 shrink-0 text-faint" />
+      <span className="shrink-0 text-xs text-muted">{formatDateTime(s.issuedAt)}</span>
     </button>
   );
 }
@@ -137,55 +136,48 @@ function RepSettlements({ viewing, setViewing }) {
   const active = all.filter((s) => s.status !== 'SETTLED');
   const completed = all.filter((s) => s.status === 'SETTLED');
 
+  // One short heading per list, no page title above them, no icons and no red badge (Nino, 11 Nov 2026:
+  // "just say Active orders — if there are none, just show the completed orders; too many words").
+  // The active section is not drawn at all when there is nothing active.
+  const Heading = ({ children, count }) => (
+    <h2 className="mb-3 px-1 text-lg font-bold text-foreground">
+      {children}
+      {count > 0 && <span className="ml-2 text-sm font-medium text-muted">{count}</span>}
+    </h2>
+  );
+
+  if (!active.length && !completed.length) {
+    return (
+      <div className="mt-16 px-1 text-center">
+        <Timer className="mx-auto h-6 w-6 text-muted" aria-hidden="true" />
+        <p className="mt-3 text-sm font-medium text-foreground">No orders yet</p>
+        <p className="mt-1 text-xs text-muted">Approved stock shows up here.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      {/* ── Active ── */}
-      <div>
-        <div className="mb-3 flex items-center gap-2">
-          <Wallet className="h-4 w-4 text-brand-500" />
-          <h2 className="text-base font-bold text-foreground">
-            Active orders
-            {active.length > 0 && (
-              <span className="ml-2 rounded-full bg-brand-500 px-2 py-0.5 text-[11px] font-black text-white">
-                {active.length}
-              </span>
-            )}
-          </h2>
-        </div>
-
-        {active.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface">
-            <EmptyState
-              title="No active orders"
-              message="When stock is approved and issued to you, the order appears here within the 72h settlement window."
-              icon={Timer}
-            />
-          </div>
-        ) : (
+      {active.length > 0 && (
+        <div>
+          <Heading count={active.length}>Active orders</Heading>
           <div className="space-y-3">
             {active.map((s) => (
               <ActiveOrderCard key={s.id} s={s} onClick={() => setViewing(s.id)} />
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* ── Completed ── */}
       {completed.length > 0 && (
         <div>
-          <div className="mb-2 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <h2 className="text-sm font-semibold text-muted">
-              Completed orders ({completed.length})
-            </h2>
+          <Heading count={completed.length}>Completed orders</Heading>
+          {/* Plain rows on the page, no card round them. */}
+          <div className="divide-y divide-white/[0.06]">
+            {completed.map((s) => (
+              <CompletedRow key={s.id} s={s} onClick={() => setViewing(s.id)} />
+            ))}
           </div>
-          <Card>
-            <div className="divide-y divide-border px-2">
-              {completed.map((s) => (
-                <CompletedRow key={s.id} s={s} onClick={() => setViewing(s.id)} />
-              ))}
-            </div>
-          </Card>
         </div>
       )}
     </div>
@@ -472,13 +464,13 @@ export default function Settlements() {
 
   return (
     <div>
-      <PageHeader
-        title="Orders & Settlements"
-        subtitle={isRep
-          ? 'Active orders need action within 72 hours — settle boxes or return unsold stock.'
-          : 'Each approved order is a 72-hour contract — open one to settle boxes and record returns.'
-        }
-      />
+      {/* A rep's page opens straight on their orders — the menu already says Settle. */}
+      {!isRep && (
+        <PageHeader
+          title="Orders & Settlements"
+          subtitle="Each approved order is a 72-hour contract — open one to settle boxes and record returns."
+        />
+      )}
 
       {isRep
         ? <RepSettlements viewing={viewing} setViewing={setViewing} />
