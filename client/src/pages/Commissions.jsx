@@ -1473,19 +1473,8 @@ function AdminView() {
 export default function Commissions({ embedded = false }) {
   const { user } = useAuth();
   const isRep = user?.role === ROLES.SALES_REP;
-  const walletPage = isRep && !embedded;
   return (
-    <div className={clsx(walletPage && 'relative isolate')}>
-      {/* The rep's page is their wallet, so it has a little warmth of its own: a soft red
-          glow fading out of the top-left corner, behind the title and the card. Nothing
-          sits on it and it carries no information. */}
-      {walletPage && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -inset-x-3 -top-8 -z-10 h-64 sm:-inset-x-4"
-          style={{ background: 'radial-gradient(70% 100% at 15% 0%, rgba(238,49,36,0.14), transparent)' }}
-        />
-      )}
+    <div>
       {!embedded && (
         <PageHeader title={isRep ? 'My wallet' : 'Commissions'} subtitle={isRep ? 'Your money, bonuses and withdrawals.' : 'Commission performance and withdrawal approvals.'} />
       )}

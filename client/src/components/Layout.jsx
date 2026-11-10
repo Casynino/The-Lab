@@ -757,7 +757,10 @@ export default function Layout() {
   ].filter((t) => items.some((i) => i.to === t.to));
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="relative isolate min-h-dvh">
+      {/* The galaxy backdrop — see .app-sky in index.css. It replaces this shell's old flat
+          bg-background, which hid the body's own glow; the body still paints #0a0a0b under it. */}
+      <div aria-hidden="true" className="app-sky" />
       <GlassSidebar mode="desktop" {...shared} collapsed={collapsed} onCollapsedChange={setFold} />
 
       {/* The phone's drawer */}
