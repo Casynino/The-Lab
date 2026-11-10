@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
+import WalletCard from '@/components/WalletCard';
 import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard } from '@/components/RepCharts';
 import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck, Boxes } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
@@ -571,21 +572,6 @@ const compactTsh = (n) => {
   return `${sign}TSh ${Math.round(v)}`;
 };
 
-// A small figure that supports the headline without competing with it.
-function MiniStat({ label, value, tone }) {
-  return (
-    <div className="min-w-0 rounded-xl border border-border bg-surface px-3 py-2.5">
-      <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</p>
-      <p className={clsx(
-        'mt-0.5 truncate text-sm font-bold tabular-nums',
-        tone === 'rose' ? 'text-rose-400' : 'text-foreground',
-      )}>
-        {compactTsh(value)}
-      </p>
-    </div>
-  );
-}
-
 function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -617,77 +603,34 @@ function RepView() {
 
   return (
     <>
-      {/* The balance is the one number this page exists for, so it takes the
-          headline and the action sits beside it. Everything else supports it. */}
-      <div className={clsx(
-        'rounded-2xl border p-4',
-        balanceNegative ? 'border-rose-500/40 bg-rose-500/[0.06]'
-          : canWithdraw ? 'border-emerald-500/40 bg-emerald-500/[0.07]'
-            : 'border-border bg-surface',
-      )}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Available balance</p>
-            <p className={clsx(
-              'mt-1 text-3xl font-bold leading-none tabular-nums',
-              balanceNegative ? 'text-rose-400' : canWithdraw ? 'text-emerald-300' : 'text-foreground',
-            )}>
-              {formatCurrency(c.available)}
-            </p>
-          </div>
-          {/* 44px minimum, so it is comfortably tappable on a phone. */}
-          <Button className="min-h-[44px] shrink-0" onClick={() => setOpen(true)} disabled={!canWithdraw}>
-            Withdraw
-          </Button>
-        </div>
-
-        {balanceNegative ? (
-          <p className="mt-3 text-[11px] leading-snug text-rose-400">
-            Your balance is negative from overdue fines. Settle your outstanding orders to clear it.
-          </p>
-        ) : (
-          <>
-            <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
-              <div
-                className={clsx(
-                  'h-full rounded-full transition-[width] duration-700 ease-out',
-                  canWithdraw ? 'bg-gradient-to-r from-emerald-500 to-emerald-300' : 'bg-gradient-to-r from-brand-600 to-brand-400',
-                )}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="mt-1.5 text-[11px] leading-snug text-muted">
-              {windowOpen
-                ? (
-                  <span className="font-semibold text-amber-400">
-                    ZELab has opened one withdrawal for you — your usual minimum does not apply
-                    until {formatDateTime(c.emergency.until)}.
-                  </span>
-                )
-                : canWithdraw
-                ? <span className="font-semibold text-emerald-400">Ready to withdraw — earned on {earnedOn(c)}</span>
-                : c.earned > 0
-                  ? `${formatCurrency(c.available)} of ${formatCurrency(c.minWithdrawal)} minimum · ${formatCurrency(c.minWithdrawal - c.available)} to go`
-                  : `Every box you settle earns commission. The first ${formatCurrency(c.minWithdrawal)} unlocks a withdrawal.`}
-            </p>
-          </>
-        )}
-      </div>
-
-      {/* The live request used to get a card here, under the balance. It is
-          already in the payouts list below with its own status, so the card was
-          the same fact twice — and the balance is what this part of the page is
-          for. */}
-
-      {/* These swapped themselves out when the note above was showing the same
-          figure. With the note gone they just state the three facts. */}
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        <MiniStat label="Earned" value={c.earned} />
-        <MiniStat label="Paid out" value={c.paid} />
-        {hasPenalties
-          ? <MiniStat label="Fines" value={c.penalties} tone="rose" />
-          : <MiniStat label="Pending" value={c.pendingRequests} />}
-      </div>
+      {/* The balance is the one number this page exists for, so it is a small
+          wallet card: balance, Withdraw, how far to the minimum, and the three
+          supporting figures, all in one place. The live request is not repeated
+          here — it is in the payouts list with its own status. */}
+      <WalletCard
+        balance={formatCurrency(c.available)}
+        negative={balanceNegative}
+        canWithdraw={canWithdraw}
+        pct={pct}
+        hintTone={windowOpen ? 'amber' : canWithdraw ? 'emerald' : undefined}
+        hint={
+          windowOpen
+            ? [`ZELab has opened one withdrawal for you — your usual minimum does not apply until ${formatDateTime(c.emergency.until)}.`]
+            : canWithdraw
+              ? [`Ready to withdraw — earned on ${earnedOn(c)}`]
+              : c.earned > 0
+                ? [{ amount: formatCurrency(c.available) }, ' of ', { amount: formatCurrency(c.minWithdrawal) }, ' minimum · ', { amount: formatCurrency(c.minWithdrawal - c.available) }, ' to go']
+                : [`Every box you settle earns commission. The first ${formatCurrency(c.minWithdrawal)} unlocks a withdrawal.`]
+        }
+        stats={[
+          { label: 'Earned', value: compactTsh(c.earned) },
+          { label: 'Paid out', value: compactTsh(c.paid) },
+          hasPenalties
+            ? { label: 'Fines', value: compactTsh(c.penalties), tone: 'rose' }
+            : { label: 'Pending', value: compactTsh(c.pendingRequests) },
+        ]}
+        onWithdraw={() => setOpen(true)}
+      />
 
       {/* Four stacked sections became four tabs. The page was a single scroll
           through everything at once; now it opens on one thing. */}
@@ -815,27 +758,37 @@ function DeductModal({ reps, onClose }) {
 // One section at a time. The page had grown to four stacked tables and a wall
 // of forgiven fines, which buried the balances everyone actually opens it for.
 function SectionTabs({ value, onChange, tabs }) {
+  // Plain words on a hairline, the active one underlined in red — no boxed bar,
+  // no filled pill (Nino, 10 Nov 2026: no big shapes for small things).
   return (
-    <div className="mt-4 flex flex-wrap gap-1 rounded-xl border border-border bg-elevated p-1">
-      {tabs.map((t) => (
-        <button
-          key={t.key}
-          type="button"
-          onClick={() => onChange(t.key)}
-          className={clsx(
-            // 44px minimum: below that a tab is uncomfortable to hit on a phone.
-            'min-h-[44px] flex-1 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium transition sm:px-3 sm:text-sm',
-            value === t.key ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
-          )}
-        >
-          {t.label}
-          {t.count != null && t.count > 0 && (
-            <span className={clsx('ml-2 rounded-full px-1.5 py-0.5 text-[11px]', value === t.key ? 'bg-black/20' : 'bg-white/10')}>
-              {t.count}
-            </span>
-          )}
-        </button>
-      ))}
+    <div
+      role="tablist"
+      className="mt-4 flex items-stretch justify-between gap-4 overflow-x-auto border-b border-border px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+      {tabs.map((t) => {
+        const on = value === t.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(t.key)}
+            className={clsx(
+              // 44px tall to hit on a phone, though only the words and the line show.
+              'relative -mb-px flex min-h-[44px] shrink-0 items-center whitespace-nowrap text-[13px] font-medium transition-colors sm:text-sm',
+              on
+                ? 'text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-brand-500'
+                : 'text-muted hover:text-foreground',
+            )}
+          >
+            {t.label}
+            {t.count != null && t.count > 0 && (
+              <span className="ml-1.5 text-[11px] font-semibold text-brand-600">{t.count}</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

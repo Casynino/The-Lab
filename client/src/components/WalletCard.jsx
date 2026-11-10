@@ -1,0 +1,142 @@
+import { useState } from 'react';
+import clsx from 'clsx';
+import { Eye, EyeOff } from 'lucide-react';
+
+// The rep's balance as a small digital wallet card (Nino, 10 Nov 2026: "a nice
+// digital card, like a wallet, well designed, premium look, small — show the
+// balance but not take too much space"). One card holds everything the top of the
+// Commissions page used to spread over a box and three tiles: the balance, the
+// Withdraw action, how far to the minimum, and the three supporting figures.
+//
+// The eye hides every amount on the card, so a rep can open the page with
+// people around. The choice is remembered on this phone only (a convenience —
+// nothing depends on it, and a blocked storage just means it starts shown).
+
+const KEY = 'zelab:hideBalance';
+const readHidden = () => { try { return localStorage.getItem(KEY) === '1'; } catch { return false; } };
+const saveHidden = (v) => { try { localStorage.setItem(KEY, v ? '1' : '0'); } catch { /* private window: fine */ } };
+
+const DOTS = '••••••';
+
+export default function WalletCard({
+  balance,            // formatted, e.g. "TSh 245,500"
+  negative,           // balance below zero (overdue fines)
+  canWithdraw,
+  pct,                // 0–100, progress to the withdrawal minimum
+  hint,               // [{ text } | { amount: formatted } ...] — see below
+  hintTone,           // 'emerald' | 'amber' | undefined
+  stats,              // [{ label, value (formatted), tone? }] — three of them
+  onWithdraw,
+}) {
+  const [hidden, setHidden] = useState(readHidden);
+  const toggle = () => setHidden((h) => { saveHidden(!h); return !h; });
+  const mask = (s) => (hidden ? '•••' : s);
+
+  return (
+    <section
+      className={clsx(
+        'relative isolate overflow-hidden rounded-[22px] p-4 text-white ring-1 ring-inset',
+        negative ? 'ring-rose-400/25' : 'ring-white/[0.09]',
+      )}
+      style={{
+        background: negative
+          ? 'linear-gradient(140deg,#2a0f16 0%,#160b0e 55%,#0e0e10 100%)'
+          : 'linear-gradient(140deg,#2c0e0c 0%,#170a0a 52%,#0e0e10 100%)',
+        boxShadow: '0 14px 32px -16px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07)',
+      }}
+    >
+      {/* Soft red light from the corner and two hair-thin arcs — the card's only
+          decoration. They sit behind everything and never carry information. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-12 -top-20 -z-10 h-56 w-56 rounded-full"
+        style={{ background: `radial-gradient(closest-side, ${negative ? 'rgba(244,63,94,.28)' : 'rgba(238,49,36,.34)'}, transparent)` }}
+      />
+      <svg aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 h-full w-full" viewBox="0 0 360 180" preserveAspectRatio="none">
+        <path d="M-10 150 C 100 70, 240 40, 380 96" fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="1" />
+        <path d="M-10 178 C 120 100, 250 78, 380 128" fill="none" stroke="rgba(255,255,255,.05)" strokeWidth="1" />
+      </svg>
+
+      {/* Label, the eye, and the house mark where a bank card keeps its logo. */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[11px] font-medium tracking-wide text-white/60">Available balance</span>
+          <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={hidden}
+            aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
+            className="-m-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white active:scale-95"
+          >
+            {hidden ? <EyeOff className="h-[15px] w-[15px]" /> : <Eye className="h-[15px] w-[15px]" />}
+          </button>
+        </div>
+        <img src="/brand/zelab-dark.svg" alt="ZELab" className="h-[15px] w-auto shrink-0 opacity-90" />
+      </div>
+
+      {/* The balance, and the one action beside it. They wrap onto two lines only
+          when a very long figure meets a very narrow phone. */}
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-x-3 gap-y-2.5">
+        <p
+          className={clsx(
+            'min-w-0 text-[27px] font-bold leading-none tabular-nums',
+            negative ? 'text-rose-300' : 'text-white',
+            hidden && 'tracking-[0.18em]',
+          )}
+        >
+          {hidden ? DOTS : balance}
+        </p>
+        <button
+          type="button"
+          onClick={onWithdraw}
+          disabled={!canWithdraw}
+          className={clsx(
+            'h-10 shrink-0 rounded-full px-[18px] text-[13px] font-semibold transition active:scale-[0.97]',
+            canWithdraw ? 'bg-white text-neutral-900 hover:bg-white/90' : 'cursor-not-allowed bg-white/10 text-white/35',
+          )}
+        >
+          Withdraw
+        </button>
+      </div>
+
+      {/* How far to the minimum, or why the balance is below zero. */}
+      {negative ? (
+        <p className="mt-3 text-[11px] leading-snug text-rose-300">
+          Your balance is negative from overdue fines. Settle your outstanding orders to clear it.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3.5 h-1 w-full overflow-hidden rounded-full bg-white/[0.09]">
+            <div
+              className={clsx(
+                'h-full rounded-full transition-[width] duration-700 ease-out',
+                canWithdraw ? 'bg-gradient-to-r from-emerald-500 to-emerald-300' : 'bg-gradient-to-r from-brand-500 to-brand-300',
+              )}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p
+            className={clsx(
+              'mt-1.5 text-[11px] leading-snug',
+              hintTone === 'emerald' ? 'font-semibold text-emerald-300' : hintTone === 'amber' ? 'font-semibold text-amber-300' : 'text-white/60',
+            )}
+          >
+            {hint.map((part, i) => (typeof part === 'string' ? part : <span key={i}>{mask(part.amount)}</span>))}
+          </p>
+        </>
+      )}
+
+      {/* The three supporting figures, one quiet line along the foot. */}
+      <div className="mt-3 grid grid-cols-3 divide-x divide-white/10 border-t border-white/10 pt-2.5">
+        {stats.map((s, i) => (
+          <div key={s.label} className={clsx('min-w-0', i > 0 && 'pl-3')}>
+            <p className="truncate text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/45">{s.label}</p>
+            <p className={clsx('mt-0.5 truncate text-[13px] font-semibold tabular-nums', s.tone === 'rose' ? 'text-rose-300' : 'text-white/90')}>
+              {mask(s.value)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
