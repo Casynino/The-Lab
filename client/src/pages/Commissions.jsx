@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
 import WalletCard from '@/components/WalletCard';
 import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard } from '@/components/RepCharts';
-import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck, Boxes } from 'lucide-react';
+import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck, Boxes } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
@@ -495,49 +495,59 @@ function FinesHistory({ admin }) {
   );
 }
 
+// The fine rules, as a short list on the page itself — no amber box, no icon, no bullets (Nino,
+// 11 Nov 2026: "too much shape for no reason, match the page"). Every rule and number is the old
+// policy text, unchanged; only the arrangement is new: what it is on the left, the figure on the right.
+function FineRule({ children, note, value, tone }) {
+  return (
+    <li className="flex items-start justify-between gap-4 py-3">
+      <div className="min-w-0">
+        <p className="text-[13px] leading-snug text-foreground">{children}</p>
+        {note && <p className="mt-0.5 text-xs leading-snug text-muted">{note}</p>}
+      </div>
+      <p className={clsx('shrink-0 pt-px text-sm font-semibold tabular-nums', tone === 'rose' ? 'text-rose-300' : 'text-foreground')}>{value}</p>
+    </li>
+  );
+}
+
 function PenaltyPolicyCard() {
   return (
-    <Card className="mt-4 border border-amber-500/20 bg-amber-500/5">
-      <div className="flex gap-3 p-4">
-        <Info className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
-        <div className="space-y-1.5 text-sm text-amber-300/80">
-          <p className="font-semibold text-amber-300">Settlement Penalty Policy</p>
-          <ul className="list-disc space-y-1.5 pl-4">
-            <li>Orders must be settled or returned within <b>72 hours</b> after stock is issued.</li>
-            <li>After 72 hours, <b>TZS 10,000</b> is taken daily from your wallet.</li>
-            <li>You may extend an order <b>once</b> by <b>96 hours</b> (7 days total) from the order screen — no approval needed.
-              During the extension there is no fine, but afterwards the daily fine becomes <b>TZS 20,000</b>,
-              and a return not completed in 24 hours costs <b>TZS 30,000</b>.</li>
-            <li>No penalty while a return awaits review — but the review window is <b>24 hours</b>.</li>
-            <li>A return not completed within 24 hours expires automatically and costs <b>TZS 15,000</b>; the boxes go back on your order.</li>
-            <li>Penalties stop once everything is settled or returned.</li>
-          </ul>
-        </div>
-      </div>
-    </Card>
+    <section className="mt-8 px-1">
+      <h2 className="text-xs font-medium text-muted">Settlement fines</h2>
+      <ul className="mt-1 divide-y divide-white/[0.06]">
+        <FineRule note="after stock is issued" value="72 hours">Settle or return an order within</FineRule>
+        <FineRule value="TZS 10,000 / day" tone="rose">After that, taken from your wallet</FineRule>
+        <FineRule note="Expires automatically; the boxes go back on your order." value="TZS 15,000" tone="rose">A return not completed within 24 hours</FineRule>
+        <FineRule note="7 days in total, from the order screen — no approval needed. No fine during it." value="+96 hours">One extension per order</FineRule>
+        <FineRule value="TZS 20,000 / day" tone="rose">After an extension, the daily fine</FineRule>
+        <FineRule value="TZS 30,000" tone="rose">After an extension, a return not completed in 24 hours</FineRule>
+      </ul>
+      <p className="mt-3 text-[11px] leading-snug text-faint">
+        No fine while a return waits for review (the review window is 24 hours). Fines stop once everything is settled or returned.
+      </p>
+    </section>
   );
 }
 
 // What a box is worth today, per brand. Orders keep the rate that was in force
-// when they were CREATED, so this card describes new orders only.
+// when they were CREATED, so this describes new orders only.
 function RatesCard({ rates }) {
   if (!rates?.perBrand?.length) return null;
   return (
-    <Card className="mt-4">
-      <CardHeader title="What you earn per box" subtitle="What one settled box pays you today." />
-      <div className="grid grid-cols-2 gap-3 p-4 pt-0 sm:grid-cols-3">
+    <section className="mt-5 px-1">
+      <h2 className="text-xs font-medium text-muted">What you earn per box</h2>
+      <ul className="mt-1 divide-y divide-white/[0.06]">
         {rates.perBrand.map((r) => (
-          <div key={r.brand} className="rounded-lg border border-white/10 bg-white/5 p-3">
-            <p className="text-xs uppercase tracking-wide text-faint">{r.brand}</p>
-            <p className="mt-1 text-lg font-semibold text-emerald-300">{formatCurrency(r.perBox)}</p>
-            <p className="text-xs text-faint">per box</p>
-          </div>
+          <li key={r.brand} className="flex items-baseline justify-between gap-4 py-3">
+            <span className="text-sm text-foreground">{r.brand}</span>
+            <span className="text-lg font-semibold tabular-nums text-emerald-300">{formatCurrency(r.perBox)}</span>
+          </li>
         ))}
-      </div>
-      <p className="px-4 pb-4 text-xs text-faint">
-        Orders you already have keep the rate they were issued with — nothing you have earned changes.
+      </ul>
+      <p className="mt-2 text-[11px] leading-snug text-faint">
+        Orders you already have keep the rate they were issued with.
       </p>
-    </Card>
+    </section>
   );
 }
 
