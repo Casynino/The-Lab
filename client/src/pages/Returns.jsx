@@ -225,8 +225,11 @@ function ReturnModal({ onClose }) {
           <span className="text-sm font-semibold text-foreground">{formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} selected</span>
         </div>
       )}
-      <Button variant="secondary" onClick={onClose}>Cancel</Button>
-      <Button loading={create.isPending} disabled={!valid} onClick={() => create.mutate()}>Submit return</Button>
+      <button type="button" onClick={onClose}
+        className="h-9 shrink-0 rounded-md px-3 text-[13px] font-medium text-muted transition hover:text-foreground">
+        Cancel
+      </button>
+      <Button className="h-9 shrink-0 px-4 text-[13px]" loading={create.isPending} disabled={!valid} onClick={() => create.mutate()}>Submit return</Button>
     </>
   );
 

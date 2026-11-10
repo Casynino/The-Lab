@@ -170,13 +170,13 @@ function SettleOneModal({ order, onClose, onDone }) {
         /* On a phone the action wants the width and the thumb wants the right
            hand side. Cancel stays quiet — it is the rarer choice, and it was
            competing with the button that matters. */
-        <div className="flex w-full items-center gap-3">
+        <div className="flex w-full items-center justify-end gap-2">
           <button type="button" onClick={onClose}
-            className="shrink-0 rounded-xl px-4 py-3 text-sm font-medium text-muted transition hover:text-foreground">
+            className="h-9 shrink-0 rounded-md px-3 text-[13px] font-medium text-muted transition hover:text-foreground">
             Cancel
           </button>
           <Button
-            className="flex-1 justify-center"
+            className="h-9 shrink-0 px-4 text-[13px]"
             loading={settle.isPending}
             disabled={!ready}
             onClick={() => settle.mutate()}
@@ -297,21 +297,31 @@ function SettleManyModal({ order, onClose, onDone }) {
   const lineValue = (l) => cart[l.productId] * (l.sellingPrice || 0);
   const total = chosen.reduce((n, l) => n + lineValue(l), 0);
 
-  // One payment block per brand among the chosen products.
-  const brands = [...new Set(chosen.map((l) => l.brandId || ''))];
+  // One list per BRAND. Every brand settles into its own account (OHIS to M-Pesa, Civlily to Airtel
+  // Money, and whatever brand comes next to its own), so the products of one brand are listed
+  // together, with that brand's amount to collect and where to pay it right under them.
+  const groups = [];
+  for (const l of lines) {
+    const b = l.brandId || '';
+    let g = groups.find((x) => x.brandId === b);
+    if (!g) { g = { brandId: b, brandName: l.brandName, lines: [] }; groups.push(g); }
+    g.lines.push(l);
+  }
   const accountQs = useQueries({
-    queries: brands.map((b) => ({
-      queryKey: ['settlements', 'payment-accounts', b],
-      queryFn: async () => unwrap(await api.get('/settlements/payment-accounts', { params: b ? { brandId: b } : undefined })).data,
+    queries: groups.map((g) => ({
+      queryKey: ['settlements', 'payment-accounts', g.brandId],
+      queryFn: async () => unwrap(await api.get('/settlements/payment-accounts', { params: g.brandId ? { brandId: g.brandId } : undefined })).data,
     })),
   });
-  const optionsFor = (b) => accountQs[brands.indexOf(b)]?.data;
+  const optionsFor = (b) => accountQs[groups.findIndex((g) => g.brandId === b)]?.data;
   const accountFor = (b) => {
     const opts = optionsFor(b);
     return opts && opts.length === 1 ? opts[0].id : picked[b] || '';
   };
-  const brandName = (b) => chosen.find((l) => (l.brandId || '') === b)?.brandName;
-  const brandAmount = (b) => chosen.filter((l) => (l.brandId || '') === b).reduce((n, l) => n + lineValue(l), 0);
+  const chosenIn = (g) => g.lines.filter((l) => cart[l.productId] > 0);
+  const amountIn = (g) => chosenIn(g).reduce((n, l) => n + lineValue(l), 0);
+  const boxesIn = (g) => chosenIn(g).reduce((n, l) => n + cart[l.productId], 0);
+  const brandsChosen = groups.filter((g) => chosenIn(g).length > 0);
 
   const [sent, setSent] = useState(null);
   const settle = useMutation({
@@ -333,60 +343,78 @@ function SettleManyModal({ order, onClose, onDone }) {
     );
   }
 
-  const ready = chosen.length > 0 && brands.every((b) => accountFor(b));
+  const ready = chosen.length > 0 && brandsChosen.every((g) => accountFor(g.brandId));
   return (
     <Modal open onClose={onClose} title="Submit settlement"
       footer={
-        <div className="flex w-full items-center gap-3">
+        <div className="flex w-full items-center justify-end gap-2">
           <button type="button" onClick={onClose}
-            className="shrink-0 rounded-xl px-4 py-3 text-sm font-medium text-muted transition hover:text-foreground">
+            className="h-9 shrink-0 rounded-md px-3 text-[13px] font-medium text-muted transition hover:text-foreground">
             Cancel
           </button>
-          <Button className="flex-1 justify-center" loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
+          <Button className="h-9 shrink-0 px-4 text-[13px]" loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
             {ready ? `Submit ${formatCurrency(total)}` : 'Submit for approval'}
           </Button>
         </div>
       }>
-      <div className="space-y-5">
+      <div className="space-y-6">
         <p className="text-[13px] leading-snug text-muted">Pay first, then submit for approval.</p>
 
-        <div>
-          <StepHead right={chosen.length ? `${chosen.length} chosen` : undefined}>What you sold</StepHead>
-          <StepperLines
-            items={lines.map((l) => ({
-              key: l.productId,
-              name: l.name,
-              max: settleAvail(order, l),
-              qty: cart[l.productId] || 0,
-              sub: `${formatNumber(settleAvail(order, l))} left · ${formatCurrency(l.sellingPrice || 0)} a box`,
-            }))}
-            onChange={setQty}
-          />
-        </div>
-
-        {chosen.length > 0 && (
-          <>
-            <div className="flex items-baseline justify-between gap-3 border-y border-white/[0.06] py-3">
-              <div className="min-w-0">
-                <p className="text-[13px] text-muted">To collect</p>
-                <p className="text-[11px] text-faint">
-                  {formatNumber(totalBoxes)} {totalBoxes === 1 ? 'box' : 'boxes'} · {chosen.length} {chosen.length === 1 ? 'product' : 'products'}
-                </p>
-              </div>
-              <span className="shrink-0 text-xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
-            </div>
-            {brands.map((b) => (
-              <PayBlock
-                key={b || 'none'}
-                labelled={brands.length > 1}
-                brandName={brandName(b)}
-                amount={brandAmount(b)}
-                options={optionsFor(b)}
-                picked={picked[b]}
-                onPick={(id) => setPicked((p) => ({ ...p, [b]: id }))}
+        {groups.map((g) => {
+          const gc = chosenIn(g);
+          const opts = optionsFor(g.brandId);
+          const only = opts && opts.length === 1 ? opts[0] : null;
+          return (
+            <section key={g.brandId || 'none'}>
+              {/* A heading per brand, saying where that brand pays. With one brand on the order there is
+                  nothing to tell apart, so no heading. */}
+              {groups.length > 1 && (
+                <div className="mb-2 flex items-baseline justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-foreground">{g.brandName || 'Other'}</h3>
+                  {only && <span className="text-xs text-muted">pays to {only.name}</span>}
+                </div>
+              )}
+              <StepperLines
+                items={g.lines.map((l) => ({
+                  key: l.productId,
+                  name: l.name,
+                  max: settleAvail(order, l),
+                  qty: cart[l.productId] || 0,
+                  sub: `${formatNumber(settleAvail(order, l))} left · ${formatCurrency(l.sellingPrice || 0)} a box`,
+                }))}
+                onChange={setQty}
               />
-            ))}
-          </>
+              {gc.length > 0 && (
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-baseline justify-between gap-3 border-y border-white/[0.06] py-3">
+                    <div className="min-w-0">
+                      <p className="text-[13px] text-muted">To collect{groups.length > 1 && g.brandName ? ` · ${g.brandName}` : ''}</p>
+                      <p className="text-[11px] text-faint">
+                        {formatNumber(boxesIn(g))} {boxesIn(g) === 1 ? 'box' : 'boxes'} · {gc.length} {gc.length === 1 ? 'product' : 'products'}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xl font-bold tabular-nums text-brand-600">{formatCurrency(amountIn(g))}</span>
+                  </div>
+                  <PayBlock
+                    labelled={false}
+                    brandName={g.brandName}
+                    amount={amountIn(g)}
+                    options={opts}
+                    picked={picked[g.brandId]}
+                    onPick={(id) => setPicked((p) => ({ ...p, [g.brandId]: id }))}
+                  />
+                </div>
+              )}
+            </section>
+          );
+        })}
+
+        {/* Only when two or more brands are in it: what the whole submission adds up to. */}
+        {brandsChosen.length > 1 && (
+          <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.06] pt-3">
+            <span className="text-[13px] text-muted">Total · {formatNumber(totalBoxes)} {totalBoxes === 1 ? 'box' : 'boxes'}</span>
+            <span className="text-xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
+          </div>
         )}
       </div>
     </Modal>
@@ -454,9 +482,12 @@ function RecordReturnModal({ order, onClose, onDone }) {
           <span className="text-sm font-semibold text-foreground">{formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} to return</span>
         </div>
       )}
-      <Button variant="secondary" onClick={onClose}>Cancel</Button>
-      <Button loading={create.isPending} disabled={!warehouseId || !hasCart} onClick={() => create.mutate()}>
-        <Undo2 className="h-4 w-4" /> Return to ZELab
+      <button type="button" onClick={onClose}
+        className="h-9 shrink-0 rounded-md px-3 text-[13px] font-medium text-muted transition hover:text-foreground">
+        Cancel
+      </button>
+      <Button className="h-9 shrink-0 px-4 text-[13px]" loading={create.isPending} disabled={!warehouseId || !hasCart} onClick={() => create.mutate()}>
+        <Undo2 className="h-3.5 w-3.5" /> Return boxes
       </Button>
     </>
   );
@@ -1173,7 +1204,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           }
           if (canAct && active && remaining > 0) {
             actions.push({
-              key: 'return', label: 'Return boxes', Icon: Undo2, onClick: () => setSub('return'),
+              key: 'return', label: 'Return boxes', short: 'Return', Icon: Undo2, onClick: () => setSub('return'),
               cls: 'bg-elevated text-foreground ring-white/[0.07]', icon: 'text-amber-400',
             });
           }
@@ -1205,33 +1236,27 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           }
 
           const [primary, ...rest] = actions;
-          // One filled button — the one you came for — and the others as plain text with an icon.
-          // Frames, rings and fills on every action made four things that all looked equally important.
-          const btn = 'flex items-center justify-center gap-2 rounded-lg px-3 transition duration-150 active:scale-[0.98] disabled:opacity-60';
-          const btnMain = 'h-11 text-sm font-semibold';
-          const btnSide = 'h-9 text-[13px] font-medium text-muted hover:bg-elevated/70 hover:text-foreground';
 
+          // ONE slim row. The other actions are plain words, no frame and no icon; the
+          // one you came for is a single small filled button on the right (where the thumb is).
+          // No full-width slab, no stack of three — the bar was taking a third of a phone screen.
+          // If a screen is too narrow for it all, the row wraps instead of squeezing.
+          const side = 'flex h-9 items-center rounded-md px-2.5 text-[13px] font-medium text-muted transition hover:bg-elevated/70 hover:text-foreground active:scale-[0.98] disabled:opacity-60';
           return (
-            <div className="w-full space-y-1">
+            <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <div className="flex min-w-0 flex-wrap items-center">
+                {rest.map((a) => (
+                  <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy} className={side}>
+                    {a.short || a.label}
+                  </button>
+                ))}
+              </div>
               {primary && (
                 <button type="button" onClick={primary.onClick} disabled={primary.busy}
-                  className={`${btn} ${btnMain} w-full ${primary.cls}`}>
-                  <primary.Icon className={`h-4 w-4 shrink-0 ${primary.icon}`} />
+                  className={`ml-auto flex h-9 shrink-0 items-center rounded-md px-3.5 text-[13px] font-semibold transition active:scale-[0.98] disabled:opacity-60 ${primary.cls}`}>
                   {primary.label}
                 </button>
               )}
-              {rest.length > 0 && (
-                <div className={`grid gap-1 ${rest.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                  {rest.map((a) => (
-                    <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy}
-                      className={`${btn} ${btnSide}`}>
-                      <a.Icon className={`h-4 w-4 shrink-0 ${a.icon}`} />
-                      {a.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
             </div>
           );
         })()}
