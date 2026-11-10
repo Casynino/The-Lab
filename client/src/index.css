@@ -385,7 +385,6 @@ body:has([data-login-scene]) { background-color: transparent; }
    active ones"). Everything finished stays as plain rows. A thin outline and a light tint; amber when the
    deadline is close or the request is waiting, red when it is late. The stars still show through. */
 .active-card {
-  display: block;
   width: 100%;
   border-radius: 1rem;
   padding: 1rem;
@@ -396,6 +395,21 @@ body:has([data-login-scene]) { background-color: transparent; }
 }
 .active-card:hover { filter: brightness(1.12); }
 .active-card:active { transform: scale(0.99); }
+.active-card--compact { padding: 0.8rem 0.95rem; border-radius: 0.95rem; }
+
+/* The pop-up window (order, Settle, More time, Return, every form): the same soft glass as the active
+   cards, a little more opaque so a long form stays easy to read, with a faint red light in its corner. */
+.modal-glass {
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(120% 55% at 100% 0%, rgba(238, 49, 36, 0.11), transparent 62%),
+    linear-gradient(155deg, rgba(31, 25, 26, 0.97), rgba(17, 16, 19, 0.97));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 32px 64px -28px rgba(0, 0, 0, 0.95);
+}
+.active-card[data-tone='brand'] {
+  background: linear-gradient(150deg, rgba(238, 49, 36, 0.16), rgba(238, 49, 36, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(238, 49, 36, 0.34), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
+}
 .active-card[data-tone='near'] {
   background: linear-gradient(150deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.04));
   box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.32), 0 10px 24px -16px rgba(0, 0, 0, 0.9);

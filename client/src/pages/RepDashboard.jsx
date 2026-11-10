@@ -26,35 +26,30 @@ function hoursLabel(h) {
 // ── Standard dash card ───────────────────────────────────────────────────────
 
 function DashCard({ icon: Icon, label, value, hint, badge, highlight, onClick }) {
+  // A small soft card, the same family as the active orders (Nino, 11 Nov 2026: "the home page feels
+  // big and too much"): the icon, the name, and a figure only where there is one worth showing.
   return (
-    <motion.button
-      whileTap={{ scale: 0.985 }}
+    <button
+      type="button"
       onClick={onClick}
-      className={clsx(
-        'flex w-full flex-col rounded-2xl border p-4 text-left shadow-card transition',
-        highlight
-          ? 'border-brand-500/50 bg-gradient-to-br from-brand-500/15 via-surface to-surface'
-          : 'border-border bg-surface hover:bg-elevated',
-      )}
+      data-tone={highlight ? 'brand' : undefined}
+      className="active-card active-card--compact flex flex-col"
     >
-      <div className="mb-2.5 flex items-center justify-between">
-        <span className={clsx(
-          'relative flex h-8 w-8 items-center justify-center rounded-lg',
-          highlight ? 'bg-brand-500 text-white' : 'bg-elevated text-brand-500',
-        )}>
-          <Icon className="h-4 w-4" />
-          {badge != null && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-              {badge}
-            </span>
-          )}
-        </span>
-        <ArrowRight className="h-3.5 w-3.5 text-faint" />
-      </div>
-      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{label}</span>
-      <span className="mt-0.5 text-lg font-bold leading-tight text-foreground">{value}</span>
-      {hint && <span className="mt-0.5 line-clamp-1 text-[11px] text-faint">{hint}</span>}
-    </motion.button>
+      <span className={clsx(
+        'relative flex h-7 w-7 items-center justify-center rounded-lg',
+        highlight ? 'bg-brand-500 text-white' : 'bg-white/[0.07] text-brand-500',
+      )}>
+        <Icon className="h-4 w-4" />
+        {badge != null && (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+            {badge}
+          </span>
+        )}
+      </span>
+      <span className="mt-2.5 text-[13px] font-semibold text-foreground">{label}</span>
+      {value && <span className="mt-0.5 text-[17px] font-bold leading-tight tabular-nums text-foreground">{value}</span>}
+      {hint && <span className="mt-0.5 text-[11px] text-muted">{hint}</span>}
+    </button>
   );
 }
 
@@ -113,8 +108,6 @@ export default function RepDashboard() {
         <DashCard
           icon={ClipboardList}
           label="Request stock"
-          value={'Order from ZELab'}
-          hint="Request new inventory"
           badge={pendingRequests > 0 ? pendingRequests : undefined}
           onClick={() => navigate('/stock-requests')}
         />
@@ -129,16 +122,12 @@ export default function RepDashboard() {
         />
         <DashCard
           icon={NotebookPen}
-          label="Daily Report"
-          value="Tap to Report"
-          hint="Opening or closing count"
+          label="Daily report"
           onClick={() => navigate('/daily-reports')}
         />
         <DashCard
           icon={Undo2}
           label="Return stock"
-          value={'Return to ZELab'}
-          hint="Send back unsold boxes"
           onClick={() => navigate('/settlements')}
         />
       </div>
@@ -146,17 +135,27 @@ export default function RepDashboard() {
       {/* Open orders */}
       {orders.length > 0 && (
         <div>
-          {/* One short heading, and on a phone the same soft cards as the Settle page (the orders here
-              have exactly the same shape). The long reminder line is gone — "too many words". */}
-          <h2 className="mb-3 px-1 text-lg font-bold text-foreground lg:text-sm lg:font-semibold">
+          {/* One short heading, and on a phone compact versions of the Settle page's soft cards (the orders
+              here have exactly the same shape). Most urgent first, at most three — the rest are one tap
+              away on the Settle page. */}
+          <h2 className="mb-3 px-1 text-base font-semibold text-foreground lg:text-sm">
             Open orders
             <span className="ml-2 text-sm font-medium text-muted lg:hidden">{orders.length}</span>
           </h2>
 
-          <div className="space-y-3 lg:hidden">
-            {orders.map((o) => (
-              <ActiveOrderCard key={o.id} s={o} onClick={() => setViewing(o.id)} />
+          <div className="space-y-2.5 lg:hidden">
+            {[...orders].sort((a, b) => (a.hoursRemaining ?? 1e9) - (b.hoursRemaining ?? 1e9)).slice(0, 3).map((o) => (
+              <ActiveOrderCard compact key={o.id} s={o} onClick={() => setViewing(o.id)} />
             ))}
+            {orders.length > 3 && (
+              <button
+                type="button"
+                onClick={() => navigate('/settlements')}
+                className="px-1 pt-1 text-[13px] font-semibold text-brand-600 transition hover:text-brand-500"
+              >
+                See all {orders.length} orders
+              </button>
+            )}
           </div>
 
           {/* Desktop table */}

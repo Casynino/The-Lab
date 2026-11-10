@@ -4,7 +4,7 @@ import { Remaining, BoxCount } from '@/components/ui';
 
 // ── Rep-facing card for an ACTIVE order ─────────────────────────────────────
 
-export default function ActiveOrderCard({ s, onClick }) {
+export default function ActiveOrderCard({ s, onClick, compact = false }) {
   const overdue = s.status === 'OVERDUE';
   const approaching = s.approaching;
 
@@ -26,20 +26,20 @@ export default function ActiveOrderCard({ s, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="active-card"
+      className={clsx('active-card block', compact && 'active-card--compact')}
       data-tone={overdue ? 'late' : approaching ? 'near' : undefined}
     >
       {/* The order, and how long is left — red words ("52h overdue") when it is late. There is no
           "Partial" / "Open" badge: nobody needs to be told an order they are working on is not
           finished, and the bar below already shows how far it is. */}
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-foreground">{s.settlementNumber}</span>
+        <span className={clsx(compact ? 'text-[13px] font-semibold text-muted' : 'text-sm font-semibold text-foreground')}>{s.settlementNumber}</span>
         <Remaining hours={s.hoursRemaining} />
       </div>
 
       {/* What is still owed, and the boxes that stand for it. */}
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <div className={clsx('min-w-0 text-[22px] font-bold leading-none tabular-nums', accentText)}>{formatCurrency(s.balance)}</div>
+      <div className={clsx('flex items-end justify-between gap-3', compact ? 'mt-1.5' : 'mt-2')}>
+        <div className={clsx('min-w-0 font-bold leading-none tabular-nums', compact ? 'text-lg' : 'text-[22px]', accentText)}>{formatCurrency(s.balance)}</div>
         {/* An order with no linked transfer has issued 0, and "0 boxes left" on a live order would be
             a lie about a finished one. */}
         {issued > 0 && (
@@ -60,7 +60,7 @@ export default function ActiveOrderCard({ s, onClick }) {
 
       {/* How far along: settled, returned, and waiting for approval, as one thin bar. */}
       {issued > 0 && (
-        <div className="mt-3 flex h-1 overflow-hidden rounded-full bg-white/[0.08]">
+        <div className={clsx('flex overflow-hidden rounded-full bg-white/[0.08]', compact ? 'mt-2.5 h-[3px]' : 'mt-3 h-1')}>
           <div className="bg-emerald-400" style={{ width: pct(b.settled) }} />
           <div className="bg-sky-400" style={{ width: pct(b.returned) }} />
           <div className="bg-amber-400" style={{ width: pct(withOffice) }} />

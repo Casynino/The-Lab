@@ -654,15 +654,17 @@ function SelfExtendModal({ order, onClose, onDone }) {
       </>
     }>
       <div className="space-y-4 text-sm">
-        <div className="rounded-xl border border-border bg-elevated p-3">
-          <div className="flex justify-between"><span className="text-muted">Current deadline</span><span className="font-medium">{formatDateTime(order.deadlineAt)}</span></div>
-          <div className="mt-1 flex justify-between"><span className="text-muted">Extra time</span><span className="font-medium text-brand-600">+{order.extensionHours || 96} hours</span></div>
-          <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold">
+        {/* Plain rows on the window, no box round them. */}
+        <div className="divide-y divide-white/[0.07]">
+          <div className="flex justify-between py-2.5"><span className="text-muted">Current deadline</span><span className="font-medium">{formatDateTime(order.deadlineAt)}</span></div>
+          <div className="flex justify-between py-2.5"><span className="text-muted">Extra time</span><span className="font-medium text-brand-600">+{order.extensionHours || 96} hours</span></div>
+          <div className="flex justify-between py-2.5 font-semibold">
             <span>New deadline</span><span>{formatDateTime(newDeadline)}</span>
           </div>
         </div>
 
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-300">
+        {/* The warning keeps its colour and its words but not its box: an amber line down the side. */}
+        <div className="border-l-2 border-amber-400/60 pl-3 text-amber-300">
           <div className="mb-1.5 flex items-center gap-2 font-semibold text-amber-400">
             <ShieldAlert className="h-4 w-4" /> What changes if you take it
           </div>

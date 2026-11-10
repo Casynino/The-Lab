@@ -502,16 +502,16 @@ const SIZES = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl'
 export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   if (!open) return null;
   return (
-    <div className="modal-safe fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 backdrop-blur-sm">
-      <div className={clsx('modal-panel card my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
+    <div className="modal-safe fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 backdrop-blur-md">
+      <div className={clsx('modal-panel modal-glass my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-5 py-4">
           <h3 className="text-base font-semibold text-foreground">{title}</h3>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-faint hover:bg-elevated hover:text-muted">
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border px-5 py-4">{footer}</div>}
+        {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-white/[0.07] px-5 py-4">{footer}</div>}
       </div>
     </div>
   );

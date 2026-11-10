@@ -12,16 +12,13 @@ function Row({ label, pct, hint, reward, ready, readyLabel, markers = [], onClic
     <Tag
       type={onClick ? 'button' : undefined}
       onClick={onClick}
-      className={clsx(
-        'block w-full px-4 py-2.5 text-left transition',
-        onClick && 'hover:bg-white/[0.02] active:bg-white/[0.04]',
-      )}
+      className={clsx('active-card active-card--compact block', !onClick && 'pointer-events-none')}
     >
       {/* The share of the way there is the headline, not the money. A long
           currency string set large dominates the screen and reads as a wall;
           a percentage is one glance, and the amounts stay legible below it. */}
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</p>
+        <p className="text-xs font-medium text-muted">{label}</p>
         <span className={clsx(
           'text-xl font-bold leading-none tabular-nums',
           ready ? 'text-emerald-400' : 'text-brand-600',
@@ -70,7 +67,7 @@ function Row({ label, pct, hint, reward, ready, readyLabel, markers = [], onClic
   );
 }
 
-// Commission and bonus, stacked in one card with a hairline between them.
+// The wallet and the bonus, one soft card each.
 export default function ProgressRows({ commission, bonus, onOpenCommission }) {
   const rows = [];
 
@@ -122,9 +119,10 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
   if (!rows.length) return null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-      {rows.map((row, i) => (
-        <div key={row.key} className={clsx(i > 0 && 'border-t border-border')}>{row}</div>
+    // One soft card per goal (the same look as the active orders), not one box with a line through it.
+    <div className="space-y-3">
+      {rows.map((row) => (
+        <div key={row.key}>{row}</div>
       ))}
     </div>
   );

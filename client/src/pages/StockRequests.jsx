@@ -418,7 +418,7 @@ function RepRequestCard({ r, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="active-card"
+      className="active-card block"
       data-tone="near"
     >
       <div className="flex items-center justify-between gap-2">
