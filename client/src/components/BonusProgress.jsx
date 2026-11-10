@@ -20,13 +20,12 @@ export default function BonusProgress({ p }) {
   const cols = Math.min(p.tiers.length, 3);
 
   return (
-    <div className={clsx(
-      'rounded-2xl border p-5',
-      claimable ? 'border-emerald-500/40 bg-emerald-500/[0.06]' : 'border-border bg-surface',
-    )}>
+    // No card round it (Nino, 11 Nov 2026: "I don't like the big shape" — he likes the galaxy behind):
+    // the rings sit straight on the background, each with a soft glow in its own colour.
+    <div className="px-1 pt-2">
       <p className="text-xs font-medium text-muted">Sales bonus</p>
 
-      <div className="mt-4 grid gap-x-3 gap-y-5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+      <div className="mt-6 grid gap-x-3 gap-y-8" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {p.tiers.map((t) => {
           const current = next && t.ruleId === next.ruleId;
           const pct = t.reached
@@ -35,9 +34,11 @@ export default function BonusProgress({ p }) {
           const color = t.reached ? GREEN : current ? RED : RED_LATER;
           return (
             <div key={t.ruleId} className="flex min-w-0 flex-col items-center text-center">
-              <Ring size={78} stroke={7} total={100} segments={[{ value: pct, color }]}>
-                <span className={clsx('text-[15px] font-bold leading-none tabular-nums', t.reached ? 'text-emerald-300' : 'text-foreground')}>{pct}%</span>
-              </Ring>
+              <div style={{ filter: `drop-shadow(0 0 7px ${t.reached ? 'rgba(52,211,153,0.35)' : current ? 'rgba(238,49,36,0.42)' : 'rgba(238,49,36,0.16)'})` }}>
+                <Ring size={84} stroke={7} total={100} segments={[{ value: pct, color }]}>
+                  <span className={clsx('text-base font-bold leading-none tabular-nums', t.reached ? 'text-emerald-300' : 'text-foreground')}>{pct}%</span>
+                </Ring>
+              </div>
               <p className={clsx('mt-2.5 text-[15px] font-semibold tabular-nums', t.reached ? 'text-emerald-300' : 'text-foreground')}>
                 {formatCurrency(t.bonusAmount)}
               </p>
@@ -47,7 +48,7 @@ export default function BonusProgress({ p }) {
         })}
       </div>
 
-      <p className="mt-5 text-[13px] text-muted">
+      <p className="mt-7 text-center text-[13px] text-muted">
         {next
           ? <><span className="font-medium text-foreground">{formatCurrency(next.remaining)}</span> to go for the next bonus</>
           : <span className="font-medium text-emerald-300">Every bonus reached</span>}
@@ -55,11 +56,11 @@ export default function BonusProgress({ p }) {
 
       {claimable && (
         <>
-          <p className="mt-3 flex items-center gap-2 text-[13px] font-semibold text-emerald-300">
+          <p className="mt-4 flex items-center justify-center gap-2 text-[13px] font-semibold text-emerald-300">
             <Trophy className="h-4 w-4 shrink-0" aria-hidden="true" />
             {formatCurrency(claimable.bonusAmount)} is ready to take
           </p>
-          <p className="mt-1 text-xs leading-snug text-muted">
+          <p className="mt-1 text-center text-xs leading-snug text-muted">
             {next
               ? <>You can take it now, or keep selling for the next one. Taking a bonus starts your count again from zero.</>
               : <>Taking it starts your count again from zero.</>}
