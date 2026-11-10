@@ -353,39 +353,29 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
 
 function PenaltyBreakdown({ breakdown }) {
   if (!breakdown?.length) return null;
+  // Plain rows on the page, no card and no table (Nino, 11 Nov 2026: the Fines tab too should sit on the
+  // galaxy like the others). Only reps see this; the owner's fines are the table in FinesHistory.
   return (
-    <Card className="mt-4 border border-rose-500/20 bg-rose-500/5">
-      <CardHeader
-        title="Penalty deductions by order"
-        subtitle="Late-settlement fines (TZS 10,000/day) actually taken from your wallet balance."
-      />
-      <Table>
-        <THead>
-          <TR>
-            <TH>Order</TH>
-            <TH>Days overdue</TH>
-            <TH>Daily rate</TH>
-            <TH className="text-right">Total deducted</TH>
-            <TH>Status</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {breakdown.map((p) => (
-            <TR key={p.settlementId}>
-              <TD className="font-medium">{p.settlementNumber}</TD>
-              <TD className="text-rose-400">{p.daysOverdue}</TD>
-              <TD>{formatCurrency(p.penaltyPerDay)}</TD>
-              <TD className="text-right font-semibold text-rose-400">−{formatCurrency(p.totalPenalty)}</TD>
-              <TD className="text-xs">
-                {p.closed ? <span className="text-emerald-500">Order closed</span>
-                  : p.exemptPendingReturn ? <span className="text-sky-400">Paused — return under review</span>
-                    : <span className="text-rose-400">Still accruing daily</span>}
-              </TD>
-            </TR>
-          ))}
-        </TBody>
-      </Table>
-    </Card>
+    <section className="mt-6 px-1">
+      <h3 className="text-sm font-semibold text-foreground">Fines by order</h3>
+      <p className="mt-0.5 text-xs text-muted">Taken from your wallet balance.</p>
+      <ul className="mt-2 divide-y divide-white/[0.06]">
+        {breakdown.map((p) => (
+          <li key={p.settlementId} className="flex items-start justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="text-[15px] font-semibold text-foreground">{p.settlementNumber}</p>
+              <p className="mt-0.5 text-xs text-muted">
+                {p.daysOverdue} {Number(p.daysOverdue) === 1 ? 'day' : 'days'} overdue · {formatCurrency(p.penaltyPerDay)} a day
+              </p>
+              <p className={clsx('mt-0.5 text-xs', p.closed ? 'text-emerald-400' : p.exemptPendingReturn ? 'text-sky-400' : 'text-rose-300')}>
+                {p.closed ? 'Order closed' : p.exemptPendingReturn ? 'Paused — return under review' : 'Still accruing daily'}
+              </p>
+            </div>
+            <p className="shrink-0 text-[15px] font-semibold tabular-nums text-rose-300">−{formatCurrency(p.totalPenalty)}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -444,6 +434,32 @@ function FinesHistory({ admin }) {
   const forgivenCount = all.length - active.length;
   const items = showForgiven ? all : active;
   if (!all.length) return null;
+  const kindLabel = (p) => (p.kind === 'ADJUSTMENT' ? 'Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return Delay Fine (24h)' : 'Late Settlement Fine');
+  if (!admin) {
+    // The rep's own history: plain rows on the page — what, which order and when on the left, the amount
+    // on the right. (Forgiven fines are hidden here, as before; only the owner can show them.)
+    return (
+      <section className="mt-9 px-1">
+        <h3 className="text-sm font-semibold text-foreground">Fine history</h3>
+        <p className="mt-0.5 text-xs text-muted">
+          {active.length ? `${active.length} fine${active.length !== 1 ? 's' : ''} still reducing your balance.` : 'Nothing is reducing your balance now.'}
+        </p>
+        <ul className="mt-2 divide-y divide-white/[0.06]">
+          {items.map((p) => (
+            <li key={p.id} className="flex items-start justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="text-[13px] text-foreground">{kindLabel(p)}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {p.settlement?.settlementNumber ? `${p.settlement.settlementNumber} · ` : ''}{formatDateTime(p.appliedAt)}
+                </p>
+              </div>
+              <p className="shrink-0 text-sm font-semibold tabular-nums text-rose-300">−{formatCurrency(p.amount)}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
   return (
     <Card className="mt-6">
       <CardHeader
@@ -565,6 +581,18 @@ function WithdrawalProgress({ available, minimum }) {
   );
 }
 
+// An empty tab, said quietly on the page: a small icon, a title, one line. No card, no circle round the
+// icon (Nino, 11 Nov 2026: the same galaxy background as every other tab).
+function QuietEmpty({ icon: Icon, title, text }) {
+  return (
+    <div className="mt-16 px-1 text-center">
+      <Icon className="mx-auto h-6 w-6 text-emerald-400/80" aria-hidden="true" />
+      <p className="mt-3 text-sm font-medium text-foreground">{title}</p>
+      <p className="mt-1 text-xs text-muted">{text}</p>
+    </div>
+  );
+}
+
 function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -663,7 +691,7 @@ function RepView() {
       {tab === 'bonus' && (
         bonusProgress?.configured
           ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
-          : <Card className="mt-4"><EmptyState title="No bonus running" description="Nothing to chase right now." /></Card>
+          : <QuietEmpty icon={TrendingUp} title="No bonus running" text="Nothing to chase right now." />
       )}
 
       {tab === 'withdrawals' && (
@@ -673,7 +701,7 @@ function RepView() {
               word for what happened. The date says PAID when it was paid — the one thing a rep opens
               this list to check. */}
           <section className="px-1">
-            <h3 className="text-sm font-semibold text-foreground">My withdrawal requests</h3>
+            <h3 className="text-sm font-semibold text-foreground">My withdrawals</h3>
             <p className="mt-0.5 text-xs text-muted">Minimum {formatCurrency(c.minWithdrawal)}</p>
             {!withdrawals.length ? (
               <p className="mt-4 text-sm text-muted">No withdrawals yet. Settle boxes and the first request will appear here.</p>
@@ -691,7 +719,7 @@ function RepView() {
             <FinesHistory admin={false} />
           </>
         ) : (
-          <Card className="mt-4"><EmptyState title="No fines" description="Nothing is reducing your balance." /></Card>
+          <QuietEmpty icon={ShieldCheck} title="No fines" text="Nothing is reducing your balance." />
         )
       )}
 
