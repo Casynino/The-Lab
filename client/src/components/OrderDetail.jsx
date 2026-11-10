@@ -26,10 +26,9 @@ function pendingBoxesByProduct(order) {
 
 // A small uppercase rule the eye can scan on a phone, instead of a stack of
 // identical form labels.
-function StepHead({ n, children, right }) {
+function StepHead({ children, right }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/15 text-[10px] font-bold text-brand-600">{n}</span>
       <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">{children}</span>
       {right && <span className="ml-auto text-[11px] text-faint">{right}</span>}
     </div>
@@ -42,21 +41,21 @@ function StepHead({ n, children, right }) {
 function BoxStepper({ value, max, onChange }) {
   const n = Number(value) || 0;
   const set = (next) => onChange(String(Math.max(0, Math.min(max, next))));
-  const btn = 'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-elevated text-xl font-bold text-foreground ring-1 ring-white/[0.08] transition active:scale-95 disabled:opacity-30';
+  const btn = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-elevated text-lg font-bold text-foreground ring-1 ring-white/[0.08] transition active:scale-95 disabled:opacity-30';
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       <button type="button" className={btn} onClick={() => set(n - 1)} disabled={n <= 0} aria-label="One fewer box">−</button>
       <input
         type="number" inputMode="numeric" min="0" max={max} value={value}
         onChange={(e) => set(Number(e.target.value))}
-        className="h-12 min-w-0 flex-1 rounded-xl bg-elevated text-center text-2xl font-bold tabular-nums text-foreground ring-1 ring-white/[0.08] focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+        className="h-10 min-w-0 flex-1 rounded-lg bg-elevated text-center text-lg font-bold tabular-nums text-foreground ring-1 ring-white/[0.08] focus:outline-none focus:ring-2 focus:ring-brand-500/50"
       />
       <button type="button" className={btn} onClick={() => set(n + 1)} disabled={n >= max} aria-label="One more box">+</button>
       {max > 1 && (
         <button
           type="button"
           onClick={() => set(max)}
-          className="shrink-0 rounded-xl bg-brand-500/15 px-3 py-3 text-xs font-semibold text-brand-600 ring-1 ring-brand-500/25 transition active:scale-95"
+          className="h-10 shrink-0 rounded-lg bg-brand-500/15 px-3 text-xs font-semibold text-brand-600 ring-1 ring-brand-500/25 transition active:scale-95"
         >
           All {formatNumber(max)}
         </button>
@@ -127,7 +126,7 @@ function SettleOneModal({ order, onClose, onDone }) {
   // to M-Pesa and Civlily to Airtel Money, so the server answers with the ONE
   // account for this product's brand. There is no filtering to do here and no
   // second copy of the rule: whatever comes back is what may be used.
-  const { data: accountOptions = [] } = useQuery({
+  const { data: accountOptions = [], isLoading: accountsLoading } = useQuery({
     queryKey: ['settlements', 'payment-accounts', line?.brandId || ''],
     queryFn: async () => unwrap(await api.get('/settlements/payment-accounts', {
       params: line?.brandId ? { brandId: line.brandId } : undefined,
@@ -177,7 +176,7 @@ function SettleOneModal({ order, onClose, onDone }) {
             Cancel
           </button>
           <Button
-            className="flex-1 justify-center py-3 text-[15px]"
+            className="flex-1 justify-center"
             loading={settle.isPending}
             disabled={!ready}
             onClick={() => settle.mutate()}
@@ -186,19 +185,17 @@ function SettleOneModal({ order, onClose, onDone }) {
           </Button>
         </div>
       }>
-      <div className="space-y-5">
+      <div className="space-y-4">
         <p className="text-[13px] leading-snug text-muted">Pay first, then submit for approval.</p>
         {lines.length === 0 ? (
           <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-faint">Every outstanding box is already submitted and awaiting approval.</p>
         ) : (<>
           <div>
-            <StepHead n="1" right={lines.length > 1 ? `${formatNumber(lines.length)} to choose from` : undefined}>What you sold</StepHead>
-            {/* One product is not a choice, so it is stated rather than put in
-                a dropdown the rep cannot change. */}
+            {/* One product is not a choice, so it is stated — as plain text, not a card. */}
             {lines.length === 1 ? (
-              <div className="rounded-xl bg-elevated/60 px-4 py-3 ring-1 ring-white/[0.07]">
-                <p className="text-[15px] font-semibold leading-tight text-foreground">{line?.name}</p>
-                <p className="mt-1 text-xs text-faint">
+              <div>
+                <p className="text-[15px] font-semibold leading-snug text-foreground">{line?.name}</p>
+                <p className="mt-0.5 text-xs text-faint">
                   {formatNumber(max)} left · {formatCurrency(line?.sellingPrice || 0)} a box
                 </p>
               </div>
@@ -210,7 +207,7 @@ function SettleOneModal({ order, onClose, onDone }) {
           </div>
 
           <div>
-            <StepHead n="2" right={lines.length > 1 ? `${formatNumber(max)} left · ${formatCurrency(line?.sellingPrice || 0)} a box` : undefined}>How many boxes</StepHead>
+            <StepHead right={lines.length > 1 ? `${formatNumber(max)} left · ${formatCurrency(line?.sellingPrice || 0)} a box` : undefined}>How many boxes</StepHead>
             <BoxStepper value={boxes} max={max} onChange={setBoxes} />
           </div>
 
@@ -218,9 +215,12 @@ function SettleOneModal({ order, onClose, onDone }) {
 
           {only ? (
             <div>
-              <StepHead n="3">Where to pay it</StepHead>
+              <StepHead>Pay to</StepHead>
               <PayTo account={only} brandName={line?.brandName} />
             </div>
+          ) : accountsLoading ? (
+            // Still asking the server: say nothing alarming yet.
+            <p className="text-[13px] text-faint">Loading…</p>
           ) : accountOptions.length === 0 ? (
             /* A brand with no account of its own leaves the rep staring at an
                empty dropdown and a Submit button that never enables. Say why,
@@ -254,8 +254,8 @@ function PayBlock({ step, brandName, amount, options, picked, onPick, labelled }
   const only = options && options.length === 1 ? options[0] : null;
   return (
     <div>
-      <StepHead n={step} right={labelled ? formatCurrency(amount) : undefined}>
-        {labelled ? `Pay ${brandName || 'this brand'}` : 'Where to pay it'}
+      <StepHead right={labelled ? formatCurrency(amount) : undefined}>
+        {labelled ? `Pay ${brandName || 'this brand'}` : 'Pay to'}
       </StepHead>
       {!options ? (
         <p className="text-[13px] text-faint">Loading…</p>
@@ -342,7 +342,7 @@ function SettleManyModal({ order, onClose, onDone }) {
             className="shrink-0 rounded-xl px-4 py-3 text-sm font-medium text-muted transition hover:text-foreground">
             Cancel
           </button>
-          <Button className="flex-1 justify-center py-3 text-[15px]" loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
+          <Button className="flex-1 justify-center" loading={settle.isPending} disabled={!ready} onClick={() => settle.mutate()}>
             {ready ? `Submit ${formatCurrency(total)}` : 'Submit for approval'}
           </Button>
         </div>
@@ -351,7 +351,7 @@ function SettleManyModal({ order, onClose, onDone }) {
         <p className="text-[13px] leading-snug text-muted">Pay first, then submit for approval.</p>
 
         <div>
-          <StepHead n="1" right={chosen.length ? `${chosen.length} chosen` : undefined}>What you sold</StepHead>
+          <StepHead right={chosen.length ? `${chosen.length} chosen` : undefined}>What you sold</StepHead>
           <StepperLines
             items={lines.map((l) => ({
               key: l.productId,
@@ -366,19 +366,18 @@ function SettleManyModal({ order, onClose, onDone }) {
 
         {chosen.length > 0 && (
           <>
-            <div className="rounded-xl bg-elevated/60 p-4 ring-1 ring-white/[0.07]">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">To collect</p>
-              <div className="mt-2 flex items-baseline justify-between gap-3">
-                <span className="min-w-0 text-sm text-muted">
+            <div className="flex items-baseline justify-between gap-3 border-y border-white/[0.06] py-3">
+              <div className="min-w-0">
+                <p className="text-[13px] text-muted">To collect</p>
+                <p className="text-[11px] text-faint">
                   {formatNumber(totalBoxes)} {totalBoxes === 1 ? 'box' : 'boxes'} · {chosen.length} {chosen.length === 1 ? 'product' : 'products'}
-                </span>
-                <span className="shrink-0 text-2xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
+                </p>
               </div>
+              <span className="shrink-0 text-xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
             </div>
-            {brands.map((b, i) => (
+            {brands.map((b) => (
               <PayBlock
                 key={b || 'none'}
-                step={String(i + 2)}
                 labelled={brands.length > 1}
                 brandName={brandName(b)}
                 amount={brandAmount(b)}
@@ -1011,38 +1010,35 @@ function PayTo({ account, brandName }) {
   };
 
   return (
-    <div className={`relative overflow-hidden rounded-xl bg-surface p-4 ring-1 ${b.ring}`}>
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${b.glow} to-transparent`} aria-hidden="true" />
-
-      <div className="relative flex items-center gap-2">
-        {/* White plate behind it: both logos are drawn for light backgrounds
-            and red on near-black is hard to read. */}
+    <div className="rounded-lg bg-elevated/50 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        {/* White plate behind the logo: both are drawn for light backgrounds. */}
         {Logo ? (
-          <span className="inline-flex items-center rounded-md bg-white px-2 py-1">
-            <Logo className="h-4" />
+          <span className="inline-flex items-center rounded bg-white px-1.5 py-0.5">
+            <Logo className="h-3.5" />
           </span>
         ) : (
-          <span className="text-sm font-semibold text-foreground">{account?.name}</span>
+          <span className="text-[13px] font-semibold text-foreground">{account?.name}</span>
         )}
         <span className="ml-auto text-[11px] text-faint">{brandName || 'This brand'} settles here</span>
       </div>
 
       {number ? (
         <>
-          <div className="relative mt-3 flex items-center gap-3">
-            <span className="select-all font-mono text-[26px] font-bold leading-none tracking-wide text-foreground">{number}</span>
+          <div className="mt-2 flex items-center gap-3">
+            <span className="select-all font-mono text-lg font-bold leading-none tracking-wide text-foreground">{number}</span>
             <button
               type="button"
               onClick={copy}
-              className="ml-auto shrink-0 rounded-lg bg-elevated px-3 py-2 text-xs font-semibold text-foreground ring-1 ring-white/[0.10] transition active:scale-95"
+              className="ml-auto h-8 shrink-0 rounded-lg bg-elevated px-3 text-xs font-semibold text-foreground ring-1 ring-white/[0.10] transition active:scale-95"
             >
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          {holder && <p className="relative mt-1.5 text-sm font-medium text-muted">{holder}</p>}
+          {holder && <p className="mt-1 text-xs text-muted">{holder}</p>}
         </>
       ) : (
-        <p className="relative mt-2 text-sm font-semibold text-foreground">{account?.name}</p>
+        <p className="mt-1.5 text-[13px] font-semibold text-foreground">{account?.name}</p>
       )}
     </div>
   );
@@ -1056,15 +1052,14 @@ function SettleSummary({ boxes, unitPrice, productName }) {
   const total = n * (Number(unitPrice) || 0);
   if (n <= 0) return null;
   return (
-    <div className="rounded-xl bg-elevated/60 p-4 ring-1 ring-white/[0.07]">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">To collect</p>
-      <div className="mt-2 flex items-baseline justify-between gap-3">
-        <span className="min-w-0 truncate text-sm text-muted">
-          {formatNumber(n)} {n === 1 ? 'box' : 'boxes'} &times; {formatCurrency(unitPrice)}
-        </span>
-        <span className="shrink-0 text-2xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
+    <div className="flex items-baseline justify-between gap-3 border-y border-white/[0.06] py-3">
+      <div className="min-w-0">
+        <p className="text-[13px] text-muted">To collect</p>
+        <p className="truncate text-[11px] text-faint">
+          {formatNumber(n)} {n === 1 ? 'box' : 'boxes'} &times; {formatCurrency(unitPrice)}{productName ? ` · ${productName}` : ''}
+        </p>
       </div>
-      {productName && <p className="mt-1 truncate text-[11px] text-faint">{productName}</p>}
+      <span className="shrink-0 text-xl font-bold tabular-nums text-brand-600">{formatCurrency(total)}</span>
     </div>
   );
 }
