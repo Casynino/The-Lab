@@ -359,7 +359,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
       open
       onClose={onClose}
       size="lg"
-      title={`Order ${request.requestNumber}`}
+      title={request.requestNumber}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Close</Button>

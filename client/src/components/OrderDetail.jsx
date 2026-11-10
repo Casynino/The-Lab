@@ -1196,7 +1196,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
 
   return (
     <>
-      <Modal open onClose={onClose} size="xl" title={order ? `Order ${order.settlementNumber}` : 'Order'}
+      <Modal open onClose={onClose} size="xl" title={order ? order.settlementNumber : 'Order'}
         footer={order && (() => {
           /* Every one of these matters — settling money, sending stock back,
              buying more time. So they are one set: same size, same shape, each
