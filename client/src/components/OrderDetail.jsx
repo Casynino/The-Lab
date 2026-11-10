@@ -559,9 +559,9 @@ function FoldedRows({ title, rows, tone, keep = 3 }) {
         <span className="text-sm font-semibold text-foreground">{title}</span>
         <span className="text-[11px] text-faint">{formatNumber(rows.length)} time{rows.length === 1 ? '' : 's'}</span>
       </div>
-      <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-xl bg-elevated/40 ring-1 ring-white/[0.06]">
+      <ul className="divide-y divide-white/[0.06]">
         {shown.map((r) => (
-          <li key={r.key} className="px-3 py-2.5">
+          <li key={r.key} className="py-2.5">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[13px] font-semibold text-foreground">{r.left}</span>
               <span className={`shrink-0 text-[13px] font-semibold tabular-nums ${tone}`}>{r.right}</span>
@@ -1174,12 +1174,14 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           }
 
           const [primary, ...rest] = actions;
-          const btn = 'flex items-center justify-center gap-2 rounded-xl px-3 font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60';
-          const btnMain = 'h-12 text-[15px]'; // the one you came for
-          const btnSide = 'h-10 text-[13px]'; // the others, quieter
+          // One filled button — the one you came for — and the others as plain text with an icon.
+          // Frames, rings and fills on every action made four things that all looked equally important.
+          const btn = 'flex items-center justify-center gap-2 rounded-lg px-3 transition duration-150 active:scale-[0.98] disabled:opacity-60';
+          const btnMain = 'h-11 text-sm font-semibold';
+          const btnSide = 'h-9 text-[13px] font-medium text-muted hover:bg-elevated/70 hover:text-foreground';
 
           return (
-            <div className="w-full space-y-2">
+            <div className="w-full space-y-1">
               {primary && (
                 <button type="button" onClick={primary.onClick} disabled={primary.busy}
                   className={`${btn} ${btnMain} w-full ${primary.cls}`}>
@@ -1188,10 +1190,10 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 </button>
               )}
               {rest.length > 0 && (
-                <div className={`grid gap-2 ${rest.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                <div className={`grid gap-1 ${rest.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                   {rest.map((a) => (
                     <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy}
-                      className={`${btn} ${btnSide} ${a.cls}`}>
+                      className={`${btn} ${btnSide}`}>
                       <a.Icon className={`h-4 w-4 shrink-0 ${a.icon}`} />
                       {a.label}
                     </button>
@@ -1204,11 +1206,11 @@ export default function OrderDetailModal({ settlementId, onClose }) {
         })()}
       >
         {isLoading || !order ? <PageSpinner /> : (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {/* Who and what state, on one line — then the two dates below it as a
                 pair, since they are read together. Same four facts, arranged so
                 the eye is not hopping across a 2x2 of look-alike blocks. */}
-            <div className="rounded-xl bg-elevated/50 px-4 py-3 ring-1 ring-white/[0.06]">
+            <div>
               <div className="flex items-center gap-3">
                 {/* A rep opening their own order already knows whose it is.
                     Staff are looking at someone else's, so they still need it. */}
@@ -1379,11 +1381,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               const barSubs = Math.max(0, Math.min(subs, t.remainingBoxes));
               const barRets = Math.max(0, Math.min(rets, t.remainingBoxes - barSubs));
               return (
-                <div className={`relative overflow-hidden rounded-xl bg-surface p-3.5 ring-1 ${
-                  done ? 'ring-emerald-500/25' : overdue ? 'ring-rose-500/25' : 'ring-brand-500/25'}`}>
-                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${
-                    done ? 'from-emerald-500/[0.12]' : overdue ? 'from-rose-500/[0.12]' : 'from-brand-500/[0.12]'
-                  } to-transparent`} aria-hidden="true" />
+                <div className="relative border-t border-white/[0.06] pt-4">
 
                   <div className="relative flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     {/* Counted down rather than up: 28 went out, 16 came back as
@@ -1434,19 +1432,25 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               );
             })()}
 
-            {/* Money picture — all derived from settled/returned boxes. Until some money or
-                stock has moved, "Settled TSh 0" and "Returned TSh 0" say nothing the first two
-                cards do not, so a new order shows two cards, not four. */}
+            {/* Money picture — all derived from settled/returned boxes. Plain rows, not four tinted
+                cards; a row for settled or returned money only once there is some. */}
             {(() => {
               const t = order.order.totals;
-              const moved = t.settledValue > 0 || t.returnedValue > 0;
+              const rows = [
+                ['Order value', t.orderValue, 'text-foreground', true],
+                ['Settled', t.settledValue, 'text-emerald-400', t.settledValue > 0],
+                ['Returned', t.returnedValue, 'text-sky-300', t.returnedValue > 0],
+                ['Outstanding', t.outstanding, t.outstanding > 0 ? 'text-rose-400' : 'text-muted', true],
+              ].filter((r) => r[3]);
               return (
-                <div className={`grid grid-cols-2 gap-3 ${moved ? 'sm:grid-cols-4' : ''}`}>
-                  <MoneyCard label="Order value" value={formatCurrency(t.orderValue)} tone="brand" />
-                  {moved && <MoneyCard label="Settled" value={formatCurrency(t.settledValue)} tone="emerald" quiet={!(t.settledValue > 0)} />}
-                  {moved && <MoneyCard label="Returned value" value={formatCurrency(t.returnedValue)} />}
-                  <MoneyCard label="Outstanding" value={formatCurrency(t.outstanding)} tone="rose" quiet={!(t.outstanding > 0)} />
-                </div>
+                <dl className="divide-y divide-white/[0.06] border-y border-white/[0.06]">
+                  {rows.map(([label, value, tone]) => (
+                    <div key={label} className="flex items-baseline justify-between gap-3 py-2.5">
+                      <dt className="text-[13px] text-muted">{label}</dt>
+                      <dd className={`text-[15px] font-semibold tabular-nums ${tone}`}>{formatCurrency(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
               );
             })()}
 
@@ -1455,55 +1459,48 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 "SUED" and the numbers belong to nothing. One block per product
                 with its own bar says the same thing and fits. */}
             <div>
-              <div className="mb-2 text-sm font-semibold text-foreground">{order.order.lines.length === 1 ? 'Product' : 'Box by box'}</div>
-              <div className="space-y-2">
+              <div className="mb-1 flex items-baseline justify-between gap-3">
+                <span className="text-sm font-semibold text-foreground">{order.order.lines.length === 1 ? 'Product' : 'Products'}</span>
+                {order.order.totals.settledBoxes > 0 && (
+                  <span className="text-xs text-muted">
+                    Commission <span className="font-semibold text-brand-600">{formatCurrency(order.order.totals.commission)}</span>
+                  </span>
+                )}
+              </div>
+              {/* On a single-product order the box panel above already says everything but the NAME,
+                  so that row is the name and what was issued. Several products each get a thin bar. */}
+              <ul className="divide-y divide-white/[0.06]">
                 {order.order.lines.map((l, n) => {
+                  const single = order.order.lines.length === 1;
                   const total = Math.max(1, l.assigned);
-                  const pct = (n) => `${Math.max(0, (n / total) * 100)}%`;
-                  // On a single-product order this block's bar and its three
-                  // figures are the hero's, restated a third of the size two
-                  // hundred pixels lower. The product NAME is the only thing
-                  // here the hero cannot say, so on those orders that is all
-                  // it says.
-                  const echoesHero = order.order.lines.length === 1;
+                  const pct = (x) => `${Math.max(0, (x / total) * 100)}%`;
+                  const notes = [
+                    l.returned > 0 ? `${formatNumber(l.returned)} returned` : null,
+                    (l.pendingReturn || 0) > 0 ? `+${formatNumber(l.pendingReturn)} return pending` : null,
+                    overdue && l.remaining > 0 ? `${formatNumber(l.remaining)} missing` : null,
+                  ].filter(Boolean);
                   return (
-                    <div key={l.productId} className="rounded-xl bg-elevated/50 p-3 ring-1 ring-white/[0.06]">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-foreground">
-                          {!echoesHero && <span className="mr-2 inline-block min-w-4 text-faint">{n + 1}</span>}
-                          {l.name}
+                    <li key={l.productId} className="py-2.5">
+                      <div className="flex items-baseline gap-3">
+                        {!single && <span className="w-4 shrink-0 text-[11px] font-semibold tabular-nums text-faint">{n + 1}</span>}
+                        <span className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-foreground">{l.name}</span>
+                        <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                          {single ? `${formatNumber(l.assigned)} issued` : `${formatNumber(l.settled)} of ${formatNumber(l.assigned)} settled`}
                         </span>
-                        <span className="shrink-0 text-[11px] text-faint">{formatNumber(l.assigned)} issued</span>
                       </div>
-                      {!echoesHero && (
-                      <div className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className="bg-emerald-400" style={{ width: pct(l.settled) }} />
-                        <div className="bg-sky-400" style={{ width: pct(l.returned) }} />
-                      </div>
+                      {!single && (
+                        <div className="mt-1.5 flex h-1 overflow-hidden rounded-full bg-white/[0.07]">
+                          <div className="bg-emerald-400" style={{ width: pct(l.settled) }} />
+                          <div className="bg-sky-400" style={{ width: pct(l.returned) }} />
+                        </div>
                       )}
-                      {!echoesHero && (
-                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
-                        <span className="text-emerald-400">{formatNumber(l.settled)} settled</span>
-                        <span className="text-sky-400">
-                          {formatNumber(l.returned)} returned
-                          {(l.pendingReturn || 0) > 0 && <span className="ml-1 text-amber-400">+{formatNumber(l.pendingReturn)} pending</span>}
-                        </span>
-                        <span className={l.remaining > 0 && overdue ? 'ml-auto font-semibold text-rose-400' : 'ml-auto text-muted'}>
-                          {formatNumber(l.remaining)} {overdue ? 'missing' : 'left'}
-                        </span>
-                      </div>
+                      {!single && notes.length > 0 && (
+                        <p className={`mt-1 text-[11px] ${overdue && l.remaining > 0 ? 'text-rose-400' : 'text-muted'}`}>{notes.join(' · ')}</p>
                       )}
-                    </div>
+                    </li>
                   );
                 })}
-              </div>
-
-              {order.order.totals.settledBoxes > 0 && (
-                <p className="mt-2 text-xs text-muted">
-                  Commission earned{' '}
-                  <span className="font-semibold text-brand-600">{formatCurrency(order.order.totals.commission)}</span>
-                </p>
-              )}
+              </ul>
             </div>
 
             {/* Money in: one compact row per settlement, newest first, the latest three shown. Nothing
