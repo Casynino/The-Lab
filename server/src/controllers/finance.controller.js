@@ -201,7 +201,7 @@ const transferBetween = asyncHandler(async (req, res) => {
   return created(res, result);
 });
 
-// ── Reports Archive (generated weekly/monthly PDFs) ──────────────────────────
+// ── Reports Archive (generated daily/weekly/monthly PDFs) ──────────────────────────
 const reportArchive = asyncHandler(async (req, res) => {
   const archiveSvc = require('../services/reportArchive.service');
   const rows = await archiveSvc.list({
@@ -217,7 +217,7 @@ const reportArchivePdf = asyncHandler(async (req, res) => {
   const archiveSvc = require('../services/reportArchive.service');
   const row = await archiveSvc.getPdf(req.params.id);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="TheLab-${row.type.toLowerCase()}-${row.periodKey}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="ZELab-${row.type.toLowerCase()}-${row.periodKey}.pdf"`);
   return res.send(Buffer.from(row.pdf));
 });
 

@@ -40,7 +40,7 @@ const TYPES = {
   COMMISSION_READY: { label: 'Rep commission ready for withdrawal', priority: 'INFO' },
   LOW_STOCK: { label: 'Low stock alert', priority: 'WARNING' },
   OUT_OF_STOCK: { label: 'Out of stock alert', priority: 'CRITICAL' },
-  DAILY_SUMMARY: { label: 'Daily business report (21:00)', priority: 'INFO' },
+  DAILY_SUMMARY: { label: 'Daily business report (21:00, with PDF)', priority: 'INFO' },
   WEEKLY_REPORT: { label: 'Weekly business report (Monday 08:00, with PDF)', priority: 'INFO' },
   MONTHLY_REPORT: { label: 'Monthly business report (1st of month 08:00, with PDF)', priority: 'INFO' },
   DEADLINE_IMMINENT: { label: 'An order is minutes from its deadline', priority: 'WARNING' },
@@ -559,83 +559,19 @@ async function scanStockAlerts() {
   return { candidates: low.length, queued };
 }
 
-// 15. Daily business report — the 21:00 (Tanzania time) evening pulse.
-// Message-only by design; the day is anchored to the EAT calendar day.
+// 15. Daily business report — the 21:00 (Tanzania time) evening report: a short
+// WhatsApp summary with the link to the full PDF (built and archived by
+// dailyBusinessReport.service). The cheap checks come first so the catch-up
+// poll below never builds a PDF for a report that was already sent, switched
+// off, or has nowhere to go.
 async function dailySummary({ force = false } = {}) {
-  const finance = require('./finance.service');
-  const reorder = require('./reorder.service');
-  const settlementSvc = require('./settlement.service');
-  const { eatRange } = require('../utils/dates');
-
-  const day = eatRange('day');
-  const [rep, accounts, val, low, stl, counts, repRows] = await Promise.all([
-    finance.report({ start: day.start, end: day.end }),
-    finance.accountBalances(),
-    require('./inventory.service').valuation(prisma),
-    reorder.lowStock(),
-    settlementSvc.summary(),
-    prisma.$transaction([
-      prisma.stockRequest.count({ where: { status: 'PENDING' } }),
-      prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
-      prisma.return.count({ where: { status: 'PENDING' } }),
-      prisma.settlementSubmission.count({ where: { status: 'APPROVED', decidedAt: { gte: day.start, lte: day.end } } }),
-      prisma.return.count({ where: { createdAt: { gte: day.start, lte: day.end } } }),
-      prisma.stockRequest.count({ where: { createdAt: { gte: day.start, lte: day.end } } }),
-    ]),
-    prisma.sale.groupBy({
-      by: ['salesRepId'],
-      where: { soldAt: { gte: day.start, lte: day.end }, status: { not: 'CANCELLED' }, salesRepId: { not: null } },
-      _sum: { total: true },
-      orderBy: { _sum: { total: 'desc' } },
-      take: 3,
-    }).catch(() => []),
-  ]);
-
-  // Names for the day's selling reps.
-  const repIds = repRows.map((r) => r.salesRepId);
-  const reps = repIds.length
-    ? await prisma.salesRepresentative.findMany({ where: { id: { in: repIds } }, include: { user: { select: { name: true } } } }).catch(() => [])
-    : [];
-  const nameOf = new Map(reps.map((r) => [r.id, r.user?.name || r.code]));
-  const repLines = repRows.map((r) => `${nameOf.get(r.salesRepId) || 'Rep'}: ${fmt(r._sum.total)}`);
-
-  const cashPosition = accounts.reduce((s, a) => s + a.balance, 0);
-  const outOfStock = val.items.filter((i) => i.totalBase <= 0).length;
-  const negAccounts = accounts.filter((a) => a.balance < 0);
-  const pendingTotal = counts[0] + counts[1] + counts[2];
-
-  const alerts = [];
-  alerts.push(`Approvals waiting: ${pendingTotal} (${counts[0]} req / ${counts[1]} stl / ${counts[2]} ret)`);
-  if (stl.overdueCount) alerts.push(`Overdue orders: ${stl.overdueCount} (${fmt(stl.overdueValue)})`);
-  if (negAccounts.length) alerts.push(`Account below zero: ${negAccounts.map((a) => a.name).join(', ')}`);
-
-  const lines = [
-    '🟢 *ZELAB — DAILY REPORT*',
-    `_${nowEAT().format('dddd, D MMM YYYY')}_`,
-    '',
-    '💰 *TODAY*',
-    `Sales: ${fmt(rep.revenue)} (${rep.boxesSold} boxes)`,
-    `Gross: ${fmt(rep.grossProfit)} / Expenses: ${fmt(rep.expenses)}`,
-    `*Net profit: ${fmt(rep.netProfit)}*`,
-    `🏦 Cash: *${fmt(cashPosition)}* (${accounts.map((a) => `${a.name} ${fmt(a.balance)}`).join(' / ')})`,
-    '',
-    '📋 *ACTIVITY*',
-    `New orders: ${counts[5]} / Settlements: ${counts[3]} / Returns: ${counts[4]}`,
-    ...(repLines.length ? ['⭐ ' + repLines.join(' · ')] : []),
-    '',
-    '📦 *INVENTORY*',
-    `Value: ${fmt(val.totals.totalValue)} (${val.totals.totalBaseUnits} boxes)`,
-    `Low stock: ${low.length} / Out of stock: ${outOfStock}`,
-    `Active orders with reps: ${stl.outstandingCount} (${fmt(stl.outstandingValue)})`,
-    '',
-    alerts.length > 1 || stl.overdueCount || negAccounts.length ? '⚠️ *NEEDS ATTENTION*' : '✅ *ALL CLEAR*',
-    ...alerts,
-  ];
-
-  return queue('DAILY_SUMMARY', {
-    dedupeKey: force ? `daily:${dateEAT()}:${Date.now()}` : `daily:${dateEAT()}`,
-    text: lines.join('\n'),
-  });
+  if (!force) {
+    if (!(await isEnabled('DAILY_SUMMARY'))) return { queued: false, reason: 'disabled' };
+    if (!(await getConfig()).configured) return { queued: false, reason: 'not-configured' };
+    const sent = await prisma.whatsAppNotification.findFirst({ where: { dedupeKey: `daily:${dateEAT()}` }, select: { id: true } });
+    if (sent) return { queued: false, reason: 'duplicate' };
+  }
+  return require('./dailyBusinessReport.service').sendDailyReport({ force, queue });
 }
 
 // Fallback for the evening summary: piggybacks on admin polling in case the

@@ -972,8 +972,8 @@ model WhatsAppNotification {
 // be lost after being sent; WhatsApp links serve straight from here.
 model ReportArchive {
   id        String   @id @default(cuid())
-  type      String // WEEKLY | MONTHLY
-  periodKey String // '2026-W27' | '2026-06'
+  type      String // DAILY | WEEKLY | MONTHLY
+  periodKey String // '2026-11-10' | '2026-W27' | '2026-06'
   label     String // human period label, e.g. '29 Jun – 5 Jul 2026'
   from      DateTime
   to        DateTime

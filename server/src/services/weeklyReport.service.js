@@ -1,7 +1,7 @@
 'use strict';
 
 // ===========================================================================
-// WEEKLY BUSINESS REPORT — WhatsApp summary + PDF statement
+// WEEKLY BUSINESS REPORT — WhatsApp summary + PDF report
 //
 // buildWeeklyData() assembles one structured snapshot (finance, accounts,
 // brands, stock, settlements, alerts) from the same sources as the dashboard.
@@ -18,7 +18,8 @@ const reports = require('./reports.service');
 const inventory = require('./inventory.service');
 const reorder = require('./reorder.service');
 const settlement = require('./settlement.service');
-const { dayjs } = require('../utils/dates');
+const { dayjs, resolveRange, eatNow } = require('../utils/dates');
+const reportData = require('./reportData.service');
 
 const APP_URL = env.appUrl;
 const fmt = (n) => `TSh ${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
@@ -65,7 +66,16 @@ async function buildWeeklyData(weekKey) {
   const from = start.format('YYYY-MM-DD');
   const to = end.format('YYYY-MM-DD');
 
-  const [rep, prof, accounts, val, stlSummary, suppliers, low, pending] = await Promise.all([
+  // The week on the BUSINESS's clock (Tanzania). finance.report reads the same days from from/to;
+  // everything below uses these instants so no figure counts a different slice of the week.
+  const range = resolveRange({ from, to });
+  // The arrows compare with the week before — the same number of days, so a part-week send
+  // is not measured against a whole one.
+  const spanDays = end.startOf('day').diff(start.startOf('day'), 'day') + 1;
+  const priorStart = start.subtract(7, 'day');
+  const prior = resolveRange({ from: priorStart.format('YYYY-MM-DD'), to: priorStart.add(spanDays - 1, 'day').format('YYYY-MM-DD') });
+
+  const [rep, prof, accounts, val, stlSummary, suppliers, low, pending, extras] = await Promise.all([
     finance.report({ from, to }),
     reports.profitOverview({ from, to }),
     finance.accountBalances(),
@@ -78,21 +88,16 @@ async function buildWeeklyData(weekKey) {
       prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
       prisma.return.count({ where: { status: 'PENDING' } }),
     ]),
+    reportData.periodExtras(range, prior),
   ]);
 
   const supplierDue = suppliers.reduce((s, x) => s + x.outstanding, 0);
-  const outOfStock = val.items.filter((i) => i.totalBase <= 0).length;
 
-  const rangeStart = start.startOf('day').toDate();
-  const rangeEnd = end.endOf('day').toDate();
+  const rangeStart = range.start;
+  const rangeEnd = range.end;
 
-  // Sales rep performance for the period (revenue + boxes per rep).
-  const [repItems, repsAll, movementRows, paidAgg, commissionAll] = await Promise.all([
-    prisma.saleItem.findMany({
-      where: { sale: { is: { soldAt: { gte: rangeStart, lte: rangeEnd }, status: { not: 'CANCELLED' }, salesRepId: { not: null } } } },
-      select: { baseQuantity: true, lineTotal: true, sale: { select: { salesRepId: true } } },
-    }).catch(() => []),
-    prisma.salesRepresentative.findMany({ include: { user: { select: { name: true } } } }).catch(() => []),
+  // Movement, commission paid and commission owed (rep sales come from extras.reps).
+  const [movementRows, paidAgg, commissionAll] = await Promise.all([
     prisma.inventoryTransaction.groupBy({
       by: ['type'],
       where: { occurredAt: { gte: rangeStart, lte: rangeEnd } },
@@ -105,16 +110,7 @@ async function buildWeeklyData(weekKey) {
     require('./commission.service').summaryAllReps().catch(() => ({ items: [] })),
   ]);
 
-  const repName = new Map(repsAll.map((r) => [r.id, r.user?.name || r.code]));
-  const perRep = new Map();
-  for (const it of repItems) {
-    const id = it.sale.salesRepId;
-    const row = perRep.get(id) || { name: repName.get(id) || 'Rep', revenue: 0, boxes: 0 };
-    row.revenue += Number(it.lineTotal) || 0;
-    row.boxes += it.baseQuantity || 0;
-    perRep.set(id, row);
-  }
-  const repPerformance = [...perRep.values()].sort((a, b) => b.revenue - a.revenue);
+  const repPerformance = extras.reps;
   const topRep = repPerformance[0] || null;
 
   // Whole-business inventory movement from the ledger (transfers cancel out).
@@ -152,7 +148,9 @@ async function buildWeeklyData(weekKey) {
       label: `${start.format('D MMM')} – ${end.format('D MMM YYYY')}`,
       weekKey: weekKeyOf(start),
     },
-    generatedAt: dayjs().format('D MMM YYYY, HH:mm [UTC]'),
+    generatedAt: `${eatNow().format('D MMM YYYY, HH:mm')} EAT`,
+    number: `ZL-${weekKeyOf(start)}`,
+    extras,
     accounts: accounts.map((a) => ({ name: a.name, balance: a.balance })),
     cashPosition: accounts.reduce((s, a) => s + a.balance, 0),
     finance: {
@@ -175,16 +173,7 @@ async function buildWeeklyData(weekKey) {
     commission,
     movement,
     pending: { requests: pending[0], settlements: pending[1], returns: pending[2] },
-    stock: {
-      costValue: val.totals.totalValue,
-      retailValue: val.totals.retailValue,
-      potential: Math.round((val.totals.retailValue - val.totals.totalValue) * 100) / 100,
-      units: val.totals.totalBaseUnits,
-      warehouseBoxes: val.items.reduce((s, i) => s + i.warehouseBase, 0),
-      repBoxes: val.items.reduce((s, i) => s + i.repBase, 0),
-      lowCount: low.length,
-      outOfStock,
-    },
+    stock: reportData.stockBlock(val, low),
     settlements: {
       active: stlSummary.outstandingCount,
       activeValue: stlSummary.outstandingValue,
@@ -246,7 +235,7 @@ const sendWhatsApp = (text) => require('./whatsappNotify.service').sendRaw(text)
 async function sendWeeklyReport({ force = false, silent = false } = {}) {
   const wa = require('./whatsappNotify.service');
   const archive = require('./reportArchive.service');
-  const { weeklyStatementPdf } = require('./weeklyPdf.service');
+  const { weeklyPdf } = require('./reportPdf.service');
 
   const data = await buildWeeklyData();
   const weekKey = data.period.weekKey;
@@ -258,7 +247,7 @@ async function sendWeeklyReport({ force = false, silent = false } = {}) {
 
   // Archive first — the message links to the stored PDF, so the report the
   // owner opens is exactly the one that was generated, forever.
-  const pdf = await weeklyStatementPdf(data);
+  const pdf = await weeklyPdf(data);
   const saved = await archive.save({
     type: 'WEEKLY',
     periodKey: weekKey,

@@ -29,7 +29,7 @@ router.get(
     const data = await weekly.buildWeeklyData(week);
     const pdf = await weeklyStatementPdf(data);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="TheLab-Weekly-${week}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="ZELab-Weekly-${week}.pdf"`);
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.send(pdf);
   }),
@@ -50,7 +50,7 @@ router.get(
     }
     const row = await archive.getPdf(id);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="TheLab-${row.type.toLowerCase()}-${row.periodKey}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="ZELab-${row.type.toLowerCase()}-${row.periodKey}.pdf"`);
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.send(Buffer.from(row.pdf));
   }),

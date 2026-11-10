@@ -96,14 +96,16 @@ Rep requests stock  →  Admin approves  →  stock issued, 72-hour order opens
 - Profit & loss, cash flow, per-brand performance, transaction ledger with corrections and
   account-to-account transfers.
 - A **finance epoch** so pre-go-live history stays for audit but never pollutes the books.
-- Permanent statement archive of every generated weekly and monthly PDF.
+- Permanent archive of every generated daily, weekly and monthly report PDF.
 
 **Reporting & notifications**
 - Real-time WhatsApp alerts on every important event (stock requests, settlements, returns,
   low stock, out of stock), with per-type toggles, quiet hours, delivery log and auto-retry.
 - Per-rep WhatsApp alerts — approvals, commission earned, deadline reminders, penalties.
 - Automated daily (21:00), weekly (Mon 08:00) and monthly (1st, 08:00) reports on
-  **Africa/Dar_es_Salaam** time, with bank-statement-style PDFs at signed public links.
+  **Africa/Dar_es_Salaam** time. Each is a designed PDF (letterhead, figures against the period before,
+  profit and loss, money in and out, charts, brands, products, best rep, stock, accounts, what needs
+  attention) at a signed public link; the WhatsApp message stays a short summary with that link.
 - Dashboards — an admin command centre and a personal rep dashboard.
 - Exports to PDF & Excel; invoice generator.
 
@@ -234,7 +236,7 @@ Driven by Vercel Cron (`vercel.json`). Times below are UTC; the business runs on
 | Job                        | Schedule (UTC) | Local time     | What it does                                              |
 | -------------------------- | -------------- | -------------- | --------------------------------------------------------- |
 | `/api/cron/settlement-sweep` | `0 6 * * *`  | 09:00 daily    | Overdue flags, deadline reminders, penalties, return expiry |
-| `/api/cron/daily-summary`    | `0 18 * * *` | 21:00 daily    | Daily business report to WhatsApp                          |
+| `/api/cron/daily-summary`    | `0 18 * * *` | 21:00 daily    | Daily report + archived PDF to WhatsApp                    |
 | `/api/cron/weekly-report`    | `0 5 * * 1`  | 08:00 Monday   | Weekly report + archived PDF                               |
 | `/api/cron/monthly-report`   | `0 5 1 * *`  | 08:00 on the 1st | Previous month's full report + archived PDF              |
 

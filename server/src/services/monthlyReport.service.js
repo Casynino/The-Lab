@@ -12,6 +12,8 @@ const prisma = require('../config/prisma');
 const finance = require('./finance.service');
 const reports = require('./reports.service');
 const reorder = require('./reorder.service');
+const inventorySvc = require('./inventory.service');
+const reportData = require('./reportData.service');
 const { dayjs, eatNow, eatRange } = require('../utils/dates');
 
 const fmt = (n) => `TSh ${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
@@ -44,7 +46,7 @@ async function buildMonthlyData(monthKey) {
   const { start, end, eatStart } = reportMonth(monthKey);
   const prev = eatRange('month', eatStart.subtract(1, 'month'));
 
-  const [rep, prof, prevRep, cf, accounts, low, movementRows, pending, stlSummary, suppliers] = await Promise.all([
+  const [rep, prof, prevRep, cf, accounts, low, movementRows, pending, stlSummary, suppliers, val] = await Promise.all([
     finance.report({ start, end }),
     reports.profitOverview({ start, end }),
     finance.report({ start: prev.start, end: prev.end }),
@@ -63,15 +65,15 @@ async function buildMonthlyData(monthKey) {
     ]),
     require('./settlement.service').summary(),
     finance.supplierSummaries(),
+    inventorySvc.valuation(prisma),
   ]);
 
-  // Rep performance for the month.
-  const [repItems, repsAll, paidRows, commissionAll] = await Promise.all([
-    prisma.saleItem.findMany({
-      where: { sale: { is: { soldAt: { gte: start, lte: end }, status: { not: 'CANCELLED' }, salesRepId: { not: null } } } },
-      select: { baseQuantity: true, lineTotal: true, sale: { select: { salesRepId: true } } },
-    }).catch(() => []),
-    prisma.salesRepresentative.findMany({ include: { user: { select: { name: true } } } }).catch(() => []),
+  // Sales day by day, expenses by category, what the money was made of, who sold what — and the
+  // month before (already read above) for the arrows.
+  const extras = await reportData.periodExtras({ start, end }, null, { prevReport: prevRep, cashflow: cf });
+
+  // Commission per rep for the month.
+  const [paidRows, commissionAll] = await Promise.all([
     prisma.commissionWithdrawal.groupBy({
       by: ['salesRepId'],
       where: { status: { in: ['APPROVED', 'PAID'] }, decidedAt: { gte: start, lte: end } },
@@ -81,28 +83,21 @@ async function buildMonthlyData(monthKey) {
   ]);
 
   let earnedByRep = new Map();
-  try { earnedByRep = (await require('./commission.service').earnedBetween(start, end)).byRep; } catch { /* no rule */ }
+  let earnedTotal = 0;
+  try {
+    const earned = await require('./commission.service').earnedBetween(start, end);
+    earnedByRep = earned.byRep;
+    earnedTotal = earned.total;
+  } catch { /* no rule */ }
 
-  const repName = new Map(repsAll.map((r) => [r.id, r.user?.name || r.code]));
   const paidByRep = new Map(paidRows.map((r) => [r.salesRepId, Number(r._sum.amount) || 0]));
   const outstandingByRep = new Map((commissionAll.items || []).map((r) => [r.salesRepId, Number(r.available) || 0]));
-  const perRep = new Map();
-  for (const it of repItems) {
-    const id = it.sale.salesRepId;
-    const row = perRep.get(id) || { name: repName.get(id) || 'Rep', revenue: 0, boxes: 0 };
-    row.revenue += Number(it.lineTotal) || 0;
-    row.boxes += it.baseQuantity || 0;
-    perRep.set(id, row);
-  }
-  const repPerformance = [...perRep.entries()]
-    .map(([id, r]) => ({
-      ...r,
-      revenue: round2(r.revenue),
-      commissionEarned: round2(earnedByRep.get(id) || 0),
-      commissionPaid: paidByRep.get(id) || 0,
-      outstanding: outstandingByRep.get(id) ?? null,
-    }))
-    .sort((a, b) => b.revenue - a.revenue);
+  const repPerformance = extras.reps.map((r) => ({
+    ...r,
+    commissionEarned: round2(earnedByRep.get(r.id) || 0),
+    commissionPaid: paidByRep.get(r.id) || 0,
+    outstanding: outstandingByRep.get(r.id) ?? null,
+  }));
 
   // Inventory summary: opening/closing from the ledger + monthly movement.
   const mv = new Map(movementRows.map((mrow) => [mrow.type, mrow._sum.baseQuantity || 0]));
@@ -139,6 +134,9 @@ async function buildMonthlyData(monthKey) {
       to: end,
     },
     generatedAt: eatNow().format('D MMM YYYY, HH:mm') + ' EAT',
+    number: `ZL-${monthKeyOf(eatStart)}`,
+    prevLabel: prev.eatStart.format('MMMM YYYY'),
+    extras,
     finance: {
       revenue: rep.revenue,
       cogs: rep.cogs,
@@ -167,6 +165,13 @@ async function buildMonthlyData(monthKey) {
     topProducts: (prof.byProduct || []).slice(0, 8).map((p) => ({ name: p.name, revenue: p.revenue, boxes: p.boxes })),
     repPerformance,
     inventory,
+    movement: inventory,
+    stock: reportData.stockBlock(val, low),
+    commission: {
+      earned: earnedTotal,
+      paid: [...paidByRep.values()].reduce((a, b) => a + b, 0),
+      outstanding: [...outstandingByRep.values()].reduce((a, b) => a + Math.max(0, b), 0),
+    },
     metrics: {
       avgDailyRevenue: round2(rep.revenue / days),
       marginPct: rep.revenue > 0 ? Math.round((rep.grossProfit / rep.revenue) * 1000) / 10 : 0,
@@ -215,12 +220,12 @@ function buildWhatsAppText(d, link) {
 async function sendMonthlyReport({ force = false, silent = false, monthKey } = {}) {
   const wa = require('./whatsappNotify.service');
   const archive = require('./reportArchive.service');
-  const { monthlyStatementPdf } = require('./monthlyPdf.service');
+  const { monthlyPdf } = require('./reportPdf.service');
 
   const data = await buildMonthlyData(monthKey);
   const key = data.period.monthKey;
 
-  const pdf = await monthlyStatementPdf(data);
+  const pdf = await monthlyPdf(data);
   const saved = await archive.save({
     type: 'MONTHLY',
     periodKey: key,

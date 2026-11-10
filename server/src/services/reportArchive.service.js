@@ -1,6 +1,6 @@
 'use strict';
 
-// Reports Archive — every generated weekly/monthly PDF is stored here
+// Reports Archive — every generated daily/weekly/monthly PDF is stored here
 // permanently and served from storage (never regenerated), so the numbers in
 // a sent report can never drift. WhatsApp links point at the signed public
 // endpoint; the admin UI lists and downloads through the authenticated API.
@@ -31,7 +31,9 @@ async function save({ type, periodKey, label, from, to, pdf, meta }) {
 
 async function list({ type, year, search, limit = 60 } = {}) {
   const where = {};
-  if (type) where.type = type;
+  // No type = the weekly and monthly statements. A daily report is archived every day and would
+  // push them out of a 60-row list, so dailies are listed only when asked for.
+  where.type = type || { not: 'DAILY' };
   if (year) where.periodKey = { startsWith: String(year) };
   if (search) {
     where.OR = [

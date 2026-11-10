@@ -2387,7 +2387,7 @@ function ArchiveTab() {
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `TheLab-${row.type.toLowerCase()}-${row.periodKey}.pdf`;
+      a.download = `ZELab-${row.type.toLowerCase()}-${row.periodKey}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -2399,12 +2399,13 @@ function ArchiveTab() {
     <Card>
       <CardHeader
         title="Reports archive"
-        subtitle="Every weekly and monthly statement PDF, exactly as it was generated and sent — nothing is lost."
+        subtitle="Every daily, weekly and monthly report PDF, exactly as it was generated and sent — nothing is lost."
       />
       <CardBody>
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Select value={type} onChange={(e) => setType(e.target.value)} className="w-36">
-            <option value="">All types</option>
+            <option value="">Weekly and monthly</option>
+            <option value="DAILY">Daily</option>
             <option value="WEEKLY">Weekly</option>
             <option value="MONTHLY">Monthly</option>
           </Select>
@@ -2412,12 +2413,12 @@ function ArchiveTab() {
             <option value="">All years</option>
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </Select>
-          <Input placeholder="Search period… (e.g. W27, 2026-06)" value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
+          <Input placeholder="Search period… (e.g. W27, 2026-06, 2026-11-10)" value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
         </div>
         {isLoading ? (
           <PageSpinner label="Loading archive…" />
         ) : rows.length === 0 ? (
-          <EmptyState icon={FileBarChart} title="No reports yet" message="Weekly and monthly PDFs are archived here automatically when they are sent." />
+          <EmptyState icon={FileBarChart} title="No reports yet" message="Daily, weekly and monthly PDFs are archived here automatically when they are sent." />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -2429,8 +2430,8 @@ function ArchiveTab() {
                   <TR key={r.id}>
                     <TD className="font-medium">{r.label}</TD>
                     <TD>
-                      <Badge className={r.type === 'MONTHLY' ? 'bg-violet-500/15 text-violet-500' : 'bg-emerald-500/15 text-emerald-400'}>
-                        {r.type === 'MONTHLY' ? 'Monthly' : 'Weekly'}
+                      <Badge className={r.type === 'MONTHLY' ? 'bg-violet-500/15 text-violet-500' : r.type === 'DAILY' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}>
+                        {r.type === 'MONTHLY' ? 'Monthly' : r.type === 'DAILY' ? 'Daily' : 'Weekly'}
                       </Badge>
                     </TD>
                     <TD className="text-xs text-muted">{r.periodKey}</TD>
