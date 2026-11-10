@@ -46,8 +46,9 @@ function DashCard({ icon: Icon, label, value, hint, badge, highlight, onClick })
           </span>
         )}
       </span>
-      <span className="mt-2.5 text-[13px] font-semibold text-foreground">{label}</span>
-      {value && <span className="mt-0.5 text-[17px] font-bold leading-tight tabular-nums text-foreground">{value}</span>}
+      {/* One word, big (Nino, 11 Nov 2026: "just say one word, big and nice — Requests, Return, Report"). */}
+      <span className="mt-3 text-[19px] font-bold leading-tight text-foreground">{label}</span>
+      {value && <span className="mt-1 text-[15px] font-semibold leading-tight tabular-nums text-foreground/90">{value}</span>}
       {hint && <span className="mt-0.5 text-[11px] text-muted">{hint}</span>}
     </button>
   );
@@ -107,13 +108,13 @@ export default function RepDashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <DashCard
           icon={ClipboardList}
-          label="Request stock"
+          label="Requests"
           badge={pendingRequests > 0 ? pendingRequests : undefined}
           onClick={() => navigate('/stock-requests')}
         />
         <DashCard
           icon={Timer}
-          label="Settlement"
+          label="Settle"
           value={openSettlementsValue > 0 ? formatCurrency(openSettlementsValue) : 'Clear'}
           hint={settlementHint}
           highlight={openSettlements > 0}
@@ -122,12 +123,12 @@ export default function RepDashboard() {
         />
         <DashCard
           icon={NotebookPen}
-          label="Daily report"
+          label="Report"
           onClick={() => navigate('/daily-reports')}
         />
         <DashCard
           icon={Undo2}
-          label="Return stock"
+          label="Return"
           onClick={() => navigate('/settlements')}
         />
       </div>
