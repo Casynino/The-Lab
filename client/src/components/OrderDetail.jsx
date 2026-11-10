@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { motion, useReducedMotion } from 'motion/react';
-import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCcw } from 'lucide-react';
+import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCcw, ChevronDown } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDateTime, formatDate } from '@/lib/format';
 import {
   Modal, Button, Field, Input, Select, Badge, PageSpinner,
   Table, THead, TBody, TR, TH, TD,
@@ -389,33 +389,77 @@ function spanOfHours(h) {
 // Every lot of time an order was given, newest first. The owner asked for this
 // after an order was extended twice and only one of them could be taken back.
 function DeadlineHistory({ order }) {
-  if (!order.deadlineHistory?.length) return null;
+  const [open, setOpen] = useState(false);
+  const rows = order.deadlineHistory || [];
+  if (!rows.length) return null;
+  // What counts is the time that is still on the order: lots taken back are not in the total.
+  const live = rows.filter((c) => !c.undoneAt);
+  const total = live.reduce((sum, c) => sum + (Number(c.hours) || 0), 0);
   return (
     <div className="mt-2.5 border-t border-white/[0.06] pt-2.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Time added to this order</div>
-      <ul className="mt-1.5 space-y-1.5">
-        {order.deadlineHistory.map((c, i) => (
-          <li key={c.id || `synth-${i}`} className="text-[11px] leading-snug">
-            <div className={c.undoneAt ? 'text-faint' : 'text-muted'}>
-              <span className={`font-semibold ${c.undoneAt ? 'text-faint line-through' : 'text-foreground'}`}>
-                {spanOfHours(c.hours)}
-              </span>
-              {' · '}
-              {c.kind === 'SELF_EXTENSION'
-                ? `${c.byName || 'The rep'} — their own ${order.extensionHours || 96} hours`
-                : c.byName
-                  ? `${c.byName} — deadline extended`
-                  : 'Deadline extended'}
-              {c.at ? ` · ${formatDateTime(c.at)}` : ''}
+      {/* One line: how much time was added and how many times. The lots themselves are a tap away —
+          three of them used to take half a phone screen before the boxes were even in view. */}
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 text-left">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">Time added</span>
+        <span className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
+          {live.length ? spanOfHours(total) : 'Taken back'}
+          {live.length > 0 && <span className="text-[11px] font-normal text-faint">{live.length} time{live.length === 1 ? '' : 's'}</span>}
+          <ChevronDown className={`h-3.5 w-3.5 text-faint transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </span>
+      </button>
+      {open && (
+        <ul className="mt-2.5 space-y-2.5">
+          {rows.map((c, i) => (
+            <li key={c.id || `synth-${i}`} className="text-[11px] leading-snug">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className={`text-[13px] font-semibold ${c.undoneAt ? 'text-faint line-through' : 'text-foreground'}`}>
+                  {spanOfHours(c.hours)}
+                </span>
+                <span className="text-faint">{c.at ? formatDate(c.at) : ''}</span>
+              </div>
+              <div className="text-faint">
+                {c.kind === 'SELF_EXTENSION' ? `Own ${order.extensionHours || 96} hours` : (c.byName || 'ZELab')}
+                {' · '}new deadline {formatDateTime(c.toAt)}
+                {c.unrecorded && ' · added before the app kept a record'}
+                {c.undoneAt && ` · taken back ${formatDate(c.undoneAt)}`}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// A short list that can grow: the latest few rows, and "Show all N" for the rest. An order with a
+// dozen settlements used to be a dozen three-line cards between the rep and the buttons.
+function FoldedRows({ title, rows, tone, keep = 3 }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? rows : rows.slice(0, keep);
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline gap-2">
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+        <span className="text-[11px] text-faint">{formatNumber(rows.length)} time{rows.length === 1 ? '' : 's'}</span>
+      </div>
+      <ul className="divide-y divide-white/[0.06] overflow-hidden rounded-xl bg-elevated/40 ring-1 ring-white/[0.06]">
+        {shown.map((r) => (
+          <li key={r.key} className="px-3 py-2.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[13px] font-semibold text-foreground">{r.left}</span>
+              <span className={`shrink-0 text-[13px] font-semibold tabular-nums ${tone}`}>{r.right}</span>
             </div>
-            <div className="text-faint">
-              {formatDateTime(c.fromAt)} → {formatDateTime(c.toAt)}
-              {c.unrecorded && ' · added before the app kept a record'}
-              {c.undoneAt && ` · taken back ${formatDateTime(c.undoneAt)}`}
-            </div>
+            {r.sub && <p className="mt-0.5 truncate text-[11px] text-faint">{r.sub}</p>}
           </li>
         ))}
       </ul>
+      {rows.length > keep && (
+        <button type="button" onClick={() => setAll((v) => !v)}
+          className="mt-1.5 w-full rounded-lg py-2 text-xs font-semibold text-muted transition hover:text-foreground">
+          {all ? 'Show fewer' : `Show all ${formatNumber(rows.length)}`}
+        </button>
+      )}
     </div>
   );
 }
@@ -970,14 +1014,14 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           if (canAct && active && remaining > 0) {
             actions.push({
               key: 'settle', label: 'Submit settlement', Icon: Wallet, onClick: () => setSub('settle'),
-              cls: 'bg-brand-500 text-white ring-brand-500 font-bold shadow-lg shadow-brand-500/20', icon: 'text-white',
+              cls: 'bg-brand-500 text-white ring-brand-500 font-bold', icon: 'text-white',
             });
           }
           if (staff && active && remaining <= 0) {
             actions.push({
               key: 'close-order', label: 'Close this order', Icon: CheckCircle2,
               onClick: () => settle.mutate(), busy: settle.isPending,
-              cls: 'bg-emerald-400 text-slate-950 ring-emerald-400 font-bold shadow-lg shadow-emerald-500/20', icon: 'text-slate-950',
+              cls: 'bg-emerald-400 text-slate-950 ring-emerald-400 font-bold', icon: 'text-slate-950',
             });
           }
           if (canAct && active && remaining > 0) {
@@ -1309,7 +1353,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   return (
                     <div key={l.productId} className="rounded-xl bg-elevated/50 p-3 ring-1 ring-white/[0.06]">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
+                        <span className="min-w-0 flex-1 text-[13px] font-semibold leading-snug text-foreground">
                           {!echoesHero && <span className="mr-2 inline-block min-w-4 text-faint">{n + 1}</span>}
                           {l.name}
                         </span>
@@ -1346,71 +1390,38 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               )}
             </div>
 
-            {/* Money in — one row per settlement, not a paragraph that wraps. Nothing settled
-                yet is already said by the box panel above, so there is no empty section. */}
+            {/* Money in: one compact row per settlement, newest first, the latest three shown. Nothing
+                settled yet is already said by the box panel above, so there is no empty section. */}
             {order.sales?.length > 0 && (
-            <div>
-              <div className="mb-2 flex items-baseline gap-2">
-                <span className="text-sm font-semibold text-foreground">Settled</span>
-                {order.sales?.length > 0 && (
-                  <span className="text-[11px] text-faint">
-                    {formatNumber(order.sales.length)} time{order.sales.length === 1 ? '' : 's'}
-                  </span>
-                )}
-              </div>
-              {(
-                <ul className="space-y-2">
-                  {order.sales.map((s) => {
-                    const boxes = (s.items || []).reduce((n, i) => n + (i.quantity || 0), 0);
-                    return (
-                      <li key={s.id} className="rounded-xl bg-emerald-500/[0.06] p-3 ring-1 ring-emerald-500/20">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <span className="text-[13px] font-semibold text-foreground">
-                            {formatNumber(boxes)} box{boxes === 1 ? '' : 'es'}
-                          </span>
-                          <span className="shrink-0 text-[15px] font-bold tabular-nums text-emerald-400">{formatCurrency(s.total)}</span>
-                        </div>
-                        <p className="mt-1 truncate text-[11px] text-muted">
-                          {(s.items || []).map((i) => i.product?.name).filter(Boolean).join(', ')}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-faint">{formatDateTime(s.soldAt)} · {s.saleNumber}</p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+              <FoldedRows
+                title="Settled"
+                tone="text-emerald-400"
+                rows={order.sales.map((s) => {
+                  const boxes = (s.items || []).reduce((n, i) => n + (i.quantity || 0), 0);
+                  const names = [...new Set((s.items || []).map((i) => i.product?.name).filter(Boolean))].join(', ');
+                  return {
+                    key: s.id,
+                    left: `${formatNumber(boxes)} box${boxes === 1 ? '' : 'es'}`,
+                    right: formatCurrency(s.total),
+                    sub: [names, formatDate(s.soldAt), staff ? s.saleNumber : null].filter(Boolean).join(' · '),
+                  };
+                })}
+              />
             )}
 
-            {/* Boxes that came back. These used to disappear into a total the
-                moment they were approved, with no way to see which ones. */}
+            {/* Boxes that came back. These used to disappear into a total the moment they were
+                approved, with no way to see which ones. */}
             {order.returnsList?.length > 0 && (
-              <div>
-                <div className="mb-2 flex items-baseline gap-2">
-                  <span className="text-sm font-semibold text-foreground">Returned</span>
-                  <span className="text-[11px] text-faint">
-                    {formatNumber(order.returnsList.length)} time{order.returnsList.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <ul className="space-y-2">
-                  {order.returnsList.map((r) => (
-                    <li key={r.id} className="rounded-xl bg-sky-500/[0.06] p-3 ring-1 ring-sky-500/20">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-[13px] font-semibold text-foreground">
-                          {formatNumber(r.boxes)} box{r.boxes === 1 ? '' : 'es'} back
-                        </span>
-                        <span className="shrink-0 text-[11px] text-sky-300">{r.returnNumber}</span>
-                      </div>
-                      <p className="mt-1 truncate text-[11px] text-muted">
-                        {r.items.map((i) => i.productName).filter(Boolean).join(', ')}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-faint">
-                        {r.at ? formatDateTime(r.at) : '—'}{r.reason ? ` · ${r.reason}` : ''}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <FoldedRows
+                title="Returned"
+                tone="text-sky-300"
+                rows={order.returnsList.map((r) => ({
+                  key: r.id,
+                  left: `${formatNumber(r.boxes)} box${r.boxes === 1 ? '' : 'es'} back`,
+                  right: r.at ? formatDate(r.at) : '—',
+                  sub: [r.items.map((i) => i.productName).filter(Boolean).join(', '), r.reason].filter(Boolean).join(' · '),
+                }))}
+              />
             )}
           </div>
         )}
