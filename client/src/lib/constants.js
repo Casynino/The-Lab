@@ -58,7 +58,7 @@ export const NAV = [
   // Everyone who deals with commission gets it in the sidebar. The same page
   // serves a rep their own earnings and an admin the approvals; it is also a
   // tab inside Finance, which is where staff used to be sent instead.
-  { to: '/commissions', label: 'Commissions', icon: 'Coins', repLabel: 'My wallet', repIcon: 'Wallet', roles: STAFF.concat(['SALES_REP']), group: 'money' },
+  { to: '/commissions', label: 'Commissions', icon: 'Coins', repLabel: 'Wallet', repIcon: 'Wallet', roles: STAFF.concat(['SALES_REP']), group: 'money' },
 
   // ── People ──
   { to: '/reps', label: 'Reps', icon: 'UserCog', roles: STAFF, group: 'people' },
