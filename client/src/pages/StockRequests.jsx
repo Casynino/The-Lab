@@ -755,11 +755,22 @@ export default function StockRequests() {
     <div>
       {isRep ? (
         // A rep's page opens on the one thing they come here to do — the menu already says Requests.
-        <div className="mb-7 px-1">
-          <Button className="rounded-full px-6" onClick={() => setCartOpen(true)}>
-            <Plus className="h-4 w-4" /> New request
-          </Button>
-        </div>
+        // The action is a bold label with a small red "+" and a soft glow, no filled pill (Nino, 11 Nov
+        // 2026: the button was "bad" — the same plain style as Withdraw on the wallet).
+        <button
+          type="button"
+          onClick={() => setCartOpen(true)}
+          className="mb-6 flex h-11 items-center gap-3 px-1 text-[15px] font-semibold text-foreground transition active:opacity-70"
+        >
+          <span
+            aria-hidden="true"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-white"
+            style={{ boxShadow: '0 0 16px rgba(238, 49, 36, 0.38)' }}
+          >
+            <Plus className="h-[18px] w-[18px]" strokeWidth={2.6} />
+          </span>
+          New request
+        </button>
       ) : (
         <PageHeader title="Stock Requests" subtitle="Approve or reject reps' stock requests." />
       )}
