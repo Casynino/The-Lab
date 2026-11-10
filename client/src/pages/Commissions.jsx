@@ -1473,20 +1473,22 @@ function AdminView() {
 export default function Commissions({ embedded = false }) {
   const { user } = useAuth();
   const isRep = user?.role === ROLES.SALES_REP;
+  const walletPage = isRep && !embedded;
   return (
-    <div>
-      {!embedded && (isRep ? (
-        // The rep's page opens on their wallet, so it is headed like one: the wallet mark
-        // and a bigger title. No subtitle — they know what this page is.
-        <div className="mb-4 flex items-center gap-3">
-          <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500/[0.14] text-brand-600 ring-1 ring-inset ring-brand-500/20">
-            <Wallet className="h-5 w-5" />
-          </span>
-          <h1 className="text-[26px] font-bold leading-none tracking-tight text-foreground">My wallet</h1>
-        </div>
-      ) : (
-        <PageHeader title="Commissions" subtitle="Commission performance and withdrawal approvals." />
-      ))}
+    <div className={clsx(walletPage && 'relative isolate')}>
+      {/* The rep's page is their wallet, so it has a little warmth of its own: a soft red
+          glow fading out of the top-left corner, behind the title and the card. Nothing
+          sits on it and it carries no information. */}
+      {walletPage && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -inset-x-3 -top-8 -z-10 h-64 sm:-inset-x-4"
+          style={{ background: 'radial-gradient(70% 100% at 15% 0%, rgba(238,49,36,0.14), transparent)' }}
+        />
+      )}
+      {!embedded && (
+        <PageHeader title={isRep ? 'My wallet' : 'Commissions'} subtitle={isRep ? 'Your money, bonuses and withdrawals.' : 'Commission performance and withdrawal approvals.'} />
+      )}
       {isRep ? <RepView /> : <AdminView />}
     </div>
   );
