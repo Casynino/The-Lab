@@ -199,57 +199,58 @@ function CartOrderSheet({ onClose, existing }) {
             return (
               <li
                 key={product.id}
-                className={`flex items-center gap-3 px-5 py-3 transition-colors ${inCart ? 'bg-brand-500/5' : 'hover:bg-elevated'}`}
+                className={`px-5 py-3 transition-colors ${inCart ? 'bg-brand-500/5' : 'hover:bg-elevated'}`}
               >
-                {/* selected indicator */}
-                <div className="flex w-4 shrink-0 items-center justify-center">
-                  {inCart
-                    ? <CheckCircle2 className="h-4 w-4 text-brand-500" />
-                    : <span className="h-1.5 w-1.5 rounded-full bg-border" />
-                  }
-                </div>
-
-                {/* name + price */}
-                <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-medium leading-tight ${inCart ? 'text-foreground' : 'text-muted'}`}>
+                {/* The name has the line to itself and stays on it; the price and the stepper sit under it. */}
+                <div className="flex items-center gap-3">
+                  <div className="flex w-4 shrink-0 items-center justify-center">
+                    {inCart
+                      ? <CheckCircle2 className="h-4 w-4 text-brand-500" />
+                      : <span className="h-1.5 w-1.5 rounded-full bg-border" />
+                    }
+                  </div>
+                  <div title={product.name} className={`min-w-0 flex-1 truncate text-sm font-medium ${inCart ? 'text-foreground' : 'text-muted'}`}>
                     {product.name}
                   </div>
-                  <div className="mt-0.5 text-xs text-faint">
-                    {formatCurrency(price)} / {pkg?.packagingUnit?.name || 'box'}
-                  </div>
                 </div>
 
-                {/* qty controls — type directly or tap +/- */}
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <button
-                    onClick={() => dec(product.id)}
-                    disabled={qty === 0}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
-                  >
-                    <Minus className="h-3.5 w-3.5" />
-                  </button>
-                  <input
-                    type="number"
-                    min="0"
-                    value={qty === 0 ? '' : qty}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10);
-                      setQty(product.id, isNaN(v) || v < 0 ? 0 : v);
-                    }}
-                    placeholder="0"
-                    className={`h-8 w-14 rounded-lg border text-center text-sm font-semibold tabular-nums outline-none transition
-                      [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none
-                      ${inCart
-                        ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 focus:ring-1 focus:ring-brand-500/30'
-                        : 'border-border bg-elevated text-muted focus:border-brand-500/40 focus:text-foreground'
-                      }`}
-                  />
-                  <button
-                    onClick={() => inc(product.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white transition hover:bg-brand-400 active:scale-90"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
+                <div className="mt-1.5 flex items-center gap-3 pl-7">
+                  <div className="min-w-0 flex-1 text-xs text-faint">
+                    {formatCurrency(price)} / {pkg?.packagingUnit?.name || 'box'}
+                  </div>
+
+                  {/* qty controls — type directly or tap +/- */}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      onClick={() => dec(product.id)}
+                      disabled={qty === 0}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      value={qty === 0 ? '' : qty}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        setQty(product.id, isNaN(v) || v < 0 ? 0 : v);
+                      }}
+                      placeholder="0"
+                      className={`h-8 w-14 rounded-lg border text-center text-sm font-semibold tabular-nums outline-none transition
+                        [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none
+                        ${inCart
+                          ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 focus:ring-1 focus:ring-brand-500/30'
+                          : 'border-border bg-elevated text-muted focus:border-brand-500/40 focus:text-foreground'
+                        }`}
+                    />
+                    <button
+                      onClick={() => inc(product.id)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white transition hover:bg-brand-400 active:scale-90"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </li>
             );

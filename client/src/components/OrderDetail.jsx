@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { motion, useReducedMotion } from 'motion/react';
@@ -194,7 +194,7 @@ function SettleOneModal({ order, onClose, onDone }) {
             {/* One product is not a choice, so it is stated — as plain text, not a card. */}
             {lines.length === 1 ? (
               <div>
-                <p className="text-[15px] font-semibold leading-snug text-foreground">{line?.name}</p>
+                <p title={line?.name} className="truncate text-sm font-semibold text-foreground">{line?.name}</p>
                 <p className="mt-0.5 text-xs text-faint">
                   {formatNumber(max)} left · {formatCurrency(line?.sellingPrice || 0)} a box
                 </p>
@@ -511,7 +511,7 @@ function DeadlineHistory({ order }) {
   const live = rows.filter((c) => !c.undoneAt);
   const total = live.reduce((sum, c) => sum + (Number(c.hours) || 0), 0);
   return (
-    <div className="mt-2.5 border-t border-white/[0.06] pt-2.5">
+    <div className="mt-3">
       {/* One line: how much time was added and how many times. The lots themselves are a tap away —
           three of them used to take half a phone screen before the boxes were even in view. */}
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
@@ -543,6 +543,42 @@ function DeadlineHistory({ order }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// The boxes of an order as a ring: settled, returned, waiting for approval, and what is left — in
+// one picture that reads the same for one product or twelve. The number in the middle is the one
+// that matters (boxes left). The arcs grow in on open; under reduced motion they are simply there.
+function SettleDonut({ total, segments, children, size = 104, stroke = 11 }) {
+  const reduce = useReducedMotion();
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (reduce) { setOn(true); return undefined; }
+    const t = setTimeout(() => setOn(true), 60);
+    return () => clearTimeout(t);
+  }, [reduce]);
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={stroke} />
+        {segments.filter((x) => x.value > 0).map((x, i) => {
+          const len = (x.value / Math.max(1, total)) * c;
+          const el = (
+            <circle
+              key={i} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={x.color} strokeWidth={stroke}
+              strokeDasharray={`${on ? Math.max(0, len - 1.5) : 0} ${c}`} strokeDashoffset={-offset}
+              style={{ transition: reduce ? 'none' : 'stroke-dasharray 0.9s cubic-bezier(0.22, 1, 0.36, 1)' }}
+            />
+          );
+          offset += len;
+          return el;
+        })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">{children}</div>
     </div>
   );
 }
@@ -1202,9 +1238,8 @@ export default function OrderDetailModal({ settlementId, onClose }) {
       >
         {isLoading || !order ? <PageSpinner /> : (
           <div className="space-y-4">
-            {/* Who and what state, on one line — then the two dates below it as a
-                pair, since they are read together. Same four facts, arranged so
-                the eye is not hopping across a 2x2 of look-alike blocks. */}
+            {/* The top of the order: who and what state, with the time left beside it; then the four
+                facts as a plain 2x2 — no rules between them. */}
             <div>
               <div className="flex items-center gap-3">
                 {/* A rep opening their own order already knows whose it is.
@@ -1217,11 +1252,15 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                     <div className="truncate text-[15px] font-semibold text-foreground">{order.salesRep?.user?.name}</div>
                   </div>
                 )}
-                <Badge className={`ml-auto shrink-0 ${SETTLEMENT_STATUS_META[order.status]?.cls}`}>
-                  {SETTLEMENT_STATUS_META[order.status]?.label}
-                </Badge>
+                <div className="ml-auto flex shrink-0 items-center gap-2.5">
+                  {active && <Remaining hours={order.hoursRemaining} />}
+                  <Badge className={SETTLEMENT_STATUS_META[order.status]?.cls}>
+                    {SETTLEMENT_STATUS_META[order.status]?.label}
+                  </Badge>
+                </div>
               </div>
-              <div className={`grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-3 ${isOwnRep ? 'mt-2.5' : 'mt-3'}`}>
+
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Issued</div>
                   <div className="mt-0.5 text-[13px] font-medium text-muted">{formatDateTime(order.issuedAt)}</div>
@@ -1238,42 +1277,32 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                       : formatDateTime(order.deadlineAt)}
                   </div>
                 </div>
+                {active && (
+                  <>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Extension</div>
+                      <div className={`mt-0.5 text-[13px] font-medium ${
+                        order.extensionStatus === 'ACTIVE' ? 'text-brand-600'
+                          : order.extensionStatus === 'EXPIRED' ? 'text-rose-400' : 'text-muted'}`}>
+                        {order.extensionStatus === 'ACTIVE' ? 'Active'
+                          : order.extensionStatus === 'EXPIRED' ? 'Expired' : 'Not used'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Late penalty</div>
+                      <div className={`mt-0.5 text-[13px] font-medium ${order.extensionUsed ? 'text-rose-400' : 'text-muted'}`}>
+                        {formatCurrency(order.penaltyPerDay)}/day
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-
-              {/* The extension and the fine used to be a panel of their own, and
-                  a badly behaved one: three items in a wrapping flex row where
-                  the last carried ml-auto, so on a phone the penalty broke onto
-                  its own line and sat right-aligned under nothing. The chip
-                  beside it was bg-elevated inside a bg-elevated panel, which is
-                  a chip you cannot see.
-                  They are two more facts about this order, so they are now two
-                  more cells in the same grid as the dates, with the state told
-                  by the colour of the words rather than by a container. */}
-              {active && (
-                <div className="mt-3 grid grid-cols-2 gap-3 border-t border-white/[0.06] pt-3">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Extension</div>
-                    <div className={`mt-0.5 text-[13px] font-medium ${
-                      order.extensionStatus === 'ACTIVE' ? 'text-brand-600'
-                        : order.extensionStatus === 'EXPIRED' ? 'text-rose-400' : 'text-muted'}`}>
-                      {order.extensionStatus === 'ACTIVE' ? 'Active'
-                        : order.extensionStatus === 'EXPIRED' ? 'Expired' : 'Not used'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Late penalty</div>
-                    <div className={`mt-0.5 text-[13px] font-medium ${order.extensionUsed ? 'text-rose-400' : 'text-muted'}`}>
-                      {formatCurrency(order.penaltyPerDay)}/day
-                    </div>
-                  </div>
-                </div>
-              )}
 
               <DeadlineHistory order={order} />
               {/* ZELab's own note. A rep has no use for a countdown of the
                   time that might be taken off his order. */}
               {staff && order.canUndoDeadline && (
-                <p className="mt-1 text-[11px] leading-snug text-faint">
+                <p className="mt-2 text-[11px] leading-snug text-faint">
                   This can be taken back — the last lot returns the deadline to {formatDateTime(order.undoDeadlineTo)}
                   {order.undoAllCount > 1 ? `, or all ${order.undoAllCount} lots return it to ${formatDateTime(order.undoAllDeadlineTo)}` : ''}.
                 </p>
@@ -1281,14 +1310,14 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               {/* And why it cannot, when it cannot: the button simply going
                   missing reads as a bug. */}
               {staff && !order.canUndoDeadline && order.undoDeadlineTo && order.finesCharged > 0 && (
-                <p className="mt-1 text-[11px] leading-snug text-faint">
+                <p className="mt-2 text-[11px] leading-snug text-faint">
                   This cannot be taken back — {order.finesCharged} fine{order.finesCharged !== 1 ? 's' : ''} already charged against this
                   deadline. Set a new deadline instead.
                 </p>
               )}
               {/* An order can be overdue while the fine only starts later. */}
               {order.finesFrom && (
-                <p className="mt-1 text-[11px] leading-snug text-amber-400/80">
+                <p className="mt-2 text-[11px] leading-snug text-amber-400/80">
                   Daily fine runs from {formatDateTime(order.finesFrom)} — the time that was taken back is not charged.
                 </p>
               )}
@@ -1310,9 +1339,12 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-foreground">{r.returnNumber}</div>
-                        <div className="mt-0.5 text-xs text-faint">
-                          {r.items.map((i) => `${formatNumber(i.quantity)} ${i.unitName || 'box'}(s) ${i.productName}`).join(' · ')}
-                        </div>
+                        {r.items.map((i, k) => (
+                          <div key={k} className="mt-0.5 flex gap-2 text-xs text-faint">
+                            <span title={i.productName} className="min-w-0 truncate">{i.productName}</span>
+                            <span className="shrink-0">· {formatNumber(i.quantity)} {i.unitName || 'box'}(s)</span>
+                          </div>
+                        ))}
                         {r.reason && <div className="mt-0.5 text-xs text-faint">Reason: {r.reason}</div>}
                       </div>
                       <div className="flex shrink-0 gap-2">
@@ -1341,7 +1373,10 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-foreground">{p.submissionNumber} · {formatCurrency(p.amount)}</div>
-                        <div className="mt-0.5 text-xs text-faint">{formatNumber(p.boxes)} box(es) {p.productName}{p.method ? ` · ${p.method}` : ''}</div>
+                        <div className="mt-0.5 flex gap-2 text-xs text-faint">
+                          <span title={p.productName} className="min-w-0 truncate">{p.productName}</span>
+                          <span className="shrink-0">· {formatNumber(p.boxes)} box(es){p.method ? ` · ${p.method}` : ''}</span>
+                        </div>
                       </div>
                       <div className="flex shrink-0 gap-2">
                         <Button variant="ghost" className="text-rose-500" disabled={approveSubmission.isPending} onClick={() => setRejectingSubmission(p)}>Reject</Button>
@@ -1355,74 +1390,70 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               </div>
             )}
 
-            {/* How many boxes are still on him. The boxes are the cause and the
-                money below is derived from them, so the cause goes first and
-                the grid reads as its consequence. This panel was the summary
-                strip that used to sit under the product list — moved, not
-                copied, and given the weight the figure deserves. */}
+            {/* The boxes, as one picture: a ring (settled / returned / awaiting approval / left) with the
+                number that matters in the middle, and the same figures as a legend. The same for one
+                product or twelve; the per-product bars are in the list below. */}
             {order.order.totals.assignedBoxes > 0 && (() => {
               const t = order.order.totals;
               const done = t.remainingBoxes <= 0;
               const shown = done ? t.assignedBoxes : t.remainingBoxes;
-              // Submitted but not yet approved, plus returns awaiting a
-              // decision. Clamped to what is outstanding so the segments can
-              // never sum past the track.
+              // Submitted but not yet approved, plus returns awaiting a decision, fitted into the
+              // outstanding tail so the ring can never add up to more than the order.
               const subs = (order.pendingSubmissionsList || []).reduce((n, x) => n + (x.boxes || 0), 0);
-              const rets = t.pendingReturnBoxes || 0;
-              // Nothing in the server stops the same boxes sitting in a pending
-              // return AND a pending submission at once, so the two shares are
-              // fitted into the outstanding tail in order rather than allowed
-              // to overrun it and make the bar contradict the number above it.
-              const barSubs = Math.max(0, Math.min(subs, t.remainingBoxes));
-              const barRets = Math.max(0, Math.min(rets, t.remainingBoxes - barSubs));
+              const pendS = Math.max(0, Math.min(subs, t.remainingBoxes));
+              const pendR = Math.max(0, Math.min(t.pendingReturnBoxes || 0, t.remainingBoxes - pendS));
+              const left = Math.max(0, t.remainingBoxes - pendS - pendR);
+              // The legend adds up to the number in the middle: "Left" is every box that is not yet
+              // settled or returned, INCLUDING the ones waiting for approval, which are said
+              // underneath in amber (the same colour as their slice of the ring).
+              const legend = [
+                ['Settled', t.settledBoxes, 'bg-emerald-400', true, null],
+                ['Returned', t.returnedBoxes, 'bg-sky-400', t.returnedBoxes > 0, null],
+                [overdue ? 'Missing' : 'Left', t.remainingBoxes, overdue ? 'bg-rose-400' : 'bg-white/25', true,
+                  [pendS > 0 ? `${formatNumber(pendS)} awaiting approval` : null, pendR > 0 ? `${formatNumber(pendR)} in a return` : null].filter(Boolean)],
+              ].filter((r) => r[3]);
               return (
-                <div className="relative border-t border-white/[0.06] pt-4">
-
-                  <div className="relative flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    {/* Counted down rather than up: 28 went out, 16 came back as
-                        cash or stock, 12 remain. A count from zero would animate
-                        nothing that happened, and would make a live order read
-                        "0 boxes left" for half a second — the one value that
-                        means finished. Overdue orders do not count at all: a
-                        rose figure tumbling downward reads as boxes being lost. */}
-                    <span className="inline-flex items-baseline gap-2" aria-hidden="true">
+                <div className="flex items-center gap-5 border-t border-white/[0.06] pt-4">
+                  <SettleDonut
+                    total={t.assignedBoxes}
+                    segments={[
+                      { value: t.settledBoxes, color: '#34d399' },
+                      { value: t.returnedBoxes, color: '#38bdf8' },
+                      { value: pendS, color: '#fbbf24' },
+                      { value: pendR, color: 'rgba(125,211,252,0.6)' },
+                      { value: left, color: overdue ? '#fb7185' : 'rgba(255,255,255,0.14)' },
+                    ]}
+                  >
+                    {/* Counted down rather than up (28 went out, 16 came back, 12 remain); an overdue
+                        order does not count at all — a rose figure tumbling reads as boxes being lost. */}
+                    <span aria-hidden="true">
                       <BoxCount
                         from={t.assignedBoxes}
                         to={shown}
                         still={overdue || done}
-                        unitOne="box"
-                        unitMany="boxes"
-                        suffix={done ? 'accounted for' : overdue ? 'missing' : 'left'}
-                        unitClassName="text-[11px] font-semibold text-muted"
-                        className={`text-[22px] font-black leading-none ${
-                          done ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-brand-600'}`}
+                        className={`text-2xl font-black leading-none ${done ? 'text-emerald-400' : overdue ? 'text-rose-400' : 'text-foreground'}`}
                       />
-                      {!done && <span className="text-[11px] text-faint">of {formatNumber(t.assignedBoxes)}</span>}
                     </span>
-                    {/* Said once for a screen reader, instead of forty times as
-                        the number counts. */}
-                    <span className="sr-only">
-                      {formatNumber(shown)} of {formatNumber(t.assignedBoxes)} boxes{' '}
-                      {done ? 'accounted for' : overdue ? 'missing' : 'left'}
+                    <span className="sr-only">{formatNumber(shown)} of {formatNumber(t.assignedBoxes)} boxes {done ? 'accounted for' : overdue ? 'missing' : 'left'}</span>
+                    <span aria-hidden="true" className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+                      {done ? 'done' : overdue ? 'missing' : 'left'}
                     </span>
-                    {active && (
-                      <span className="ml-auto shrink-0"><Remaining hours={order.hoursRemaining} /></span>
-                    )}
-                  </div>
-
-                  <div className="relative mt-2">
-                    <BoxBar settled={t.settledBoxes} returned={t.returnedBoxes}
-                      pendingSubmitted={barSubs} pendingReturned={barRets} total={t.assignedBoxes} />
-                  </div>
-
-                  <div className="relative mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] font-semibold">
-                    {t.settledBoxes > 0
-                      ? <span className="text-emerald-400">{formatNumber(t.settledBoxes)} settled</span>
-                      : <span className="text-faint">Nothing settled yet</span>}
-                    {t.returnedBoxes > 0 && <span className="text-sky-400">{formatNumber(t.returnedBoxes)} returned</span>}
-                    {subs > 0 && <span className="ml-auto text-amber-400">{formatNumber(subs)} awaiting approval</span>}
-                    {rets > 0 && <span className={subs > 0 ? 'text-sky-300' : 'ml-auto text-sky-300'}>{formatNumber(rets)} return under review</span>}
-                  </div>
+                  </SettleDonut>
+                  <ul className="min-w-0 flex-1 space-y-2">
+                    {legend.map(([label, value, dot, , notes]) => (
+                      <li key={label}>
+                        <div className="flex items-center gap-2 text-[13px]">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
+                          <span className="min-w-0 truncate text-muted">{label}</span>
+                          <span className="ml-auto shrink-0 font-semibold tabular-nums text-foreground">{formatNumber(value)}</span>
+                        </div>
+                        {notes && notes.length > 0 && (
+                          <p className="mt-0.5 pl-4 text-[11px] text-amber-400">{notes.join(' · ')}</p>
+                        )}
+                      </li>
+                    ))}
+                    <li className="pt-0.5 text-[11px] text-faint">of {formatNumber(t.assignedBoxes)} boxes</li>
+                  </ul>
                 </div>
               );
             })()}
@@ -1469,28 +1500,33 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   const single = order.order.lines.length === 1;
                   const total = Math.max(1, l.assigned);
                   const pct = (x) => `${Math.max(0, (x / total) * 100)}%`;
+                  const awaiting = Math.min(pendingBoxesByProduct(order)[l.productId] || 0, Math.max(0, l.remaining));
                   const notes = [
                     l.returned > 0 ? `${formatNumber(l.returned)} returned` : null,
+                    awaiting > 0 ? `${formatNumber(awaiting)} awaiting approval` : null,
                     (l.pendingReturn || 0) > 0 ? `+${formatNumber(l.pendingReturn)} return pending` : null,
                     overdue && l.remaining > 0 ? `${formatNumber(l.remaining)} missing` : null,
                   ].filter(Boolean);
                   return (
                     <li key={l.productId} className="py-2.5">
-                      <div className="flex items-baseline gap-3">
-                        {!single && <span className="w-4 shrink-0 text-[11px] font-semibold tabular-nums text-faint">{n + 1}</span>}
-                        <span className="min-w-0 flex-1 text-[13px] font-medium leading-snug text-foreground">{l.name}</span>
-                        <span className="shrink-0 text-[11px] tabular-nums text-muted">
-                          {single ? `${formatNumber(l.assigned)} issued` : `${formatNumber(l.settled)} of ${formatNumber(l.assigned)} settled`}
-                        </span>
+                      {/* The name has its own line and stays on it; the bar and "x of y" sit underneath. */}
+                      <div className="flex items-center gap-3">
+                        {!single && <span className="w-5 shrink-0 text-[11px] font-semibold tabular-nums text-faint">{n + 1}</span>}
+                        <span title={l.name} className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">{l.name}</span>
+                        {single && <span className="shrink-0 text-[11px] tabular-nums text-muted">{formatNumber(l.assigned)} issued</span>}
                       </div>
                       {!single && (
-                        <div className="mt-1.5 flex h-1 overflow-hidden rounded-full bg-white/[0.07]">
-                          <div className="bg-emerald-400" style={{ width: pct(l.settled) }} />
-                          <div className="bg-sky-400" style={{ width: pct(l.returned) }} />
+                        <div className="mt-1.5 flex items-center gap-3 pl-8">
+                          <div className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
+                            <div className="bg-emerald-400" style={{ width: pct(l.settled) }} />
+                            <div className="bg-sky-400" style={{ width: pct(l.returned) }} />
+                            <div className="bg-amber-400" style={{ width: pct(awaiting) }} />
+                          </div>
+                          <span className="shrink-0 text-[11px] tabular-nums text-muted">{formatNumber(l.settled)} of {formatNumber(l.assigned)}</span>
                         </div>
                       )}
                       {!single && notes.length > 0 && (
-                        <p className={`mt-1 text-[11px] ${overdue && l.remaining > 0 ? 'text-rose-400' : 'text-muted'}`}>{notes.join(' · ')}</p>
+                        <p className={`mt-1 pl-8 text-[11px] ${overdue && l.remaining > 0 ? 'text-rose-400' : 'text-muted'}`}>{notes.join(' · ')}</p>
                       )}
                     </li>
                   );

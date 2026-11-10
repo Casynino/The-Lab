@@ -300,11 +300,10 @@ function ReturnModal({ onClose }) {
             const qty = cart[product.id] || 0;
             const inCart = qty > 0;
             return (
-              <div key={product.id} className={`flex items-center gap-3 px-1 py-3 transition ${inCart ? 'bg-brand-500/5' : ''}`}>
-                <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-medium leading-snug ${inCart ? 'text-foreground' : 'text-muted'}`}>{product.name}</div>
-                </div>
-                <div className="flex items-center gap-1.5">
+              <div key={product.id} className={`px-1 py-2.5 transition ${inCart ? 'bg-brand-500/5' : ''}`}>
+                {/* The name has the line to itself and stays on it; the stepper sits under it. */}
+                <div title={product.name} className={`truncate text-sm font-medium ${inCart ? 'text-foreground' : 'text-muted'}`}>{product.name}</div>
+                <div className="mt-1.5 flex items-center justify-end gap-1.5">
                   <button onClick={() => dec(product.id)} disabled={qty === 0}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-elevated text-lg font-bold text-muted transition hover:bg-surface disabled:opacity-30">−</button>
                   <input type="number" min="0" value={qty === 0 ? '' : qty}
@@ -371,10 +370,10 @@ function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve })
         {/* Several products: numbered, with the quantity AFTER the name ("1. Name · 4 boxes"), so the
             number in front is never read as a number of boxes. */}
         {r.items.map((i, n) => (
-          <div key={i.id} className="mt-0.5 text-xs text-faint">
-            {r.items.length > 1 && <span className="mr-1 font-semibold text-muted">{n + 1}.</span>}
-            {i.product?.name}
-            <span className="font-semibold text-muted"> · {formatNumber(i.quantity)} box{plural(i.quantity)}</span>
+          <div key={i.id} className="mt-0.5 flex gap-1 text-xs text-faint">
+            {r.items.length > 1 && <span className="shrink-0 font-semibold text-muted">{n + 1}.</span>}
+            <span title={i.product?.name} className="min-w-0 truncate">{i.product?.name}</span>
+            <span className="shrink-0 font-semibold text-muted">· {formatNumber(i.quantity)} box{plural(i.quantity)}</span>
           </div>
         ))}
         <div className="mt-1 text-xs text-faint">
