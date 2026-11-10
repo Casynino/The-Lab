@@ -416,10 +416,10 @@ function RepRequestCard({ r, onClick }) {
   const boxes = boxCount(r);
   const ds = requestDisplayStatus(r);
   return (
-    <motion.button
-      whileTap={{ scale: 0.985 }}
+    <button
       onClick={onClick}
-      className="w-full rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 text-left transition hover:bg-elevated"
+      className="active-card"
+      data-tone="near"
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold text-foreground">{r.requestNumber}</span>
@@ -440,7 +440,7 @@ function RepRequestCard({ r, onClick }) {
           <Clock className="h-3.5 w-3.5" /> Waiting for approval · tap to edit
         </span>
       </div>
-    </motion.button>
+    </button>
   );
 }
 

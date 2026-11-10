@@ -13,6 +13,7 @@ import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import ProgressRows from '@/components/ProgressRows';
 import { SETTLEMENT_STATUS_META } from '@/lib/constants';
 import OrderDetailModal from '@/components/OrderDetail';
+import ActiveOrderCard from '@/components/ActiveOrderCard';
 import { PageSpinner, EmptyState, Badge } from '@/components/ui';
 
 function hoursLabel(h) {
@@ -145,52 +146,17 @@ export default function RepDashboard() {
       {/* Open orders */}
       {orders.length > 0 && (
         <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">Open orders</h2>
-            <span className="text-xs text-faint">Settle or return before 72 h deadline</span>
-          </div>
+          {/* One short heading, and on a phone the same soft cards as the Settle page (the orders here
+              have exactly the same shape). The long reminder line is gone — "too many words". */}
+          <h2 className="mb-3 px-1 text-lg font-bold text-foreground lg:text-sm lg:font-semibold">
+            Open orders
+            <span className="ml-2 text-sm font-medium text-muted lg:hidden">{orders.length}</span>
+          </h2>
 
-          {/* Mobile cards */}
-          <div className="space-y-2 lg:hidden">
-            {orders.map((o) => {
-              const overdue = o.hoursRemaining < 0;
-              const approaching = o.approaching;
-              return (
-                <motion.button
-                  key={o.id}
-                  whileTap={{ scale: 0.985 }}
-                  onClick={() => setViewing(o.id)}
-                  className={clsx(
-                    'w-full rounded-2xl border p-4 text-left transition',
-                    overdue ? 'border-rose-500/30 bg-rose-500/5' : 'border-border bg-surface hover:bg-elevated',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-foreground">{o.settlementNumber}</span>
-                      <Badge className={SETTLEMENT_STATUS_META[o.status]?.cls}>
-                        {SETTLEMENT_STATUS_META[o.status]?.label}
-                      </Badge>
-                    </div>
-                    <span className={clsx('font-bold', o.balance > 0 ? 'text-rose-400' : 'text-emerald-400')}>
-                      {formatCurrency(o.balance)}
-                    </span>
-                  </div>
-                  {o.boxes?.issued > 0 && (
-                    <div className="mt-1 text-xs font-semibold text-muted">
-                      <span className={clsx('tabular-nums', overdue ? 'text-rose-400' : 'text-foreground')}>
-                        {formatNumber(o.boxes.remaining)}
-                      </span>{' '}
-                      {o.boxes.remaining === 1 ? 'box' : 'boxes'} {overdue ? 'missing' : 'left'}
-                    </div>
-                  )}
-                  <div className={clsx('mt-1.5 flex items-center justify-between text-xs', overdue ? 'text-rose-400' : approaching ? 'text-amber-400' : 'text-faint')}>
-                    <span>{hoursLabel(o.hoursRemaining)} · {formatDateTime(o.deadlineAt)}</span>
-                    <span className="font-semibold text-brand-600">Settle &rsaquo;</span>
-                  </div>
-                </motion.button>
-              );
-            })}
+          <div className="space-y-3 lg:hidden">
+            {orders.map((o) => (
+              <ActiveOrderCard key={o.id} s={o} onClick={() => setViewing(o.id)} />
+            ))}
           </div>
 
           {/* Desktop table */}
