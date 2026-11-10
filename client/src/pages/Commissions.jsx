@@ -561,17 +561,6 @@ function WithdrawalProgress({ available, minimum }) {
   );
 }
 
-// Three seven-digit amounts do not fit across a phone, and truncating them to
-// "TSh 656,0…" is worse than rounding: a shortened number still reads, a cut one
-// does not. Exact figures are a tap away on the tabs below.
-const compactTsh = (n) => {
-  const v = Math.abs(Number(n) || 0);
-  const sign = Number(n) < 0 ? '-' : '';
-  if (v >= 1_000_000) return `${sign}TSh ${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1)}M`;
-  if (v >= 1_000) return `${sign}TSh ${Math.round(v / 1_000)}K`;
-  return `${sign}TSh ${Math.round(v)}`;
-};
-
 function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -614,11 +603,11 @@ function RepView() {
         pct={pct}
         note={windowOpen ? `Opened for you until ${formatDateTime(c.emergency.until)} — the usual minimum does not apply` : null}
         stats={[
-          { label: 'Earned', value: compactTsh(c.earned) },
-          { label: 'Paid out', value: compactTsh(c.paid) },
+          { label: 'Earned', value: formatCurrency(c.earned) },
+          { label: 'Paid out', value: formatCurrency(c.paid) },
           hasPenalties
-            ? { label: 'Fines', value: compactTsh(c.penalties), tone: 'rose' }
-            : { label: 'Pending', value: compactTsh(c.pendingRequests) },
+            ? { label: 'Fines', value: formatCurrency(c.penalties), tone: 'rose' }
+            : { label: 'Pending', value: formatCurrency(c.pendingRequests) },
         ]}
         onWithdraw={() => setOpen(true)}
       />

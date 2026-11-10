@@ -123,11 +123,11 @@ export default function WalletCard({
       )}
 
       {/* The three supporting figures: small, plain, no lines or boxes around them. */}
-      <div className="mt-3.5 grid grid-cols-3 gap-3">
+      <div className="mt-3.5 flex flex-wrap justify-between gap-x-4 gap-y-2">
         {stats.map((s) => (
           <div key={s.label} className="min-w-0">
-            <p className="truncate text-[10px] text-white/40">{s.label}</p>
-            <p className={clsx('mt-px truncate text-[12.5px] font-medium tabular-nums', s.tone === 'rose' ? 'text-rose-300' : 'text-white/85')}>
+            <p className="text-[10px] text-white/40">{s.label}</p>
+            <p className={clsx('mt-px whitespace-nowrap text-[12.5px] font-medium tabular-nums', s.tone === 'rose' ? 'text-rose-300' : 'text-white/85')}>
               {mask(s.value)}
             </p>
           </div>
