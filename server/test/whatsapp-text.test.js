@@ -2,8 +2,10 @@
 
 // The WhatsApp texts. Run with: npm test
 //
-// The expected strings below are the samples Nino wrote on 10 Nov 2026, word for
-// word. If one of these fails, the wording drifted from what he approved.
+// The expected strings below are the samples Nino wrote on 10 Nov 2026 — the same
+// words, with the heading in bold and, since he found the first layout crowded, a
+// blank line between groups of two or three lines. If one of these fails, the
+// wording or the spacing drifted from what he approved.
 // (Trailing spaces in his paste are dropped: WhatsApp ignores them.)
 
 const test = require('node:test');
@@ -20,7 +22,9 @@ test('STOCK REQUEST', () => {
 
 By: Asha Mwinyi
 
-Pepa King Size: 20 Boxes
+Product: Pepa King Size
+Quantity: 20 Boxes
+
 Total Value: TSh 760,000`);
 });
 
@@ -54,10 +58,10 @@ test('STOCK REQUEST: a very long request keeps its totals; the list gives way, n
   assert.ok(!four.includes('more, see ZELab') && four.includes('Product 4: OHIS Pepa Ndogo (Colour 4) – Bila Filter'));
 });
 
-test('STOCK REQUEST: one product stays a single line with no number; a carton counts as the boxes it holds', () => {
+test('STOCK REQUEST: one product is just Product / Quantity, no number; a carton counts as the boxes it holds', () => {
   const one = t.owner.stockRequest({ by: 'Nyoya', items: [{ name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', qty: 1 }], total: 7500, when: at });
-  assert.match(one, /\n\nOHIS Pepa Ndogo \(Brown\) – Bila Filter: 1 Box\nTotal Value: TSh 7,500$/);
-  assert.ok(!one.includes('Total Boxes') && !one.includes('1-'));
+  assert.match(one, /\n\nProduct: OHIS Pepa Ndogo \(Brown\) – Bila Filter\nQuantity: 1 Box\n\nTotal Value: TSh 7,500$/);
+  assert.ok(!one.includes('Total Boxes') && !one.includes('Product 1'));
   const mixed = t.owner.stockRequest({ by: 'A', items: [{ name: 'A', qty: 1 }, { name: 'B', qty: 3, unit: 'Carton', boxes: 30 }], total: 5, when: at });
   assert.match(mixed, /\nProduct 1: A\nQuantity: 1 Box\n\nProduct 2: B\nQuantity: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
 });
@@ -69,8 +73,10 @@ test('SETTLEMENT SUBMITTED', () => {
 
 By: Asha Mwinyi
 Order: STL-20261110-0001
+
 Product: Pepa King Size
 Boxes Sold: 10
+
 Payment: TSh 380,000 (CRDB)
 Commission: TSh 20,000`);
 });
@@ -88,8 +94,10 @@ test('RETURN REQUEST', () => {
 
 By: Asha Mwinyi
 Order: STL-20261110-0001
+
 Product: Pepa Roll
 Quantity: 4 Boxes
+
 Reason: Damaged`);
 });
 
@@ -103,6 +111,7 @@ test('COMMISSION READY', () => {
 `*COMMISSION READY*
 
 Rep: Asha Mwinyi
+
 Available: TSh 210,000
 Earned: TSh 460,000
 Penalties: TSh 10,000
@@ -115,11 +124,13 @@ test('LOW STOCK', () => {
 `*LOW STOCK*
 
 Product: Pepa Roll
+
 Remaining: 6 Boxes
 Reorder Level: 10 Boxes
 Suggested Restock: 14 Boxes
+
 Priority: High`);
-  assert.match(t.owner.lowStock({ product: 'P', remaining: 1, level: 10, suggested: 19, high: false }), /Remaining: 1 Box\n.*\nSuggested Restock: 19 Boxes\nPriority: Medium$/s);
+  assert.match(t.owner.lowStock({ product: 'P', remaining: 1, level: 10, suggested: 19, high: false }), /Remaining: 1 Box\n.*\nSuggested Restock: 19 Boxes\n\nPriority: Medium$/s);
 });
 
 test('OUT OF STOCK', () => {
@@ -128,8 +139,10 @@ test('OUT OF STOCK', () => {
 
 Product: Pepa Roll
 Brand: Pepa
+
 Warehouse Stock: 0 Boxes
 Last Sale: 9 Nov 2026 | 16:10 EAT
+
 Suggested Restock: 20 Boxes`);
   const bare = t.owner.outOfStock({ product: 'P', brand: null, lastSale: null, suggested: 4 });
   assert.ok(!bare.includes('Brand') && !bare.includes('Last Sale'));
@@ -141,6 +154,7 @@ test('SETTLEMENT DEADLINE', () => {
 STL-20261110-0001
 
 Rep: Paul
+
 Time Remaining: 8 Minutes
 Outstanding: TSh 30,000
 Daily Fine: TSh 10,000`);
@@ -152,8 +166,10 @@ test('EXTENSION GRANTED', () => {
 `*EXTENSION GRANTED*
 
 Rep: Paul
+
 Extension: 96 Hours
 New Deadline: 14 Nov 2026 | 14:32 EAT
+
 Daily Fine: TSh 20,000`);
 });
 
@@ -279,6 +295,7 @@ test('SETTLEMENT APPROVED (rep)', () => {
 
 10 Boxes of Pepa King Size
 Payment: TSh 380,000
+
 Commission Earned: TSh 20,000
 Available Balance: TSh 210,000
 
@@ -308,6 +325,7 @@ test('LATE SETTLEMENT FINE (rep)', () => {
 `*LATE SETTLEMENT FINE*
 
 Fine Applied: TSh 10,000
+
 Order: STL-20261110-0001
 Overdue: 1 Day
 
@@ -320,6 +338,7 @@ test('STOCK REQUEST APPROVED (rep)', () => {
 `*STOCK REQUEST APPROVED*
 
 Request: SR-0001
+
 Your stock request has been approved and issued.
 
 ZELab`);
@@ -396,5 +415,32 @@ test('the heading of every message is bold in WhatsApp (*TITLE*) and nothing els
 
 test('the bold heading changes nothing else: the rest of Nino\'s sample is untouched', () => {
   const text = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'SR-0001' });
-  assert.equal(text.replace(/\*/g, ''), 'STOCK REQUEST APPROVED\n\nRequest: SR-0001\nYour stock request has been approved and issued.\n\nZELab');
+  assert.equal(text.replace(/\*/g, ''), 'STOCK REQUEST APPROVED\n\nRequest: SR-0001\n\nYour stock request has been approved and issued.\n\nZELab');
+});
+
+// ── room to breathe (Nino, 10 Nov 2026: the settlement text "looked crowded") ──
+test('no alert is a wall of text: every block is at most 4 lines, with a blank line between blocks', () => {
+  const sample = {
+    request: 'SR-1', reason: 'r', product: 'P', boxes: 2, order: 'STL-1', attached: true, amount: 1000, earned: 1, available: 1, closed: true,
+    stage: 1, fine: 1, days: 1, deadline: at, rate: 1, returnFine: 1, extensionCancelled: true, dailyFine: 1, overdueNow: true,
+    number: 'RET-1', hours: 24, minimum: 1, bonus: 1, target: 1, nextTarget: 2, nextBonus: 3,
+  };
+  const texts = Object.keys(t.repTexts).map((kind) => [`rep ${kind}`, t.repText({ kind, ...sample })]);
+  texts.push(
+    ['stockRequest', t.owner.stockRequest({ by: 'A', items: [{ name: 'P', qty: 1 }], total: 1, when: at })],
+    ['stockRequest (several)', t.owner.stockRequest({ by: 'A', items: [{ name: 'P', qty: 1 }, { name: 'Q', qty: 2 }], total: 1, when: at })],
+    ['settlementSubmitted', t.owner.settlementSubmitted({ by: 'Mrema', order: 'STL-20261101-0001', product: 'OHIS Pepa Ndogo (White) – Bila Filter', boxes: 2, amount: 60000, method: 'M-Pesa', commission: 10000, when: at })],
+    ['returnRequest', t.owner.returnRequest({ by: 'A', order: 'O', items: [{ name: 'P', quantity: 1 }], reason: 'r' })],
+    ['commissionReady', t.owner.commissionReady({ rep: 'A', available: 1, earned: 1, penalties: 1, minimum: 1 })],
+    ['lowStock', t.owner.lowStock({ product: 'P', remaining: 1, level: 1, suggested: 1, high: true })],
+    ['outOfStock', t.owner.outOfStock({ product: 'P', brand: 'B', lastSale: at, suggested: 1 })],
+    ['settlementDeadline', t.owner.settlementDeadline({ order: 'O', rep: 'R', minutes: 1, outstanding: 1, rate: 1 })],
+    ['extensionGranted', t.owner.extensionGranted({ rep: 'R', deadline: at, rate: 1 })],
+  );
+  for (const [name, text] of texts) {
+    assert.ok(!/\n\n\n/.test(text), `${name}: never two blank lines in a row`);
+    for (const block of text.split('\n\n')) {
+      assert.ok(block.split('\n').length <= 4, `${name}: a block of ${block.split('\n').length} lines —\n${block}`);
+    }
+  }
 });

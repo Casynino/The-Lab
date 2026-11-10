@@ -8,8 +8,10 @@
 //   *TITLE IN CAPITALS*      <- bold in WhatsApp (the asterisks make it bold)
 //   (date or reference, when the message has one)
 //
+//   Label: value             <- a group of 2-3 lines
 //   Label: value
-//   Label: value
+//
+//   Label: value             <- a blank line between groups, so it can breathe
 //
 //   (reps only) ZELab
 //
@@ -50,8 +52,8 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  // One product reads as "Name: 20 Boxes". Several are labelled "Product 1:", "Product 2:", each
-  // with its own "Quantity:" line, so no bare number is ever left to be read as a number of boxes
+  // One product: "Product:" and "Quantity:". Several: "Product 1:", "Product 2:", each with its own
+  // "Quantity:" line, so no bare number is ever left to be read as a number of boxes
   // ("1-Name: 2 Boxes / 2-Name: 3 Boxes" read as a muddle of 1, 2, 2, 3). Then the box count of
   // the whole request (a carton counts as the boxes it holds: `boxes`) and the value.
   // The totals are what the owner needs most, so a very long request drops lines from the LIST
@@ -59,7 +61,8 @@ const owner = {
   stockRequest: ({ by, items = [], total, when }) => {
     const head = [lines(bold('STOCK REQUEST'), dateTime(when)), `By: ${by}`];
     if (items.length <= 1) {
-      return doc(...head, lines(...items.map((i) => `${i.name}: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`));
+      const i = items[0];
+      return doc(...head, i && lines(`Product: ${i.name}`, `Quantity: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`);
     }
     const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes ?? i.qty) || 0), 0);
     const tail = lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`);
@@ -74,31 +77,26 @@ const owner = {
     return fitted(build, steps);
   },
 
+  // Who and which order / the product / the money: three small groups, not one block.
   settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when }) => doc(
     lines(bold('SETTLEMENT SUBMITTED'), dateOnly(when)),
-    lines(
-      `By: ${by}`,
-      `Order: ${order}`,
-      `Product: ${product}`,
-      `Boxes Sold: ${Math.round(Number(n) || 0)}`,
-      `Payment: ${money(amount)}${method ? ` (${method})` : ''}`,
-      Number(commission) > 0 && `Commission: ${money(commission)}`,
-    ),
+    lines(`By: ${by}`, `Order: ${order}`),
+    lines(`Product: ${product}`, `Boxes Sold: ${Math.round(Number(n) || 0)}`),
+    lines(`Payment: ${money(amount)}${method ? ` (${method})` : ''}`, Number(commission) > 0 && `Commission: ${money(commission)}`),
   ),
 
-  // One item reads as Product / Quantity. Several items each get their own pair.
-  returnRequest: ({ by, order, items = [], reason }) => {
-    const item = (i) => lines(`Product: ${i.name}`, `Quantity: ${boxes(i.quantity)}`);
-    if (items.length <= 1) {
-      return doc(bold('RETURN REQUEST'), lines(`By: ${by}`, order && `Order: ${order}`, items[0] && item(items[0]), reason && `Reason: ${reason}`));
-    }
-    return doc(bold('RETURN REQUEST'), lines(`By: ${by}`, order && `Order: ${order}`), ...items.map(item), reason && `Reason: ${reason}`);
-  },
+  // Who and which order, then each product with its quantity, then the reason.
+  returnRequest: ({ by, order, items = [], reason }) => doc(
+    bold('RETURN REQUEST'),
+    lines(`By: ${by}`, order && `Order: ${order}`),
+    ...items.map((i) => lines(`Product: ${i.name}`, `Quantity: ${boxes(i.quantity)}`)),
+    reason && `Reason: ${reason}`,
+  ),
 
   commissionReady: ({ rep, available, earned, penalties, minimum }) => doc(
     bold('COMMISSION READY'),
+    `Rep: ${rep}`,
     lines(
-      `Rep: ${rep}`,
       `Available: ${money(available)}`,
       `Earned: ${money(earned)}`,
       Number(penalties) > 0 && `Penalties: ${money(penalties)}`,
@@ -108,44 +106,29 @@ const owner = {
 
   lowStock: ({ product, remaining, level, suggested, high }) => doc(
     bold('LOW STOCK'),
-    lines(
-      `Product: ${product}`,
-      `Remaining: ${boxes(remaining)}`,
-      `Reorder Level: ${boxes(level)}`,
-      `Suggested Restock: ${boxes(suggested)}`,
-      `Priority: ${high ? 'High' : 'Medium'}`,
-    ),
+    `Product: ${product}`,
+    lines(`Remaining: ${boxes(remaining)}`, `Reorder Level: ${boxes(level)}`, `Suggested Restock: ${boxes(suggested)}`),
+    `Priority: ${high ? 'High' : 'Medium'}`,
   ),
 
   outOfStock: ({ product, brand, lastSale, suggested }) => doc(
     bold('OUT OF STOCK'),
-    lines(
-      `Product: ${product}`,
-      brand && `Brand: ${brand}`,
-      'Warehouse Stock: 0 Boxes',
-      lastSale && `Last Sale: ${dateTime(lastSale)}`,
-      `Suggested Restock: ${boxes(suggested)}`,
-    ),
+    lines(`Product: ${product}`, brand && `Brand: ${brand}`),
+    lines('Warehouse Stock: 0 Boxes', lastSale && `Last Sale: ${dateTime(lastSale)}`),
+    `Suggested Restock: ${boxes(suggested)}`,
   ),
 
   settlementDeadline: ({ order, rep, minutes, outstanding, rate }) => doc(
     lines(bold('SETTLEMENT DEADLINE'), order),
-    lines(
-      `Rep: ${rep}`,
-      `Time Remaining: ${count(minutes, 'Minute')}`,
-      `Outstanding: ${money(outstanding)}`,
-      `Daily Fine: ${money(rate)}`,
-    ),
+    `Rep: ${rep}`,
+    lines(`Time Remaining: ${count(minutes, 'Minute')}`, `Outstanding: ${money(outstanding)}`, `Daily Fine: ${money(rate)}`),
   ),
 
   extensionGranted: ({ rep, hours = 96, deadline, rate }) => doc(
     bold('EXTENSION GRANTED'),
-    lines(
-      `Rep: ${rep}`,
-      `Extension: ${count(hours, 'Hour')}`,
-      `New Deadline: ${dateTime(deadline)}`,
-      `Daily Fine: ${money(rate)}`,
-    ),
+    `Rep: ${rep}`,
+    lines(`Extension: ${count(hours, 'Hour')}`, `New Deadline: ${dateTime(deadline)}`),
+    `Daily Fine: ${money(rate)}`,
   ),
 
   test: () => doc(bold('ZELAB — TEST NOTIFICATION'), 'WhatsApp notifications are working.'),
@@ -212,45 +195,39 @@ const FOOT = 'ZELab';
 const rep = (title, ...parts) => doc(bold(title), ...parts, FOOT);
 
 const repTexts = {
-  STOCK_REQUEST_APPROVED: ({ request }) => rep('STOCK REQUEST APPROVED', lines(`Request: ${request}`, 'Your stock request has been approved and issued.')),
-  STOCK_REQUEST_REJECTED: ({ request, reason }) => rep('STOCK REQUEST REJECTED', lines(`Request: ${request}`, 'Your stock request was not approved.', reason && `Reason: ${reason}`)),
+  STOCK_REQUEST_APPROVED: ({ request }) => rep('STOCK REQUEST APPROVED', `Request: ${request}`, 'Your stock request has been approved and issued.'),
+  STOCK_REQUEST_REJECTED: ({ request, reason }) => rep('STOCK REQUEST REJECTED', `Request: ${request}`, lines('Your stock request was not approved.', reason && `Reason: ${reason}`)),
   STOCK_ADDED: ({ product, boxes: n, order, attached }) => rep(
     'NEW STOCK ADDED',
-    lines(`Product: ${product}`, `Quantity: ${boxes(n)}`, `Order: ${order}`),
+    lines(`Product: ${product}`, `Quantity: ${boxes(n)}`),
+    `Order: ${order}`,
     attached ? 'Added to your active order. Your settlement has been updated.' : 'Issued to you as a new order.',
   ),
   SETTLEMENT_APPROVED: ({ boxes: n, product, amount, earned, available, closed, order }) => rep(
     'SETTLEMENT APPROVED',
-    lines(
-      `${boxes(n)} of ${product}`,
-      `Payment: ${money(amount)}`,
-      earned != null && `Commission Earned: ${money(earned)}`,
-      available != null && `Available Balance: ${money(available)}`,
-    ),
+    lines(`${boxes(n)} of ${product}`, `Payment: ${money(amount)}`),
+    lines(earned != null && `Commission Earned: ${money(earned)}`, available != null && `Available Balance: ${money(available)}`),
     closed && `Order ${order} is now fully closed.`,
   ),
   SETTLEMENT_REJECTED: ({ boxes: n, product, reason }) => rep(
     'SETTLEMENT REJECTED',
-    lines(`${boxes(n)} of ${product}`, reason && `Reason: ${reason}`, 'Please review and resubmit.'),
+    `${boxes(n)} of ${product}`,
+    lines(reason && `Reason: ${reason}`, 'Please review and resubmit.'),
   ),
-  ORDER_CLOSED: ({ order }) => rep('ORDER CLOSED', lines(`Order: ${order}`, 'Fully settled. All boxes accounted for.')),
+  ORDER_CLOSED: ({ order }) => rep('ORDER CLOSED', `Order: ${order}`, 'Fully settled. All boxes accounted for.'),
   DEADLINE_NEAR: ({ order, stage = 1 }) => {
     if (stage >= 3) return rep('SETTLEMENT DEADLINE URGENT', `Order: ${order}`, 'Your settlement deadline is almost reached. Settle or return your order immediately.');
     if (stage === 2) return rep('SETTLEMENT FINAL REMINDER', `Order: ${order}`, 'Your settlement deadline is very close. Settle or return your order now.');
     return rep('SETTLEMENT DEADLINE NEAR', `Order: ${order}`, 'Your settlement deadline is approaching. Please settle your order.');
   },
-  LATE_FINE: ({ fine, order, days }) => rep('LATE SETTLEMENT FINE', lines(`Fine Applied: ${money(fine)}`, `Order: ${order}`, `Overdue: ${count(days, 'Day')}`)),
-  FINE_FORGIVEN: ({ amount, order }) => rep('FINE FORGIVEN', lines(`Amount: ${money(amount)}`, order && `Order: ${order}`, 'Returned to your commission balance.')),
-  COMMISSION_DEDUCTED: ({ amount, reason }) => rep('COMMISSION DEDUCTED', lines(`Amount: ${money(amount)}`, reason && `Reason: ${reason}`, 'Future commission is not affected.')),
+  LATE_FINE: ({ fine, order, days }) => rep('LATE SETTLEMENT FINE', `Fine Applied: ${money(fine)}`, lines(`Order: ${order}`, `Overdue: ${count(days, 'Day')}`)),
+  FINE_FORGIVEN: ({ amount, order }) => rep('FINE FORGIVEN', lines(`Amount: ${money(amount)}`, order && `Order: ${order}`), 'Returned to your commission balance.'),
+  COMMISSION_DEDUCTED: ({ amount, reason }) => rep('COMMISSION DEDUCTED', lines(`Amount: ${money(amount)}`, reason && `Reason: ${reason}`), 'Future commission is not affected.'),
   EXTENSION_ACTIVATED: ({ order, deadline, hours = 96, rate, returnFine }) => rep(
     'EXTENSION ACTIVATED',
-    lines(
-      `Order: ${order}`,
-      `Extension: ${count(hours, 'Hour')}`,
-      `New Deadline: ${dateTime(deadline)}`,
-      `Daily Fine After Deadline: ${money(rate)}`,
-      `Return Delay Fine: ${money(returnFine)}`,
-    ),
+    `Order: ${order}`,
+    lines(`Extension: ${count(hours, 'Hour')}`, `New Deadline: ${dateTime(deadline)}`),
+    lines(`Daily Fine After Deadline: ${money(rate)}`, `Return Delay Fine: ${money(returnFine)}`),
     'No fine until the new deadline. A return not completed within 24 Hours is fined.',
   ),
   DEADLINE_EXTENDED: ({ order, deadline }) => rep(
@@ -260,8 +237,8 @@ const repTexts = {
   ),
   DEADLINE_MOVED_BACK: ({ order, deadline, extensionCancelled, dailyFine, overdueNow }) => rep(
     'DEADLINE MOVED BACK',
+    `Order: ${order}`,
     lines(
-      `Order: ${order}`,
       `New Deadline: ${dateTime(deadline)}`,
       extensionCancelled && 'Extension: Cancelled',
       extensionCancelled && `Daily Fine: ${money(dailyFine)}`,
@@ -270,9 +247,9 @@ const repTexts = {
     extensionCancelled && 'The extension is yours again. You can take it whenever this order is not overdue.',
     overdueNow && 'That time has already passed, so the order is overdue now. The daily fine runs from today. A return waiting for approval pauses it. Settle or return to stop it.',
   ),
-  RETURN_APPROVED: ({ number, boxes: n }) => rep('RETURN APPROVED', lines(`Return: ${number}`, `Quantity: ${boxes(n)}`, 'Added back to inventory.')),
-  RETURN_REJECTED: ({ number, boxes: n, reason }) => rep('RETURN REJECTED', lines(`Return: ${number}`, `Quantity: ${boxes(n)}`, reason ? `Reason: ${reason}` : 'Please contact the administrator.')),
-  RETURN_CANCELLED: ({ number }) => rep('RETURN CANCELLED', lines(`Return: ${number}`, 'The boxes remain on your order. Settle or resubmit the return.')),
+  RETURN_APPROVED: ({ number, boxes: n }) => rep('RETURN APPROVED', lines(`Return: ${number}`, `Quantity: ${boxes(n)}`), 'Added back to inventory.'),
+  RETURN_REJECTED: ({ number, boxes: n, reason }) => rep('RETURN REJECTED', lines(`Return: ${number}`, `Quantity: ${boxes(n)}`), reason ? `Reason: ${reason}` : 'Please contact the administrator.'),
+  RETURN_CANCELLED: ({ number }) => rep('RETURN CANCELLED', `Return: ${number}`, 'The boxes remain on your order. Settle or resubmit the return.'),
   RETURN_EXPIRED: ({ number, fine, hours }) => rep(
     'RETURN EXPIRED',
     lines(`Return: ${number}`, Number(fine) > 0 && `Fine Applied: ${money(fine)}`),
