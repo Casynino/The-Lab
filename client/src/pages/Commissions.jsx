@@ -511,19 +511,18 @@ function FinesHistory({ admin }) {
   );
 }
 
-// The rules as figures, not sentences (Nino, 11 Nov 2026: "not well designed, too much info"). One small
-// label and one bold value per rule, two to a row, straight on the page — no box, no lines, no paragraph.
-// Both rate and fine rules use it, so the whole tab reads as one design.
-function Figure({ label, value, tone }) {
+// The rules as a small table, not sentences and not big numbers (Nino, 11 Nov 2026: "cool, but it feels too
+// much — make it better arranged"). The two situations run down the side, three columns across, and the
+// column headings carry the words so every cell is just a plain figure. Straight on the page.
+const FINE_COLS = 'grid-cols-[4.75rem_repeat(3,minmax(0,1fr))]';
+
+function FineRow({ label, time, daily, late, first }) {
   return (
-    <div className="min-w-0">
-      <p className="text-[11px] leading-snug text-muted">{label}</p>
-      <p className={clsx(
-        'mt-1 text-xl font-bold leading-tight tabular-nums',
-        tone === 'rose' ? 'text-rose-300' : tone === 'emerald' ? 'text-emerald-300' : 'text-foreground',
-      )}>
-        {value}
-      </p>
+    <div className={clsx('grid items-baseline gap-x-2 py-3.5', FINE_COLS, !first && 'border-t border-white/[0.06]')}>
+      <p className="text-xs text-muted">{label}</p>
+      <p className="text-[15px] font-semibold tabular-nums text-foreground">{time}</p>
+      <p className="text-[15px] font-semibold tabular-nums text-foreground">{daily}</p>
+      <p className="text-[15px] font-semibold tabular-nums text-foreground">{late}</p>
     </div>
   );
 }
@@ -531,16 +530,18 @@ function Figure({ label, value, tone }) {
 function PenaltyPolicyCard() {
   return (
     <section className="mt-9 px-1">
-      <h2 className="text-xs font-medium text-muted">Fines</h2>
-      <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-6">
-        <Figure label="Settle or return within" value="72 hours" />
-        <Figure label="Fine after that" value="TZS 10,000 / day" tone="rose" />
-        <Figure label="One extension, no fine" value="+96 hours" />
-        <Figure label="Fine after an extension" value="TZS 20,000 / day" tone="rose" />
-        <Figure label="Return not done in 24 hours" value="TZS 15,000" tone="rose" />
-        <Figure label="Same, after an extension" value="TZS 30,000" tone="rose" />
+      <h2 className="text-xs font-medium text-muted">Fines <span className="text-faint">· TZS</span></h2>
+      <div className={clsx('mt-4 grid gap-x-2 text-[10.5px] leading-tight text-faint', FINE_COLS)}>
+        <span />
+        <span>Time</span>
+        <span>Fine a day</span>
+        <span>Late return</span>
       </div>
-      <p className="mt-6 text-[11px] text-faint">Fines stop once everything is settled or returned.</p>
+      <div className="mt-2 border-t border-white/[0.06]">
+        <FineRow first label="Normal" time="72 hours" daily="10,000" late="15,000" />
+        <FineRow label="Extension" time="+96 hours" daily="20,000" late="30,000" />
+      </div>
+      <p className="mt-4 text-[11px] leading-snug text-faint">A late return is one not done in 24 hours. One extension per order, with no fine while it runs.</p>
     </section>
   );
 }
@@ -552,9 +553,12 @@ function RatesCard({ rates }) {
   return (
     <section className="mt-6 px-1">
       <h2 className="text-xs font-medium text-muted">You earn per box</h2>
-      <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-6">
+      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-4">
         {rates.perBrand.map((r) => (
-          <Figure key={r.brand} label={r.brand} value={formatCurrency(r.perBox)} tone="emerald" />
+          <div key={r.brand} className="min-w-0">
+            <p className="text-[11px] text-muted">{r.brand}</p>
+            <p className="mt-0.5 text-[17px] font-semibold tabular-nums text-emerald-300">{formatCurrency(r.perBox)}</p>
+          </div>
         ))}
       </div>
     </section>
