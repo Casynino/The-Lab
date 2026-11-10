@@ -2,6 +2,7 @@ import { LIVE } from '@/lib/polling';
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 import { Plus, Search, X, CheckCircle, XCircle, Eye, Clock, CheckCircle2, PackageOpen, PackageCheck } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -13,6 +14,7 @@ import {
   Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
+import CollapsibleList from '@/components/CollapsibleList';
 
 function defaultPkg(product) {
   if (!product?.packagings?.length) return null;
@@ -435,6 +437,114 @@ function HistoryRow({ r, onView }) {
   );
 }
 
+// ── The rep's Returns page, in the same style as their Requests page (Nino, 11 Nov 2026: "like the one you
+// showed me for requests — nice, not this"): a premium New return card, the returns still waiting as soft
+// cards, the rest in a History list that opens and closes. The tiles and the paragraph under them are gone;
+// the owner's and the warehouse's page is untouched.
+function RepReturnsView({ all, isLoading, onNew, onView, onCancel }) {
+  const pending = all.filter((r) => r.status === 'PENDING');
+  const done = all.filter((r) => r.status !== 'PENDING');
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onNew}
+        className="premium-card premium-card--sm mb-7 flex h-14 w-full items-center justify-between px-5 text-left transition hover:brightness-110 active:scale-[0.99]"
+      >
+        <span className="text-[17px] font-bold tracking-tight text-white">New return</span>
+        <Plus className="h-6 w-6 text-brand-500" strokeWidth={2.4} aria-hidden="true" />
+      </button>
+
+      {isLoading ? (
+        <PageSpinner />
+      ) : all.length === 0 ? (
+        <div className="mt-14 px-1 text-center">
+          <PackageOpen className="mx-auto h-6 w-6 text-muted" aria-hidden="true" />
+          <p className="mt-3 text-sm font-medium text-foreground">No returns yet</p>
+          <p className="mt-1 text-xs text-muted">Tap New return to send boxes back to ZELab.</p>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {pending.length > 0 && (
+            <div>
+              <h2 className="mb-3 px-1 text-lg font-bold text-foreground">
+                Waiting
+                <span className="ml-2 text-sm font-medium text-muted">{pending.length}</span>
+              </h2>
+              <div className="space-y-3">
+                {pending.map((r) => {
+                  const boxes = boxesOf(r);
+                  // 24 hours to be decided, then it expires and the boxes go back on the order.
+                  const hoursLeft = Math.max(0, 24 - (Date.now() - new Date(r.processedAt).getTime()) / 3600000);
+                  const expiring = hoursLeft <= 6;
+                  const names = r.items.map((i) => i.product?.name).filter(Boolean);
+                  return (
+                    <div
+                      key={r.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onView(r.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') onView(r.id); }}
+                      className="active-card block cursor-pointer"
+                      data-tone="near"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-sm font-semibold text-foreground">{r.returnNumber}</span>
+                        <span className={clsx('text-[13px] font-semibold', expiring ? 'text-rose-300' : 'text-amber-300')}>{Math.ceil(hoursLeft)}h left</span>
+                      </div>
+                      <p className="mt-2 text-[22px] font-bold leading-none tabular-nums text-amber-300">{formatNumber(boxes)} box{plural(boxes)}</p>
+                      {names.length > 0 && (
+                        <p className="mt-1.5 truncate text-xs text-muted">{names[0]}{names.length > 1 ? ` · +${names.length - 1} more` : ''}</p>
+                      )}
+                      <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.08] pt-3">
+                        <span className="text-xs text-muted">Waiting for ZELab</span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onCancel(r.id); }}
+                          className="text-xs font-semibold text-rose-300 transition hover:text-rose-200"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {done.length > 0 && (
+            <CollapsibleList title="History" count={done.length} defaultOpen={pending.length === 0}>
+              {done.map((r) => {
+                const meta = statusMeta(r.status);
+                const tone = meta.cls?.split(' ').find((c) => c.startsWith('text-')) || 'text-muted';
+                const boxes = boxesOf(r);
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => onView(r.id)}
+                    className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left transition hover:bg-white/[0.04] active:bg-white/[0.06]"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-foreground">{r.returnNumber}</p>
+                      <p className="mt-0.5 text-xs tabular-nums text-muted">{formatNumber(boxes)} box{plural(boxes)}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={clsx('text-[13px] font-medium', tone)}>{meta.label}</p>
+                      <p className="mt-0.5 text-xs text-muted">{formatDate(r.processedAt)}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </CollapsibleList>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Returns() {
   const { user } = useAuth();
@@ -476,6 +586,17 @@ export default function Returns() {
   });
 
   const all = data?.data || [];
+
+  if (isRep) {
+    return (
+      <div>
+        <RepReturnsView all={all} isLoading={isLoading} onNew={() => setOpen(true)} onView={setViewingId} onCancel={(id) => cancel.mutate(id)} />
+        {open && <ReturnModal onClose={() => setOpen(false)} />}
+        {viewingId && <ReturnDetailModal returnId={viewingId} canDecide={false} onClose={() => setViewingId(null)} />}
+      </div>
+    );
+  }
+
   const pending = all.filter((r) => r.status === 'PENDING');
   const approved = all.filter((r) => r.status === 'APPROVED' || r.status === 'COMPLETED');
   const rejected = all.filter((r) => ['REJECTED', 'CANCELLED', 'EXPIRED'].includes(r.status));
