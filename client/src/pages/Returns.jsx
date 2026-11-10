@@ -245,8 +245,8 @@ function ReturnModal({ onClose }) {
           </div>
         )}
 
-        {/* Pending-approval notice */}
-        <div className="rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+        {/* Pending-approval notice — a slim amber line down the side, no box */}
+        <div className="border-l-2 border-amber-400/60 pl-3 text-xs leading-relaxed text-amber-300">
           {isRep
             ? 'Your boxes go back to ZELab and are cleared off your open orders once approved. Submitted boxes are locked, and the request must be decided within 24 hours or it expires with a TSh 15,000 delay fine.'
             : 'Returns are pending until verified by the warehouse. Inventory updates only after approval. Pending returns expire after 24 hours.'}
@@ -305,13 +305,13 @@ function ReturnModal({ onClose }) {
                 <div title={product.name} className={`truncate text-sm font-medium ${inCart ? 'text-foreground' : 'text-muted'}`}>{product.name}</div>
                 <div className="mt-1.5 flex items-center justify-end gap-1.5">
                   <button onClick={() => dec(product.id)} disabled={qty === 0}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-elevated text-lg font-bold text-muted transition hover:bg-surface disabled:opacity-30">−</button>
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-lg font-bold text-muted transition hover:text-foreground disabled:opacity-30">−</button>
                   <input type="number" min="0" value={qty === 0 ? '' : qty}
                     onChange={(e) => { const v = parseInt(e.target.value, 10); setQty(product.id, isNaN(v) || v < 0 ? 0 : v); }}
                     placeholder="0"
                     className="h-8 w-14 rounded-lg border border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
                   <button onClick={() => inc(product.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-lg font-bold text-white transition hover:bg-brand-400">+</button>
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-lg font-bold text-brand-500 transition hover:bg-brand-500/25">+</button>
                 </div>
               </div>
             );

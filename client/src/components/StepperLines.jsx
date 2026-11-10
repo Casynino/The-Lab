@@ -8,7 +8,7 @@ import clsx from 'clsx';
 //
 //   items: [{ key, name, sub?, max, qty }]      onChange(key, nextQty)  — the caller clamps
 export default function StepperLines({ items, onChange }) {
-  const btn = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-elevated text-base font-bold text-foreground ring-1 ring-white/[0.08] transition active:scale-95 disabled:opacity-30';
+  const btn = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-base font-bold text-foreground ring-1 ring-white/[0.12] transition active:scale-95 disabled:opacity-30';
   // A list of one has nothing to number.
   const numbered = items.length > 1;
   return (
@@ -58,7 +58,7 @@ export default function StepperLines({ items, onChange }) {
                   aria-label={`Boxes of ${it.name}`}
                   className="h-8 w-10 min-w-0 rounded-lg bg-elevated text-center text-sm font-bold tabular-nums text-foreground ring-1 ring-white/[0.08] [appearance:textfield] focus:outline-none focus:ring-2 focus:ring-brand-500/50 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
-                <button type="button" className={clsx(btn, 'bg-brand-500 text-white ring-brand-500')} onClick={() => onChange(it.key, qty + 1)} disabled={qty >= it.max} aria-label={`One more ${it.name}`}>+</button>
+                <button type="button" className={clsx(btn, 'bg-brand-500/15 text-brand-500 ring-brand-500/40')} onClick={() => onChange(it.key, qty + 1)} disabled={qty >= it.max} aria-label={`One more ${it.name}`}>+</button>
               </div>
             </div>
           </li>

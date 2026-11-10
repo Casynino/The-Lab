@@ -15,9 +15,9 @@ import clsx from 'clsx';
 export default function NumberedLines({ items, className }) {
   if (!items?.length) return null;
   return (
-    <ol className={clsx('divide-y divide-border overflow-hidden rounded-xl border border-border', className)}>
+    <ol className={clsx('divide-y divide-white/[0.07]', className)}>
       {items.map((it, i) => (
-        <li key={it.key ?? i} className="px-3 py-2.5">
+        <li key={it.key ?? i} className="py-3">
           <div className="flex items-center gap-3">
             <span
               aria-hidden="true"

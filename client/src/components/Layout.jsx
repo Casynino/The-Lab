@@ -442,7 +442,7 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
       {open && <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />}
       {open && (
         <div className={clsx(
-          'absolute z-30 w-48 overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-[0_12px_30px_-12px_rgba(0,0,0,0.75)]',
+          'modal-glass absolute z-30 w-48 overflow-hidden !rounded-2xl p-1.5',
           rail ? 'bottom-2 left-[calc(100%+0.75rem)]' : 'bottom-[calc(100%-0.5rem)] left-3',
         )}>
           <div className="px-2.5 pb-1.5 pt-1">
@@ -459,7 +459,7 @@ function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotificatio
               <Smartphone className="h-3.5 w-3.5" /> Get the app
             </button>
           )} />
-          <div className="my-1 border-t border-border" />
+          <div className="my-1 border-t border-white/[0.07]" />
           <button className={clsx(item, 'text-rose-400 hover:bg-rose-500/10 hover:text-rose-300')} onClick={onSignOut}>
             <LogOut className="h-3.5 w-3.5" /> Sign out
           </button>
@@ -567,8 +567,8 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className={clsx('absolute z-50 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl', position)}>
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className={clsx('modal-glass absolute z-50 w-[min(20rem,calc(100vw-2rem))] overflow-hidden', position)}>
+        <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
           <span className="text-sm font-semibold text-foreground">
             Notifications
             {unread > 0 && <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{unread}</span>}
@@ -578,7 +578,7 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
         {notes.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted">You're all caught up.</div>
         ) : (
-          <ul className="max-h-72 divide-y divide-border overflow-y-auto">
+          <ul className="max-h-72 divide-y divide-white/[0.07] overflow-y-auto">
             {notes.map((n) => (
               <li key={n.id} className={clsx('flex items-start gap-3 px-4 py-3', !n.isRead && 'bg-brand-500/5')}>
                 <span className={clsx('mt-1.5 h-2 w-2 shrink-0 rounded-full', !n.isRead ? 'bg-brand-500' : 'bg-transparent')} />
@@ -592,7 +592,7 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
             ))}
           </ul>
         )}
-        <div className="border-t border-border p-2 text-center">
+        <div className="border-t border-white/[0.07] p-2.5 text-center">
           <button onClick={onViewAll} className="cursor-pointer text-sm text-brand-600 hover:underline">View all notifications →</button>
         </div>
       </div>

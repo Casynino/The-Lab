@@ -221,23 +221,25 @@ export default function InvoiceGenerator() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Customer */}
         <div className="lg:col-span-2">
-          <Card>
-            <CardHeader title="Customer details" />
-            <CardBody className="space-y-3">
+          {/* Plain sections on the page, no card round them (Nino, 11 Nov 2026: the same look as the rest). */}
+          <section className="px-1">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">Customer details</h2>
+            <div className="space-y-3">
               <Field label="Customer name" required><Input value={customer.name} onChange={setField('name')} placeholder="e.g. John Mussa" /></Field>
               <Field label="Business name"><Input value={customer.business} onChange={setField('business')} placeholder="Optional" /></Field>
               <Field label="Phone number" required><Input value={customer.phone} onChange={setField('phone')} placeholder="07.." /></Field>
               <Field label="TIN number"><Input value={customer.tin} onChange={setField('tin')} placeholder="Optional" /></Field>
               <Field label="Location"><Input value={customer.location} onChange={setField('location')} placeholder="Optional" /></Field>
-            </CardBody>
-          </Card>
+            </div>
+          </section>
         </div>
 
         {/* Products */}
         <div className="lg:col-span-3">
-          <Card>
-            <CardHeader title="Products" subtitle="Only in-stock products. Prices auto-fill from the system." />
-            <CardBody className="space-y-3">
+          <section className="px-1">
+            <h2 className="text-sm font-semibold text-foreground">Products</h2>
+            <p className="mb-3 mt-0.5 text-xs text-muted">Only in-stock products. Prices fill in by themselves.</p>
+            <div className="space-y-3">
               {/* Searchable picker */}
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
@@ -262,11 +264,15 @@ export default function InvoiceGenerator() {
 
               {/* Cart */}
               {cart.length === 0 ? (
-                <EmptyState title="No products added" message="Search above to add products to the invoice." icon={Package} />
+                <div className="py-10 text-center">
+                  <Package className="mx-auto h-6 w-6 text-muted" aria-hidden="true" />
+                  <p className="mt-3 text-sm font-medium text-foreground">No products added</p>
+                  <p className="mt-1 text-xs text-muted">Search above to add products.</p>
+                </div>
               ) : (
-                <div className="space-y-2">
+                <div>
                   {cart.map((it) => (
-                    <div key={it.productId} className="flex items-center gap-2 rounded-xl border border-border bg-elevated p-2.5">
+                    <div key={it.productId} className="flex items-center gap-2 border-b border-white/[0.07] py-3">
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium text-foreground">{it.name}</div>
                         <div className="text-xs text-faint">{tzs(it.unitPrice)} / unit · line {tzs(it.qty * it.unitPrice)}</div>
@@ -275,21 +281,21 @@ export default function InvoiceGenerator() {
                       <button onClick={() => removeItem(it.productId)} className="text-faint hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between rounded-xl bg-brand-500/10 px-3 py-2.5">
+                  <div className="flex items-center justify-between pt-3">
                     <span className="text-sm font-semibold text-foreground">Grand total</span>
                     <span className="text-lg font-bold text-brand-600 tabular-nums">{tzs(grandTotal)}</span>
                   </div>
                 </div>
               )}
-            </CardBody>
-          </Card>
+            </div>
+          </section>
 
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <p className="text-xs text-faint">
+          <div className="mt-6 flex items-center justify-between gap-4 px-1">
+            <p className="min-w-0 text-xs text-faint">
               {valid ? <span className="inline-flex items-center gap-1 text-emerald-500"><Check className="h-3.5 w-3.5" /> Ready to generate</span>
                 : 'Add customer name, phone and at least one product.'}
             </p>
-            <Button onClick={generate} disabled={!valid}><Receipt className="h-4 w-4" /> Generate invoice</Button>
+            <Button className="shrink-0 whitespace-nowrap rounded-full px-5" onClick={generate} disabled={!valid}><Receipt className="h-4 w-4" /> Generate invoice</Button>
           </div>
         </div>
       </div>

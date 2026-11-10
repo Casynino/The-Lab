@@ -14,6 +14,7 @@ import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/format';
 import OrderDetailModal from '@/components/OrderDetail';
 import ActiveOrderCard from '@/components/ActiveOrderCard';
+import CollapsibleList from '@/components/CollapsibleList';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
   Pagination, Table, THead, TBody, TR, TH, TD,
@@ -26,7 +27,7 @@ function CompletedRow({ s, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl px-1 py-3.5 text-left transition hover:bg-elevated"
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-white/[0.04] active:bg-white/[0.06]"
     >
       {/* No tick and no eye: the heading already says these are completed, and the whole row is the button. */}
       <div className="min-w-0 flex-1">
@@ -87,15 +88,11 @@ function RepSettlements({ viewing, setViewing }) {
       )}
 
       {completed.length > 0 && (
-        <div>
-          <Heading count={completed.length}>Completed orders</Heading>
-          {/* Plain rows on the page, no card round them. */}
-          <div className="divide-y divide-white/[0.06]">
-            {completed.map((s) => (
-              <CompletedRow key={s.id} s={s} onClick={() => setViewing(s.id)} />
-            ))}
-          </div>
-        </div>
+        <CollapsibleList title="Completed orders" count={completed.length} defaultOpen={active.length === 0}>
+          {completed.map((s) => (
+            <CompletedRow key={s.id} s={s} onClick={() => setViewing(s.id)} />
+          ))}
+        </CollapsibleList>
       )}
     </div>
   );

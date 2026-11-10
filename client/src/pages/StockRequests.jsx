@@ -18,6 +18,7 @@ import {
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
+import CollapsibleList from '@/components/CollapsibleList';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -224,7 +225,7 @@ function CartOrderSheet({ onClose, existing }) {
                     <button
                       onClick={() => dec(product.id)}
                       disabled={qty === 0}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
@@ -246,7 +247,7 @@ function CartOrderSheet({ onClose, existing }) {
                     />
                     <button
                       onClick={() => inc(product.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white transition hover:bg-brand-400 active:scale-90"
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-brand-500 transition hover:bg-brand-500/25 active:scale-90"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
@@ -364,7 +365,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div><div className="text-xs text-faint">Rep</div><div className="font-medium">{request.salesRep?.user?.name}</div></div>
-          <div><div className="text-xs text-faint">Status</div><Badge className={requestDisplayStatus(request).cls}>{requestDisplayStatus(request).label}</Badge></div>
+          <div><div className="text-xs text-faint">Status</div><div className={clsx('font-medium', requestDisplayStatus(request).cls?.split(' ').find((c) => c.startsWith('text-')) || 'text-foreground')}>{requestDisplayStatus(request).label}</div></div>
           <div><div className="text-xs text-faint">Requested</div><div className="font-medium">{formatDateTime(request.requestedAt)}</div></div>
           <div><div className="text-xs text-faint">Lines</div><div className="font-medium">{displayItems.length}</div></div>
         </div>
@@ -394,7 +395,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
           })}
         />
 
-        <div className="flex items-center justify-between rounded-xl bg-elevated px-4 py-3">
+        <div className="flex items-center justify-between border-t border-white/[0.07] pt-4">
           <span className="text-sm font-medium text-muted">
             {fulfilled ? 'Approved order value' : editable ? 'Approved order value' : 'Order value'}
           </span>
@@ -454,7 +455,7 @@ function RepRequestRow({ r, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-start justify-between gap-3 rounded-xl px-1 py-3.5 text-left transition hover:bg-elevated active:bg-elevated"
+      className="flex w-full items-start justify-between gap-3 px-4 py-3.5 text-left transition hover:bg-white/[0.04] active:bg-white/[0.06]"
     >
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-foreground">{r.requestNumber}</p>
@@ -512,12 +513,9 @@ function RepRequestsView({ onView }) {
       )}
 
       {completed.length > 0 && (
-        <div>
-          <Heading count={completed.length}>History</Heading>
-          <div className="divide-y divide-white/[0.06]">
-            {completed.map((r) => <RepRequestRow key={r.id} r={r} onClick={() => onView(r)} />)}
-          </div>
-        </div>
+        <CollapsibleList title="History" count={completed.length} defaultOpen={active.length === 0}>
+          {completed.map((r) => <RepRequestRow key={r.id} r={r} onClick={() => onView(r)} />)}
+        </CollapsibleList>
       )}
     </div>
   );
