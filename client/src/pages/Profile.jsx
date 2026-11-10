@@ -113,7 +113,7 @@ function ProfileCard({ user, sub }) {
   );
 }
 
-// ── How the rep is doing: the settlement record as a ring, this month, the best month ──
+// ── How the rep is doing: the settlement record as a ring, this month, the best month, and the six months ──
 function DoingCard({ insights }) {
   const s = insights?.settlement;
   const months = insights?.months || [];
@@ -121,44 +121,70 @@ function DoingCard({ insights }) {
   const best = insights?.best;
   const hasRate = s && s.onTimeRate != null;
   if (!hasRate && !(thisMonth && thisMonth.earned > 0) && !best) return null;
+  const top = Math.max(1, ...months.map((m) => m.earned));
   return (
-    <section className="active-card flex items-center gap-5">
-      {hasRate && (
-        <div style={{ filter: 'drop-shadow(0 0 7px rgba(238,49,36,0.35))' }}>
-          <Ring size={84} stroke={7} total={100} segments={[{ value: s.onTimeRate, color: s.onTimeRate >= 80 ? '#34d399' : RED }]}>
-            <span className="text-base font-bold leading-none tabular-nums text-foreground">{Math.round(s.onTimeRate)}%</span>
-            <span className="mt-1 text-[9px] text-muted">on time</span>
-          </Ring>
+    <section className="premium-card p-5">
+      <div className="flex items-center gap-5">
+        {hasRate && (
+          <div style={{ filter: 'drop-shadow(0 0 9px rgba(238,49,36,0.4))' }}>
+            <Ring size={88} stroke={7} total={100} segments={[{ value: s.onTimeRate, color: s.onTimeRate >= 80 ? '#34d399' : RED }]}>
+              <span className="text-lg font-bold leading-none tabular-nums text-white">{Math.round(s.onTimeRate)}%</span>
+              <span className="mt-1 text-[9px] text-white/50">on time</span>
+            </Ring>
+          </div>
+        )}
+        <div className="min-w-0 flex-1 space-y-3">
+          <p className="text-[11px] font-medium tracking-wide text-white/55">How you are doing</p>
+          {thisMonth && (
+            <div>
+              <p className="text-[11px] text-white/45">Earned this month</p>
+              <p className="text-[22px] font-bold leading-tight tabular-nums text-white">{formatCurrency(thisMonth.earned)}</p>
+            </div>
+          )}
+          {best && best.earned > 0 && (
+            <div>
+              <p className="text-[11px] text-white/45">Best month · {best.label}</p>
+              <p className="text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(best.earned)}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* The six months at a glance: the best one in red, the rest quiet. */}
+      {months.length > 1 && (
+        <div className="mt-5 flex items-end justify-between gap-2 border-t border-white/10 pt-4">
+          {months.map((m) => {
+            const isBest = best && m.label === best.label && m.earned === best.earned;
+            return (
+              <div key={m.key || m.label} className="flex flex-1 flex-col items-center gap-1.5">
+                <div className="flex h-10 w-full items-end justify-center">
+                  <div
+                    className={`w-full max-w-[26px] rounded-md ${isBest ? 'bg-brand-500' : 'bg-white/[0.14]'}`}
+                    style={{ height: `${Math.max(6, (m.earned / top) * 100)}%`, boxShadow: isBest ? '0 0 12px rgba(238,49,36,.45)' : undefined }}
+                  />
+                </div>
+                <span className="text-[9px] text-white/40">{m.label}</span>
+              </div>
+            );
+          })}
         </div>
       )}
-      <div className="min-w-0 flex-1 space-y-3">
-        <p className="text-xs font-medium text-muted">How you are doing</p>
-        {thisMonth && (
-          <div>
-            <p className="text-[11px] text-muted">Earned this month</p>
-            <p className="text-lg font-semibold tabular-nums text-foreground">{formatCurrency(thisMonth.earned)}</p>
-          </div>
-        )}
-        {best && best.earned > 0 && (
-          <div>
-            <p className="text-[11px] text-muted">Best month · {best.label}</p>
-            <p className="text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(best.earned)}</p>
-          </div>
-        )}
-      </div>
     </section>
   );
 }
 
-// ── A small soft card for one activity figure ─────────────────────────────────
+// ── A premium card for one activity figure ────────────────────────────────────
 function ActivityCard({ icon: Icon, label, value }) {
   return (
-    <div className="active-card active-card--compact">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.07] text-brand-500">
+    <div className="premium-card premium-card--sm p-4">
+      <span
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500/15 text-brand-500 ring-1 ring-inset ring-brand-500/30"
+        style={{ boxShadow: '0 0 14px rgba(238,49,36,.3)' }}
+      >
         <Icon className="h-4 w-4" />
       </span>
-      <p className="mt-2.5 text-[22px] font-bold leading-none tabular-nums text-foreground">{value}</p>
-      <p className="mt-1 text-[11px] text-muted">{label}</p>
+      <p className="mt-3 text-[26px] font-bold leading-none tabular-nums text-white">{value}</p>
+      <p className="mt-1.5 text-[11px] text-white/50">{label}</p>
     </div>
   );
 }
