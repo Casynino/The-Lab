@@ -435,43 +435,35 @@ function RepRequestCard({ r, onClick }) {
         {products} product{products !== 1 ? 's' : ''} · {formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatDateTime(r.requestedAt)}
       </div>
 
-      <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
+      <div className="mt-3 border-t border-white/8 pt-3">
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400">
           <Clock className="h-3.5 w-3.5" /> Waiting for approval · tap to edit
-        </span>
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
-          View details <ChevronRight className="h-3.5 w-3.5" />
         </span>
       </div>
     </motion.button>
   );
 }
 
-// Compact row for a finished request (approved/issued, rejected, or cancelled).
+// A finished request (approved/issued, rejected, or cancelled) as a plain row on the page: the number and
+// what it was on the left, how it ended and when on the right (Nino, 11 Nov 2026: "too much info" — the
+// icon, the badge, the product count and the arrow are gone). The status is a coloured word.
 function RepRequestRow({ r, onClick }) {
   const ds = requestDisplayStatus(r);
-  const settled = r.settlement?.status === 'SETTLED';
-  const Icon = r.status === 'FULFILLED' ? CheckCircle2 : r.status === 'REJECTED' ? XCircle : Ban;
-  const iconCls = r.status === 'FULFILLED'
-    ? (settled ? 'text-emerald-500' : 'text-sky-500')
-    : r.status === 'REJECTED' ? 'text-rose-500' : 'text-faint';
+  const tone = ds.cls?.split(' ').find((c) => c.startsWith('text-')) || 'text-muted';
+  const boxes = boxCount(r);
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-elevated active:bg-elevated"
+      className="flex w-full items-start justify-between gap-3 rounded-xl px-1 py-3.5 text-left transition hover:bg-elevated active:bg-elevated"
     >
-      <Icon className={clsx('h-5 w-5 shrink-0', iconCls)} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-semibold text-foreground">{r.requestNumber}</span>
-          <Badge className={ds.cls}>{ds.label}</Badge>
-        </div>
-        <div className="mt-0.5 text-xs text-faint">
-          {productCount(r)} product{productCount(r) !== 1 ? 's' : ''} · {formatNumber(boxCount(r))} box{boxCount(r) !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}
-        </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold text-foreground">{r.requestNumber}</p>
+        <p className="mt-0.5 text-xs tabular-nums text-muted">{formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}</p>
       </div>
-      <span className="hidden shrink-0 text-xs text-faint sm:block">{formatDate(r.requestedAt)}</span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
+      <div className="shrink-0 text-right">
+        <p className={clsx('text-[13px] font-medium', tone)}>{ds.label}</p>
+        <p className="mt-0.5 text-xs text-muted">{formatDate(r.requestedAt)}</p>
+      </div>
     </button>
   );
 }
@@ -489,46 +481,42 @@ function RepRequestsView({ onView }) {
   const active = all.filter((r) => r.status === 'PENDING');
   const completed = all.filter((r) => r.status !== 'PENDING');
 
+  // One short heading per list, no icons and no badge. The active list is not drawn when nothing is
+  // waiting — the page then goes straight from the New request button to the history.
+  const Heading = ({ children, count }) => (
+    <h2 className="mb-3 px-1 text-lg font-bold text-foreground">
+      {children}
+      {count > 0 && <span className="ml-2 text-sm font-medium text-muted">{count}</span>}
+    </h2>
+  );
+
+  if (!active.length && !completed.length) {
+    return (
+      <div className="mt-14 px-1 text-center">
+        <ClipboardList className="mx-auto h-6 w-6 text-muted" aria-hidden="true" />
+        <p className="mt-3 text-sm font-medium text-foreground">No requests yet</p>
+        <p className="mt-1 text-xs text-muted">Tap New request to order stock from ZELab.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
-      {/* ── Active (needs your attention) ── */}
-      <div>
-        <div className="mb-3 flex items-center gap-2">
-          <ClipboardList className="h-4 w-4 text-brand-500" />
-          <h2 className="text-base font-bold text-foreground">
-            Active requests
-            {active.length > 0 && (
-              <span className="ml-2 rounded-full bg-brand-500 px-2 py-0.5 text-[11px] font-black text-white">{active.length}</span>
-            )}
-          </h2>
-        </div>
-        {active.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface">
-            <EmptyState
-              title="No requests waiting"
-              message="When you submit a stock request, it shows here until ZELab approves it."
-              icon={ClipboardList}
-            />
-          </div>
-        ) : (
+      {active.length > 0 && (
+        <div>
+          <Heading count={active.length}>Active requests</Heading>
           <div className="space-y-3">
             {active.map((r) => <RepRequestCard key={r.id} r={r} onClick={() => onView(r)} />)}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* ── Completed ── */}
       {completed.length > 0 && (
         <div>
-          <div className="mb-2 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <h2 className="text-sm font-semibold text-muted">Completed requests ({completed.length})</h2>
+          <Heading count={completed.length}>History</Heading>
+          <div className="divide-y divide-white/[0.06]">
+            {completed.map((r) => <RepRequestRow key={r.id} r={r} onClick={() => onView(r)} />)}
           </div>
-          <Card>
-            <div className="divide-y divide-border p-1">
-              {completed.map((r) => <RepRequestRow key={r.id} r={r} onClick={() => onView(r)} />)}
-            </div>
-          </Card>
         </div>
       )}
     </div>
@@ -765,16 +753,16 @@ export default function StockRequests() {
 
   return (
     <div>
-      <PageHeader
-        title="Stock Requests"
-        subtitle={isRep ? 'Request stock from ZELab — tap a request to view details.' : "Approve or reject reps' stock requests."}
-      >
-        {isRep && (
-          <Button onClick={() => setCartOpen(true)}>
+      {isRep ? (
+        // A rep's page opens on the one thing they come here to do — the menu already says Requests.
+        <div className="mb-7 px-1">
+          <Button className="rounded-full px-6" onClick={() => setCartOpen(true)}>
             <Plus className="h-4 w-4" /> New request
           </Button>
-        )}
-      </PageHeader>
+        </div>
+      ) : (
+        <PageHeader title="Stock Requests" subtitle="Approve or reject reps' stock requests." />
+      )}
 
       {isRep ? <RepRequestsView onView={setViewing} /> : (
         <>
