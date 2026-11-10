@@ -6,7 +6,8 @@ import { ChevronDown } from 'lucide-react';
 // and see them"). The heading is the button, with the count and a small arrow; the rows live in ONE soft
 // glass card with a hairline between them. Callers open it by default only when nothing more urgent is on
 // the page (no active orders / requests), so a long history never pushes the live items down.
-export default function CollapsibleList({ title, count, defaultOpen = false, children }) {
+// `variant="premium"` holds its content in the red-lit premium card (for a form) instead of the list card.
+export default function CollapsibleList({ title, count, defaultOpen = false, variant = 'list', children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section>
@@ -22,7 +23,9 @@ export default function CollapsibleList({ title, count, defaultOpen = false, chi
         </h2>
         <ChevronDown className={clsx('h-5 w-5 shrink-0 text-muted transition-transform duration-200', open && 'rotate-180')} aria-hidden="true" />
       </button>
-      {open && <div className="glass-list mt-3 divide-y divide-white/[0.07]">{children}</div>}
+      {open && (variant === 'premium'
+        ? <div className="premium-card mt-3 p-5">{children}</div>
+        : <div className="glass-list mt-3 divide-y divide-white/[0.07]">{children}</div>)}
     </section>
   );
 }

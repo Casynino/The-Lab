@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { motion, useReducedMotion } from 'motion/react';
-import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCcw, ChevronDown } from 'lucide-react';
+import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCcw, ChevronDown, ArrowRight } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
@@ -644,41 +644,66 @@ function SelfExtendModal({ order, onClose, onDone }) {
   });
   const newDeadline = new Date(new Date(order.deadlineAt).getTime() + (order.extensionHours || 96) * 3600000);
 
+  // The deadline now and after, side by side; what the extra time costs as a two-row table instead of four
+  // sentences (Nino, 11 Nov 2026: "this information should be well arranged"); the pill bar footer the
+  // Settle and Return windows use. The fine amounts are the same ones the sentences said.
+  const [d1, t1] = formatDateTime(order.deadlineAt).split(', ');
+  const [d2, t2] = formatDateTime(newDeadline).split(', ');
+  const hours = order.extensionHours || 96;
+
   return (
-    <Modal open onClose={onClose} title="Extend settlement time" footer={
-      <>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={extend.isPending} disabled={!confirmed} onClick={() => extend.mutate()}>
-          <CalendarPlus className="h-4 w-4" /> Activate extension
+    <Modal open onClose={onClose} title="More time" footer={
+      <div className="flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
+        <button type="button" onClick={onClose}
+          className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]">
+          Cancel
+        </button>
+        <Button className="h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold" loading={extend.isPending} disabled={!confirmed} onClick={() => extend.mutate()}>
+          Extend
         </Button>
-      </>
+      </div>
     }>
-      <div className="space-y-4 text-sm">
-        {/* Plain rows on the window, no box round them. */}
-        <div className="divide-y divide-white/[0.07]">
-          <div className="flex justify-between py-2.5"><span className="text-muted">Current deadline</span><span className="font-medium">{formatDateTime(order.deadlineAt)}</span></div>
-          <div className="flex justify-between py-2.5"><span className="text-muted">Extra time</span><span className="font-medium text-brand-600">+{order.extensionHours || 96} hours</span></div>
-          <div className="flex justify-between py-2.5 font-semibold">
-            <span>New deadline</span><span>{formatDateTime(newDeadline)}</span>
+      <div className="space-y-6">
+        {/* Now → new deadline */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] text-muted">Now</p>
+            <p className="mt-1 text-[15px] font-semibold leading-tight text-foreground">{d1}</p>
+            <p className="text-xs text-muted">{t1}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-center gap-1.5">
+            <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-brand-500 ring-1 ring-inset ring-brand-500/30">+{hours} hours</span>
+            <ArrowRight className="h-4 w-4 text-muted" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 text-right">
+            <p className="text-[11px] text-muted">New deadline</p>
+            <p className="mt-1 text-[15px] font-semibold leading-tight text-foreground">{d2}</p>
+            <p className="text-xs text-muted">{t2}</p>
           </div>
         </div>
 
-        {/* The warning keeps its colour and its words but not its box: an amber line down the side. */}
-        <div className="border-l-2 border-amber-400/60 pl-3 text-amber-300">
-          <div className="mb-1.5 flex items-center gap-2 font-semibold text-amber-400">
-            <ShieldAlert className="h-4 w-4" /> What changes if you take it
+        {/* What it costs: normally, and after the extension */}
+        <div>
+          <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-amber-300">
+            <ShieldAlert className="h-4 w-4" /> What changes
+          </p>
+          <div className="grid grid-cols-[1fr_auto_auto] items-baseline text-[13px]">
+            <span />
+            <span className="pb-1 pl-6 text-right text-[10.5px] text-faint">Normally</span>
+            <span className="pb-1 pl-6 text-right text-[10.5px] text-amber-300/80">After</span>
+            <span className="border-t border-white/[0.07] py-2.5 text-muted">Late fine, a day</span>
+            <span className="border-t border-white/[0.07] py-2.5 pl-6 text-right tabular-nums text-muted">{formatCurrency(10000)}</span>
+            <span className="border-t border-white/[0.07] py-2.5 pl-6 text-right font-semibold tabular-nums text-amber-300">{formatCurrency(20000)}</span>
+            <span className="border-t border-white/[0.07] py-2.5 text-muted">Return not approved in 24 hours</span>
+            <span className="border-t border-white/[0.07] py-2.5 pl-6 text-right tabular-nums text-muted">{formatCurrency(15000)}</span>
+            <span className="border-t border-white/[0.07] py-2.5 pl-6 text-right font-semibold tabular-nums text-amber-300">{formatCurrency(30000)}</span>
           </div>
-          <ul className="list-disc space-y-1 pl-4 text-xs">
-            <li>No fine at all until the new deadline.</li>
-            <li>After it, the late fine becomes <b>{formatCurrency(20000)} per day</b> (normally {formatCurrency(10000)}).</li>
-            <li>A return still has to be approved within <b>24 hours</b>; if it isn't, the fine is <b>{formatCurrency(30000)}</b> (normally {formatCurrency(15000)}).</li>
-            <li>This can only be used <b>once</b> on this order, and can't be undone.</li>
-          </ul>
+          <p className="mt-3 text-xs leading-snug text-muted">No fine at all until the new deadline. You can do this once on this order, and it can't be undone.</p>
         </div>
 
-        <label className="flex cursor-pointer items-start gap-2">
+        <label className="flex cursor-pointer items-start gap-2.5 text-[13px]">
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="mt-0.5" />
-          <span className="text-muted">I understand the higher penalties and want the extra time.</span>
+          <span className="text-muted">I understand, and I want the extra time.</span>
         </label>
       </div>
     </Modal>

@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Lock, Eye, EyeOff, Loader2, ClipboardList, CheckCircle2, Boxes, Undo2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ClipboardList, CheckCircle2, Boxes, Undo2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import api, { unwrap, apiError } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
 import { RED } from '@/lib/brand';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
-import { PageSpinner, Field, Input, Button } from '@/components/ui';
+import { PageSpinner, Button } from '@/components/ui';
 import { repRegions, shortRegion } from '@/lib/repRegions';
 import CollapsibleList from '@/components/CollapsibleList';
 import WalletCard from '@/components/WalletCard';
@@ -19,7 +19,30 @@ import { Ring } from '@/components/RepCharts';
 // doing"): a profile card, the real wallet card, a "how you are doing" card, small soft activity cards, the
 // closed orders in one list that opens and closes, and the password form in a soft card.
 
-// ── Change-password form ──────────────────────────────────────────────────────
+// ── Change-password form: three short fields and one word ─────────────────────
+function PasswordField({ label, value, onChange, autoComplete, show, onToggle, error }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] text-white/50">{label}</span>
+      <div className="relative">
+        <input
+          type={onToggle && show ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          className="input h-10 text-[14px] [&]:pr-10"
+        />
+        {onToggle && (
+          <button type="button" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        )}
+      </div>
+      {error && <span className="mt-1 block text-[11px] text-rose-300">{error}</span>}
+    </label>
+  );
+}
+
 function ChangePasswordForm() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -40,32 +63,14 @@ function ChangePasswordForm() {
   const valid = current.length > 0 && next.length >= 6 && next === confirm;
 
   return (
-    <div className="space-y-4">
-      <Field label="Current password" required>
-        <div className="relative">
-          <Input type={showCurrent ? 'text' : 'password'} value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
-          <button type="button" onClick={() => setShowCurrent((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
-            {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
-      </Field>
-      <Field label="New password" required hint="Minimum 6 characters">
-        <div className="relative">
-          <Input type={showNext ? 'text' : 'password'} value={next} onChange={(e) => setNext(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
-          <button type="button" onClick={() => setShowNext((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
-            {showNext ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
-      </Field>
-      <Field label="Confirm new password" required error={mismatch ? 'Passwords do not match' : undefined}>
-        <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
-      </Field>
-      <div className="flex justify-end">
-        <Button className="rounded-full px-5" disabled={!valid || change.isPending} onClick={() => change.mutate()}>
-          {change.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-          Update password
-        </Button>
-      </div>
+    <div className="space-y-3">
+      <PasswordField label="Current password" value={current} onChange={setCurrent} autoComplete="current-password" show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} />
+      <PasswordField label="New password · 6 or more characters" value={next} onChange={setNext} autoComplete="new-password" show={showNext} onToggle={() => setShowNext((v) => !v)} />
+      <PasswordField label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={mismatch ? 'These do not match' : undefined} />
+      <Button className="mt-1 h-10 w-full justify-center rounded-full text-[13px] font-semibold" disabled={!valid || change.isPending} onClick={() => change.mutate()}>
+        {change.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+        Update
+      </Button>
     </div>
   );
 }
@@ -289,10 +294,10 @@ export default function Profile() {
         </>
       )}
 
-      <section>
-        <SectionTitle>Change password</SectionTitle>
-        <div className="glass-list p-5"><ChangePasswordForm /></div>
-      </section>
+      {/* Short: just a heading until it is opened, then three small fields in the premium card. */}
+      <CollapsibleList title="Change password" variant="premium">
+        <ChangePasswordForm />
+      </CollapsibleList>
     </div>
   );
 }
