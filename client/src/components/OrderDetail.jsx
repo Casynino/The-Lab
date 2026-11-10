@@ -100,7 +100,7 @@ function SettleDone({ amount, boxes, productName, onClose }) {
       </p>
 
       <p className="animate-rise mt-5 text-[13px] text-muted" style={{ animationDelay: '0.5s' }}>
-        Approved, and <b className="text-foreground">the commission is yours</b>.
+        Your commission is added once it is approved.
       </p>
 
       <Button className="animate-rise mt-6 w-full" style={{ animationDelay: '0.58s' }} onClick={onClose}>
@@ -165,7 +165,7 @@ function SettleBoxesModal({ order, onClose, onDone }) {
 
   const ready = productId && Number(boxes) > 0 && Number(boxes) <= max && accountId;
   return (
-    <Modal open onClose={onClose} title={`Submit settlement · ${order.settlementNumber}`}
+    <Modal open onClose={onClose} title="Submit settlement"
       footer={
         /* On a phone the action wants the width and the thumb wants the right
            hand side. Cancel stays quiet — it is the rarer choice, and it was
@@ -186,9 +186,7 @@ function SettleBoxesModal({ order, onClose, onDone }) {
         </div>
       }>
       <div className="space-y-5">
-        <p className="text-[13px] leading-snug text-muted">
-          Send the money, then submit. Your sale and commission are recorded <b className="text-foreground">once ZELab approves</b>.
-        </p>
+        <p className="text-[13px] leading-snug text-muted">Pay first, then submit for approval.</p>
         {lines.length === 0 ? (
           <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-faint">Every outstanding box is already submitted and awaiting approval.</p>
         ) : (<>
@@ -200,7 +198,7 @@ function SettleBoxesModal({ order, onClose, onDone }) {
               <div className="rounded-xl bg-elevated/60 px-4 py-3 ring-1 ring-white/[0.07]">
                 <p className="text-[15px] font-semibold leading-tight text-foreground">{line?.name}</p>
                 <p className="mt-1 text-xs text-faint">
-                  {formatNumber(max)} left to settle · {formatCurrency(line?.sellingPrice || 0)} a box
+                  {formatNumber(max)} left · {formatCurrency(line?.sellingPrice || 0)} a box
                 </p>
               </div>
             ) : (
@@ -211,7 +209,7 @@ function SettleBoxesModal({ order, onClose, onDone }) {
           </div>
 
           <div>
-            <StepHead n="2" right={`${formatNumber(max)} left · ${formatCurrency(line?.sellingPrice || 0)} a box`}>How many boxes</StepHead>
+            <StepHead n="2" right={lines.length > 1 ? `${formatNumber(max)} left · ${formatCurrency(line?.sellingPrice || 0)} a box` : undefined}>How many boxes</StepHead>
             <BoxStepper value={boxes} max={max} onChange={setBoxes} />
           </div>
 
@@ -306,7 +304,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
   );
 
   return (
-    <Modal open onClose={onClose} size="lg" title={`Return to ZELab · ${order.settlementNumber}`} footer={footer}>
+    <Modal open onClose={onClose} size="lg" title="Return boxes" footer={footer}>
       {returnableLines.length === 0 ? (
         <p className="py-4 text-center text-sm text-muted">No boxes left to return on this order.</p>
       ) : (
@@ -1016,13 +1014,15 @@ export default function OrderDetailModal({ settlementId, onClose }) {
           }
 
           const [primary, ...rest] = actions;
-          const btn = 'flex h-11 items-center justify-center gap-2 rounded-xl px-3 text-[13px] font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60';
+          const btn = 'flex items-center justify-center gap-2 rounded-xl px-3 font-semibold ring-1 transition duration-150 active:scale-[0.97] disabled:opacity-60';
+          const btnMain = 'h-12 text-[15px]'; // the one you came for
+          const btnSide = 'h-10 text-[13px]'; // the others, quieter
 
           return (
             <div className="w-full space-y-2">
               {primary && (
                 <button type="button" onClick={primary.onClick} disabled={primary.busy}
-                  className={`${btn} w-full ${primary.cls}`}>
+                  className={`${btn} ${btnMain} w-full ${primary.cls}`}>
                   <primary.Icon className={`h-4 w-4 shrink-0 ${primary.icon}`} />
                   {primary.label}
                 </button>
@@ -1031,7 +1031,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 <div className={`grid gap-2 ${rest.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
                   {rest.map((a) => (
                     <button key={a.key} type="button" onClick={a.onClick} disabled={a.busy}
-                      className={`${btn} ${a.cls}`}>
+                      className={`${btn} ${btnSide} ${a.cls}`}>
                       <a.Icon className={`h-4 w-4 shrink-0 ${a.icon}`} />
                       {a.label}
                     </button>
@@ -1141,7 +1141,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
             {order.pendingReturns > 0 && (
               <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-400">
                 <Clock className="h-4 w-4 shrink-0" />
-                <span>{order.pendingReturns} return{order.pendingReturns !== 1 ? 's' : ''} awaiting ZELab approval — boxes remain outstanding until approved.</span>
+                <span>{order.pendingReturns} return{order.pendingReturns !== 1 ? 's' : ''} waiting for approval</span>
               </div>
             )}
 
@@ -1174,7 +1174,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
             {order.pendingSubmissions > 0 && (
               <div className="flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2.5 text-sm text-sky-300">
                 <Clock className="h-4 w-4 shrink-0" />
-                <span>{order.pendingSubmissions} settlement{order.pendingSubmissions !== 1 ? 's' : ''} awaiting approval — no sale or commission is recorded until The Doctor approves.</span>
+                <span>{order.pendingSubmissions} settlement{order.pendingSubmissions !== 1 ? 's' : ''} waiting for approval</span>
               </div>
             )}
             {staff && order.pendingSubmissionsList?.length > 0 && (
@@ -1274,22 +1274,28 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               );
             })()}
 
-            {/* Money picture — all derived from settled/returned boxes */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <MoneyCard label="Order value" value={formatCurrency(order.order.totals.orderValue)} tone="brand" />
-              <MoneyCard label="Settled" value={formatCurrency(order.order.totals.settledValue)} tone="emerald"
-                quiet={!(order.order.totals.settledValue > 0)} />
-              <MoneyCard label="Returned value" value={formatCurrency(order.order.totals.returnedValue)} />
-              <MoneyCard label="Outstanding" value={formatCurrency(order.order.totals.outstanding)} tone="rose"
-                quiet={!(order.order.totals.outstanding > 0)} />
-            </div>
+            {/* Money picture — all derived from settled/returned boxes. Until some money or
+                stock has moved, "Settled TSh 0" and "Returned TSh 0" say nothing the first two
+                cards do not, so a new order shows two cards, not four. */}
+            {(() => {
+              const t = order.order.totals;
+              const moved = t.settledValue > 0 || t.returnedValue > 0;
+              return (
+                <div className={`grid grid-cols-2 gap-3 ${moved ? 'sm:grid-cols-4' : ''}`}>
+                  <MoneyCard label="Order value" value={formatCurrency(t.orderValue)} tone="brand" />
+                  {moved && <MoneyCard label="Settled" value={formatCurrency(t.settledValue)} tone="emerald" quiet={!(t.settledValue > 0)} />}
+                  {moved && <MoneyCard label="Returned value" value={formatCurrency(t.returnedValue)} />}
+                  <MoneyCard label="Outstanding" value={formatCurrency(t.outstanding)} tone="rose" quiet={!(t.outstanding > 0)} />
+                </div>
+              );
+            })()}
 
             {/* Box-by-box, per product. A five-column table on a 390px phone
                 scrolls the product name off the left edge, so the header reads
                 "SUED" and the numbers belong to nothing. One block per product
                 with its own bar says the same thing and fits. */}
             <div>
-              <div className="mb-2 text-sm font-semibold text-foreground">Box by box</div>
+              <div className="mb-2 text-sm font-semibold text-foreground">{order.order.lines.length === 1 ? 'Product' : 'Box by box'}</div>
               <div className="space-y-2">
                 {order.order.lines.map((l, n) => {
                   const total = Math.max(1, l.assigned);
@@ -1332,17 +1338,17 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 })}
               </div>
 
-              <p className="mt-2 text-[11px] leading-snug text-faint">
-                The order closes only when every box is settled or returned. After the deadline, boxes not accounted
-                for count as missing — {formatCurrency(order.order.totals.remainingValue)} on this one.
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-faint">
-                Commission on {formatNumber(order.order.totals.settledBoxes)} settled box{order.order.totals.settledBoxes === 1 ? '' : 'es'}:{' '}
-                <span className="font-semibold text-brand-600">{formatCurrency(order.order.totals.commission)}</span> · paid via Commissions.
-              </p>
+              {order.order.totals.settledBoxes > 0 && (
+                <p className="mt-2 text-xs text-muted">
+                  Commission earned{' '}
+                  <span className="font-semibold text-brand-600">{formatCurrency(order.order.totals.commission)}</span>
+                </p>
+              )}
             </div>
 
-            {/* Money in — one row per settlement, not a paragraph that wraps. */}
+            {/* Money in — one row per settlement, not a paragraph that wraps. Nothing settled
+                yet is already said by the box panel above, so there is no empty section. */}
+            {order.sales?.length > 0 && (
             <div>
               <div className="mb-2 flex items-baseline gap-2">
                 <span className="text-sm font-semibold text-foreground">Settled</span>
@@ -1352,9 +1358,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   </span>
                 )}
               </div>
-              {!order.sales?.length ? (
-                <p className="rounded-xl bg-elevated/40 px-3 py-2.5 text-[13px] text-faint">Nothing settled yet.</p>
-              ) : (
+              {(
                 <ul className="space-y-2">
                   {order.sales.map((s) => {
                     const boxes = (s.items || []).reduce((n, i) => n + (i.quantity || 0), 0);
@@ -1376,6 +1380,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 </ul>
               )}
             </div>
+            )}
 
             {/* Boxes that came back. These used to disappear into a total the
                 moment they were approved, with no way to see which ones. */}
