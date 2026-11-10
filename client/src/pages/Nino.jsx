@@ -59,7 +59,8 @@ export default function Nino() {
           </a>
           <nav aria-label="Page" className="flex items-center gap-1 sm:gap-2">
             <Link to="/login" className={`hidden h-9 items-center gap-1.5 rounded-full px-3 text-[13px] text-[var(--n-muted)] transition-colors hover:text-[var(--n-ink)] sm:inline-flex ${focus}`}>
-              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />ZELab
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+              <img src="/brand/zelab-dark.svg" alt="ZELab" width="678" height="264" className="h-7 w-auto" />
             </Link>
             <a href="#work" className={`hidden h-9 items-center rounded-full px-3 text-[13px] text-[var(--n-muted)] transition-colors hover:text-[var(--n-ink)] md:inline-flex ${focus}`}>Work</a>
             <a href="#contact" className={`inline-flex h-9 items-center rounded-full bg-[var(--n-accent)] px-4 text-[13px] font-semibold text-[var(--n-accent-ink)] transition hover:brightness-110 ${focus}`}>Work with me</a>
@@ -205,7 +206,8 @@ export default function Nino() {
             {' · © '}{new Date().getFullYear()}{' · Designed & built by Nino'}
           </p>
           <Link to="/login" className={`inline-flex min-h-11 items-center gap-1.5 transition-colors hover:text-[var(--n-ink)] ${focus}`}>
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Back to ZELab
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Back to
+            <img src="/brand/zelab-dark.svg" alt="ZELab" width="678" height="264" className="h-6 w-auto" />
           </Link>
         </div>
       </footer>
@@ -258,7 +260,9 @@ function ProjectCard({ p, featured }) {
             )}
             <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-[var(--n-faint)]">{p.kind}</p>
             <h3 className={`mt-2 flex items-start justify-between gap-3 font-bold tracking-[-0.03em] ${featured ? 'text-3xl sm:text-4xl' : 'text-xl'}`}>
-              {p.name}
+              {p.logo
+                ? <img src={p.logo} alt={p.name} width="678" height="264" className={`w-auto ${featured ? 'h-14 sm:h-[4.5rem]' : 'h-10'}`} />
+                : p.name}
               <ArrowUpRight className="nino-arrow mt-1 h-5 w-5 shrink-0 text-[var(--n-faint)] group-hover:text-[var(--n-accent)]" aria-hidden="true" />
             </h3>
             <p className={`mt-2.5 text-pretty leading-relaxed text-[var(--n-muted)] ${featured ? 'text-base sm:text-[17px]' : 'text-[14.5px]'}`}>{p.line}</p>

@@ -20,6 +20,7 @@ export const LIVE = [
     name: 'ZELab', kind: 'Stock, settlement & commission system',
     line: "You're on it. Every box that leaves ZELab is on the system — who took it, what came back, what is still owed, and what each rep has earned. We keep Tanzania stocked.",
     url: 'https://www.zelab.site', domain: 'zelab.site', shot: '/nino/haolabs.webp',
+    logo: '/brand/zelab-dark.svg',   // the official ZELab logo (dark-page version): shown as the card's title
     tags: ['Stock control', 'Settlements', 'Commission', 'Reports'],
   },
   {
