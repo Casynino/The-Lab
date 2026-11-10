@@ -175,19 +175,6 @@ function GlassSidebar({
     return setHint({ label: el.dataset.hint, x: box.right + 12, y: box.top + box.height / 2 });
   };
 
-  const brand = (compact) => (
-    <NavLink to="/" onClick={onNavigate} data-hint="ZELab"
-      className={clsx('flex min-w-0 items-center rounded-full', sheet ? 'gap-2.5' : 'gap-3', FOCUS)}>
-      {/* Just "Lab" — the letters of the OFFICIAL logo, white. Nino, 10 Nov 2026, looking at
-          this panel: "it should just say Lab, no need for ZELab up there" (the whole logo
-          is on the sign-in page, the tab and the home-screen icon). The same word in the
-          folded rail, smaller. The name is still here for a screen reader and for the
-          rail's tooltip. Artwork: docs/mockups/official_logo.py. */}
-      <img src="/brand/lab-dark.svg" alt="ZELab" width="330" height="194"
-        className={clsx('w-auto shrink-0', compact ? 'h-6' : sheet ? 'h-7' : 'h-8')} />
-    </NavLink>
-  );
-
   const row = (item, child = false, where = null) => {
     const Icon = ICONS[item.icon] || Package;
     const active = item.to === current;
@@ -222,16 +209,19 @@ function GlassSidebar({
 
   const full = (
     <div className="flex h-full min-h-0 flex-col">
-      <div className={clsx('flex items-center justify-between gap-2', sheet ? 'px-3 pb-2 pr-6 pt-3' : 'px-4 pb-2.5 pr-7 pt-3.5')}>
-        {brand(false)}
-        {mode === 'sheet' ? (
+      {/* No logo up here (Nino, 11 Nov 2026: "no need of the logo, just keep it plain"). The phone's
+          drawer keeps its close button; the desk panel just starts with the search. */}
+      {mode === 'sheet' ? (
+        <div className="flex justify-end px-3 pb-2 pr-6 pt-3">
           <button type="button" onClick={onNavigate}
             className={clsx('glass-row grid size-9 shrink-0 place-items-center rounded-full g-text g-hover', FOCUS)}>
             <X className="h-[17px] w-[17px]" />
             <span className="sr-only">Close</span>
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : (
+        <div aria-hidden="true" className="pt-4" />
+      )}
 
       <div className={clsx('pb-1.5', sheet ? 'px-2.5' : 'px-3')}>
         <label className={clsx('glass-field flex items-center gap-2.5 g-soft', sheet ? 'px-2.5 py-1.5 text-[13px]' : 'px-3.5 py-2 text-sm')}>
@@ -340,7 +330,7 @@ function GlassSidebar({
 
   const railView = (
     <div className="flex min-h-0 flex-1 flex-col items-center">
-      <div className="pb-2 pt-4">{brand(true)}</div>
+      <div aria-hidden="true" className="pt-4" />
       <button
         type="button"
         data-hint="Search pages"
