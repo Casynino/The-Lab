@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import api, { unwrap, apiError } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
 import { RED } from '@/lib/brand';
-import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
 import { PageSpinner, Field, Input, Button } from '@/components/ui';
 import CollapsibleList from '@/components/CollapsibleList';
 import WalletCard from '@/components/WalletCard';
@@ -90,20 +90,13 @@ function ProfileCard({ user, sub }) {
         className="pointer-events-none absolute -right-12 -top-20 -z-10 h-56 w-56 rounded-full"
         style={{ background: 'radial-gradient(closest-side, rgba(238,49,36,.34), transparent)' }}
       />
-      <div className="flex items-center gap-4">
-        <div
-          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-xl font-bold text-white"
-          style={{ boxShadow: '0 0 22px rgba(238,49,36,.45)' }}
-        >
-          {initials(user?.name)}
-        </div>
-        <div className="min-w-0">
-          <h1 className="truncate text-[22px] font-bold leading-tight tracking-tight text-white">{user?.name}</h1>
-          <p className="mt-0.5 text-[13px] leading-snug text-white/60">
-            {sub}
-            {user?.isActive === false && <span className="ml-2 text-rose-300">· Inactive</span>}
-          </p>
-        </div>
+      {/* Just the name — no initials circle (Nino, 11 Nov 2026: "no need of the MK, the name is ok"). */}
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold leading-tight tracking-tight text-white">{user?.name}</h1>
+        <p className="mt-1 text-[13px] leading-snug text-white/60">
+          {sub}
+          {user?.isActive === false && <span className="ml-2 text-rose-300">· Inactive</span>}
+        </p>
       </div>
       {rows.length > 0 && (
         <div className="mt-5 space-y-2.5 border-t border-white/10 pt-4">
