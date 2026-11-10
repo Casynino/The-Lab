@@ -847,6 +847,7 @@ module.exports = {
   earnedForRep,
   earnedBetween,
   earnedLinesForRep,
+  boxesSettledByRep,
   currentRates,
   rateForProductOnOrder,
   computeForRep,
