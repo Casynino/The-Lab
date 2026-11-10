@@ -26,10 +26,20 @@ function ActiveOrderCard({ s, onClick }) {
   const approaching = s.approaching;
 
   const accent = overdue
-    ? { border: 'border-rose-500/30', bg: 'bg-rose-500/5', text: 'text-rose-400', timeCls: 'text-rose-400' }
+    ? { border: 'border-rose-500/30', bg: 'bg-rose-500/5', text: 'text-rose-400' }
     : approaching
-      ? { border: 'border-amber-500/30', bg: 'bg-amber-500/5', text: 'text-amber-400', timeCls: 'text-amber-400' }
-      : { border: 'border-border', bg: 'bg-surface', text: 'text-brand-600', timeCls: 'text-faint' };
+      ? { border: 'border-amber-500/30', bg: 'bg-amber-500/5', text: 'text-amber-400' }
+      : { border: 'border-border', bg: 'bg-surface', text: 'text-brand-600' };
+
+  const b = s.boxes || {};
+  const issued = b.issued || 0;
+  // Boxes the rep has already handed over and is waiting on ZELab for: a submission or a return.
+  const withOffice = (b.pendingSubmitted || 0) + (b.pendingReturned || 0);
+  const pct = (n) => `${issued > 0 ? Math.max(0, Math.min(100, (n / issued) * 100)) : 0}%`;
+  // "Missing" is an accusation, and it is the wrong one when the rep has already handed the boxes
+  // over and is waiting on The Doctor. A late order whose whole outstanding count is sitting in a
+  // submission or a return says so instead.
+  const waiting = b.remaining > 0 && withOffice >= b.remaining;
 
   return (
     <motion.button
@@ -37,71 +47,56 @@ function ActiveOrderCard({ s, onClick }) {
       onClick={onClick}
       className={clsx('w-full rounded-2xl border p-4 text-left transition hover:bg-elevated', accent.border, accent.bg)}
     >
-      {/* Order number + status */}
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-bold text-foreground">{s.settlementNumber}</span>
-        <Badge className={SETTLEMENT_STATUS_META[s.status]?.cls}>
-          {SETTLEMENT_STATUS_META[s.status]?.label}
-        </Badge>
+      {/* The order, and how long is left — red words ("52h overdue") when it is late. There is no
+          "Partial" / "Open" badge: nobody needs to be told an order they are working on is not
+          finished, and the bar below already shows how far it is. */}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] font-semibold text-muted">{s.settlementNumber}</span>
+        <Remaining hours={s.hoursRemaining} />
       </div>
 
-      {/* Outstanding, in both of this order's currencies: the money he owes and
-          the boxes he is still carrying. The count stays white — the accent is
-          already carrying urgency on the money, and a second lime figure beside
-          it reads as the money said twice. Late, they go rose together. */}
-      <div className="mt-3">
-        <div className="text-[11px] uppercase tracking-widest text-faint">Outstanding</div>
-        <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-          <span className={clsx('text-2xl font-black tabular-nums', accent.text)}>
-            {formatCurrency(s.balance)}
-          </span>
-          {/* An order with no linked transfer has issued 0, and "0 boxes left"
-              on a live order would be a lie about a finished one. */}
-          {s.boxes?.issued > 0 && (() => {
-            // "Missing" is an accusation, and it is the wrong one when the rep
-            // has already handed the boxes over and is waiting on The Doctor.
-            // A late order whose whole outstanding count is sitting in a
-            // submission or a return says so instead.
-            const withOffice = (s.boxes.pendingSubmitted || 0) + (s.boxes.pendingReturned || 0);
-            const waiting = s.boxes.remaining > 0 && withOffice >= s.boxes.remaining;
-            return (
-              <span className="ml-auto shrink-0 text-[12px] font-semibold text-muted">
-                <BoxCount
-                  to={s.boxes.remaining}
-                  countOnMount={false}
-                  duration={450}
-                  unitOne="box"
-                  unitMany="boxes"
-                  suffix={waiting ? 'awaiting approval' : overdue ? 'missing' : 'left'}
-                  unitClassName="text-[12px] font-semibold text-muted"
-                  className={clsx(
-                    'text-[15px] font-black',
-                    waiting ? 'text-amber-400' : overdue ? 'text-rose-400' : 'text-foreground',
-                  )}
-                />
-              </span>
-            );
-          })()}
+      {/* What is still owed, and the boxes that stand for it. */}
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-faint">Outstanding</div>
+          <div className={clsx('mt-0.5 text-2xl font-black tabular-nums', accent.text)}>{formatCurrency(s.balance)}</div>
         </div>
+        {/* An order with no linked transfer has issued 0, and "0 boxes left" on a live order would be
+            a lie about a finished one. */}
+        {issued > 0 && (
+          <span className="shrink-0 pb-0.5 text-right text-[12px] font-semibold text-muted">
+            <BoxCount
+              to={b.remaining}
+              countOnMount={false}
+              duration={450}
+              unitOne="box"
+              unitMany="boxes"
+              suffix={waiting ? 'awaiting approval' : overdue ? 'missing' : 'left'}
+              unitClassName="text-[12px] font-semibold text-muted"
+              className={clsx('text-[15px] font-black', waiting ? 'text-amber-400' : overdue ? 'text-rose-400' : 'text-foreground')}
+            />
+          </span>
+        )}
       </div>
 
-      {/* Secondary money line */}
-      <div className="mt-2 flex gap-4 text-xs text-faint">
-        <span>Order {formatCurrency(s.assignedValue)}</span>
-        {s.paid > 0 && <span className="text-emerald-400">Settled {formatCurrency(s.paid)}</span>}
-        {s.returned > 0 && <span className="text-sky-400">Returned {formatCurrency(s.returned)}</span>}
-      </div>
+      {/* How far along: settled, returned, and waiting for approval, as one thin bar. */}
+      {issued > 0 && (
+        <div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+          <div className="bg-emerald-400" style={{ width: pct(b.settled) }} />
+          <div className="bg-sky-400" style={{ width: pct(b.returned) }} />
+          <div className="bg-amber-400" style={{ width: pct(withOffice) }} />
+        </div>
+      )}
 
-      {/* Footer */}
-      <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-3">
-        {/* The same pill the admin table uses, so a rep and ZELab are
-            reading the identical signal about the same order. */}
-        <span className="inline-flex items-center gap-2">
-          <Remaining hours={s.hoursRemaining} />
-          <span className="text-[11px] text-faint">{formatDateTime(s.deadlineAt)}</span>
+      <div className="mt-2.5 flex items-center justify-between gap-3 text-xs">
+        <span className="min-w-0 truncate text-faint">
+          {s.paid > 0
+            ? <><span className="font-medium text-emerald-400">{formatCurrency(s.paid)}</span> settled</>
+            : <>Order {formatCurrency(s.assignedValue)}</>}
         </span>
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
-          Open <ChevronRight className="h-3.5 w-3.5" />
+        <span className="inline-flex shrink-0 items-center gap-1 text-faint">
+          {formatDateTime(s.deadlineAt)}
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
       </div>
     </motion.button>
