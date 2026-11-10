@@ -615,15 +615,15 @@ function RepView() {
           the card — the card itself stays figures only. No box, no icon: a dot
           and a coloured line. */}
       {balanceNegative && (
-        <p className="mt-2.5 flex items-start gap-2 px-1 text-xs leading-snug text-rose-300">
-          <span aria-hidden="true" className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-          Your balance is negative from overdue fines. Settle your outstanding orders to clear it.
+        <p className="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-rose-300">
+          <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full bg-current" />
+          Negative balance from overdue fines
         </p>
       )}
       {windowOpen && (
-        <p className="mt-2.5 flex items-start gap-2 px-1 text-xs leading-snug text-amber-300">
-          <span aria-hidden="true" className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
-          ZELab has opened one withdrawal for you — your usual minimum does not apply until {formatDateTime(c.emergency.until)}.
+        <p className="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-amber-300">
+          <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full bg-current" />
+          Withdrawal open for you until {formatDateTime(c.emergency.until)}
         </p>
       )}
 
