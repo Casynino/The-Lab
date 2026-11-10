@@ -23,8 +23,7 @@ export default function WalletCard({
   negative,           // balance below zero (overdue fines)
   canWithdraw,
   pct,                // 0–100, progress to the withdrawal minimum
-  hint,               // [{ text } | { amount: formatted } ...] — see below
-  hintTone,           // 'emerald' | 'amber' | undefined
+  note,               // one short line, only for the rare state that needs it (an open withdrawal window)
   stats,              // [{ label, value (formatted), tone? }] — three of them
   onWithdraw,
 }) {
@@ -102,39 +101,33 @@ export default function WalletCard({
         </button>
       </div>
 
-      {/* How far to the minimum, or why the balance is below zero. */}
+      {/* Nothing is written under the balance in the ordinary case (Nino, 11 Nov
+          2026: "no word, no anything"). Below the minimum a thin line shows how far
+          there is to go, and the greyed Withdraw says why it cannot be pressed;
+          once the minimum is reached the line goes and Withdraw lights up. Only the
+          two rare states that need explaining get one short line. */}
       {negative ? (
-        <p className="mt-3 text-[11px] leading-snug text-rose-300">
-          Your balance is negative from overdue fines. Settle your outstanding orders to clear it.
-        </p>
+        <p className="mt-2.5 text-[11px] leading-snug text-rose-300">Negative from overdue fines — settle your orders to clear it.</p>
       ) : (
         <>
-          <div className="mt-3.5 h-1 w-full overflow-hidden rounded-full bg-white/[0.09]">
-            <div
-              className={clsx(
-                'h-full rounded-full transition-[width] duration-700 ease-out',
-                canWithdraw ? 'bg-gradient-to-r from-emerald-500 to-emerald-300' : 'bg-gradient-to-r from-brand-500 to-brand-300',
-              )}
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <p
-            className={clsx(
-              'mt-1.5 text-[11px] leading-snug',
-              hintTone === 'emerald' ? 'font-semibold text-emerald-300' : hintTone === 'amber' ? 'font-semibold text-amber-300' : 'text-white/60',
-            )}
-          >
-            {hint.map((part, i) => (typeof part === 'string' ? part : <span key={i}>{mask(part.amount)}</span>))}
-          </p>
+          {!canWithdraw && (
+            <div className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-white/[0.09]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300 transition-[width] duration-700 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          )}
+          {note && <p className="mt-2 text-[11px] leading-snug text-amber-300">{note}</p>}
         </>
       )}
 
-      {/* The three supporting figures, one quiet line along the foot. */}
-      <div className="mt-3 grid grid-cols-3 divide-x divide-white/10 border-t border-white/10 pt-2.5">
-        {stats.map((s, i) => (
-          <div key={s.label} className={clsx('min-w-0', i > 0 && 'pl-3')}>
-            <p className="truncate text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/45">{s.label}</p>
-            <p className={clsx('mt-0.5 truncate text-[13px] font-semibold tabular-nums', s.tone === 'rose' ? 'text-rose-300' : 'text-white/90')}>
+      {/* The three supporting figures: small, plain, no lines or boxes around them. */}
+      <div className="mt-3.5 grid grid-cols-3 gap-3">
+        {stats.map((s) => (
+          <div key={s.label} className="min-w-0">
+            <p className="truncate text-[10px] text-white/40">{s.label}</p>
+            <p className={clsx('mt-px truncate text-[12.5px] font-medium tabular-nums', s.tone === 'rose' ? 'text-rose-300' : 'text-white/85')}>
               {mask(s.value)}
             </p>
           </div>

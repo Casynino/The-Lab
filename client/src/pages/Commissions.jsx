@@ -612,16 +612,7 @@ function RepView() {
         negative={balanceNegative}
         canWithdraw={canWithdraw}
         pct={pct}
-        hintTone={windowOpen ? 'amber' : canWithdraw ? 'emerald' : undefined}
-        hint={
-          windowOpen
-            ? [`ZELab has opened one withdrawal for you — your usual minimum does not apply until ${formatDateTime(c.emergency.until)}.`]
-            : canWithdraw
-              ? [`Ready to withdraw — earned on ${earnedOn(c)}`]
-              : c.earned > 0
-                ? [{ amount: formatCurrency(c.available) }, ' of ', { amount: formatCurrency(c.minWithdrawal) }, ' minimum · ', { amount: formatCurrency(c.minWithdrawal - c.available) }, ' to go']
-                : [`Every box you settle earns commission. The first ${formatCurrency(c.minWithdrawal)} unlocks a withdrawal.`]
-        }
+        note={windowOpen ? `Opened for you until ${formatDateTime(c.emergency.until)} — the usual minimum does not apply` : null}
         stats={[
           { label: 'Earned', value: compactTsh(c.earned) },
           { label: 'Paid out', value: compactTsh(c.paid) },
