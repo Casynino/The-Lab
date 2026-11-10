@@ -23,7 +23,6 @@ export default function WalletCard({
   negative,           // balance below zero (overdue fines)
   canWithdraw,
   pct,                // 0–100, progress to the withdrawal minimum
-  note,               // one short line, only for the rare state that needs it (an open withdrawal window)
   stats,              // [{ label, value (formatted), tone? }] — three of them
   onWithdraw,
 }) {
@@ -101,25 +100,18 @@ export default function WalletCard({
         </button>
       </div>
 
-      {/* Nothing is written under the balance in the ordinary case (Nino, 11 Nov
-          2026: "no word, no anything"). Below the minimum a thin line shows how far
-          there is to go, and the greyed Withdraw says why it cannot be pressed;
-          once the minimum is reached the line goes and Withdraw lights up. Only the
-          two rare states that need explaining get one short line. */}
-      {negative ? (
-        <p className="mt-2.5 text-[11px] leading-snug text-rose-300">Negative from overdue fines — settle your orders to clear it.</p>
-      ) : (
-        <>
-          {!canWithdraw && (
-            <div className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-white/[0.09]">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300 transition-[width] duration-700 ease-out"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          )}
-          {note && <p className="mt-2 text-[11px] leading-snug text-amber-300">{note}</p>}
-        </>
+      {/* Nothing is written on the card but the figures (Nino, 11 Nov 2026: keep the
+          notices off it). Below the minimum a thin line shows how far there is to
+          go and the greyed Withdraw says why it cannot be pressed; at the minimum
+          the line goes and Withdraw lights up. A negative balance only turns the
+          figure rose; the page says why, in a line under the card. */}
+      {!negative && !canWithdraw && (
+        <div className="mt-3 h-[3px] w-full overflow-hidden rounded-full bg-white/[0.09]">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-300 transition-[width] duration-700 ease-out"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       )}
 
       {/* The three supporting figures: small, plain, no lines or boxes around them. */}

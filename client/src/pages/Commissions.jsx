@@ -601,7 +601,6 @@ function RepView() {
         negative={balanceNegative}
         canWithdraw={canWithdraw}
         pct={pct}
-        note={windowOpen ? `Opened for you until ${formatDateTime(c.emergency.until)} — the usual minimum does not apply` : null}
         stats={[
           { label: 'Earned', value: formatCurrency(c.earned) },
           { label: 'Paid out', value: formatCurrency(c.paid) },
@@ -611,6 +610,22 @@ function RepView() {
         ]}
         onWithdraw={() => setOpen(true)}
       />
+
+      {/* The two rare states that need a sentence get it HERE, as one quiet line under
+          the card — the card itself stays figures only. No box, no icon: a dot
+          and a coloured line. */}
+      {balanceNegative && (
+        <p className="mt-2.5 flex items-start gap-2 px-1 text-xs leading-snug text-rose-300">
+          <span aria-hidden="true" className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+          Your balance is negative from overdue fines. Settle your outstanding orders to clear it.
+        </p>
+      )}
+      {windowOpen && (
+        <p className="mt-2.5 flex items-start gap-2 px-1 text-xs leading-snug text-amber-300">
+          <span aria-hidden="true" className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+          ZELab has opened one withdrawal for you — your usual minimum does not apply until {formatDateTime(c.emergency.until)}.
+        </p>
+      )}
 
       {/* Four stacked sections became four tabs. The page was a single scroll
           through everything at once; now it opens on one thing. */}
