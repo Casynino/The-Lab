@@ -225,13 +225,13 @@ function ReturnModal({ onClose }) {
         Cancel
       </button>
       <Button className="h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold" loading={create.isPending} disabled={!valid} onClick={() => create.mutate()}>
-        {hasCart ? `Return ${formatNumber(totalBoxes)} box${totalBoxes !== 1 ? 'es' : ''}` : 'Submit return'}
+        {hasCart ? `Return ${formatNumber(totalBoxes)} box${totalBoxes !== 1 ? 'es' : ''}` : 'Return'}
       </Button>
     </div>
   );
 
   return (
-    <Modal open onClose={onClose} size="lg" title="Submit a return" footer={footer}>
+    <Modal open onClose={onClose} size="lg" title="Return" footer={footer}>
       <div className="space-y-4">
         {/* Type toggle — staff only; reps always return to ZELab */}
         {!isRep && (
