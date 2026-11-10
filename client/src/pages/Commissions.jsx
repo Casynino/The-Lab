@@ -109,7 +109,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
   }
 
   return (
-    <Modal open onClose={onClose} title="Request commission withdrawal"
+    <Modal open onClose={onClose} title="Withdraw from my wallet"
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={req.isPending} disabled={!valid} onClick={() => req.mutate()}>Request {valid ? formatCurrency(amt) : 'withdrawal'}</Button></>}>
       <div className="space-y-4">
         <div className="relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ring-emerald-500/25">
@@ -357,7 +357,7 @@ function PenaltyBreakdown({ breakdown }) {
     <Card className="mt-4 border border-rose-500/20 bg-rose-500/5">
       <CardHeader
         title="Penalty deductions by order"
-        subtitle="Late-settlement fines (TZS 10,000/day) actually deducted from your commission balance."
+        subtitle="Late-settlement fines (TZS 10,000/day) actually taken from your wallet balance."
       />
       <Table>
         <THead>
@@ -464,7 +464,7 @@ function FinesHistory({ admin }) {
             return (
               <TR key={p.id}>
                 {admin && <TD className="font-medium">{p.salesRep?.user?.name}</TD>}
-                <TD>{p.kind === 'ADJUSTMENT' ? 'Commission Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return Delay Fine (24h)' : 'Late Settlement Fine'}</TD>
+                <TD>{p.kind === 'ADJUSTMENT' ? 'Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return Delay Fine (24h)' : 'Late Settlement Fine'}</TD>
                 <TD className="text-faint" title={p.notes || undefined}>{p.settlement?.settlementNumber || '—'}</TD>
                 <TD className={`text-right font-semibold ${waived ? 'text-faint line-through' : 'text-rose-400'}`}>−{formatCurrency(p.amount)}</TD>
                 <TD>
@@ -504,7 +504,7 @@ function PenaltyPolicyCard() {
           <p className="font-semibold text-amber-300">Settlement Penalty Policy</p>
           <ul className="list-disc space-y-1.5 pl-4">
             <li>Orders must be settled or returned within <b>72 hours</b> after stock is issued.</li>
-            <li>After 72 hours, <b>TZS 10,000</b> is deducted daily from your commission.</li>
+            <li>After 72 hours, <b>TZS 10,000</b> is taken daily from your wallet.</li>
             <li>You may extend an order <b>once</b> by <b>96 hours</b> (7 days total) from the order screen — no approval needed.
               During the extension there is no fine, but afterwards the daily fine becomes <b>TZS 20,000</b>,
               and a return not completed in 24 hours costs <b>TZS 30,000</b>.</li>
@@ -524,7 +524,7 @@ function RatesCard({ rates }) {
   if (!rates?.perBrand?.length) return null;
   return (
     <Card className="mt-4">
-      <CardHeader title="Commission rate per box" subtitle="What one settled box earns today." />
+      <CardHeader title="What you earn per box" subtitle="What one settled box pays you today." />
       <div className="grid grid-cols-2 gap-3 p-4 pt-0 sm:grid-cols-3">
         {rates.perBrand.map((r) => (
           <div key={r.brand} className="rounded-lg border border-white/10 bg-white/5 p-3">
@@ -1476,7 +1476,7 @@ export default function Commissions({ embedded = false }) {
   return (
     <div>
       {!embedded && (
-        <PageHeader title="Commissions" subtitle={isRep ? 'Your commission earnings and withdrawals.' : 'Commission performance and withdrawal approvals.'} />
+        <PageHeader title={isRep ? 'My wallet' : 'Commissions'} subtitle={isRep ? 'Your money, bonuses and withdrawals.' : 'Commission performance and withdrawal approvals.'} />
       )}
       {isRep ? <RepView /> : <AdminView />}
     </div>

@@ -87,7 +87,7 @@ export default function BonusProgress({ p }) {
           ? <>You can take <span className="font-semibold text-emerald-400">{formatCurrency(claimable.bonusAmount)}</span> now, or reach {formatCurrency(p.next.target)} for <span className="font-semibold text-emerald-400">{formatCurrency(p.next.bonusAmount)}</span>. Taking a bonus starts your count again from zero.</>
           : claimable
             ? <>Taking it starts your count again from zero.</>
-            : <>Bonus is separate from your commission on boxes.</>}
+            : <>Bonus is separate from what you earn on boxes.</>}
         {' '}<span className="sr-only">Top target {formatCurrency(top)}.</span>
       </p>
     </div>

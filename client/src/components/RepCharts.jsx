@@ -126,8 +126,8 @@ export function BrandCard({ insights }) {
   if (!rows.length) return null;
   const lead = rows[0];
   const said = rows.length > 1
-    ? `${lead.brand} brings ${lead.share}% of your commission.`
-    : `All of your commission is from ${lead.brand}.`;
+    ? `${lead.brand} brings ${lead.share}% of what you earn.`
+    : `All of what you earn is from ${lead.brand}.`;
   return (
     <InsightCard title="Where it comes from" said={said}>
       <div className="flex items-center gap-5">
@@ -196,7 +196,7 @@ export function TopProductsCard({ insights }) {
   if (!rows.length) return null;
   const top = Math.max(1, ...rows.map((r) => r.earned));
   return (
-    <InsightCard title="Products that earn the most" said={`Your top ${rows.length === 1 ? 'product' : `${rows.length} products`} by commission.`}>
+    <InsightCard title="Products that earn the most" said={`Your top ${rows.length === 1 ? 'product' : `${rows.length} products`} by what they earned you.`}>
       <ol className="divide-y divide-white/[0.06]">
         {rows.map((r, i) => (
           <li key={r.name} className="py-2.5">

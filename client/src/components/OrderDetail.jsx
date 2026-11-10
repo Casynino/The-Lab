@@ -100,7 +100,7 @@ function SettleDone({ amount, boxes, productName, onClose }) {
       </p>
 
       <p className="animate-rise mt-5 text-[13px] text-muted" style={{ animationDelay: '0.5s' }}>
-        Your commission is added once it is approved.
+        The money is added to your wallet once it is approved.
       </p>
 
       <Button className="animate-rise mt-6 w-full" style={{ animationDelay: '0.58s' }} onClick={onClose}>
@@ -1512,7 +1512,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                 <span className="text-sm font-semibold text-foreground">{order.order.lines.length === 1 ? 'Product' : 'Products'}</span>
                 {order.order.totals.settledBoxes > 0 && (
                   <span className="text-xs text-muted">
-                    Commission <span className="font-semibold text-brand-600">{formatCurrency(order.order.totals.commission)}</span>
+                    {user?.role === ROLES.SALES_REP ? 'Earned' : 'Commission'} <span className="font-semibold text-brand-600">{formatCurrency(order.order.totals.commission)}</span>
                   </span>
                 )}
               </div>

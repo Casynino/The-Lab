@@ -132,7 +132,7 @@ export function withdrawalState({ commission = {}, latest = null, firstName = ''
       key: 'none', tone: 'brand', icon: Coins,
       title: 'Nothing to withdraw yet',
       value: formatCurrency(0),
-      line: `Every box you settle earns commission. The first ${formatCurrency(min)} unlocks a withdrawal.`,
+      line: `Every box you settle adds money to your wallet. The first ${formatCurrency(min)} unlocks a withdrawal.`,
     };
   }
   if (available < min) {

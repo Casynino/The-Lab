@@ -81,7 +81,7 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
     rows.push(
       <Row
         key="commission"
-        label="Commission"
+        label="My wallet"
         pct={(avail / min) * 100}
         reward={min}
         ready={ready}

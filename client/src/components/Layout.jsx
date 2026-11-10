@@ -662,7 +662,11 @@ export default function Layout() {
   const [bellOpen, setBellOpen] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
-  const items = NAV.filter((n) => (n.exact ? n.roles.includes(user?.role) : hasRole(...n.roles)));
+  // A rep's money page is their wallet — the same page, the owner's word is "Commissions".
+  const isRep = user?.role === ROLES.SALES_REP;
+  const items = NAV
+    .filter((n) => (n.exact ? n.roles.includes(user?.role) : hasRole(...n.roles)))
+    .map((n) => (isRep && n.repLabel ? { ...n, label: n.repLabel, icon: n.repIcon || n.icon } : n));
 
   /* The banner belongs to the home page, not to the shell. Target Express puts
      it inside each desk's hero (components/app/desk-hero, warehouse-hero, the
