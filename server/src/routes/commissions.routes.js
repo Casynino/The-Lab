@@ -15,6 +15,7 @@ const admin = requireRoles(ROLES.ADMIN);
 
 router.use(authenticate);
 router.get('/me', reps, ctrl.me);
+router.get('/me/insights', reps, ctrl.insightsMe);
 router.get('/rule', ctrl.rule);
 router.get('/summary', staff, ctrl.summary);
 router.get('/rep/:salesRepId', staff, ctrl.getForRep);

@@ -19,6 +19,12 @@ const me = asyncHandler(async (req, res) => {
   return ok(res, { ...c, emergency: { open: c.emergency.open, until: c.emergency.until } });
 });
 
+// The rep's own page as pictures: earnings by month, by brand and product, and their settlement record.
+const insightsMe = asyncHandler(async (req, res) => {
+  if (!req.user.salesRepId) throw ApiError.forbidden('Only sales representatives have commissions');
+  return ok(res, await require('../services/repInsights.service').insightsForRep(req.user.salesRepId));
+});
+
 const getForRep = asyncHandler(async (req, res) => ok(res, await commission.computeForRep(req.params.salesRepId)));
 
 const summary = asyncHandler(async (_req, res) => ok(res, await commission.summaryAllReps()));
@@ -154,4 +160,4 @@ module.exports = {
   setEmergencyWindow,
   listRates, createRate, deleteRate,
   bonusMe, bonusSummary, bonusRules, createBonusRule, updateBonusRule, setBonusRuleActive, bonusAwards, payBonusAward,
-  me, getForRep, summary, rule, listWithdrawals, requestWithdrawal, decideWithdrawal };
+  me, insightsMe, getForRep, summary, rule, listWithdrawals, requestWithdrawal, decideWithdrawal };

@@ -287,6 +287,42 @@ async function earnedBetween(start, end) {
   return { total: round2(total), byRep };
 }
 
+// The same arithmetic as earnedBetween — a settled box, at the rate in force when its order was
+// issued — but for ONE rep and kept line by line, so a screen can say WHEN and ON WHAT it was earned
+// (by month, by brand, by product). One rate rule, two readers: nothing here prices a box on its own.
+async function earnedLinesForRep(salesRepId, start, end) {
+  const rates = await allRates();
+  const items = await prisma.saleItem.findMany({
+    where: {
+      sale: {
+        is: {
+          soldAt: { gte: start, lte: end },
+          settlementId: { not: null },
+          status: { not: 'CANCELLED' },
+          salesRepId,
+        },
+      },
+    },
+    select: {
+      baseQuantity: true,
+      product: { select: { name: true, brand: { select: { name: true } } } },
+      sale: { select: { soldAt: true, settlement: { select: { issuedAt: true } } } },
+    },
+  });
+  return items.map((it) => {
+    const when = it.sale?.settlement?.issuedAt || it.sale?.soldAt || new Date();
+    const rate = pickRate(rates, normalizeBrand(it.product?.brand?.name), new Date(when).getTime());
+    const boxes = it.baseQuantity || 0;
+    return {
+      soldAt: it.sale?.soldAt,
+      brand: it.product?.brand?.name || 'Other',
+      product: it.product?.name || 'Product',
+      boxes,
+      amount: round2(boxes * rate),
+    };
+  });
+}
+
 // Boxes a rep has SETTLED (paid for) across all their orders. Each settlement
 // records a CASH sale linked to the order, so settled boxes = base units sold
 // on settlement-linked sales (the base unit is the Box). Commission is earned
@@ -810,6 +846,7 @@ module.exports = {
   clearRateCache,
   earnedForRep,
   earnedBetween,
+  earnedLinesForRep,
   currentRates,
   rateForProductOnOrder,
   computeForRep,

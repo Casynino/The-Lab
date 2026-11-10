@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
+import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard } from '@/components/RepCharts';
 import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, Info, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck, Boxes } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -588,7 +589,8 @@ function MiniStat({ label, value, tone }) {
 function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('bonus');
+  const [tab, setTab] = useState('overview');
+  const { data: insights } = useQuery({ queryKey: ['commissions', 'me', 'insights'], queryFn: async () => unwrap(await api.get('/commissions/me/insights')).data });
   const { data: c, isLoading } = useQuery({ queryKey: ['commissions', 'me'], queryFn: async () => unwrap(await api.get('/commissions/me')).data });
   const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'mine'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 20 } })) });
   const { data: bonusProgress } = useQuery({ queryKey: ['bonus', 'me'], queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data });
@@ -693,6 +695,7 @@ function RepView() {
         value={tab}
         onChange={setTab}
         tabs={[
+          { key: 'overview', label: 'Overview' },
           { key: 'bonus', label: 'Bonus' },
           { key: 'withdrawals', label: 'Payouts', count: pendingCount },
           { key: 'fines', label: 'Fines' },
@@ -700,11 +703,28 @@ function RepView() {
         ]}
       />
 
+      {tab === 'overview' && (
+        <div className="mt-4 space-y-4">
+          {!insights ? (
+            <PageSpinner />
+          ) : (
+            <>
+              <EarningsCard insights={insights} />
+              <SettlementCard insights={insights} />
+              <BrandCard insights={insights} />
+              <TopProductsCard insights={insights} />
+            </>
+          )}
+        </div>
+      )}
+
       {tab === 'bonus' && (
         bonusProgress?.configured
           ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
           : <Card className="mt-4"><EmptyState title="No bonus running" description="Nothing to chase right now." /></Card>
       )}
+
+      {tab === 'withdrawals' && <div className="mt-4"><PayoutsCard items={withdrawals} /></div>}
 
       {tab === 'withdrawals' && (
         <Card className="mt-4">
@@ -804,7 +824,7 @@ function SectionTabs({ value, onChange, tabs }) {
           onClick={() => onChange(t.key)}
           className={clsx(
             // 44px minimum: below that a tab is uncomfortable to hit on a phone.
-            'min-h-[44px] flex-1 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition',
+            'min-h-[44px] flex-1 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium transition sm:px-3 sm:text-sm',
             value === t.key ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
           )}
         >
