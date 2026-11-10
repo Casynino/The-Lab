@@ -125,5 +125,5 @@ test('a stock request with several products arrives numbered, with the boxes of 
     ],
   });
   assert.equal(textOf(sent[0]),
-    '*STOCK REQUEST*\n10 Nov 2026 | 19:01 EAT\n\nBy: Nyoya\n\n1-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box\n2-OHIS Pepa Ndogo (Blue): 2 Cartons\n\nTotal Boxes: 21\nTotal Value: TSh 30,000');
+    '*STOCK REQUEST*\n10 Nov 2026 | 19:01 EAT\n\nBy: Nyoya\n\nProduct 1: OHIS Pepa Ndogo (Brown) – Bila Filter\nQuantity: 1 Box\n\nProduct 2: OHIS Pepa Ndogo (Blue)\nQuantity: 2 Cartons\n\nTotal Boxes: 21\nTotal Value: TSh 30,000');
 });

@@ -17,6 +17,7 @@ import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
+import NumberedLines from '@/components/NumberedLines';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -259,6 +260,24 @@ function CartOrderSheet({ onClose, existing }) {
         </ul>
       )}
 
+      {/* What is about to be sent, as a numbered list — the catalogue above is long, so this is
+          the place to check the order before pressing Submit. */}
+      {cartEntries.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 text-sm font-semibold text-foreground">
+            Your order · {cartCount} product{cartCount !== 1 ? 's' : ''}
+          </div>
+          <NumberedLines
+            items={cartEntries.map((e) => ({
+              key: e.productId,
+              name: e.product.name,
+              detail: `${e.qty} ${e.pkg?.packagingUnit?.name || 'box'} × ${formatCurrency(e.price)}`,
+              value: formatCurrency(e.lineTotal),
+            }))}
+          />
+        </div>
+      )}
+
       {/* Notes */}
       <div className="mt-4">
         <Field label="Notes (optional)">
@@ -349,43 +368,30 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
           <div><div className="text-xs text-faint">Lines</div><div className="font-medium">{displayItems.length}</div></div>
         </div>
 
-        <Table>
-          <THead>
-            <TR>
-              <TH>Product</TH>
-              <TH>{fulfilled ? 'Approved' : 'Requested'}</TH>
-              {editable && <TH>Approve qty</TH>}
-              <TH>Unit price</TH>
-              <TH>Line total</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {displayItems.map((i) => {
-              const lineTotal = fulfilled
-                ? (i.quantityApproved ?? 0) * Number(i.unitPrice || 0)
-                : editable
-                  ? (Number(qtys[i.id]) || 0) * Number(i.unitPrice || 0)
-                  : Number(i.lineTotal || 0);
-              return (
-                <TR key={i.id}>
-                  <TD className="font-medium text-foreground">{i.product.name}</TD>
-                  <TD>
-                    {fulfilled
-                      ? `${i.quantityApproved} ${i.packagingUnit.name}`
-                      : `${i.quantityRequested} ${i.packagingUnit.name}`}
-                  </TD>
-                  {editable && (
-                    <TD>
-                      <NumberInput min="0" value={qtys[i.id]} onChange={(e) => setQtys({ ...qtys, [i.id]: e.target.value })} className="w-20" />
-                    </TD>
-                  )}
-                  <TD>{formatCurrency(i.unitPrice)}</TD>
-                  <TD>{formatCurrency(lineTotal)}</TD>
-                </TR>
-              );
-            })}
-          </TBody>
-        </Table>
+        {/* A numbered list, one row per product. The table this replaced had five columns and
+            scrolled "Unit price" and "Line total" off the edge of a phone. */}
+        <NumberedLines
+          items={displayItems.map((i) => {
+            const lineTotal = fulfilled
+              ? (i.quantityApproved ?? 0) * Number(i.unitPrice || 0)
+              : editable
+                ? (Number(qtys[i.id]) || 0) * Number(i.unitPrice || 0)
+                : Number(i.lineTotal || 0);
+            const qty = fulfilled ? i.quantityApproved : i.quantityRequested;
+            return {
+              key: i.id,
+              name: i.product.name,
+              detail: `${fulfilled ? 'Approved' : 'Requested'} ${qty} ${i.packagingUnit.name} × ${formatCurrency(i.unitPrice)}`,
+              value: formatCurrency(lineTotal),
+              extra: editable && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-faint">
+                  Approve qty
+                  <NumberInput min="0" value={qtys[i.id]} onChange={(e) => setQtys({ ...qtys, [i.id]: e.target.value })} className="w-20" />
+                </div>
+              ),
+            };
+          })}
+        />
 
         <div className="flex items-center justify-between rounded-xl bg-elevated px-4 py-3">
           <span className="text-sm font-medium text-muted">

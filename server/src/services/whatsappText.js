@@ -50,19 +50,28 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  // One product reads as "Name: 20 Boxes". Several are numbered, one per line, then the
-  // box count of the whole request (a carton counts as the boxes it holds: `boxes`).
+  // One product reads as "Name: 20 Boxes". Several are labelled "Product 1:", "Product 2:", each
+  // with its own "Quantity:" line, so no bare number is ever left to be read as a number of boxes
+  // ("1-Name: 2 Boxes / 2-Name: 3 Boxes" read as a muddle of 1, 2, 2, 3). Then the box count of
+  // the whole request (a carton counts as the boxes it holds: `boxes`) and the value.
+  // The totals are what the owner needs most, so a very long request drops lines from the LIST
+  // (blank lines first, then the last products, "+3 more") and never from the totals.
   stockRequest: ({ by, items = [], total, when }) => {
     const head = [lines(bold('STOCK REQUEST'), dateTime(when)), `By: ${by}`];
     if (items.length <= 1) {
       return doc(...head, lines(...items.map((i) => `${i.name}: ${boxes(i.qty, i.unit)}`), `Total Value: ${money(total)}`));
     }
     const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes ?? i.qty) || 0), 0);
-    return doc(
+    const tail = lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`);
+    const build = ({ gap, shown }) => doc(
       ...head,
-      lines(...items.map((i, n) => `${n + 1}-${i.name}: ${boxes(i.qty, i.unit)}`)),
-      lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`),
+      items.slice(0, shown).map((i, n) => lines(`Product ${n + 1}: ${i.name}`, `Quantity: ${boxes(i.qty, i.unit)}`)).join(gap ? '\n\n' : '\n'),
+      shown < items.length && `+${items.length - shown} more, see ZELab`,
+      tail,
     );
+    const steps = [{ gap: true, shown: items.length }, { gap: false, shown: items.length }];
+    for (let k = items.length - 1; k >= 1; k -= 1) steps.push({ gap: false, shown: k });
+    return fitted(build, steps);
   },
 
   settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when }) => doc(

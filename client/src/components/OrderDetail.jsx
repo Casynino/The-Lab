@@ -13,6 +13,7 @@ import {
   Table, THead, TBody, TR, TH, TD,
   BoxCount, Remaining,
 } from '@/components/ui';
+import NumberedLines from '@/components/NumberedLines';
 
 // --- Submit settlement: the rep submits boxes + cash for The Doctor's approval
 // Nothing is recorded (no sale, commission, revenue or profit) until approved.
@@ -350,6 +351,22 @@ function RecordReturnModal({ order, onClose, onDone }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* What is going back, numbered — check it here before pressing Return. */}
+      {hasCart && (
+        <div className="mt-4">
+          <div className="mb-2 text-sm font-semibold text-foreground">
+            Boxes to return · {Object.keys(cart).length} product{Object.keys(cart).length !== 1 ? 's' : ''}
+          </div>
+          <NumberedLines
+            items={returnableLines.filter((l) => cart[l.productId] > 0).map((l) => ({
+              key: l.productId,
+              name: l.name,
+              detail: `${formatNumber(cart[l.productId])} box${cart[l.productId] !== 1 ? 'es' : ''}`,
+            }))}
+          />
         </div>
       )}
     </Modal>
@@ -1274,7 +1291,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
             <div>
               <div className="mb-2 text-sm font-semibold text-foreground">Box by box</div>
               <div className="space-y-2">
-                {order.order.lines.map((l) => {
+                {order.order.lines.map((l, n) => {
                   const total = Math.max(1, l.assigned);
                   const pct = (n) => `${Math.max(0, (n / total) * 100)}%`;
                   // On a single-product order this block's bar and its three
@@ -1286,7 +1303,10 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                   return (
                     <div key={l.productId} className="rounded-xl bg-elevated/50 p-3 ring-1 ring-white/[0.06]">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">{l.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
+                          {!echoesHero && <span className="mr-2 inline-block min-w-4 text-faint">{n + 1}</span>}
+                          {l.name}
+                        </span>
                         <span className="shrink-0 text-[11px] text-faint">{formatNumber(l.assigned)} issued</span>
                       </div>
                       {!echoesHero && (

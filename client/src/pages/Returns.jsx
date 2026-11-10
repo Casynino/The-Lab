@@ -12,6 +12,7 @@ import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
   Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
+import NumberedLines from '@/components/NumberedLines';
 
 function defaultPkg(product) {
   if (!product?.packagings?.length) return null;
@@ -119,27 +120,23 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
 
             <div>
               <div className="mb-2 text-sm font-semibold text-foreground">Items returned</div>
-              <Table>
-                <THead><TR><TH>Product</TH><TH>Quantity</TH><TH>Condition</TH><TH>Unit price</TH><TH>Line value</TH></TR></THead>
-                <TBody>
-                  {ret.items.map((i) => (
-                    <TR key={i.id}>
-                      <TD className="font-medium text-foreground">{i.product?.name}</TD>
-                      <TD>{formatNumber(i.quantity)} {i.packagingUnit?.name || 'box'}(s)</TD>
-                      <TD className="text-muted">{i.condition}</TD>
-                      <TD>{formatCurrency(i.unitPrice)}</TD>
-                      <TD>{formatCurrency(i.quantity * Number(i.unitPrice || 0))}</TD>
-                    </TR>
-                  ))}
-                  <TR className="font-semibold">
-                    <TD>Total</TD>
-                    <TD>{formatNumber(totalBoxes)} box(es)</TD>
-                    <TD />
-                    <TD />
-                    <TD>{formatCurrency(totalValue)}</TD>
-                  </TR>
-                </TBody>
-              </Table>
+              {/* Numbered, one row per product: the five-column table this replaced pushed the
+                  value and condition off the edge of a phone. */}
+              <NumberedLines
+                items={ret.items.map((i) => ({
+                  key: i.id,
+                  name: i.product?.name,
+                  detail: [
+                    `${formatNumber(i.quantity)} ${i.packagingUnit?.name || 'box'}(s) × ${formatCurrency(i.unitPrice)}`,
+                    i.condition,
+                  ].filter(Boolean).join(' · '),
+                  value: formatCurrency(i.quantity * Number(i.unitPrice || 0)),
+                }))}
+              />
+              <div className="mt-2 flex items-center justify-between rounded-xl bg-elevated px-3 py-2.5 text-sm font-semibold text-foreground">
+                <span>Total · {formatNumber(totalBoxes)} box(es)</span>
+                <span className="tabular-nums">{formatCurrency(totalValue)}</span>
+              </div>
             </div>
 
             {canDecide && pending && (
@@ -322,6 +319,22 @@ function ReturnModal({ onClose }) {
           })}
         </div>
 
+        {/* What is about to be returned, numbered — check it here before pressing Submit. */}
+        {hasCart && (
+          <div>
+            <div className="mb-2 text-sm font-semibold text-foreground">
+              Boxes to return · {Object.keys(cart).length} product{Object.keys(cart).length !== 1 ? 's' : ''}
+            </div>
+            <NumberedLines
+              items={Object.entries(cart).map(([productId, quantity]) => ({
+                key: productId,
+                name: products.find((p) => p.id === productId)?.name || 'Product',
+                detail: `${formatNumber(quantity)} box${quantity !== 1 ? 'es' : ''}`,
+              }))}
+            />
+          </div>
+        )}
+
         <Field label="Reason">
           <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. damaged in transit, customer over-ordered" />
@@ -355,9 +368,13 @@ function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve })
           <span className="text-xs text-muted">box{plural(totalBoxes)} to verify · {formatCurrency(totalValue)}</span>
         </div>
         {/* Every line stays visible here — you are about to accept these goods. */}
-        {r.items.map((i) => (
+        {/* Several products: numbered, with the quantity AFTER the name ("1. Name · 4 boxes"), so the
+            number in front is never read as a number of boxes. */}
+        {r.items.map((i, n) => (
           <div key={i.id} className="mt-0.5 text-xs text-faint">
-            <span className="font-semibold text-muted">{formatNumber(i.quantity)}×</span> {i.product?.name}
+            {r.items.length > 1 && <span className="mr-1 font-semibold text-muted">{n + 1}.</span>}
+            {i.product?.name}
+            <span className="font-semibold text-muted"> · {formatNumber(i.quantity)} box{plural(i.quantity)}</span>
           </div>
         ))}
         <div className="mt-1 text-xs text-faint">

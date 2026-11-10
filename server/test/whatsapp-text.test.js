@@ -24,21 +24,34 @@ Pepa King Size: 20 Boxes
 Total Value: TSh 760,000`);
 });
 
-test('STOCK REQUEST with several products: numbered list, then the box total and the value (Nino\'s own example)', () => {
-  const item = { name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', qty: 1 };
-  assert.equal(t.owner.stockRequest({ by: 'Nyoya', items: [item, item, item, item], total: 30000, when: new Date('2026-11-10T16:01:00Z') }),
+test('STOCK REQUEST with several products: Product 1, Product 2, each quantity labelled, then the totals', () => {
+  const brown = { name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', qty: 2 };
+  const white = { name: 'OHIS Pepa Ndogo (White) – Bila Filter', qty: 3 };
+  assert.equal(t.owner.stockRequest({ by: 'Nyoya', items: [brown, white], total: 150000, when: new Date('2026-11-10T16:22:00Z') }),
 `*STOCK REQUEST*
-10 Nov 2026 | 19:01 EAT
+10 Nov 2026 | 19:22 EAT
 
 By: Nyoya
 
-1-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
-2-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
-3-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
-4-OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box
+Product 1: OHIS Pepa Ndogo (Brown) – Bila Filter
+Quantity: 2 Boxes
 
-Total Boxes: 4
-Total Value: TSh 30,000`);
+Product 2: OHIS Pepa Ndogo (White) – Bila Filter
+Quantity: 3 Boxes
+
+Total Boxes: 5
+Total Value: TSh 150,000`);
+});
+
+test('STOCK REQUEST: a very long request keeps its totals; the list gives way, never the Total lines', () => {
+  const many = Array.from({ length: 14 }, (_, n) => ({ name: `OHIS Pepa Ndogo (Colour ${n + 1}) – Bila Filter`, qty: 2 }));
+  const text = t.owner.stockRequest({ by: 'Nyoya', items: many, total: 420000, when: at });
+  assert.ok(text.length <= t.MAX_REPORT_CHARS, `${text.length} characters`);
+  assert.match(text, /\+\d+ more, see ZELab\n\nTotal Boxes: 28\nTotal Value: TSh 420,000$/);
+  assert.ok(text.includes('Product 1: OHIS Pepa Ndogo (Colour 1) – Bila Filter\nQuantity: 2 Boxes'));
+  // a request that fits is untouched: blank line between products, every product shown
+  const four = t.owner.stockRequest({ by: 'A', items: many.slice(0, 4), total: 1, when: at });
+  assert.ok(!four.includes('more, see ZELab') && four.includes('Product 4: OHIS Pepa Ndogo (Colour 4) – Bila Filter'));
 });
 
 test('STOCK REQUEST: one product stays a single line with no number; a carton counts as the boxes it holds', () => {
@@ -46,7 +59,7 @@ test('STOCK REQUEST: one product stays a single line with no number; a carton co
   assert.match(one, /\n\nOHIS Pepa Ndogo \(Brown\) – Bila Filter: 1 Box\nTotal Value: TSh 7,500$/);
   assert.ok(!one.includes('Total Boxes') && !one.includes('1-'));
   const mixed = t.owner.stockRequest({ by: 'A', items: [{ name: 'A', qty: 1 }, { name: 'B', qty: 3, unit: 'Carton', boxes: 30 }], total: 5, when: at });
-  assert.match(mixed, /\n1-A: 1 Box\n2-B: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
+  assert.match(mixed, /\nProduct 1: A\nQuantity: 1 Box\n\nProduct 2: B\nQuantity: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
 });
 
 test('SETTLEMENT SUBMITTED', () => {
