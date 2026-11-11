@@ -17,6 +17,7 @@ Writes into client/public/brand/:
     mark-dark.svg, mark-light.svg   the red "ZE" with its swoosh and blocks
     zel-mark.png              that mark for light surfaces (the 3D sign-in scene's decals)
     app-180/192/512, maskable, favicon.png, favicon-32.png, ../favicon.ico,
+    ../favicon.svg, ../apple-touch-icon.png (asked for by name at the root)
     splash/*, og-image.jpg    the home-screen set, the tab icon, the launch screens
                               and the card a shared link shows
 
@@ -178,6 +179,33 @@ def write_ico(path, images):
 
 
 write_ico(os.path.join(PUB, "favicon.ico"), [fav[16], fav[32], fav[48]])
+
+
+def write_favicon_svg(path, size=64, glyph=0.88, radius=0.22):
+    """/favicon.svg, the same tile as the .ico but in vectors (his mark's own
+    paths, untouched). The page links the .ico and PNGs, but browsers, Vercel's
+    project card and link crawlers ask for /favicon.svg by name — it used to
+    answer with the old Lab cube (11 Nov 2026, Nino: "our logo, not other
+    people's")."""
+    import re
+    src = open(os.path.join(OFFICIAL, "mark-dark.svg"), encoding="utf-8").read()
+    x, y, w, h = (float(v) for v in re.search(r'viewBox="([^"]+)"', src).group(1).split())
+    inner = src[src.index(">", src.index("<svg")) + 1: src.rindex("</svg>")].strip()
+    s = size * glyph / w
+    tx, ty = (size - w * s) / 2, (size - h * s) / 2
+    ink = "#%02x%02x%02x" % INK
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size} {size}" role="img" aria-label="ZELab">\n'
+           f'<rect width="{size}" height="{size}" rx="{size * radius:g}" fill="{ink}"/>\n'
+           f'<g transform="translate({tx:.3f} {ty:.3f}) scale({s:.6f}) translate({-x:g} {-y:g})">\n{inner}\n</g>\n</svg>\n')
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(svg)
+    print(path, os.path.getsize(path))
+
+
+write_favicon_svg(os.path.join(PUB, "favicon.svg"))
+# Also at the site root: iOS and crawlers ask for /apple-touch-icon.png by
+# name, and the site answered with the web page.
+shutil.copyfile(os.path.join(BRAND, "apple-touch-icon.png"), os.path.join(PUB, "apple-touch-icon.png"))
 
 # ── the iPhone launch screens ───────────────────────────────────────────────
 SPLASH = [
