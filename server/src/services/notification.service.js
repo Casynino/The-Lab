@@ -175,7 +175,8 @@ async function notifyUser(userId, data) {
   if (!userId) return;
   const created = await create({ ...data, userId });
   const wa = require('./whatsappNotify.service');
-  wa.background(wa.mirrorToRep(userId, data));
+  // The in-app notice it copies goes with it: each notice is one event, so it is one WhatsApp (audit #45).
+  wa.background(wa.mirrorToRep(userId, { ...data, notificationId: created?.id }));
   return created;
 }
 

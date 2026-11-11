@@ -502,8 +502,9 @@ async function extensionTaken(settlement, { newDeadline, rate }) {
 // skips it too: while a return is pending the clock is paused and no fine is
 // charged. Warning about a fine that will not be charged is worse than silence.
 //
-// Deduplicated on the order, so an order is warned about once and never again
-// however often the sweep runs.
+// Deduplicated on the order AND its deadline, so a deadline is warned about once
+// however often the sweep runs — and an order given more time is warned again
+// before its new deadline (it was warned once per order, ever: audit #45).
 const DEADLINE_WARN_MINUTES = 10;
 
 async function deadlineWarnings(withinMinutes = DEADLINE_WARN_MINUTES) {
@@ -547,7 +548,7 @@ async function deadlineWarnings(withinMinutes = DEADLINE_WARN_MINUTES) {
       rate,
     });
     const r = await queue('DEADLINE_IMMINENT', {
-      dedupeKey: `deadlinewarn:${s.id}`,
+      dedupeKey: `deadlinewarn:${s.id}:${new Date(s.deadlineAt).getTime()}`,
       refType: 'Settlement',
       refId: s.id,
       text,
@@ -709,11 +710,15 @@ async function mirrorToRep(userId, data) {
       whatsapp: data.whatsapp || null,
       // Dedupe so a RETRIED notify never double-texts — but only a retry. The key used to be rep +
       // entity + title alone, so a second, real message under the same title about the same order
-      // (tomorrow's late fine, a new amount) was silently dropped (audit #45, 11 Nov 2026). It now also
-      // carries the Tanzania day and a fingerprint of the words: the same text again today is a retry;
-      // new words, or the same reminder on another day, go out. dedupeSalt still lets a caller send the
-      // same words twice on purpose.
-      dedupeKey: data.entityId
+      // (tomorrow's late fine, a new amount) was silently dropped (audit #45, 11 Nov 2026). The Tanzania
+      // day and a fingerprint of the words were added, but a second real event in the SAME words on the
+      // same order the same day (two rejections with the same reason) was still dropped while its bell
+      // notice arrived. So a copy of an in-app notice is now keyed on that notice: one notice is one
+      // event, one WhatsApp. Without a notice (createIfAbsent, which has its own guard) the day-and-words
+      // key stands, and dedupeSalt still lets a caller send the same words twice on purpose.
+      dedupeKey: data.notificationId
+        ? `rep:${rep.id}:notice:${data.notificationId}`
+        : data.entityId
         ? `rep:${rep.id}:${data.entityType || 'x'}:${data.entityId}:${data.title}:${dateEAT()}:${require('crypto').createHash('sha1').update(String(data.message || '')).digest('hex').slice(0, 12)}${data.dedupeSalt ? `:${data.dedupeSalt}` : ''}`
         : null,
     });
