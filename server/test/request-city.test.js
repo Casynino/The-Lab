@@ -47,6 +47,7 @@ function loadService({ rep, existing }) {
     product: { findMany: async () => [{ id: 'p1', sellingPrice: 36000 }] },
     stockRequest: {
       count: async () => 0,
+      findMany: async () => [], // document numbers read today's numbers
       updateMany: async () => ({ count: 1 }),
       create: async ({ data }) => { written.create = data; return { id: 'r1', requestNumber: 'REQ-1', totalValue: data.totalValue, ...data }; },
       update: async ({ data }) => { written.update = data; return { id: 'r1', requestNumber: 'REQ-1', totalValue: data.totalValue, ...data }; },

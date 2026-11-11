@@ -27,6 +27,7 @@ const model = (name) => ({
   },
   findUnique: async ({ where }) => tables[name].find((r) => r.id === where.id) || null,
   count: async () => tables[name].length,
+  findMany: async () => tables[name], // document numbers read today's numbers
 });
 
 const tx = {

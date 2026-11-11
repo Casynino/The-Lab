@@ -15,13 +15,26 @@ function compactDate(date = new Date()) {
 // SALE-20260616-0007. `delegate` is a Prisma model delegate (e.g. tx.sale),
 // `field` the unique column, `prefix` the document prefix. The surrounding
 // unique constraint is the real guarantee; this just produces friendly values.
+//
+// The next number is the HIGHEST one used today + 1, not today's count + 1 (audit #35, 11 Nov 2026).
+// With a count, deleting one row of the day (e.g. a ledger entry from the Finance trash icon) made the
+// count land on a number still in use, and every later create that day hit the unique key: manual
+// entries failed with 409 and — worse — the automatic income of settlement approvals and payout
+// records failed silently until midnight. A day holds a handful of numbers per prefix, so reading
+// them is cheap; numbers above 9999 still sort correctly because they are compared as numbers.
 async function nextDocNumber(delegate, field, prefix) {
   const datePart = compactDate();
   const like = `${prefix}-${datePart}-`;
-  const count = await delegate.count({
+  const rows = await delegate.findMany({
     where: { [field]: { startsWith: like } },
+    select: { [field]: true },
   });
-  return `${like}${pad(count + 1)}`;
+  let max = 0;
+  for (const r of rows) {
+    const n = Number(String(r[field] || '').slice(like.length));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${like}${pad(max + 1)}`;
 }
 
 // Next sequential sales-rep code (REP-006). Derived from the HIGHEST existing

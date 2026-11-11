@@ -31,6 +31,7 @@ const prismaStub = {
       settlementSubmission: {
         aggregate: async ({ where }) => ({ _sum: { boxes: db.pendingByProduct[where.productId] || 0 } }),
         count: async () => db.committed.length + staged.length,
+        findMany: async () => [...db.committed, ...staged], // document numbers read today's numbers
         create: async ({ data }) => { const row = { id: `sub${db.committed.length + staged.length + 1}`, createdAt: new Date(), ...data }; staged.push(row); return row; },
       },
     };
