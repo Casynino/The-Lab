@@ -97,7 +97,25 @@ function background(promise) {
   return p;
 }
 
+// CallMeBot's firewall refuses (HTTP 403, from its Apache) messages carrying a www.zelab.site link — the
+// first daily report after the move to the new domain (10 Nov 2026, 21:00) was refused five times and
+// never arrived, while the same kind of message with the old vercel.app link went through. So a message
+// refused that way is sent again at once WITHOUT its links, saying where the document is kept: every
+// report is archived and opens from ZELab → Profile → Reports. The text that was stored is unchanged.
+const LINK = /https?:\/\/\S+/g;
 async function sendRaw(text, creds = null) {
+  const first = await sendRawOnce(text, creds);
+  if (!first.sent && first.status === 403 && LINK.test(text)) {
+    LINK.lastIndex = 0;
+    const plain = text.replace(LINK, '(open it in ZELab → Profile → Reports)');
+    const second = await sendRawOnce(plain, creds);
+    return { ...second, linkRemoved: true, firstRefusal: first.provider };
+  }
+  LINK.lastIndex = 0;
+  return first;
+}
+
+async function sendRawOnce(text, creds = null) {
   const { phone, apikey, configured } = creds && creds.phone && creds.apikey
     ? { phone: creds.phone, apikey: creds.apikey, configured: true }
     : await getConfig();
