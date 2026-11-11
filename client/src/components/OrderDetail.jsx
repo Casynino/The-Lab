@@ -6,6 +6,7 @@ import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCc
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
+import { useOnce } from '@/lib/useOnce';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDateTime, formatDate } from '@/lib/format';
 import {
@@ -1161,16 +1162,21 @@ export default function OrderDetailModal({ settlementId, onClose }) {
     onError: (e) => toast.error(apiError(e)),
   });
 
+  // One press per row goes through until it has an answer: a same-frame double tap sent two approvals
+  // (audit admin-ops-3).
+  const once = useOnce();
   const approveReturn = useMutation({
     mutationFn: (id) => api.post(`/returns/${id}/approve`),
     onSuccess: () => { toast.success('Return approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: (_d, _e, id) => once.release(`ret:${id}`),
   });
 
   const approveSubmission = useMutation({
     mutationFn: (id) => api.post(`/settlements/submissions/${id}/approve`),
     onSuccess: () => { toast.success('Settlement approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: (_d, _e, id) => once.release(`sub:${id}`),
   });
 
   const isOwnRep = user?.role === ROLES.SALES_REP && order?.salesRepId === user?.salesRepId;
@@ -1384,7 +1390,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                       </div>
                       <div className="flex shrink-0 gap-2">
                         <Button variant="ghost" className="text-rose-500" disabled={approveReturn.isPending} onClick={() => setRejectingReturn(r)}>Reject</Button>
-                        <Button loading={approveReturn.isPending && approveReturn.variables === r.id} onClick={() => approveReturn.mutate(r.id)}>
+                        <Button loading={approveReturn.isPending && approveReturn.variables === r.id} onClick={() => once.run(() => approveReturn.mutate(r.id), `ret:${r.id}`)}>
                           <CheckCircle2 className="h-4 w-4" /> Approve return
                         </Button>
                       </div>
@@ -1415,7 +1421,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                       </div>
                       <div className="flex shrink-0 gap-2">
                         <Button variant="ghost" className="text-rose-500" disabled={approveSubmission.isPending} onClick={() => setRejectingSubmission(p)}>Reject</Button>
-                        <Button loading={approveSubmission.isPending && approveSubmission.variables === p.id} onClick={() => approveSubmission.mutate(p.id)}>
+                        <Button loading={approveSubmission.isPending && approveSubmission.variables === p.id} onClick={() => once.run(() => approveSubmission.mutate(p.id), `sub:${p.id}`)}>
                           <CheckCircle2 className="h-4 w-4" /> Approve settlement
                         </Button>
                       </div>

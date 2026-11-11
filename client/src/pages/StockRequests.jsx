@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts } from '@/lib/hooks';
 import { ROLES, REQUEST_STATUS_META } from '@/lib/constants';
@@ -422,14 +423,7 @@ function CartOrderSheet({ onClose, existing }) {
 
 // isPending only disables a button after React re-renders, so two taps in the same frame both sent a
 // decision (the server refused the second, but it should never have gone). run() lets one through until
-// done() — called when that decision has finished, either way.
-function useOnce() {
-  const busy = useRef(false);
-  return {
-    run: (fn) => { if (busy.current) return; busy.current = true; fn(); },
-    done: () => { busy.current = false; },
-  };
-}
+// done() — called when that decision has finished, either way. Shared hook: lib/useOnce.js.
 
 // The step before Reject and Cancel order, which cannot be undone. Reject can carry a reason: it is kept
 // under the rep's own note and sent to him in the app and on WhatsApp.
