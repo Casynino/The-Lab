@@ -77,7 +77,9 @@ async function buildPeriodBody({ start, end, prev, topProducts = 8 }) {
   const [paidRows, commissionAll] = await Promise.all([
     prisma.commissionWithdrawal.groupBy({
       by: ['salesRepId'],
-      where: { status: { in: ['APPROVED', 'PAID'] }, decidedAt: { gte: start, lte: end } },
+      // Paid in the month, by the day it was paid — not approved-but-unpaid, and not counted again when an
+      // approved request is paid the month after (audit #81). Rows with no paidAt fall back to the decision.
+      where: { status: 'PAID', OR: [{ paidAt: { gte: start, lte: end } }, { paidAt: null, decidedAt: { gte: start, lte: end } }] },
       _sum: { amount: true },
     }).catch(() => []),
     require('./commission.service').summaryAllReps().catch(() => ({ items: [] })),
