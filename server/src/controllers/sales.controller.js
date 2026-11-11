@@ -14,6 +14,14 @@ const { toNumber } = require('../utils/money');
 const create = asyncHandler(async (req, res) => {
   const payload = { ...req.body };
 
+  // A sale tied to a rep's order is made ONLY by approving that rep's settlement submission (which
+  // locks the order, checks the boxes are still owed and pays the commission once). Through this
+  // endpoint a settlementId skipped the submission and the approval and still minted commission and
+  // closed boxes (audit #32/#42, 11 Nov 2026). The app never sends one here; nobody may.
+  if (payload.settlementId) {
+    throw ApiError.badRequest("A rep's order is settled from Settlements (the rep submits, you approve) — not as a direct sale.");
+  }
+
   // A sales rep can only sell from their own van stock.
   if (req.user.role === ROLES.SALES_REP) {
     if (!req.user.salesRepId) throw ApiError.forbidden('Your account has no sales-rep profile');
