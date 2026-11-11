@@ -25,6 +25,29 @@ function guard(req, res, next) {
   return next();
 }
 
+// A best-effort sub-job may fail without stopping the run, but never silently (audit #125): every
+// `.catch(() => null)` here used to drop the error, so a job that failed every morning left no trace.
+// The answer still carries null for that job.
+function logFailure(job) {
+  return (err) => {
+    console.error(`[cron] ${job} failed:`, err && err.message ? err.message : err);
+    return null;
+  };
+}
+
+// When the jobs that keep orders and fines honest fail, a log line is not enough: overdue orders stay
+// unflagged and fines stay unapplied until someone notices, so the admins are told.
+function alertAdmins(title, message) {
+  return require('../services/notification.service').notifyAdmins({
+    type: 'GENERAL',
+    severity: 'CRITICAL',
+    title,
+    message,
+    entityType: 'Cron',
+    entityId: title,
+  }).catch(logFailure('admin alert'));
+}
+
 // Flip past-deadline orders to OVERDUE (so penalties apply) and send any due
 // 24h/6h/1h settlement reminders. Safe to call repeatedly — fully idempotent.
 // Also retries undelivered WhatsApp notifications and re-scans stock alerts.
@@ -33,14 +56,26 @@ router.get(
   guard,
   asyncHandler(async (_req, res) => {
     const wa = require('../services/whatsappNotify.service');
-    const returnExpiry = await require('../services/returns.service').expireStaleReturns().catch(() => null);
-    const overdue = await settlement.refreshOverdue();
-    const reminders = await settlement.sendDueReminders();
-    const penalties = await penalty.applyDuePenalties();
-    const stockAlerts = await wa.scanStockAlerts().catch(() => null);
-    const whatsappRetries = await wa.flush({ throttleMs: 0 }).catch(() => null);
+    const returnExpiry = await require('../services/returns.service').expireStaleReturns().catch(logFailure('settlement-sweep: return expiry'));
+    let overdue;
+    let reminders;
+    let penalties;
+    try {
+      overdue = await settlement.refreshOverdue();
+      reminders = await settlement.sendDueReminders();
+      penalties = await penalty.applyDuePenalties();
+    } catch (err) {
+      logFailure('settlement-sweep')(err);
+      await alertAdmins(
+        'Morning check failed',
+        `The 09:00 check could not finish: ${String(err.message).slice(0, 200)}. Overdue orders, settlement reminders and fines may not have been applied. It runs again tomorrow at 09:00.`,
+      );
+      return res.status(500).json({ success: false, error: { message: err.message } });
+    }
+    const stockAlerts = await wa.scanStockAlerts().catch(logFailure('settlement-sweep: stock alerts'));
+    const whatsappRetries = await wa.flush({ throttleMs: 0 }).catch(logFailure('settlement-sweep: WhatsApp retries'));
     // A daily, weekly or monthly report whose own run failed or never ran is sent late from here.
-    const missedReports = await wa.catchUpReports().catch(() => null);
+    const missedReports = await wa.catchUpReports().catch(logFailure('settlement-sweep: missed reports'));
     return res.json({ success: true, data: { overdue, reminders, penalties, returnExpiry, stockAlerts, whatsappRetries, missedReports, at: new Date().toISOString() } });
   }),
 );
@@ -57,7 +92,7 @@ router.get(
     const wa = require('../services/whatsappNotify.service');
     const minutes = Number(req.query.minutes) || wa.DEADLINE_WARN_MINUTES;
     const result = await wa.deadlineWarnings(minutes);
-    await wa.flush({ throttleMs: 0 }).catch(() => {});
+    await wa.flush({ throttleMs: 0 }).catch(logFailure('deadline-watch: WhatsApp flush'));
     return res.json({ success: true, data: { ...result, minutes, at: new Date().toISOString() } });
   }),
 );
@@ -71,7 +106,7 @@ router.get(
     const wa = require('../services/whatsappNotify.service');
     return reportGuard('Daily report', async () => {
       const result = await wa.dailySummary({ force: req.query.force === '1' });
-      await wa.flush({ throttleMs: 0 }).catch(() => null);
+      await wa.flush({ throttleMs: 0 }).catch(logFailure('daily-summary: WhatsApp flush'));
       return result;
     }, res);
   }),
@@ -88,6 +123,7 @@ async function reportGuard(name, fn, res) {
     if (err.statusCode && err.statusCode < 500) {
       return res.status(err.statusCode).json({ success: false, error: { message: err.message } });
     }
+    logFailure(name)(err);
     require('../services/notification.service').notifyAdmins({
       type: 'GENERAL',
       severity: 'CRITICAL',
