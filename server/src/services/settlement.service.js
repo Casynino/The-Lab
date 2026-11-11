@@ -643,9 +643,11 @@ async function addStockToRep(salesRepId, payload, actor) {
 
       const product = await tx.product.findUnique({
         where: { id: productId },
-        select: { id: true, name: true, sellingPrice: true, purchasePrice: true },
+        select: { id: true, name: true, sellingPrice: true, purchasePrice: true, isActive: true },
       });
       if (!product) throw ApiError.badRequest('Product not found');
+      // Same rule as a transfer to a rep: a switched-off product's boxes could never be settled (audit #110).
+      if (product.isActive === false) throw ApiError.badRequest(`${product.name} is switched off, so it can't be issued to a rep. Switch it back on in Products first.`);
       const pkg = await tx.productPackaging.findFirst({ where: { productId, isBaseUnit: true } });
       if (!pkg) throw ApiError.badRequest(`${product.name} has no base (Box) packaging configured`);
 
