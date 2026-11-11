@@ -54,6 +54,12 @@ const W = [ROLES.WAREHOUSE_STAFF]; // ADMIN always allowed by hasRole
 
 // The owner's own pages now open inside his profile (and the Label inside Products). An old link,
 // bookmark or notification still works: for him it goes there; anyone else keeps the page itself.
+// Staff open this page inside another one (Invoice inside Sales); a rep, who has no such page, keeps it.
+function RepOnlyElse({ to, children }) {
+  const { role } = useAuth();
+  return role === ROLES.SALES_REP ? children : <Navigate to={to} replace />;
+}
+
 function OwnerAt({ to, children }) {
   const { role } = useAuth();
   return role === ROLES.ADMIN ? <Navigate to={to} replace /> : children;
@@ -90,7 +96,7 @@ export default function App() {
         <Route path="/settlements" element={<Settlements />} />
         <Route path="/commissions" element={<CommissionsRouter />} />
         <Route path="/daily-reports" element={<OwnerAt to="/profile?tab=reports"><DailyReports /></OwnerAt>} />
-        <Route path="/invoice-generator" element={<Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense>} />
+        <Route path="/invoice-generator" element={<RepOnlyElse to="/sales?tab=invoice"><Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense></RepOnlyElse>} />
         <Route path="/activity" element={<ProtectedRoute roles={W}><OwnerAt to="/profile?tab=activity"><Activity /></OwnerAt></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute roles={W}><Sales /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute roles={W}><Customers /></ProtectedRoute>} />

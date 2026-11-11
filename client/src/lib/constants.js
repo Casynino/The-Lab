@@ -44,7 +44,8 @@ export const NAV = [
   { to: '/settlements', label: 'Settle', icon: 'Timer', roles: ALL, group: 'selling', badge: 'settlements' },
   { to: '/sales', label: 'Sales', icon: 'ShoppingCart', roles: STAFF, group: 'selling' },
   { to: '/returns', label: 'Returns', icon: 'Undo2', roles: ALL, group: 'selling', badge: 'returns' },
-  { to: '/invoice-generator', label: 'Invoice', icon: 'Receipt', roles: ALL, group: 'selling' },
+  // Inside Sales for staff (`insideFor`); reps have no Sales page and keep Invoice in their menu.
+  { to: '/invoice-generator', label: 'Invoice', icon: 'Receipt', roles: ALL, group: 'selling', inside: '/sales?tab=invoice', insideFor: STAFF },
 
   // ── Stock — where the goods come from and where they are ──
   { to: '/purchases', label: 'Purchases', icon: 'Ship', roles: STAFF, group: 'stock', inside: '/inventory?tab=purchases', keywords: ['po', 'purchase order', 'imports', 'suppliers'] },

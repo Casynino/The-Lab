@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -323,7 +324,32 @@ function Chip({ active, tone, label, count, onClick }) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+// The invoice maker lives inside Sales for staff (Nino, 11 Nov 2026: "this should be in the Sales page,
+// inside, not on the sidebar"). Reps keep their own Invoice page (they have no Sales page). The tab is in
+// the address (?tab=invoice), so the old /invoice-generator link lands on it.
+const InvoiceGenerator = lazy(() => import('@/pages/InvoiceGenerator'));
+const SALES_TABS = [['list', 'Sales'], ['invoice', 'Invoice']];
+
 export default function Sales() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('tab') === 'invoice' ? 'invoice' : 'list';
+  // Fetch the invoice maker's code while the list is open, so the tab opens at once.
+  useEffect(() => { import('@/pages/InvoiceGenerator'); }, []);
+  return (
+    <div>
+      <div className="mb-5 flex flex-wrap gap-2">
+        {SALES_TABS.map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setParams(k === 'list' ? {} : { tab: k })}
+            aria-current={tab === k ? 'page' : undefined}
+            className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
+        ))}
+      </div>
+      {tab === 'invoice' ? <Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense> : <SalesList />}
+    </div>
+  );
+}
+
+function SalesList() {
   const [page, setPage] = useState(1);
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');

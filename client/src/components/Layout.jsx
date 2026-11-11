@@ -162,7 +162,7 @@ function GlassSidebar({
     for (const s of groups) {
       for (const item of s.items) {
         const to = String(item.to);
-        const where = s.label !== 'Profile' ? s.label : to.startsWith('/products') ? 'Products' : to.startsWith('/inventory') ? 'Inventory' : 'Profile';
+        const where = s.label !== 'Profile' ? s.label : to.startsWith('/products') ? 'Products' : to.startsWith('/inventory') ? 'Inventory' : to.startsWith('/sales') ? 'Sales' : 'Profile';
         const words = [item.label, where || 'Main', ...(item.keywords || [])];
         if (!words.some((w) => w.toLowerCase().includes(q))) continue;
         out.push({ item, where: where || null });
@@ -675,7 +675,15 @@ export default function Layout() {
     // still in the page search, pointing where they are.
     .map((n) => (isOwner && n.adminAt ? { ...n, to: n.adminAt, group: 'inProfile' } : n))
     // Pages that are a tab of another page for everyone (Transfers and Reorder inside Inventory).
-    .map((n) => (n.inside ? { ...n, to: n.inside, group: 'inProfile' } : n));
+    .map((n) => (n.inside && (!n.insideFor || n.insideFor.includes(user?.role)) ? { ...n, to: n.inside, group: 'inProfile' } : n));
+  // Staff read Selling as Sales, Settle, Returns, Requests (Nino, 11 Nov 2026: "Sales should be above Settle";
+  // "Requests should be below Returns"). A rep's menu keeps its own order, Requests first.
+  if (!isRep) {
+    const ORDER = ['/sales', '/settlements', '/returns', '/stock-requests'];
+    const slots = items.map((n, i) => (ORDER.includes(n.to) ? i : -1)).filter((i) => i > -1);
+    const picked = slots.map((i) => items[i]).sort((a, b) => ORDER.indexOf(a.to) - ORDER.indexOf(b.to));
+    slots.forEach((i, k) => { items[i] = picked[k]; });
+  }
 
   /* The banner belongs to the home page, not to the shell. Target Express puts
      it inside each desk's hero (components/app/desk-hero, warehouse-hero, the
