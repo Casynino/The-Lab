@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
@@ -181,6 +181,24 @@ function WithdrawModal({ commission, firstName, onClose }) {
 // on a decision — so it sits at the top of the page rather than three tabs
 // deep, and carries the detail the decision needs: who, how much, and the name
 // and number they asked it to be sent to.
+// Reject was one tap in all three places, and the rep is told at once that the request was not approved.
+// It now asks this first, everywhere.
+const rejectQuestion = (w) =>
+  `Reject ${w.salesRep?.user?.name || 'this rep'}'s request for ${formatCurrency(w.amount)}? They will be told it was not approved, and the amount goes back into their balance.`;
+
+function RejectWithdrawalModal({ w, busy, onConfirm, onClose }) {
+  return (
+    <Modal open onClose={busy ? () => {} : onClose} title="Reject this request?" footer={
+      <>
+        <Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
+        <Button variant="danger" loading={busy} onClick={onConfirm}>Yes, reject</Button>
+      </>
+    }>
+      <p className="text-sm leading-snug text-foreground">{rejectQuestion(w)}</p>
+    </Modal>
+  );
+}
+
 // Opening a request. The table can only show a line; deciding one deserves the
 // whole picture — who asked, how much, where they want it sent, what it leaves
 // them with, and who decided it if someone already has.
@@ -199,6 +217,9 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
     },
     onError: (e) => toast.error(apiError(e)),
   });
+
+  // Reject asks once more before it goes: the rep is told at once that it was not approved.
+  const [confirmReject, setConfirmReject] = useState(false);
 
   const meta = WITHDRAWAL_STATUS_META[w.status] || {};
   const pending = w.status === 'PENDING';
@@ -246,15 +267,28 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
           </div>
         )}
 
-        {pending && (
+        {pending && !confirmReject && (
           <div className="grid grid-cols-2 gap-2">
             <Button className="justify-center py-2.5" loading={decide.isPending} onClick={() => decide.mutate('PAY')}>
               <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
             </Button>
             <Button variant="secondary" className="justify-center py-2.5 text-rose-400"
-              disabled={decide.isPending} onClick={() => decide.mutate('REJECT')}>
+              disabled={decide.isPending} onClick={() => setConfirmReject(true)}>
               Reject
             </Button>
+          </div>
+        )}
+        {pending && confirmReject && (
+          <div className="space-y-3 rounded-xl bg-rose-500/[0.06] p-3 ring-1 ring-rose-500/20">
+            <p className="text-[13px] leading-snug text-foreground">{rejectQuestion(w)}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" className="justify-center py-2.5" disabled={decide.isPending} onClick={() => setConfirmReject(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" className="justify-center py-2.5" loading={decide.isPending} onClick={() => decide.mutate('REJECT')}>
+                Yes, reject
+              </Button>
+            </div>
           </div>
         )}
         {approved && (
@@ -262,10 +296,10 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
             <Coins className="h-4 w-4" /> Mark paid — from my pocket
           </Button>
         )}
-        {pending && (
+        {pending && !confirmReject && (
           <p className="text-[11px] leading-snug text-faint">
-            Approving moves no money. It clears the request so you can send it, and the amount stays held aside from
-            their balance either way until you decide.
+            One press marks it paid from your own pocket, records it on the Commission account and tells the rep it
+            has been paid. Send the money first.
           </p>
         )}
       </div>
@@ -274,6 +308,7 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
 }
 
 function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
+  const [rejecting, setRejecting] = useState(null);
   const decide = useMutation({
     mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action, fromOwnPocket: action === 'PAY' }),
     onSuccess: (_r, v) => {
@@ -308,7 +343,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
               </button>
               <div className="flex shrink-0 gap-2">
                 <Button variant="ghost" className="text-rose-400" disabled={busy}
-                  onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
+                  onClick={() => setRejecting(w)}>Reject</Button>
                 <Button loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
                   <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
                 </Button>
@@ -317,6 +352,14 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
           );
         })}
       </div>
+      {rejecting && (
+        <RejectWithdrawalModal
+          w={rejecting}
+          busy={decide.isPending}
+          onClose={() => setRejecting(null)}
+          onConfirm={() => decide.mutate({ id: rejecting.id, action: 'REJECT' }, { onSettled: () => setRejecting(null) })}
+        />
+      )}
     </Card>
   );
 }
@@ -330,20 +373,32 @@ function PenaltyBreakdown({ breakdown }) {
       <h3 className="text-sm font-semibold text-foreground">Fines by order</h3>
       <p className="mt-0.5 text-xs text-muted">Taken from your wallet balance.</p>
       <ul className="mt-2 divide-y divide-white/[0.06]">
-        {breakdown.map((p) => (
-          <li key={p.settlementId} className="flex items-start justify-between gap-3 py-3">
-            <div className="min-w-0">
-              <p className="text-[15px] font-semibold text-foreground">{p.settlementNumber}</p>
-              <p className="mt-0.5 text-xs text-muted">
-                {p.daysOverdue} {Number(p.daysOverdue) === 1 ? 'day' : 'days'} overdue · {formatCurrency(p.penaltyPerDay)} a day
-              </p>
-              <p className={clsx('mt-0.5 text-xs', p.closed ? 'text-emerald-400' : p.exemptPendingReturn ? 'text-sky-400' : 'text-rose-300')}>
-                {p.closed ? 'Order closed' : p.exemptPendingReturn ? 'Paused — return under review' : 'Still accruing daily'}
-              </p>
-            </div>
-            <p className="shrink-0 text-[15px] font-semibold tabular-nums text-rose-300">−{formatCurrency(p.totalPenalty)}</p>
-          </li>
-        ))}
+        {breakdown.map((p) => {
+          // A manual deduction has no order, no days and no rate; an order fined only for a late return
+          // (0 days) has no daily rate. Only a late order still open and not paused keeps accruing.
+          const days = Number(p.daysOverdue) || 0;
+          const status = p.closed ? 'Order closed'
+            : p.exemptPendingReturn ? 'Paused — return under review'
+              : days > 0 ? 'Still accruing daily' : null;
+          return (
+            <li key={p.settlementId} className="flex items-start justify-between gap-3 py-3">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold text-foreground">{p.settlementNumber}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {!p.settlementId ? 'Deduction by ZELab'
+                    : days > 0 ? `${days} ${days === 1 ? 'day' : 'days'} overdue · ${formatCurrency(p.penaltyPerDay)} a day`
+                      : 'Return delay fine'}
+                </p>
+                {p.settlementId && status && (
+                  <p className={clsx('mt-0.5 text-xs', p.closed ? 'text-emerald-400' : p.exemptPendingReturn ? 'text-sky-400' : 'text-rose-300')}>
+                    {status}
+                  </p>
+                )}
+              </div>
+              <p className="shrink-0 text-[15px] font-semibold tabular-nums text-rose-300">−{formatCurrency(p.totalPenalty)}</p>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -393,17 +448,33 @@ function ForgiveModal({ penalty, onClose }) {
 function FinesHistory({ admin }) {
   const [forgiving, setForgiving] = useState(null);
   const [showForgiven, setShowForgiven] = useState(false);
+  const [page, setPage] = useState(1);
+  const [forgivenPage, setForgivenPage] = useState(1);
+  // The fines still charged and the forgiven ones are asked for separately. One page of both, newest
+  // first, left older applied fines unloaded — and this table is the only place a fine can be forgiven.
   const { data } = useQuery({
-    queryKey: ['penalties', admin ? 'all' : 'mine'],
-    queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 50 } })),
+    queryKey: ['penalties', admin ? 'all' : 'mine', 'APPLIED', page],
+    queryFn: async () => unwrap(await api.get('/penalties', { params: { status: 'APPLIED', limit: 50, page } })),
+    placeholderData: keepPreviousData, // turning a page keeps the table on screen until the next one arrives
   });
-  const all = data?.data || [];
+  const { data: forgivenData } = useQuery({
+    queryKey: ['penalties', 'all', 'WAIVED', forgivenPage],
+    queryFn: async () => unwrap(await api.get('/penalties', { params: { status: 'WAIVED', limit: 50, page: forgivenPage } })),
+    enabled: Boolean(admin && showForgiven),
+    placeholderData: keepPreviousData,
+  });
+  // Forgiving the last fine on a later page leaves that page empty: step back to one that has rows.
+  // (Only once the page has loaded: while it loads there is no answer yet, and that is not "no rows".)
+  const lastPage = data?.meta ? Math.max(1, data.meta.totalPages || 1) : page;
+  useEffect(() => { if (page > lastPage) setPage(lastPage); }, [page, lastPage]);
   // A forgiven fine is settled business. Showing dozens of them first buried the
   // handful still costing someone money, so they are collapsed by default.
-  const active = all.filter((p) => p.status !== 'WAIVED');
-  const forgivenCount = all.length - active.length;
-  const items = showForgiven ? all : active;
-  if (!all.length) return null;
+  const active = (data?.data || []).filter((p) => p.status !== 'WAIVED');
+  const forgiven = showForgiven ? (forgivenData?.data || []) : [];
+  // Counted by the server over the whole table, not from the page on screen.
+  const activeCount = data?.meta?.counts?.applied ?? active.length;
+  const forgivenCount = data?.meta?.counts?.waived ?? 0;
+  if (!activeCount && !(admin && forgivenCount)) return null;
   const kindLabel = (p) => (p.kind === 'ADJUSTMENT' ? 'Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return Delay Fine (24h)' : 'Late Settlement Fine');
   if (!admin) {
     // The rep's own history: plain rows on the page — what, which order and when on the left, the amount
@@ -412,10 +483,10 @@ function FinesHistory({ admin }) {
       <section className="mt-9 px-1">
         <h3 className="text-sm font-semibold text-foreground">Fine history</h3>
         <p className="mt-0.5 text-xs text-muted">
-          {active.length ? `${active.length} fine${active.length !== 1 ? 's' : ''} still reducing your balance.` : 'Nothing is reducing your balance now.'}
+          {activeCount ? `${activeCount} fine${activeCount !== 1 ? 's' : ''} still reducing your balance.` : 'Nothing is reducing your balance now.'}
         </p>
         <ul className="mt-2 divide-y divide-white/[0.06]">
-          {items.map((p) => (
+          {active.map((p) => (
             <li key={p.id} className="flex items-start justify-between gap-3 py-3">
               <div className="min-w-0">
                 <p className="text-[13px] text-foreground">{kindLabel(p)}</p>
@@ -427,55 +498,83 @@ function FinesHistory({ admin }) {
             </li>
           ))}
         </ul>
+        {data?.meta?.totalPages > 1 && (
+          <Pagination page={page} totalPages={data.meta.totalPages} total={activeCount} onChange={setPage} />
+        )}
       </section>
     );
   }
+  const head = (
+    <THead><TR>{admin && <TH>Rep</TH>}<TH>Type</TH><TH>Order</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH>Date</TH>{admin && <TH />}</TR></THead>
+  );
+  const row = (p) => {
+    const waived = p.status === 'WAIVED';
+    return (
+      <TR key={p.id}>
+        {admin && <TD className="font-medium">{p.salesRep?.user?.name}</TD>}
+        <TD>{p.kind === 'ADJUSTMENT' ? 'Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return Delay Fine (24h)' : 'Late Settlement Fine'}</TD>
+        <TD className="text-faint" title={p.notes || undefined}>{p.settlement?.settlementNumber || '—'}</TD>
+        <TD className={`text-right font-semibold ${waived ? 'text-faint line-through' : 'text-rose-400'}`}>−{formatCurrency(p.amount)}</TD>
+        <TD>
+          {waived
+            ? <Badge className="bg-emerald-500/15 text-emerald-300" title={p.waiveReason || undefined}>Forgiven</Badge>
+            : <Badge className="bg-rose-500/15 text-rose-300">Applied</Badge>}
+        </TD>
+        <TD className="text-faint">{waived && p.waivedAt ? `${formatDateTime(p.appliedAt)} · forgiven ${formatDateTime(p.waivedAt)}` : formatDateTime(p.appliedAt)}</TD>
+        {admin && (
+          <TD>
+            {!waived && (
+              <button
+                onClick={() => setForgiving(p)}
+                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
+              >
+                <HeartHandshake className="h-3.5 w-3.5" /> Forgive
+              </button>
+            )}
+          </TD>
+        )}
+      </TR>
+    );
+  };
   return (
     <Card className="mt-6">
       <CardHeader
         title="Penalty transactions"
-        subtitle={active.length
-          ? `${active.length} fine${active.length !== 1 ? 's' : ''} still reducing a balance.`
-          : 'Nothing is currently reducing anyone\u2019s balance.'}
+        subtitle={activeCount
+          ? `${activeCount} fine${activeCount !== 1 ? 's' : ''} still reducing a balance.`
+          : 'Nothing is currently reducing anyone’s balance.'}
         action={admin && forgivenCount > 0 && (
           <Button variant="ghost" className="text-xs" onClick={() => setShowForgiven((v) => !v)}>
             {showForgiven ? 'Hide forgiven' : `Show ${forgivenCount} forgiven`}
           </Button>
         )} />
-      <Table>
-        <THead><TR>{admin && <TH>Rep</TH>}<TH>Type</TH><TH>Order</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH>Date</TH>{admin && <TH />}</TR></THead>
-        <TBody>
-          {items.map((p) => {
-            const waived = p.status === 'WAIVED';
-            return (
-              <TR key={p.id}>
-                {admin && <TD className="font-medium">{p.salesRep?.user?.name}</TD>}
-                <TD>{p.kind === 'ADJUSTMENT' ? 'Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return Delay Fine (24h)' : 'Late Settlement Fine'}</TD>
-                <TD className="text-faint" title={p.notes || undefined}>{p.settlement?.settlementNumber || '—'}</TD>
-                <TD className={`text-right font-semibold ${waived ? 'text-faint line-through' : 'text-rose-400'}`}>−{formatCurrency(p.amount)}</TD>
-                <TD>
-                  {waived
-                    ? <Badge className="bg-emerald-500/15 text-emerald-300" title={p.waiveReason || undefined}>Forgiven</Badge>
-                    : <Badge className="bg-rose-500/15 text-rose-300">Applied</Badge>}
-                </TD>
-                <TD className="text-faint">{waived && p.waivedAt ? `${formatDateTime(p.appliedAt)} · forgiven ${formatDateTime(p.waivedAt)}` : formatDateTime(p.appliedAt)}</TD>
-                {admin && (
-                  <TD>
-                    {!waived && (
-                      <button
-                        onClick={() => setForgiving(p)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
-                      >
-                        <HeartHandshake className="h-3.5 w-3.5" /> Forgive
-                      </button>
-                    )}
-                  </TD>
-                )}
-              </TR>
-            );
-          })}
-        </TBody>
-      </Table>
+      {active.length > 0 && (
+        <Table>
+          {head}
+          <TBody>{active.map(row)}</TBody>
+        </Table>
+      )}
+      {data?.meta?.totalPages > 1 && (
+        <Pagination page={page} totalPages={data.meta.totalPages} total={activeCount} onChange={setPage} />
+      )}
+      {showForgiven && (
+        <div className="border-t border-border">
+          <p className="px-5 pb-1 pt-4 text-xs font-semibold text-muted">Forgiven</p>
+          {!forgivenData ? (
+            <p className="px-5 py-3 text-xs text-faint">Loading…</p>
+          ) : (
+            <>
+              <Table>
+                {head}
+                <TBody>{forgiven.map(row)}</TBody>
+              </Table>
+              {forgivenData.meta?.totalPages > 1 && (
+                <Pagination page={forgivenPage} totalPages={forgivenData.meta.totalPages} total={forgivenCount} onChange={setForgivenPage} />
+              )}
+            </>
+          )}
+        </div>
+      )}
       {forgiving && <ForgiveModal penalty={forgiving} onClose={() => setForgiving(null)} />}
     </Card>
   );
@@ -642,7 +741,10 @@ function RepView() {
       {balanceNegative && (
         <p className="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-rose-300">
           <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full bg-current" />
-          Negative balance from overdue fines
+          {/* Blame the fines only when they explain the whole deficit — a claw-back can take it below zero too. */}
+          {c.penalties > 0 && c.available + c.penalties >= 0
+            ? 'Negative balance from overdue fines'
+            : 'Negative balance — new commission pays it off first'}
         </p>
       )}
       {windowOpen && (
@@ -1338,12 +1440,14 @@ function AdminView() {
   const [deducting, setDeducting] = useState(false);
   const [tab, setTab] = useState('balances');
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
+  const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
   const { data: summary, isLoading } = useQuery({ queryKey: ['commissions', 'summary'], queryFn: async () => unwrap(await api.get('/commissions/summary')).data });
   const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'all'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 30 } })) });
-  // Same query key as FinesHistory, so this shares its cache rather than refetching.
+  // Only the whole-table counts are read here (meta.counts), so one row is enough. FinesHistory asks for
+  // its own lists by status under longer keys; invalidating ['penalties'] refreshes both.
   const { data: penaltyData } = useQuery({
     queryKey: ['penalties', 'all'],
-    queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 50 } })),
+    queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 1 } })),
   });
   // The sales bonus, for the balances table. Same key BonusSettings uses, so
   // the two share one cache entry and paying a bonus over on Rates & bonus
@@ -1464,7 +1568,7 @@ function AdminView() {
                         The server now refuses it too; this keeps the button from inviting it. */}
                     {w.status === 'PENDING' && <>
                       <Button className="px-2 py-1 text-xs" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>Approve &amp; pay</Button>
-                      <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
+                      <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
                     </>}
                     {w.status === 'APPROVED' && (
                       // One button, because there is only one truth: rep
@@ -1483,6 +1587,14 @@ function AdminView() {
               </TR>
             ))}</TBody>
           </Table>
+        )}
+        {rejectingWd && (
+          <RejectWithdrawalModal
+            w={rejectingWd}
+            busy={decide.isPending}
+            onClose={() => setRejectingWd(null)}
+            onConfirm={() => decide.mutate({ id: rejectingWd.id, action: 'REJECT' }, { onSettled: () => setRejectingWd(null) })}
+          />
         )}
       </Card>
 

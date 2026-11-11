@@ -154,14 +154,20 @@ async function penaltyBreakdownForRep(salesRepId) {
 
   // Manual deductions have no settlement — keep them out of the id lookups.
   const ids = grouped.map((g) => g.settlementId).filter(Boolean);
-  const [settlements, pendingRets] = await Promise.all([
+  const [settlements, pendingRets, lateRates] = await Promise.all([
     prisma.settlement.findMany({ where: { id: { in: ids } }, select: { id: true, settlementNumber: true, status: true, selfExtendedAt: true } }),
     ids.length
       ? prisma.return.groupBy({ by: ['settlementId'], where: { settlementId: { in: ids }, status: 'PENDING' }, _count: true })
       : [],
+    // The daily fine actually charged on each order. Today's rate follows the order's extension state NOW,
+    // so a closed order extended after its fines quoted 20,000 a day beside a 10,000 one-day fine.
+    ids.length
+      ? prisma.settlementPenalty.groupBy({ by: ['settlementId'], where: { salesRepId, settlementId: { in: ids }, status: 'APPLIED', kind: 'LATE_FINE' }, _max: { amount: true } })
+      : [],
   ]);
   const sMap = new Map(settlements.map((s) => [s.id, s]));
   const pendingMap = new Map(pendingRets.map((r) => [r.settlementId, r._count]));
+  const chargedRate = new Map(lateRates.map((r) => [r.settlementId, round2(toNumber(r._max.amount))]));
 
   let total = 0;
   const breakdown = grouped
@@ -169,6 +175,7 @@ async function penaltyBreakdownForRep(salesRepId) {
       const amt = round2(toNumber(g._sum.amount));
       total += amt;
       const s = g.settlementId ? sMap.get(g.settlementId) : null;
+      const closed = s?.status === 'SETTLED';
       return {
         settlementId: g.settlementId,
         settlementNumber: s?.settlementNumber || (g.settlementId ? '—' : 'Manual deduction'),
@@ -176,9 +183,11 @@ async function penaltyBreakdownForRep(salesRepId) {
         // so callers must not render them as overdue days.
         daysOverdue: g._max.daysOverdue || 0,
         fines: g._count,
-        penaltyPerDay: dailyRateFor(s),
+        // A manual deduction has no daily rate. A closed order shows what it was charged; an open one the
+        // rate its next fine will be charged at.
+        penaltyPerDay: !g.settlementId ? null : (closed && chargedRate.get(g.settlementId)) || dailyRateFor(s),
         totalPenalty: amt,
-        closed: s?.status === 'SETTLED',
+        closed,
         exemptPendingReturn: (pendingMap.get(g.settlementId) || 0) > 0,
       };
     })
@@ -281,10 +290,12 @@ async function waivePenalty(id, actor, reason) {
 // debt that is no longer theirs. The row itself must survive — the sweep counts
 // rows to know which penalty-days it already charged — so it is hidden, never
 // deleted. Admins still see everything, forgiven rows included.
-async function listPenalties({ salesRepId, settlementId, page = 1, limit = 20, includeWaived = true }) {
+// `status` (APPLIED or WAIVED) narrows the rows; the counts below stay over both.
+async function listPenalties({ salesRepId, settlementId, status, page = 1, limit = 20, includeWaived = true }) {
   const where = {};
   if (salesRepId) where.salesRepId = salesRepId;
   if (settlementId) where.settlementId = settlementId;
+  if (status === 'APPLIED' || status === 'WAIVED') where.status = status;
   if (!includeWaived) where.status = 'APPLIED';
   const skip = (page - 1) * limit;
   const [items, total] = await Promise.all([
