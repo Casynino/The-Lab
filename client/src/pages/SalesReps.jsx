@@ -12,40 +12,133 @@ import { repRegions } from '@/lib/repRegions';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, LoadError, Button, Modal, Field, Select, NumberInput, Pagination,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Button, Modal, Field, Select, NumberInput, Pagination, Input,
 } from '@/components/ui';
 
+// A readable password the owner can read out or send: no 0/O, 1/l/I, 10 characters.
+function makePassword() {
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const buf = new Uint32Array(10);
+  (globalThis.crypto || window.crypto).getRandomValues(buf);
+  return Array.from(buf, (n) => chars[n % chars.length]).join('');
+}
+
+// Adding a rep is one step (Nino, 11 Nov 2026: "I should just be able to add a rep here, no need to go and add a
+// user first"). "New person" makes his sign-in account and his rep profile in ONE request — POST /users with the
+// SALES_REP role creates both together on the server (one write) — and then shows the sign-in details to give him.
+// "Existing account" is the old path, for a Sales-rep login that has no rep profile yet.
 function RepModal({ onClose }) {
   const qc = useQueryClient();
   const { data: users = [] } = useQuery({ queryKey: ['users', 'all'], queryFn: async () => unwrap(await api.get('/users', { params: { limit: 200 } })).data });
-  const [userId, setUserId] = useState('');
-  const [regions, setRegions] = useState([]);
-  const [monthlyTarget, setMonthlyTarget] = useState('');
-
+  const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: async () => unwrap(await api.get('/roles')).data });
+  const repRole = roles.find((r) => r.name === ROLES.SALES_REP);
   // Only Sales rep accounts: the server refuses any other role (an admin made a rep kept admin powers).
   const candidates = users.filter((u) => u.role?.name === 'SALES_REP' && !u.salesRep);
 
+  const [mode, setMode] = useState('new'); // 'new' | 'existing'
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [userId, setUserId] = useState('');
+  const [regions, setRegions] = useState([]);
+  const [monthlyTarget, setMonthlyTarget] = useState('');
+  const [done, setDone] = useState(null); // { name, code, email, password }
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const takenEmail = emailOk && users.some((u) => (u.email || '').toLowerCase() === email.trim().toLowerCase());
+  const target = monthlyTarget ? Number(monthlyTarget) : null;
+  const validNew = name.trim().length >= 2 && phone.trim().length >= 9 && emailOk && !takenEmail && password.length >= 8 && !!repRole;
+  const valid = mode === 'new' ? validNew : !!userId;
+
   const create = useMutation({
-    mutationFn: () => api.post('/sales-reps', { userId, regions, monthlyTarget: monthlyTarget ? Number(monthlyTarget) : null }),
-    onSuccess: () => { toast.success('Sales rep created'); qc.invalidateQueries({ queryKey: ['sales-reps'] }); onClose(); },
+    mutationFn: async () => {
+      if (mode === 'existing') return api.post('/sales-reps', { userId, regions, monthlyTarget: target });
+      return api.post('/users', {
+        name: name.trim(), email: email.trim().toLowerCase(), password, phone: phone.trim(), roleId: repRole.id,
+        salesRep: { regions, phone: phone.trim(), monthlyTarget: target },
+      });
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['sales-reps'] });
+      qc.invalidateQueries({ queryKey: ['users'] });
+      if (mode === 'existing') { toast.success('Sales rep created'); onClose(); return; }
+      const u = unwrap(res)?.data || unwrap(res);
+      setDone({ name: name.trim(), code: u?.salesRep?.code || '', email: email.trim().toLowerCase(), password });
+    },
     onError: (e) => toast.error(apiError(e)),
   });
 
+  if (done) {
+    const text = `ZELab sign-in\nName: ${done.name}${done.code ? ` (${done.code})` : ''}\nEmail: ${done.email}\nPassword: ${done.password}\nOpen www.zelab.site on your phone and sign in.`;
+    return (
+      <Modal open onClose={onClose} title="Rep added"
+        footer={<>
+          <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(text).then(() => toast.success('Copied')).catch(() => {}); }}>Copy sign-in details</Button>
+          <Button onClick={onClose}>Done</Button>
+        </>}>
+        <div className="space-y-3">
+          <p className="text-sm text-muted"><b className="text-foreground">{done.name}</b>{done.code ? ` · ${done.code}` : ''} can sign in now. Give him these details — he can change the password on his Profile.</p>
+          <dl className="space-y-2 rounded-2xl bg-white/[0.04] p-4 text-sm ring-1 ring-inset ring-white/[0.08]">
+            <div className="flex justify-between gap-3"><dt className="text-muted">Email</dt><dd className="break-all text-right font-medium text-foreground">{done.email}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-muted">Password</dt><dd className="font-mono text-right font-semibold tracking-wide text-foreground">{done.password}</dd></div>
+          </dl>
+          <p className="text-[11px] text-faint">Reps sign in on a phone only.</p>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal open onClose={onClose} title="New sales representative"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={create.isPending} disabled={!userId} onClick={() => create.mutate()}>Create</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={create.isPending} disabled={!valid || create.isPending} onClick={() => create.mutate()}>Add rep</Button></>}>
       <div className="space-y-4">
-        <Field label="User account" required hint="Pick a user who isn't already a rep. Tip: create SALES_REP users from the Users page.">
-          <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
-            <option value="">Select user…</option>
-            {candidates.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.email}</option>)}
-          </Select>
-        </Field>
+        {candidates.length > 0 && (
+          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Who is the rep">
+            {[['new', 'New person'], ['existing', `Existing account (${candidates.length})`]].map(([k, label]) => (
+              <button key={k} type="button" role="tab" aria-selected={mode === k} onClick={() => setMode(k)}
+                className={clsx('h-10 rounded-xl text-sm font-medium ring-1 ring-inset transition', mode === k ? 'bg-white/[0.08] text-foreground ring-white/20' : 'text-muted ring-white/[0.08] hover:text-foreground')}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mode === 'new' ? (
+          <>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Full name" required>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Juma Hamisi" autoFocus autoComplete="off" />
+              </Field>
+              <Field label="Phone" required hint="His WhatsApp number">
+                <Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" autoComplete="off" />
+              </Field>
+            </div>
+            <Field label="Sign-in email" required error={takenEmail ? 'Another account already uses this email' : undefined}>
+              <Input type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="juma@zelab.site" autoComplete="off" autoCapitalize="none" />
+            </Field>
+            <Field label="Password" required hint={password && password.length < 8 ? 'At least 8 characters' : 'He can change it later on his Profile'}>
+              <div className="flex gap-2">
+                <Input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" className="min-w-0 flex-1" />
+                <Button type="button" variant="secondary" className="shrink-0 px-3 text-xs" onClick={() => { setPassword(makePassword()); setShowPw(true); }}>Make one</Button>
+              </div>
+            </Field>
+          </>
+        ) : (
+          <Field label="User account" required hint="A Sales-rep login that has no rep profile yet">
+            <Select value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <option value="">Select user…</option>
+              {candidates.map((u) => <option key={u.id} value={u.id}>{u.name} · {u.email}</option>)}
+            </Select>
+          </Field>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Region(s)" hint="One or more — the first is the main region">
+          <Field label="Region(s)" hint="One or more — the first is the main region; none means Dar es Salaam">
             <RegionPicker value={regions} onChange={setRegions} />
           </Field>
-          <Field label="Monthly target"><NumberInput min="0" value={monthlyTarget} onChange={(e) => setMonthlyTarget(e.target.value)} /></Field>
+          <Field label="Monthly target (optional)"><NumberInput min="0" value={monthlyTarget} onChange={(e) => setMonthlyTarget(e.target.value)} /></Field>
         </div>
       </div>
     </Modal>
