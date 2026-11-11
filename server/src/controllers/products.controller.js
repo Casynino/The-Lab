@@ -14,11 +14,13 @@ const list = asyncHandler(async (req, res) => {
     defaultSortBy: 'name',
     defaultSortDir: 'asc',
   });
-  const { items, total } = await productsService.listProducts(
-    { brandId: q.brandId, categoryId: q.categoryId, isActive: q.isActive, search: q.search },
+  // The catalogue totals are for staff only — a rep is not given business-wide stock figures here.
+  const withSummary = req.user && req.user.role !== 'SALES_REP';
+  const { items, total, summary } = await productsService.listProducts(
+    { brandId: q.brandId, categoryId: q.categoryId, isActive: q.isActive, search: q.search, withSummary },
     pagination,
   );
-  return paginated(res, forRole(req, items), { page: pagination.page, limit: pagination.limit, total });
+  return paginated(res, forRole(req, items), { page: pagination.page, limit: pagination.limit, total, ...(summary ? { summary } : {}) });
 });
 
 const get = asyncHandler(async (req, res) => {

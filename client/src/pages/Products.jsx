@@ -519,14 +519,15 @@ function ProductsCatalogue() {
         {isOwner && <Button onClick={() => setModal({ open: true, editing: null })} disabled={!units.length}><Plus className="h-4 w-4" /> New product</Button>}
       </PageHeader>
 
-      {/* What the catalogue holds, before the list of it. Counted over the
-          rows on screen, and the low-stock card only lights up when there is
-          something to act on. */}
+      {/* What the catalogue holds, before the list of it. Counted by the server over every product the
+          filters match (meta.summary), not just the page on screen, and the low-stock card only lights up
+          when there is something to act on. An older server without the summary falls back to the rows. */}
       {(() => {
         const rows = data?.data || [];
-        const onHand = rows.reduce((n, p) => n + (p.onHandBase || 0), 0);
-        const lowCount = rows.filter((p) => p.lowStock).length;
-        const value = rows.reduce((n, p) => n + (p.onHandBase || 0) * Number(p.sellingPrice || 0), 0);
+        const sum = data?.meta?.summary;
+        const onHand = sum ? sum.onHandBase : rows.reduce((n, p) => n + (p.onHandBase || 0), 0);
+        const lowCount = sum ? sum.lowCount : rows.filter((p) => p.lowStock).length;
+        const value = sum ? sum.worthAtSelling : rows.reduce((n, p) => n + (p.onHandBase || 0) * Number(p.sellingPrice || 0), 0);
         const cards = [
           { label: 'Products', value: formatNumber(data?.meta?.total ?? rows.length), icon: Package, sub: 'in the catalogue',
             ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
