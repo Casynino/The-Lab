@@ -908,7 +908,8 @@ function RejectReturnModal({ ret, onClose, onDone }) {
 }
 
 // --- Reject a pending settlement submission (staff / admin) -----------------
-function RejectSubmissionModal({ submission, onClose, onDone }) {
+// Also used by the "Pending settlement approvals" card on the Settlements page.
+export function RejectSubmissionModal({ submission, onClose, onDone }) {
   const [reason, setReason] = useState('');
   const reject = useMutation({
     mutationFn: () => api.post(`/settlements/submissions/${submission.id}/reject`, { reason: reason || undefined }),
@@ -1027,7 +1028,8 @@ function MpesaLogo({ className = 'h-5' }) {
 
 function AirtelMoneyLogo({ className = 'h-5' }) {
   return (
-    <svg viewBox="0 0 104 24" className={className} role="img" aria-label="Airtel Money">
+    // 112 wide: "money" ends near x=109, and at 104 its "y" was cut off.
+    <svg viewBox="0 0 112 24" className={className} role="img" aria-label="Airtel Money">
       {/* the airtel swirl */}
       <path d="M14.6 19.8c-4.6 0-8.2-2.8-8.2-7.2 0-4.8 4.2-8.6 9.2-8.6 3.6 0 6.2 1.9 6.2 4.5 0 1.9-1.2 3.1-2.7 3.4"
         fill="none" stroke="#E40000" strokeWidth="3.6" strokeLinecap="round" />

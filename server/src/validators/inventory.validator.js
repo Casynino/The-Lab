@@ -122,7 +122,7 @@ const returnQuery = {
     ...paginationFields,
     ...dateRangeFields,
     type: z.enum(['CUSTOMER_RETURN', 'SALES_RETURN']).optional(),
-    status: z.enum(['PENDING', 'COMPLETED', 'CANCELLED']).optional(),
+    status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED', 'CANCELLED', 'EXPIRED']).optional(),
     salesRepId: id.optional(),
     warehouseId: id.optional(),
   }),

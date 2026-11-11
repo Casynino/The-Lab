@@ -46,16 +46,18 @@ async function submitLineTx(tx, settlementId, payload, actor) {
   // to M-Pesa, Civlily to Airtel Money — so what may be ACCEPTED here is
   // exactly what the rep was OFFERED, read from the same function rather
   // than re-derived: a second copy of the rule is a second rule.
-  let account = null;
-  if (payload.accountId) {
-    const allowed = await finance.paymentAccountsForBrand(product.brandId || null);
-    account = allowed.find((a) => a.id === payload.accountId) || null;
-    if (!account) {
-      const one = allowed[0];
-      throw ApiError.badRequest(one
-        ? `${product.name} settles to ${one.name}. Submit the money there.`
-        : 'Select a valid payment account');
-    }
+  // The account is ALWAYS resolved here, as the screen does it: the one account offered, or the one the rep
+  // picked. A submission with no account used to be saved under whatever `method` the caller typed
+  // ("CASH"), which the owner then read while the money was booked to the brand's wallet (audit, 11 Nov 2026).
+  const allowed = await finance.paymentAccountsForBrand(product.brandId || null);
+  const account = payload.accountId
+    ? allowed.find((a) => a.id === payload.accountId) || null
+    : allowed.length === 1 ? allowed[0] : null;
+  if (!account) {
+    const one = payload.accountId ? allowed[0] : null; // no account chosen where there is a choice: say so
+    throw ApiError.badRequest(one
+      ? `${product.name} settles to ${one.name}. Submit the money there.`
+      : 'Select a valid payment account');
   }
   const pkg = await tx.productPackaging.findFirst({ where: { productId, isBaseUnit: true } });
   if (!pkg) throw ApiError.badRequest(`${product.name} has no base (Box) packaging configured`);
@@ -90,8 +92,8 @@ async function submitLineTx(tx, settlementId, payload, actor) {
       boxes,
       baseQuantity,
       amount,
-      method: account ? account.name : payload.method || null,
-      accountId: account ? account.id : null,
+      method: account.name,
+      accountId: account.id,
       status: 'PENDING',
       submittedById: actor ? actor.id : null,
     },

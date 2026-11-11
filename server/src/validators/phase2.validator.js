@@ -125,7 +125,7 @@ const settlementSettleBoxes = {
   body: z.object({
     productId: id,
     boxes: z.number().int().positive(),
-    method: z.enum(['CASH', 'MOBILE_MONEY', 'BANK', 'OTHER']).optional(),
+    // No `method`: the label is always the payment account's name, resolved on the server.
     accountId: id.optional().nullable(), // payment account the money went to
     reference: z.string().max(120).optional().nullable(),
     notes: z.string().max(500).optional().nullable(),

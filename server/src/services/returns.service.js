@@ -66,16 +66,21 @@ async function validateSettlementLines(client, settlementId, salesRepId, lines, 
   // and returned (audit, 11 Nov 2026).
   const subMap = await settlement.pendingSubmissionBoxes(client, settlementId);
 
-  for (const l of lines) {
-    const name = productMap.get(l.productId)?.name || 'This product';
-    const issued = issuedMap.get(l.productId) || 0;
+  // Checked per PRODUCT, not per line: the same product listed twice (2 + 2) must fit as 4, or a return
+  // could lock boxes the rep does not have (audit, 11 Nov 2026).
+  const want = new Map();
+  for (const l of lines) want.set(l.productId, (want.get(l.productId) || 0) + l.baseQuantity);
+
+  for (const [productId, baseQuantity] of want) {
+    const name = productMap.get(productId)?.name || 'This product';
+    const issued = issuedMap.get(productId) || 0;
     if (issued === 0) {
       throw ApiError.badRequest(`${name} was not issued on order ${stl.settlementNumber} — it can't be returned here`);
     }
-    const pending = pendingMap.get(l.productId) || 0;
-    const inSettlement = subMap.get(l.productId) || 0;
-    const remaining = issued - (settledMap.get(l.productId) || 0) - (retMap.get(l.productId) || 0) - pending - inSettlement;
-    if (l.baseQuantity > remaining) {
+    const pending = pendingMap.get(productId) || 0;
+    const inSettlement = subMap.get(productId) || 0;
+    const remaining = issued - (settledMap.get(productId) || 0) - (retMap.get(productId) || 0) - pending - inSettlement;
+    if (baseQuantity > remaining) {
       throw ApiError.badRequest(
         pending > 0
           ? `Only ${Math.max(0, remaining)} box(es) of ${name} can still be returned on order ${stl.settlementNumber} — ${pending} box(es) are locked in a pending return.`

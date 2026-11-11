@@ -56,8 +56,10 @@ async function markAllRead(user) {
 // `whatsapp` rides along on the same object as the in-app notification: it is the
 // structured version of the event that the WhatsApp text is built from (see
 // whatsappText.js). It is not a column, so it never goes into the database.
+// `dedupeSalt` is the same: it only tells the WhatsApp duplicate guard that this is a new event. Left on the
+// row it made Prisma refuse the notice, and the WhatsApp after it was never sent (audit, 11 Nov 2026).
 async function create(data) {
-  const { whatsapp, ...row } = data; // eslint-disable-line no-unused-vars
+  const { whatsapp, dedupeSalt, ...row } = data; // eslint-disable-line no-unused-vars
   return prisma.notification.create({ data: row });
 }
 
