@@ -70,14 +70,14 @@ function BoxStepper({ value, max, onChange }) {
 // real money — so the modal turns into the confirmation, says the amount back,
 // and tells them plainly what happens next and when the commission is theirs.
 function SettleDone({ amount, boxes, productName, onClose }) {
-  // One calm receipt (Nino, 11 Nov 2026: the old "Deposited" screen was "too much"). The commission is
-  // recorded only when ZELab approves, so that is what the line under the card says.
+  // "Deposited", like before but calmer (Nino, 11 Nov 2026). The commission is recorded only when ZELab
+  // approves, so that is what the sentence says.
   return (
     <DoneReceipt
-      label="Settlement sent"
-      amount={formatCurrency(amount)}
+      title="Deposited"
+      amount={amount}
       details={[`${formatNumber(boxes)} ${Number(boxes) === 1 ? 'box' : 'boxes'}${productName ? ` · ${productName}` : ''}`]}
-      note="Your commission comes in once ZELab approves it."
+      note="Your commission is added once it is approved."
       onClose={onClose}
     />
   );

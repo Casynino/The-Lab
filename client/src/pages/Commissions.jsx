@@ -65,16 +65,17 @@ function WithdrawModal({ commission, firstName, onClose }) {
   if (done != null) {
     return (
       <Modal open onClose={onClose} title="Withdraw">
-        {/* One calm receipt (Nino, 11 Nov 2026: the old one was "not cool — too much"): where the money goes
-            on two short lines (how and the number, then the name), and one line for when it arrives. */}
+        {/* "Withdrawal successful" (Nino, 11 Nov 2026): where the money goes on two short lines (how and the
+            number, then the name), and one line for when it arrives. It is still paid only after approval,
+            which the small amber line under the title says. */}
         <DoneReceipt
-          label={`On its way${firstName ? `, ${firstName}` : ''}`}
-          amount={formatCurrency(done.amount)}
+          title="Withdrawal successful"
+          amount={done.amount}
           details={(() => {
             const parts = String(done.to || '').split(' · ').filter(Boolean);
             return parts.length > 1 ? [parts.slice(0, -1).join(' · '), parts[parts.length - 1]] : parts;
           })()}
-          note="Once approved, it reaches you in 1–2 hours, during working hours."
+          note="The money will be in your account shortly."
           onClose={onClose}
         />
       </Modal>
