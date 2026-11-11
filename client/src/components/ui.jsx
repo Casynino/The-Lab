@@ -462,11 +462,11 @@ export function Pagination({ page, totalPages, total, onChange }) {
         {total != null ? ` · ${total} records` : ''}
       </span>
       <div className="flex gap-1">
-        <button className="btn-secondary px-2 py-1" disabled={page <= 1} onClick={() => onChange(page - 1)}>
-          <ChevronLeft className="h-4 w-4" />
+        <button className="btn-secondary px-2 py-1" aria-label="Previous page" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button className="btn-secondary px-2 py-1" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
-          <ChevronRight className="h-4 w-4" />
+        <button className="btn-secondary px-2 py-1" aria-label="Next page" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     </div>
