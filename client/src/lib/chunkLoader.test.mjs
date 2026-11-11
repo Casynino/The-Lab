@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createChunkLoader, warmInTurn, shouldWarm } from './chunkLoader.js';
+import { createChunkLoader, warmInTurn, shouldWarm, isPageLoadError } from './chunkLoader.js';
 
 // A loader whose fetch we finish by hand, counting how often it was asked.
 function manual() {
@@ -157,6 +157,19 @@ test('warmInTurn stops when the person leaves (signs out)', async () => {
     stopped: () => stop, pause: async () => {},
   });
   assert.deepEqual(loaded, ['A']);
+});
+
+test('a page file that failed is told apart from a bug in a page', () => {
+  assert.equal(isPageLoadError(Object.assign(new Error('x'), { pageLoadFailed: true })), true);
+  // Chrome, Firefox, Safari wording for a failed import()
+  assert.equal(isPageLoadError(new TypeError('Failed to fetch dynamically imported module: https://x/assets/Purchases-a1.js')), true);
+  assert.equal(isPageLoadError(new TypeError('error loading dynamically imported module: https://x/assets/Purchases-a1.js')), true);
+  assert.equal(isPageLoadError(new TypeError('Importing a module script failed.')), true);
+  assert.equal(isPageLoadError(new Error('Unable to preload CSS for /assets/x.css')), true);
+  // a real bug keeps going up, as it always did
+  assert.equal(isPageLoadError(new TypeError("Cannot read properties of undefined (reading 'total')")), false);
+  assert.equal(isPageLoadError(null), false);
+  assert.equal(isPageLoadError('boom'), false);
 });
 
 test('no fetch-ahead with data saver on or on a 2G line', () => {

@@ -88,6 +88,14 @@ export function createChunkLoader(loaders) {
   };
 }
 
+/** A page file that could not be fetched — ours (tagged above) or any other
+ *  import() inside a page (a tab's own file), in each browser's wording. */
+export function isPageLoadError(error) {
+  if (!error) return false;
+  if (error.pageLoadFailed) return true;
+  return /dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(String(error.message || ''));
+}
+
 // Fetch ahead one at a time, and never while the screen is still asking the
 // server for its own figures: on a 1.5 Mbit/s line a page file in the way of
 // an answer is time the person waits for. A file that fails is skipped.

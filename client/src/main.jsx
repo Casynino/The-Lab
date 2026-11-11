@@ -31,7 +31,11 @@ window.addEventListener('vite:preloadError', (event) => {
   event.preventDefault();
   window.location.reload();
 });
-window.addEventListener('load', () => sessionStorage.removeItem('chunkReloadAttempted'));
+// The flag is cleared a while after the app has loaded, so a later deploy can
+// reload it again — not at once: with every page a file of its own, the page
+// that failed is opened again right after the reload, and a file still failing
+// then must show the "couldn't load" card instead of reloading in a loop.
+window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('chunkReloadAttempted'), 15000));
 
 // Start this address's page file now, alongside the session check, instead of
 // after it. The role in the stored token only picks WHICH file (the owner's

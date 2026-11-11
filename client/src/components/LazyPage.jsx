@@ -3,7 +3,7 @@ import { PageSpinner, LoadError } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { queryClient } from '@/lib/queryClient';
 import { pages, pageFor, warmList } from '@/lib/pages';
-import { warmInTurn, shouldWarm } from '@/lib/chunkLoader';
+import { warmInTurn, shouldWarm, isPageLoadError } from '@/lib/chunkLoader';
 
 // A page's file that could not be fetched even after the one reload main.jsx
 // allows (no signal, say) shows the app's own "couldn't load" card with a
@@ -22,7 +22,7 @@ class PageLoadBoundary extends Component {
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
-    if (!error.pageLoadFailed) throw error;
+    if (!isPageLoadError(error)) throw error;
     return <LoadError what="this page" onRetry={() => window.location.reload()} />;
   }
 }
