@@ -8,6 +8,7 @@ const { parsePagination } = require('../utils/pagination');
 const { toNumber, round2 } = require('../utils/money');
 const audit = require('../services/audit.service');
 const { ROLES } = require('../middleware/authorize');
+const { isCustomerPhone, CUSTOMER_PHONE_HINT } = require('../validators/people.validator');
 
 // Sales reps only see/manage their own customers.
 function repScope(req, where) {
@@ -96,6 +97,11 @@ const update = asyncHandler(async (req, res) => {
   }
   const data = { ...req.body };
   if (req.user.role === ROLES.SALES_REP) delete data.salesRepId; // reps can't reassign
+  // The phone is checked when it changes. The one already saved, even one written before the check
+  // (two numbers, a "-"), must not block an edit of the name or the notes.
+  if (typeof data.phone === 'string' && data.phone !== String(existing.phone ?? '').trim() && !isCustomerPhone(data.phone)) {
+    throw ApiError.unprocessable('Validation failed', [{ path: 'phone', message: CUSTOMER_PHONE_HINT }]);
+  }
   const customer = await prisma.customer.update({ where: { id: req.params.id }, data });
   await audit.record(req, { action: 'UPDATE', entityType: 'Customer', entityId: customer.id, oldValues: existing, newValues: data });
   return ok(res, customer);

@@ -1,8 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import api, { tokenStore, unwrap, apiError } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { idle } from '@/lib/idle';
 import { installOffer } from '@/lib/installOffer';
+import { sessionRefused, retryDelay } from '@/lib/sessionCheck';
 
 const AuthContext = createContext(null);
 
@@ -32,9 +33,26 @@ function endSession(reason) {
   }
 }
 
+// Wait `ms`, or less if the device says it is back online.
+function waitToRetry(ms) {
+  return new Promise((resolve) => {
+    const done = () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('online', done);
+      resolve();
+    };
+    const timer = window.setTimeout(done, ms);
+    window.addEventListener('online', done);
+  });
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Opening with no signal: the session is kept and asked about again (see sessionCheck.js).
+  const [reconnecting, setReconnecting] = useState(false);
+  // Signed in from the sign-in page while that was still waiting: the waiting is over.
+  const signedInHere = useRef(false);
 
   // Restore the session on first load if a token is present.
   useEffect(() => {
@@ -53,13 +71,33 @@ export function AuthProvider({ children }) {
         return;
       }
       idle.touch(true);
-      try {
-        const res = await api.get('/auth/me');
-        if (active) setUser(unwrap(res).data);
-      } catch {
-        tokenStore.clear();
-      } finally {
-        if (active) setLoading(false);
+      // Only the server refusing the sign-in forgets it (audit #116: opening the app with no signal
+      // signed the rep out). No signal, a server error or the host in the way: keep it and ask again.
+      for (let attempt = 0; active && !signedInHere.current; attempt += 1) {
+        try {
+          const res = await api.get('/auth/me');
+          if (!active || signedInHere.current) break;
+          // The wait for a signal can outlast the one-hour limit (a phone back in the pocket): still signed out.
+          if (idle.expired()) {
+            endSession('idle');
+            break;
+          }
+          setUser(unwrap(res).data);
+          break;
+        } catch (err) {
+          if (!active || signedInHere.current) break;
+          // Refused, or signed out meanwhile (another tab, or a refused device that cleared it).
+          if (sessionRefused(err) || !tokenStore.get()) {
+            tokenStore.clear();
+            break;
+          }
+          setReconnecting(true);
+          await waitToRetry(retryDelay(attempt));
+        }
+      }
+      if (active) {
+        setReconnecting(false);
+        setLoading(false);
       }
     }
     bootstrap();
@@ -76,6 +114,9 @@ export function AuthProvider({ children }) {
       idle.touch(true);
       // A real sign-in is the one moment the "Use it like an app" sheet may open by itself.
       installOffer.offerAfterSignIn();
+      signedInHere.current = true;
+      setReconnecting(false);
+      setLoading(false);
       setUser(u);
       return { ok: true, user: u };
     } catch (err) {
@@ -138,6 +179,7 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       loading,
+      reconnecting,
       isAuthenticated: !!user,
       role: user?.role,
       hasRole: (...roles) => !!user && (user.role === 'ADMIN' || roles.includes(user.role)),
@@ -148,7 +190,7 @@ export function AuthProvider({ children }) {
       refreshUser,
       setUser,
     }),
-    [user, loading, login, logout, refreshUser],
+    [user, loading, reconnecting, login, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

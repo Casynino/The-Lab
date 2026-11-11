@@ -296,7 +296,7 @@ function AddCommissionModal({ rep, earned, onClose }) {
     onSuccess: () => {
       const n = Number(amount);
       toast.success(`${formatCurrency(Math.abs(n))} ${n >= 0 ? 'added to' : 'taken off'} ${rep.name || 'the rep'}'s commission`);
-      ['salesRep', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ['sales-rep-profile', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),
@@ -338,7 +338,7 @@ function DeductCommissionModal({ rep, available, onClose }) {
     mutationFn: () => api.post('/penalties/adjust', { salesRepId: rep.id, amount: Number(amount), reason }),
     onSuccess: () => {
       toast.success(`${formatCurrency(Number(amount))} deducted from ${rep.name || 'the rep'}'s commission`);
-      ['salesRep', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ['sales-rep-profile', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),
@@ -625,7 +625,7 @@ export default function SalesRepProfile() {
     onSuccess: (_r, v) => {
       toast.success(v.open ? 'Window open — they can withdraw now' : 'Window closed');
       setOpening(false);
-      ['salesRep', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ['sales-rep-profile', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),
   });
@@ -634,7 +634,7 @@ export default function SalesRepProfile() {
     mutationFn: (on) => api.put(`/sales-reps/${id}`, { earnsCommission: on }),
     onSuccess: (_r, on) => {
       toast.success(on ? 'Back on commission' : 'Taken off commission');
-      ['salesRep', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ['sales-rep-profile', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),
   });

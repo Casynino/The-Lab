@@ -1598,8 +1598,10 @@ function AdminView() {
                       // two called the same endpoint with the same result, and
                       // the choice only invited the confusion the Commission
                       // account exists to end.
-                      <Button className="px-2 py-1 text-xs" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
-                        Mark paid — from my pocket
+                      // On a phone it says "Mark paid" only, so it cannot push the table wider than the screen;
+                      // the payout's own sheet (tap the amount) still says "from my pocket" in full.
+                      <Button className="px-2 py-1 text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                        Mark paid<span className="hidden sm:inline"> — from my pocket</span>
                       </Button>
                     )}
                   </div>

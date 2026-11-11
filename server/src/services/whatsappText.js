@@ -295,9 +295,29 @@ const stockIssued = ({ transfer, order, deadline, items }) => {
   return fitted(build, steps.length ? steps : [{ shown: 0 }]);
 };
 
+// A rep's pending request changed by the admin (audit, 11 Nov 2026: it went out in the general wording,
+// every product run together on one line, and a long one passed CallMeBot's ~700 characters and lost its
+// end). Same family as STOCK REQUEST APPROVED: one lettered line per product as it is now; a very long
+// list drops products from the end ("+2 more, see ZELab"), never the total.
+const stockRequestChanged = ({ request, by, items, total }) => {
+  const list = Array.isArray(items) ? items : [];
+  const line = (i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.quantity, i.unit)}`;
+  const build = ({ shown }) => rep(
+    'STOCK REQUEST CHANGED',
+    lines(`Request: ${request}`, by && `Changed by: ${by}`),
+    list.length > 0 && lines(...list.slice(0, shown).map(line), shown < list.length && `+${list.length - shown} more, see ZELab`),
+    total != null && `Total Value: ${money(total)}`,
+    'Your pending request has been changed. This is what it is now.',
+  );
+  const steps = [];
+  for (let k = list.length; k >= 1; k -= 1) steps.push({ shown: k });
+  return fitted(build, steps.length ? steps : [{ shown: 0 }]);
+};
+
 const repTexts = {
   STOCK_REQUEST_APPROVED: stockRequestApproved,
   STOCK_ISSUED: stockIssued,
+  STOCK_REQUEST_CHANGED: stockRequestChanged,
   STOCK_REQUEST_REJECTED: ({ request, reason }) => rep('STOCK REQUEST REJECTED', `Request: ${request}`, lines('Your stock request was not approved.', reason && `Reason: ${reason}`)),
   STOCK_ADDED: ({ product, boxes: n, order, attached }) => rep(
     'NEW STOCK ADDED',

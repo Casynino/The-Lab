@@ -385,6 +385,42 @@ ZELab`);
   assert.match(long, /\+\d+ more, see ZELab/);
 });
 
+// Audit, 11 Nov 2026: the admin changing a rep's pending request went out in the general wording, every
+// product on one line, and about 12 products passed CallMeBot's ~700 characters and lost the total.
+test('STOCK REQUEST CHANGED (rep): one line per product, and a long list never loses the total', () => {
+  assert.equal(t.repText({
+    kind: 'STOCK_REQUEST_CHANGED',
+    request: 'REQ-20261111-0001',
+    by: 'Doctor',
+    items: [
+      { name: 'Civlily Pepa Ndogo (Brown)', quantity: 3, unit: 'Box' },
+      { name: 'OHIS Pepa Ndogo (White)', quantity: 1, unit: 'Carton' },
+    ],
+    total: 8500,
+  }),
+`*STOCK REQUEST CHANGED*
+
+Request: REQ-20261111-0001
+Changed by: Doctor
+
+(a) Civlily Pepa Ndogo (Brown): 3 Boxes
+(b) OHIS Pepa Ndogo (White): 1 Carton
+
+Total Value: TSh 8,500
+
+Your pending request has been changed. This is what it is now.
+
+ZELab`);
+  const many = Array.from({ length: 40 }, (_, k) => ({ name: `OHIS Pepa Kubwa (Brown) – Bila Filter ${k}`, quantity: 2, unit: 'Box' }));
+  const long = t.repText({ kind: 'STOCK_REQUEST_CHANGED', request: 'REQ-20261111-0001', by: 'Doctor', items: many, total: 1234500 });
+  assert.ok(long.length <= 700, `${long.length} characters`);
+  assert.match(long, /\+\d+ more, see ZELab\n\nTotal Value: TSh 1,234,500\n\nYour pending request has been changed\. This is what it is now\.\n\nZELab$/);
+  // 12 products, the size that used to lose its end, all fit or end the same way.
+  const twelve = t.repText({ kind: 'STOCK_REQUEST_CHANGED', request: 'REQ-20261111-0001', by: 'Doctor', items: many.slice(0, 12), total: 1234500 });
+  assert.ok(twelve.length <= 700, `${twelve.length} characters`);
+  assert.match(twelve, /Total Value: TSh 1,234,500\n\n.*\n\nZELab$/);
+});
+
 test('every rep template is plain text in the same frame: capitals title, blank line, ZELab at the foot, no emoji', () => {
   const sample = {
     request: 'SR-1', reason: 'r', product: 'P', boxes: 2, order: 'STL-1', attached: true, amount: 1000, earned: 1, available: 1, closed: false,

@@ -378,6 +378,14 @@ async function update(id, payload, actor = null) {
       severity: 'INFO',
       title: 'Stock request changed',
       message: `${actor.name || 'ZELab'} changed your pending request (${result.requestNumber}). It is now ${now}, worth ${formatCurrency(result.totalValue)}.`,
+      // Its own WhatsApp: one line per product, and a long list never loses the total (audit, 11 Nov 2026).
+      whatsapp: {
+        kind: 'STOCK_REQUEST_CHANGED',
+        request: result.requestNumber,
+        by: actor.name || 'ZELab',
+        items: (result.items || []).map((i) => ({ name: i.product?.name || 'Product', quantity: i.quantityRequested, unit: i.packagingUnit?.name || null })),
+        total: Number(result.totalValue),
+      },
       entityType: 'StockRequest',
       entityId: result.id,
     }).catch(() => {});

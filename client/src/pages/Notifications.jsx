@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { CheckCheck, Bell } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { fromNow, formatDate } from '@/lib/format';
-import { PageSpinner, Pagination } from '@/components/ui';
+import { PageSpinner, Pagination, LoadError } from '@/components/ui';
 
 // Notifications in the same premium family as the rest (Nino, 11 Nov 2026: "the information is good, but arrange
 // it better and make the page feel premium like the pages"): grouped by day, each group one soft glass card,
@@ -36,7 +36,7 @@ export default function Notifications() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['notifications', { page }],
     queryFn: async () => unwrap(await api.get('/notifications', { params: { page, limit: 20 } })),
   });
@@ -91,6 +91,9 @@ export default function Notifications() {
 
       {isLoading ? (
         <PageSpinner />
+      ) : isError && !data ? (
+        // A request that never came back is not "You're all caught up" (audit #68).
+        <LoadError what="your notifications" onRetry={refetch} />
       ) : !items.length ? (
         <div className="mt-16 px-1 text-center">
           <Bell className="mx-auto h-6 w-6 text-muted" aria-hidden="true" />

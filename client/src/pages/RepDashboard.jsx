@@ -14,7 +14,7 @@ import ProgressRows from '@/components/ProgressRows';
 import { SETTLEMENT_STATUS_META } from '@/lib/constants';
 import OrderDetailModal from '@/components/OrderDetail';
 import ActiveOrderCard from '@/components/ActiveOrderCard';
-import { PageSpinner, EmptyState, Badge } from '@/components/ui';
+import { PageSpinner, EmptyState, LoadError, Badge } from '@/components/ui';
 
 function hoursLabel(h) {
   if (h == null) return '—';
@@ -66,13 +66,15 @@ export default function RepDashboard() {
     queryKey: ['bonus', 'me'],
     queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data,
   });
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['dashboard', 'me'],
     queryFn: async () => unwrap(await api.get('/dashboard/me')).data,
     refetchInterval: STEADY,
   });
 
   if (isLoading) return <PageSpinner />;
+  // A request that never came back is not "No data yet" (audit #68).
+  if (isError && !data) return <LoadError what="your home page" onRetry={refetch} />;
   if (!data) return <EmptyState title="No data yet" />;
 
   const { commission, openSettlements, openSettlementsValue, openSettlementBoxes, pendingRequests, orders } = data;

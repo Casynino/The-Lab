@@ -226,6 +226,55 @@ test('a customer phone must be a number written any usual way, or nothing', () =
   for (const good of ['0712 345 678', '+255 712-345-678', '(0712) 345678', '+254 712 345 678', '', null, undefined]) {
     assert.equal(ok(good), true, String(good));
   }
-  assert.equal(customerUpdate.body.safeParse({ phone: 'call me' }).success, false);
+  // An edit's phone is checked by the controller, against the saved one (next test).
   assert.equal(customerUpdate.body.safeParse({ notes: 'no phone sent' }).success, true);
+  assert.equal(customerUpdate.body.safeParse({ phone: 'x'.repeat(41) }).success, false, 'still at most 40 characters');
+});
+
+// Since the check above, a customer whose SAVED phone is not a plain number ("0712.../0754...", "-")
+// could not be saved at all, not even for a name change. The phone is now checked only when it changes.
+test('editing a customer checks the phone only when it changes', async () => {
+  const ctrl = require('../src/controllers/customers.controller');
+  const { customerUpdate } = require('../src/validators/people.validator');
+  const saved = { id: 'c1', name: 'Mama Neema', phone: '0712 345 678/0754 111 222', salesRepId: 'r1' };
+  let written = null;
+  db.customer = {
+    findUnique: async () => ({ ...saved }),
+    update: async ({ data }) => { written = data; return { ...saved, ...data }; },
+  };
+  const edit = (body, user = { id: 'admin', role: 'ADMIN' }) => new Promise((resolve) => {
+    const out = { code: null, failed: null };
+    const res = { status: (code) => { out.code = code; return { json: () => resolve(out) }; } };
+    // The request goes through the route's validator first, as it does in the app.
+    ctrl.update({ params: { id: 'c1' }, body: customerUpdate.body.parse(body), user }, res, (e) => { out.failed = e; resolve(out); });
+  });
+
+  // The whole form sent back with the old phone untouched: the name change is saved.
+  let out = await edit({ name: 'Mama Neema Shop', phone: ` ${saved.phone} `, notes: '' });
+  assert.equal(out.failed, null);
+  assert.equal(out.code, 200);
+  assert.equal(written.name, 'Mama Neema Shop');
+  for (const old of ['-', 'call me']) {
+    saved.phone = old;
+    written = null;
+    out = await edit({ name: 'Renamed', phone: old }, { id: 'u', role: 'SALES_REP', salesRepId: 'r1' });
+    assert.equal(out.failed, null, old);
+    assert.equal(written.name, 'Renamed');
+  }
+
+  // A NEW phone must still be a phone number; nothing is written.
+  written = null;
+  out = await edit({ name: 'Renamed', phone: 'not-a-phone!!' });
+  assert.equal(out.failed.statusCode, 422);
+  assert.equal(out.failed.details[0].path, 'phone');
+  assert.match(out.failed.details[0].message, /phone number in digits/);
+  assert.equal(written, null);
+
+  // A real new number, or clearing it, is saved.
+  for (const phone of ['0754 111 222', '', null]) {
+    written = null;
+    out = await edit({ phone });
+    assert.equal(out.failed, null, String(phone));
+    assert.equal(written.phone, phone);
+  }
 });
