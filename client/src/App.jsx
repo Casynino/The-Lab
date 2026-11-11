@@ -13,19 +13,16 @@ import Dashboard from '@/pages/Dashboard';
 import RepDashboard from '@/pages/RepDashboard';
 import Products from '@/pages/Products';
 import Inventory from '@/pages/Inventory';
-import Transfers from '@/pages/Transfers';
 import Sales from '@/pages/Sales';
 import Customers from '@/pages/Customers';
 import Returns from '@/pages/Returns';
 import SalesReps from '@/pages/SalesReps';
 import SalesRepProfile from '@/pages/SalesRepProfile';
-import Reorder from '@/pages/Reorder';
 import Finance from '@/pages/Finance';
 import AuditLogs from '@/pages/AuditLogs';
 import Users from '@/pages/Users';
 import Settings from '@/pages/Settings';
 import Notifications from '@/pages/Notifications';
-import Purchases from '@/pages/Purchases';
 import StockRequests from '@/pages/StockRequests';
 import Settlements from '@/pages/Settlements';
 import Commissions from '@/pages/Commissions';
@@ -87,8 +84,8 @@ export default function App() {
         <Route path="/" element={<DashboardRouter />} />
         <Route path="/products" element={<ProtectedRoute roles={W}><Products /></ProtectedRoute>} />
         <Route path="/inventory" element={<ProtectedRoute roles={W}><Inventory /></ProtectedRoute>} />
-        <Route path="/purchases" element={<ProtectedRoute roles={W}><Purchases /></ProtectedRoute>} />
-        <Route path="/transfers" element={<ProtectedRoute roles={W}><Transfers /></ProtectedRoute>} />
+        <Route path="/purchases" element={<ProtectedRoute roles={W}><Navigate to="/inventory?tab=purchases" replace /></ProtectedRoute>} />
+        <Route path="/transfers" element={<ProtectedRoute roles={W}><Navigate to="/inventory?tab=transfers" replace /></ProtectedRoute>} />
         <Route path="/stock-requests" element={<StockRequests />} />
         <Route path="/settlements" element={<Settlements />} />
         <Route path="/commissions" element={<CommissionsRouter />} />
@@ -100,7 +97,7 @@ export default function App() {
         <Route path="/returns" element={<Returns />} />
         <Route path="/reps" element={<ProtectedRoute roles={W}><SalesReps /></ProtectedRoute>} />
         <Route path="/reps/:id" element={<ProtectedRoute roles={W}><SalesRepProfile /></ProtectedRoute>} />
-        <Route path="/reorder" element={<ProtectedRoute roles={W}><Reorder /></ProtectedRoute>} />
+        <Route path="/reorder" element={<ProtectedRoute roles={W}><Navigate to="/inventory?tab=reorder" replace /></ProtectedRoute>} />
         {/* Reports now lives inside Finance */}
         <Route path="/reports" element={<Navigate to="/finance?tab=reports" replace />} />
         {/* Profit & Margins now lives inside Finance */}

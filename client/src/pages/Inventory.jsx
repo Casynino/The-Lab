@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, PackageX } from 'lucide-react';
@@ -552,23 +553,54 @@ function ProductStockModal({ row, onClose }) {
   );
 }
 
+// Transfers and Reorder live inside Inventory (Nino, 11 Nov 2026: "on Inventory we should see the other
+// pages next to it — movement, stock transfer, reorder — and remove them from the sidebar; keep the sidebar
+// clean"; "even PO … inside"). The tab is in the address (?tab=), so the old /purchases, /transfers and
+// /reorder links land on it.
+const Purchases = lazy(() => import('@/pages/Purchases'));
+const Transfers = lazy(() => import('@/pages/Transfers'));
+const Reorder = lazy(() => import('@/pages/Reorder'));
+const INVENTORY_TABS = [['balances', 'Stock balances'], ['movements', 'Movement ledger'], ['purchases', 'Purchases'], ['transfers', 'Transfers'], ['reorder', 'Reorder']];
+const INNER = { purchases: Purchases, transfers: Transfers, reorder: Reorder };
+
 export default function Inventory() {
-  const [tab, setTab] = useState('balances');
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('tab');
+  const tab = INVENTORY_TABS.some(([k]) => k === asked) ? asked : 'balances';
   const [modal, setModal] = useState(null); // 'receive' | 'adjust' | 'damage'
+
+  // Fetch the inner pages' code while the owner reads the balances, so a tab click never waits for it.
+  useEffect(() => { import('@/pages/Purchases'); import('@/pages/Transfers'); import('@/pages/Reorder'); }, []);
+
+  const tabs = (
+    <div className="mb-5 flex flex-wrap gap-2">
+      {INVENTORY_TABS.map(([k, label]) => (
+        <button key={k} type="button" onClick={() => setParams(k === 'balances' ? {} : { tab: k })}
+          aria-current={tab === k ? 'page' : undefined}
+          className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
+      ))}
+    </div>
+  );
+
+  // The inner pages keep their own title and buttons (New PO, New transfer, the reorder list).
+  const Inner = INNER[tab];
+  if (Inner) {
+    return (
+      <div>
+        {tabs}
+        <Suspense fallback={<PageSpinner />}><Inner /></Suspense>
+      </div>
+    );
+  }
 
   return (
     <div>
+      {tabs}
       <PageHeader title="Inventory" subtitle="Live balances and the full movement ledger.">
         <Button variant="secondary" onClick={() => setModal('damage')}>Record damage</Button>
         <Button variant="secondary" onClick={() => setModal('adjust')}><SlidersHorizontal className="h-4 w-4" /> Adjust</Button>
         <Button onClick={() => setModal('receive')}><PackagePlus className="h-4 w-4" /> Receive stock</Button>
       </PageHeader>
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        {[['balances', 'Stock balances'], ['movements', 'Movement ledger']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
-        ))}
-      </div>
 
       {tab === 'balances' ? <Balances /> : <Movements />}
 

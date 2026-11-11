@@ -602,7 +602,7 @@ export default function Dashboard() {
           attention.outOfStock > 0 && {
             key: 'oos', tone: 'rose',
             title: `${attention.outOfStock} product${attention.outOfStock !== 1 ? 's' : ''} out of stock`,
-            desc: 'Nothing left to sell or issue', to: '/reorder',
+            desc: 'Nothing left to sell or issue', to: '/inventory?tab=reorder',
           },
           attention.settlements > 0 && {
             key: 'stl', tone: 'amber',
@@ -626,7 +626,7 @@ export default function Dashboard() {
             key: 'low', tone: 'amber',
             title: `${attention.lowStock.count} product${attention.lowStock.count !== 1 ? 's' : ''} running low`,
             desc: attention.lowStock.items[0]?.name ? `Lowest: ${attention.lowStock.items[0].name}` : 'Below reorder level',
-            to: '/reorder',
+            to: '/inventory?tab=reorder',
           },
           attention.supplierDue > 0 && {
             key: 'sup', tone: 'violet',

@@ -161,7 +161,8 @@ function GlassSidebar({
     const groups = [...sections, ...(moved.length ? [{ label: 'Profile', items: moved }] : []), ...(searchOnly.length ? [{ label: '', items: searchOnly }] : [])];
     for (const s of groups) {
       for (const item of s.items) {
-        const where = s.label === 'Profile' && String(item.to).startsWith('/products') ? 'Products' : s.label;
+        const to = String(item.to);
+        const where = s.label !== 'Profile' ? s.label : to.startsWith('/products') ? 'Products' : to.startsWith('/inventory') ? 'Inventory' : 'Profile';
         const words = [item.label, where || 'Main', ...(item.keywords || [])];
         if (!words.some((w) => w.toLowerCase().includes(q))) continue;
         out.push({ item, where: where || null });
@@ -672,7 +673,9 @@ export default function Layout() {
     .map((n) => (isRep && n.repLabel ? { ...n, label: n.repLabel, icon: n.repIcon || n.icon } : n))
     // The owner's own pages live in his profile now: out of the sidebar groups ('inProfile' is not one),
     // still in the page search, pointing where they are.
-    .map((n) => (isOwner && n.adminAt ? { ...n, to: n.adminAt, group: 'inProfile' } : n));
+    .map((n) => (isOwner && n.adminAt ? { ...n, to: n.adminAt, group: 'inProfile' } : n))
+    // Pages that are a tab of another page for everyone (Transfers and Reorder inside Inventory).
+    .map((n) => (n.inside ? { ...n, to: n.inside, group: 'inProfile' } : n));
 
   /* The banner belongs to the home page, not to the shell. Target Express puts
      it inside each desk's hero (components/app/desk-hero, warehouse-hero, the

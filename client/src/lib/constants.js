@@ -47,11 +47,13 @@ export const NAV = [
   { to: '/invoice-generator', label: 'Invoice', icon: 'Receipt', roles: ALL, group: 'selling' },
 
   // ── Stock — where the goods come from and where they are ──
-  { to: '/purchases', label: 'Purchases', icon: 'Ship', roles: STAFF, group: 'stock' },
+  { to: '/purchases', label: 'Purchases', icon: 'Ship', roles: STAFF, group: 'stock', inside: '/inventory?tab=purchases', keywords: ['po', 'purchase order', 'imports', 'suppliers'] },
   { to: '/inventory', label: 'Inventory', icon: 'Boxes', roles: STAFF, group: 'stock' },
   { to: '/products', label: 'Products', icon: 'Package', roles: STAFF, group: 'stock' },
-  { to: '/transfers', label: 'Transfers', icon: 'Truck', roles: STAFF, group: 'stock' },
-  { to: '/reorder', label: 'Reorder', icon: 'Repeat', roles: STAFF, group: 'stock' },
+  // `inside`: a tab of another page for everyone (Nino, 11 Nov 2026: "keep the sidebar clean") — out of the
+  // sidebar, still found by the page search, at that address.
+  { to: '/transfers', label: 'Transfers', icon: 'Truck', roles: STAFF, group: 'stock', inside: '/inventory?tab=transfers', keywords: ['movement'] },
+  { to: '/reorder', label: 'Reorder', icon: 'Repeat', roles: STAFF, group: 'stock', inside: '/inventory?tab=reorder' },
 
   // ── Money ──
   // `keywords`: other words the page search finds a page by (its tabs, what people call it).
