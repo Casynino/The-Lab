@@ -22,6 +22,7 @@ import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { eatISODate, eatDay } from '@/lib/tz';
+import { statementRows, poPayCap } from '@/lib/financeFigures';
 import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
@@ -2343,10 +2344,12 @@ function AddSupplierModal({ onClose }) {
   );
 }
 
-function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
+function PaySupplierModal({ order, supplierOutstanding, accounts: all, onClose, onDone }) {
   const accounts = wallets(all);
   const [accountId, setAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
-  const [amount, setAmount] = useState(String(order.outstanding || ''));
+  // Never more than the PO still owes AND the supplier is owed overall (the server refuses the same).
+  const cap = poPayCap(order.outstanding, supplierOutstanding);
+  const [amount, setAmount] = useState(cap > 0 ? String(cap) : '');
   // Money that moved weeks ago belongs in the week it moved. Without this the
   // payment landed on the day it was typed, which put a September purchase's
   // cash into October and left both months wrong.
@@ -2360,15 +2363,19 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
     onError: (e) => toast.error(apiError(e)),
   });
   const amt = Number(amount);
-  const valid = accountId && amt > 0 && amt <= order.outstanding + 0.001;
+  const valid = accountId && amt > 0 && amt <= cap + 0.001;
   return (
     <Modal open onClose={onClose} title={`Pay supplier · ${order.poNumber}`}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={pay.isPending} disabled={!valid} onClick={() => pay.mutate()}><Wallet className="h-4 w-4" /> Record payment</Button></>}>
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-muted">
-          Order total {formatCurrency(order.totalCost)} · paid {formatCurrency(order.paid)} · <b className="text-rose-400">outstanding {formatCurrency(order.outstanding)}</b>
+          Order total {formatCurrency(order.totalCost)} · paid {formatCurrency(order.paid)}
+          {order.returned > 0 && <> · returned {formatCurrency(order.returned)}</>} · <b className="text-rose-400">outstanding {formatCurrency(order.outstanding)}</b>
+          {cap < order.outstanding && (
+            <div className="mt-1 text-xs text-faint">You owe the supplier {formatCurrency(Math.max(0, supplierOutstanding))} in all, so that is the most this payment can be.</div>
+          )}
         </div>
-        <Field label="Amount (TZS)" required error={amt > order.outstanding + 0.001 ? 'More than what is outstanding' : undefined}>
+        <Field label="Amount (TZS)" required error={amt > cap + 0.001 ? (cap < order.outstanding ? 'More than you owe this supplier' : 'More than what is outstanding') : undefined}>
           <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2706,10 +2713,15 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
                         <TD className="text-faint">{formatDate(o.receivedAt || o.createdAt)}</TD>
                         <TD>{formatNumber(o.boxes)}</TD>
                         <TD>{formatCurrency(o.totalCost)}</TD>
-                        <TD className="text-emerald-500">{formatCurrency(o.paid)}</TD>
+                        {/* Paid includes this PO's share of balance payments (oldest PO first), so the rows add
+                            up to the balance owed; goods returned come off the outstanding under it. */}
+                        <TD className="text-emerald-500">
+                          {formatCurrency(o.paid)}
+                          {o.returned > 0 && <div className="text-[11px] text-amber-300/80">{formatCurrency(o.returned)} returned</div>}
+                        </TD>
                         <TD className={o.outstanding > 0 ? 'font-semibold text-rose-400' : 'text-faint'}>{formatCurrency(o.outstanding)}</TD>
                         <TD>
-                          {o.outstanding > 0 && (
+                          {poPayCap(o.outstanding, data.totals.outstanding) > 0 && (
                             <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => setPaying(o)}>Pay PO</Button>
                           )}
                         </TD>
@@ -2737,7 +2749,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
           </div>
         )}
       </Modal>
-      {paying && <PaySupplierModal order={paying} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
+      {paying && <PaySupplierModal order={paying} supplierOutstanding={data?.totals?.outstanding} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
       {payingBalance && s && <PayBalanceModal supplier={s} outstanding={data.totals.outstanding} accounts={accounts} onClose={() => setPayingBalance(false)} onDone={refresh} />}
       {purchasing && s && <NewPurchaseModal supplier={s} accounts={accounts} onClose={() => setPurchasing(false)} onDone={refresh} />}
       {returning && s && <ReturnGoodsModal supplier={s} outstanding={data.totals.outstanding} onClose={() => setReturning(false)} onDone={refresh} />}

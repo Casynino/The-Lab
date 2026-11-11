@@ -15,8 +15,8 @@ const reports = require('./reports.service');
 const inventory = require('./inventory.service');
 const commission = require('./commission.service');
 const { nextDocNumber } = require('../utils/numbering');
-const { toNumber, round2 } = require('../utils/money');
-const { dayjs, resolveRange, EAT_OFFSET_H } = require('../utils/dates');
+const { toNumber, round2, DB_MAX_AMOUNT } = require('../utils/money');
+const { dayjs, resolveRange, eatDayBounds, EAT_OFFSET_H } = require('../utils/dates');
 
 // ── Money that never touches a business account ─────────────────────────────
 // The owner pays every rep in physical cash out of his own hand: "no business
@@ -1275,6 +1275,33 @@ async function supplierSummaries() {
   });
 }
 
+// Share a supplier's balance payments, then his returned goods, over his POs, oldest first. Each PO
+// takes only what is still open on it after its own PO payments. Pure (tested). Returns
+// Map(poId -> { paid, returned, outstanding }), where paid = the PO's own payments + its share of the
+// balance payments. A PO paid directly beyond its cost keeps its negative outstanding (shown, not hidden).
+function spreadOverOrders(orders, { balancePaid = 0, returned = 0 } = {}) {
+  let pay = round2(balancePaid);
+  let back = round2(returned);
+  const out = new Map();
+  const oldestFirst = [...orders].sort((a, b) => new Date(a.at) - new Date(b.at) || String(a.id).localeCompare(String(b.id)));
+  for (const o of oldestFirst) {
+    const total = round2(o.totalCost);
+    const direct = round2(o.paidDirect);
+    let open = Math.max(0, round2(total - direct));
+    const fromPay = Math.min(open, pay);
+    pay = round2(pay - fromPay);
+    open = round2(open - fromPay);
+    const fromBack = Math.min(open, back);
+    back = round2(back - fromBack);
+    out.set(o.id, {
+      paid: round2(direct + fromPay),
+      returned: round2(fromBack),
+      outstanding: round2(total - direct - fromPay - fromBack),
+    });
+  }
+  return out;
+}
+
 // One supplier's full accounts-payable profile: purchases, payments (both
 // PO-level and supplier-level), products supplied, balances and last activity.
 async function supplierDetail(id) {
@@ -1308,24 +1335,33 @@ async function supplierDetail(id) {
     orderBy: { occurredAt: 'desc' },
   });
   const paidByPo = new Map();
+  let balancePaid = 0;
   txns.forEach((t) => {
     if (t.refType === 'PurchaseOrder') paidByPo.set(t.refId, (paidByPo.get(t.refId) || 0) + toNumber(t.amount));
+    else balancePaid += toNumber(t.amount);
   });
+  const paid = round2(txns.reduce((x, t) => x + toNumber(t.amount), 0));
+  const returned = round2(credits.reduce((x, c) => x + toNumber(c.amount), 0));
 
+  // Balance payments and goods returned belong to the supplier, not to one PO. Spread over the POs,
+  // oldest first, each PO row says what is really still owed on it, and the rows add up to the
+  // balance owed. Without this every PO showed its full cost as outstanding with a Pay PO button
+  // (Bonge: 22,942,000 offered while 12,000,000 was owed) and could be paid twice (audit admin-money-1).
+  const spread = spreadOverOrders(
+    pos.map((p) => ({ id: p.id, totalCost: toNumber(p.totalCost), paidDirect: paidByPo.get(p.id) || 0, at: p.receivedAt || p.createdAt })),
+    { balancePaid, returned },
+  );
   const orders = pos.map((p) => {
-    const total = toNumber(p.totalCost);
-    const paid = round2(paidByPo.get(p.id) || 0);
+    const f = spread.get(p.id);
     return {
       id: p.id, poNumber: p.poNumber, status: p.status,
-      totalCost: round2(total), paid, outstanding: round2(total - paid),
+      totalCost: round2(toNumber(p.totalCost)), paid: f.paid, returned: f.returned, outstanding: f.outstanding,
       boxes: p.items.reduce((n, it) => n + it.quantity, 0),
       products: [...new Set(p.items.map((it) => it.product?.name).filter(Boolean))],
       receivedAt: p.receivedAt, createdAt: p.createdAt,
     };
   });
   const purchased = round2(orders.reduce((x, o) => x + o.totalCost, 0));
-  const paid = round2(txns.reduce((x, t) => x + toNumber(t.amount), 0));
-  const returned = round2(credits.reduce((x, c) => x + toNumber(c.amount), 0));
   const productsPurchased = [...new Set(orders.flatMap((o) => o.products))];
   return {
     supplier: { ...s, brandName: brand?.name || null },
@@ -1420,15 +1456,30 @@ async function paySupplier({ purchaseOrderId, accountId, amount, notes, occurred
   });
   if (!po) throw ApiError.notFound('Purchase order not found');
   if (po.status === 'CANCELLED') throw ApiError.badRequest('This purchase order is cancelled');
-  const paidAgg = await prisma.financeTransaction.aggregate({
-    where: { refType: 'PurchaseOrder', refId: po.id, direction: 'OUT' },
-    _sum: { amount: true },
-  });
-  const alreadyPaid = toNumber(paidAgg._sum.amount);
-  const remaining = round2(toNumber(po.totalCost) - alreadyPaid);
+  // What is left on this PO counts the supplier's balance payments and returned goods too (shared over
+  // his POs, oldest first), and a PO payment can never take the supplier past what he is owed
+  // overall — the same cap as Pay supplier. Before, only this PO's own payments were counted, so a
+  // bill already paid as a balance payment could be paid again (audit admin-money-1).
+  // Which POs count as owed (ordered vs received) is unchanged here: that is decision D8.
+  const detail = await supplierDetail(po.supplierId);
+  const row = detail.orders.find((o) => o.id === po.id);
+  const onOrder = row ? row.outstanding : 0;
+  const owedOverall = detail.totals.outstanding;
+  const remaining = Math.max(0, round2(Math.min(onOrder, owedOverall)));
   const amt = amount != null ? round2(toNumber(amount)) : remaining;
-  if (!(amt > 0)) throw ApiError.badRequest('Payment amount must be greater than zero');
+  if (!(amt > 0)) {
+    if (amount == null && remaining <= 0) {
+      throw ApiError.badRequest(`Nothing is left to pay on ${po.poNumber} — balance payments and returned goods already cover it`);
+    }
+    throw ApiError.badRequest('Payment amount must be greater than zero');
+  }
   if (amt > remaining + 0.001) {
+    if (remaining <= 0) {
+      throw ApiError.badRequest(`Nothing is left to pay on ${po.poNumber} — balance payments and returned goods already cover it`);
+    }
+    if (owedOverall < onOrder) {
+      throw ApiError.badRequest(`You only owe ${po.supplier?.name || 'this supplier'} TZS ${owedOverall.toLocaleString()} in all`);
+    }
     throw ApiError.badRequest(`Only TZS ${remaining.toLocaleString()} is outstanding on ${po.poNumber}`);
   }
   return recordTransaction(
@@ -2176,6 +2227,7 @@ module.exports = {
   report,
   supplierSummaries,
   supplierDetail,
+  spreadOverOrders,
   recordSupplierCredit,
   paySupplier,
   paySupplierBalance,
