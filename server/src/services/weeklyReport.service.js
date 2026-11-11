@@ -13,6 +13,7 @@
 const crypto = require('crypto');
 const prisma = require('../config/prisma');
 const env = require('../config/env');
+const ApiError = require('../utils/ApiError');
 const finance = require('./finance.service');
 const reports = require('./reports.service');
 const inventory = require('./inventory.service');
@@ -221,19 +222,33 @@ const sendWhatsApp = (text) => require('./whatsappNotify.service').sendRaw(text)
 // Generate the PDF, archive it permanently, then send the WhatsApp summary
 // with the archived report's signed link. Deduped per reported week (a retried
 // cron never double-sends); failed sends are retried by flush(). `force`
-// bypasses the dedupe for tests (and refreshes the archived PDF).
-async function sendWeeklyReport({ force = false, silent = false } = {}) {
+// bypasses the dedupe for tests (linking to the PDF already on file, never
+// replacing it); `silent` rewrites the archived PDF without sending. `weekKey`
+// pins a finished week (the morning catch-up of a missed report).
+async function sendWeeklyReport({ force = false, silent = false, weekKey: pinned } = {}) {
   const wa = require('./whatsappNotify.service');
   const archive = require('./reportArchive.service');
   const { weeklyPdf } = require('./reportPdf.service');
 
-  const data = await buildWeeklyData();
-  const weekKey = data.period.weekKey;
-  // Legacy dedupe guard (pre-dated the notification log) — still honored so
-  // weeks sent before the log existed can't repeat.
-  if (!force && (await getSetting('whatsapp.lastWeeklySent')) === weekKey) {
-    return { sent: false, reason: `Already sent for ${weekKey}`, weekKey };
+  // Decided before anything is built: the period, whether it is over, and whether it already went out.
+  const now = eatNow();
+  const period = reportWeek(pinned, now);
+  const weekKey = weekKeyOf(period.start);
+  // A week still under way is not the week's report: sending or archiving it used up the key the
+  // real report needs on Tuesday, which then skipped itself as "already sent". A forced send is
+  // still allowed (a manual look at the week so far).
+  if (!force && period.end.format('YYYY-MM-DD') >= now.format('YYYY-MM-DD')) {
+    throw ApiError.badRequest(`The week ${weekKey} is not over yet`);
   }
+  if (!force && !silent) {
+    // Legacy guard (pre-dated the notification log), then the log itself. Checked first so a re-run
+    // never rebuilds and overwrites the PDF the owner was already sent.
+    const done = (await getSetting('whatsapp.lastWeeklySent')) === weekKey
+      || (await prisma.whatsAppNotification.findFirst({ where: { dedupeKey: `weekly:${weekKey}` }, select: { id: true } }));
+    if (done) return { sent: false, reason: `Already sent for ${weekKey}`, weekKey };
+  }
+
+  const data = await buildWeeklyData(pinned);
 
   // Archive first — the message links to the stored PDF, so the report the
   // owner opens is exactly the one that was generated, forever.
@@ -246,6 +261,7 @@ async function sendWeeklyReport({ force = false, silent = false } = {}) {
     to: data.period.end.toDate(),
     pdf,
     meta: { revenue: data.finance.revenue, netProfit: data.finance.netProfit, boxes: data.finance.boxesSold },
+    keep: force && !silent,
   });
   const link = archive.publicLink(saved.id);
   if (silent) return { sent: false, reason: 'silent-regeneration', weekKey, pdf: link, archiveId: saved.id };
@@ -264,4 +280,4 @@ async function sendWeeklyReport({ force = false, silent = false } = {}) {
   return { ...result, weekKey, pdf: link, archiveId: saved.id, chars: text.length };
 }
 
-module.exports = { buildWeeklyData, buildWhatsAppText, sendWhatsApp, sendWeeklyReport, signWeek, pdfLink, reportWeek, REPORT_WEEKDAY };
+module.exports = { buildWeeklyData, buildWhatsAppText, sendWhatsApp, sendWeeklyReport, signWeek, pdfLink, reportWeek, weekKeyOf, REPORT_WEEKDAY };

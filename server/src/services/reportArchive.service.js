@@ -20,8 +20,17 @@ function publicLink(id) {
   return `${APP_URL}/api/public/report/${id}.pdf?sig=${signReport(id)}`;
 }
 
-// Store (or replace — force resends regenerate) the PDF for a period.
-async function save({ type, periodKey, label, from, to, pdf, meta }) {
+// Store (or replace) the PDF for a period. `keep` (a forced test resend) never
+// replaces a report already on file: the PDF the owner was sent stays the one he
+// was sent. Only the scheduled send and the explicit silent repair rewrite it.
+async function save({ type, periodKey, label, from, to, pdf, meta, keep = false }) {
+  if (keep) {
+    const existing = await prisma.reportArchive.findUnique({
+      where: { type_periodKey: { type, periodKey } },
+      select: { id: true, type: true, periodKey: true, label: true },
+    });
+    if (existing) return existing;
+  }
   return prisma.reportArchive.upsert({
     where: { type_periodKey: { type, periodKey } },
     create: { type, periodKey, label, from, to, pdf, meta: meta || undefined },

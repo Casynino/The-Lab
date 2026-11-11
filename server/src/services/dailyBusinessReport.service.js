@@ -44,8 +44,11 @@ async function buildDailyData(dateKey) {
       prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
       prisma.return.count({ where: { status: 'PENDING' } }),
       prisma.settlementSubmission.count({ where: { status: 'APPROVED', decidedAt: { gte: day.start, lte: day.end } } }),
-      prisma.return.count({ where: { createdAt: { gte: day.start, lte: day.end } } }),
-      prisma.stockRequest.count({ where: { createdAt: { gte: day.start, lte: day.end } } }),
+      // "Returns" and "Orders" count what the words say, like "Settlements" above: returns accepted
+      // today, and orders issued today. Counting every request created also counted the cancelled
+      // and rejected ones (four "orders" on a day that issued one).
+      prisma.return.count({ where: { status: { in: ['APPROVED', 'COMPLETED'] }, decidedAt: { gte: day.start, lte: day.end } } }),
+      prisma.settlement.count({ where: { issuedAt: { gte: day.start, lte: day.end } } }),
     ]),
     finance.supplierSummaries(),
     reportData.periodExtras({ start: day.start, end: day.end }, before, { dayWindow: { start: chartStart, end: day.end } }),
@@ -118,10 +121,11 @@ async function buildDailyData(dateKey) {
 // whatsappText.js, which keeps the PDF link (at the foot) and drops optional
 // lines first. `link` is the archived report's signed https URL, or null when
 // the PDF could not be made.
-function buildWhatsAppText(d, link) {
+function buildWhatsAppText(d, link, { late = null } = {}) {
   const f = d.finance;
   return require('./whatsappText').owner.dailyReport({
     date: d.period.shortLabel,
+    late,
     sales: f.revenue,
     boxesSold: f.boxesSold,
     netProfit: f.netProfit,
@@ -145,8 +149,10 @@ function buildWhatsAppText(d, link) {
  * it is passed in so this file never has to require that one back.
  * If the PDF cannot be made, the summary still goes out, without a link: the
  * owner must always get the evening numbers.
+ * `late`: a missed day sent the next morning (the message says so). `force` is a
+ * test resend: it links to the PDF already on file and never replaces it.
  */
-async function sendDailyReport({ force = false, dateKey, queue } = {}) {
+async function sendDailyReport({ force = false, dateKey, queue, late = false } = {}) {
   const archive = require('./reportArchive.service');
   const data = await buildDailyData(dateKey);
 
@@ -163,6 +169,7 @@ async function sendDailyReport({ force = false, dateKey, queue } = {}) {
       to: data.period.end,
       pdf,
       meta: { revenue: data.finance.revenue, netProfit: data.finance.netProfit, boxes: data.finance.boxesSold },
+      keep: force,
     });
     archiveId = saved.id;
     link = archive.publicLink(saved.id);
@@ -170,7 +177,7 @@ async function sendDailyReport({ force = false, dateKey, queue } = {}) {
     logger.error('[daily-report] PDF failed, sending the summary without it:', e.message);
   }
 
-  const text = buildWhatsAppText(data, link);
+  const text = buildWhatsAppText(data, link, { late: late ? new Date() : null });
   const result = await queue('DAILY_SUMMARY', {
     dedupeKey: force ? `daily:${data.period.key}:${Date.now()}` : `daily:${data.period.key}`,
     ...(archiveId ? { refType: 'ReportArchive', refId: archiveId } : {}),
