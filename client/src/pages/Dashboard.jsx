@@ -33,7 +33,7 @@ import toast from 'react-hot-toast';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber, formatPercent, formatDateTime } from '@/lib/format';
-import { TrendChart, BarChartCard, DonutChart, MonthBars } from '@/components/charts';
+import { TrendChart, BarChartCard, DonutChart, MonthBars } from '@/components/chartsLazy';
 import { tzDateLabel, eatDay } from '@/lib/tz';
 import {
   StatCard,

@@ -7,21 +7,46 @@ import App from './App';
 import { AuthProvider } from '@/context/AuthContext';
 import { queryClient } from '@/lib/queryClient';
 import { watchForNewVersion } from '@/lib/version';
+import { tokenStore } from '@/lib/api';
+import { pages, pageFor, roleFromToken } from '@/lib/pages';
+// The sign-in and /nino pages' own styles stay in the main stylesheet, ahead of
+// index.css, exactly where they sat before those pages became files of their
+// own — a style that arrived later would win ties it used to lose.
+import './pages/login.css';
+import './pages/nino.css';
 import './index.css';
 
 // Every deploy renames the hashed chunks. A tab left open across one will ask
-// for a chunk that no longer exists the moment it hits a lazy route (the
-// invoice page), and the request fails. Reloading pulls a fresh index.html
+// for a chunk that no longer exists the moment it opens a page whose file is
+// not here yet, and the request fails. Reloading pulls a fresh index.html
 // naming the new chunks. Guarded by a session flag so a chunk that is genuinely
 // unfetchable — offline, or a stale entry cached under its old URL — fails
-// visibly instead of reloading forever.
+// visibly instead of reloading forever. A file fetched only AHEAD of a click
+// (lib/pages.js) is not worth a reload: it is dropped, and the real open asks
+// again.
 window.addEventListener('vite:preloadError', (event) => {
+  if (pages.aheadOnly()) return;
   if (sessionStorage.getItem('chunkReloadAttempted')) return;
   sessionStorage.setItem('chunkReloadAttempted', '1');
   event.preventDefault();
   window.location.reload();
 });
-window.addEventListener('load', () => sessionStorage.removeItem('chunkReloadAttempted'));
+// The flag is cleared a while after the app has loaded, so a later deploy can
+// reload it again — not at once: with every page a file of its own, the page
+// that failed is opened again right after the reload, and a file still failing
+// then must show the "couldn't load" card instead of reloading in a loop.
+window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('chunkReloadAttempted'), 15000));
+
+// Start this address's page file now, alongside the session check, instead of
+// after it. The role in the stored token only picks WHICH file (the owner's
+// home or a rep's); the session check and the server still decide everything.
+// (Not the chart library: at 1.5 Mbit/s its 89 KB would hold up the session
+// check itself. The home charts fetch it once the figures are in.)
+try {
+  pages.load(pageFor(window.location.pathname, roleFromToken(tokenStore.get())), { ahead: true }).catch(() => {});
+} catch {
+  /* storage blocked: the page file simply loads when the page opens */
+}
 
 watchForNewVersion();
 
