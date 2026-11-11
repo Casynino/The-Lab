@@ -12,6 +12,7 @@ import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard, 
 import { Coins, Crown, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck, Search, X, ChevronRight, ArrowUpDown } from 'lucide-react';
 import SideSheet from '@/components/SideSheet';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents, initials } from '@/lib/format';
@@ -723,10 +724,10 @@ function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('overview');
-  const { data: insights } = useQuery({ queryKey: ['commissions', 'me', 'insights'], queryFn: async () => unwrap(await api.get('/commissions/me/insights')).data });
-  const { data: c, isLoading } = useQuery({ queryKey: ['commissions', 'me'], queryFn: async () => unwrap(await api.get('/commissions/me')).data });
-  const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'mine'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 20 } })) });
-  const { data: bonusProgress } = useQuery({ queryKey: ['bonus', 'me'], queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data });
+  const { data: insights } = useQuery(pageQueries.commissionsInsights());
+  const { data: c, isLoading } = useQuery(pageQueries.commissionsMine());
+  const { data: wd } = useQuery(pageQueries.withdrawalsMine());
+  const { data: bonusProgress } = useQuery(pageQueries.bonusMe());
 
   if (isLoading || !c) return <PageSpinner />;
 
@@ -1717,6 +1718,10 @@ const Avatar = ({ name, className }) => (
 
 // The small card (a row in one list on a phone). The whole of it is one button that opens the rep's view;
 // the switch above decides whether the facts tell this run or all time. Money never wraps or gets cut.
+// What a card's rep view asks for, started on a hover or touch of the card (see the Commissions case in
+// lib/routeQueries.js). Only a hint for the read-ahead: the address is never opened.
+const sheetAhead = (i) => `/commissions?rep=${encodeURIComponent(i.salesRepId)}`;
+
 function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) {
   const { avail, min, show, ready, pct } = minState(i);
   const ownMin = show && usualMin != null && min !== usualMin;
@@ -1749,7 +1754,7 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
 
   if (phone) {
     return (
-      <button type="button" onClick={onOpen} aria-haspopup="dialog" className={clsx('flex w-full items-center gap-3 px-3.5 py-2 text-left transition active:bg-white/[0.05]', focus)}>
+      <button type="button" onClick={onOpen} aria-haspopup="dialog" data-prefetch={sheetAhead(i)} data-prefetch-hover="off" className={clsx('flex w-full items-center gap-3 px-3.5 py-2 text-left transition active:bg-white/[0.05]', focus)}>
         <Avatar name={i.name} className="h-8 w-8 text-[13px]" />
         <span className="min-w-0 flex-1">
           <span className="flex items-center justify-between gap-3">
@@ -1773,6 +1778,8 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
       type="button"
       onClick={onOpen}
       aria-haspopup="dialog"
+      data-prefetch={sheetAhead(i)}
+      data-prefetch-hover="off"
       className={clsx('stat-glass group flex h-full w-full flex-col px-3.5 py-3 text-left transition hover:brightness-[1.15] active:scale-[0.99]', focus)}
     >
       <span className="flex w-full items-center gap-2.5">
@@ -1962,22 +1969,20 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
 
   // Staff and the owner may both read these (the profile is staff-only, payouts and fines are open to any
   // signed-in user and scoped by the server). Same key as the rep's profile page, so opening it is instant.
+  // The card's data-prefetch starts all three on a press or touch, not a hover (lib/routeQueries.js).
   const profileQ = useQuery({
-    queryKey: ['sales-rep-profile', id, 'all'],
-    queryFn: async () => unwrap(await api.get(`/sales-reps/${id}/profile`, { params: {} })).data,
+    ...pageQueries.repProfile({ id, period: 'all' }),
     staleTime: 60_000,
     retry: false,
   });
   const wdQ = useQuery({
     // A key of its own: the profile page keeps its latest 6 under ['commissions', 'withdrawals', 'rep', id].
     // It still starts with 'commissions', so every refresh of the page refreshes it too.
-    queryKey: ['commissions', 'withdrawals', 'rep', id, 'sheet'],
-    queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { salesRepId: id, limit: 200 } })),
+    ...pageQueries.repSheetWithdrawals(id),
     retry: false,
   });
   const finesQ = useQuery({
-    queryKey: ['penalties', 'rep', id, 'APPLIED'],
-    queryFn: async () => unwrap(await api.get('/penalties', { params: { salesRepId: id, status: 'APPLIED', limit: 50 } })),
+    ...pageQueries.repFines(id),
     retry: false,
   });
   const profile = profileQ.data;
@@ -2535,30 +2540,23 @@ function AdminView() {
   const [tab, setTab] = useState('balances');
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
   const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
-  const { data: summary, isLoading } = useQuery({ queryKey: ['commissions', 'summary'], queryFn: async () => unwrap(await api.get('/commissions/summary')).data });
-  const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'all'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 30 } })) });
+  const { data: summary, isLoading } = useQuery(pageQueries.commissionsSummary());
+  const { data: wd } = useQuery(pageQueries.withdrawalsAll());
   // The "Paid out" bars need six months of payouts, more than the 30 newest the table lists. Same
   // endpoint, under the 'commissions' key, so every decision refreshes it with the rest.
-  const { data: wdTrend } = useQuery({
-    queryKey: ['commissions', 'withdrawals', 'all', 'trend'],
-    queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 200 } })),
-  });
+  const { data: wdTrend } = useQuery(pageQueries.withdrawalsTrend());
   // How reliably orders are settled, overall and per rep — the existing staff analytics. Optional: the
   // page draws without it.
   const { data: analytics } = useQuery({
-    queryKey: ['settlements', 'analytics'],
-    queryFn: async () => unwrap(await api.get('/settlements/analytics')).data,
+    ...pageQueries.settlementsAnalytics(),
     staleTime: 60_000,
   });
   // Only the whole-table counts are read here (meta.counts), so one row is enough. FinesHistory asks for
   // its own lists by status under longer keys; invalidating ['penalties'] refreshes both.
-  const { data: penaltyData } = useQuery({
-    queryKey: ['penalties', 'all'],
-    queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 1 } })),
-  });
+  const { data: penaltyData } = useQuery(pageQueries.penaltiesCount());
   // The sales bonus, for the rep cards. Same key BonusSettings uses, so the two share one cache entry and
   // paying a bonus over on Rates & bonus already invalidates this.
-  const { data: bonusRun } = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
+  const { data: bonusRun } = useQuery(pageQueries.bonusSummary());
   // Only fines still charged are worth a badge — counted by the SERVER over the whole table.
   const activeFines = penaltyData?.meta?.counts?.applied
     ?? (penaltyData?.data || []).filter((p) => p.status !== 'WAIVED').length;

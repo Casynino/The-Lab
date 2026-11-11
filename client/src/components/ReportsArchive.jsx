@@ -3,7 +3,8 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { FileBarChart, ExternalLink, Download } from 'lucide-react';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { apiError } from '@/lib/api';
+import { pageQueries } from '@/lib/pageQueries';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { Card, EmptyState, Input, Select } from '@/components/ui';
 
@@ -36,14 +37,8 @@ export default function ReportsArchive() {
   const [search, setSearch] = useState('');
   const [shown, setShown] = useState(24);
   const { data: rows = [], isLoading, isFetching } = useQuery({
-    queryKey: ['report-archive', type, year, search],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (type) params.set('type', type);
-      if (year) params.set('year', year);
-      if (search) params.set('search', search);
-      return unwrap(await api.get(`/finance/report-archive?${params}`)).data;
-    },
+    // The same builder the Statements tab reads ahead with (lib/routeQueries.js).
+    ...pageQueries.reportArchive({ type, year, search }),
     placeholderData: keepPreviousData,
   });
 

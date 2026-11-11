@@ -5,6 +5,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { Plus, ShoppingCart, Eye, Wallet, TrendingUp, Boxes, Timer } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useWarehouses, useSalesReps } from '@/lib/hooks';
 import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent } from '@/lib/format';
@@ -362,8 +363,8 @@ function SalesList() {
   const [detailId, setDetailId] = useState(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['sales', { page, type, status }],
-    queryFn: async () => unwrap(await api.get('/sales', { params: { page, limit: 15, type: type || undefined, status: status || undefined } })),
+    ...pageQueries.sales({ page, type, status }),
+    placeholderData: keepOnPageTurn({ type, status }),
   });
 
   // Every figure below covers all the sales the filter matches, not the fifteen

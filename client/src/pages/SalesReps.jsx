@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { Plus, UserCog, AlertTriangle, Search, X, ArrowUpDown } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { formatCurrency, formatNumber, formatDate, fromNow, initials } from '@/lib/format';
 import RegionPicker from '@/components/RegionPicker';
 import { repRegions } from '@/lib/repRegions';
@@ -314,6 +315,7 @@ function RepCard({ r, st, g, b, showBonus, i, onOpen }) {
     <button
       type="button"
       data-rep={r.code}
+      data-prefetch={`/reps/${r.id}`}
       onClick={onOpen}
       // A late rep is the one card that needs action, so only that card is tinted.
       data-tone={st.key === 'late' ? 'late' : undefined}
@@ -393,14 +395,14 @@ export default function SalesReps() {
   }, { replace: true });
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['sales-reps', { page }],
-    queryFn: async () => unwrap(await api.get('/sales-reps', { params: { page, limit: 100 } })),
+    ...pageQueries.salesReps({ page }),
+    placeholderData: keepOnPageTurn(),
   });
 
   // The sales bonus run, read from the same endpoint and cache key as the
   // Commissions page. Owner and warehouse staff may read it (the same roles
   // this page is open to); if it ever fails, the bonus part simply is not drawn.
-  const bonusQ = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
+  const bonusQ = useQuery(pageQueries.bonusSummary());
   const bonusFor = new Map((bonusQ.isError ? [] : bonusQ.data?.items || []).filter((b) => b.configured).map((b) => [b.salesRepId, b]));
   const showBonus = bonusFor.size > 0;
   const starts = [...bonusFor.values()].map((b) => new Date(b.cycleStart).getTime()).filter(Number.isFinite);

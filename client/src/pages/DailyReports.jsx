@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { NotebookPen, Sun, Moon } from 'lucide-react';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
 import { formatCurrency, formatDate } from '@/lib/format';
@@ -61,8 +62,8 @@ export default function DailyReports() {
   const [modal, setModal] = useState(null); // 'OPENING' | 'CLOSING'
 
   const { data, isLoading } = useQuery({
-    queryKey: ['daily-reports', { page }],
-    queryFn: async () => unwrap(await api.get('/daily-reports', { params: { page, limit: 20 } })),
+    ...pageQueries.dailyReports({ page }),
+    placeholderData: keepOnPageTurn(),
   });
 
   return (

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Truck, Ban, ArrowRight, Boxes, Warehouse, UserRound, RotateCcw, ChevronDown } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useWarehouses, useSalesReps } from '@/lib/hooks';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/format';
 import ProductPicker, {
@@ -265,6 +266,7 @@ export default function Transfers() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['transfers', { page, direction }],
     queryFn: async () => unwrap(await api.get('/transfers', { params: { page, limit: 15, direction: direction || undefined } })),
+    placeholderData: keepOnPageTurn({ direction }),
   });
 
   const cancel = useMutation({

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Eye, Users as UsersIcon } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { useSalesReps, useDebounce } from '@/lib/hooks';
 import { ROLES, CREDIT_STATUS_META } from '@/lib/constants';
@@ -115,8 +116,8 @@ export default function Customers() {
 
   const { data: reps = [] } = useSalesReps();
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['customers', { page, search: debounced }],
-    queryFn: async () => unwrap(await api.get('/customers', { params: { page, limit: 15, search: debounced } })),
+    ...pageQueries.customers({ page, search: debounced }),
+    placeholderData: keepOnPageTurn(),
   });
 
   return (

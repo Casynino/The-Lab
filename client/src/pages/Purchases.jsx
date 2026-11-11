@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Ship, PackageCheck, Pencil, Trash2, Eye } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatNumber, pluralizeUnit } from '@/lib/format';
@@ -366,7 +367,7 @@ function PurchaseOrders() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
-  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['purchase-orders', { page }], queryFn: async () => unwrap(await api.get('/purchase-orders', { params: { page, limit: 15 } })) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['purchase-orders', { page }], queryFn: async () => unwrap(await api.get('/purchase-orders', { params: { page, limit: 15 } })), placeholderData: keepOnPageTurn() });
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const askDelete = (po) => {
