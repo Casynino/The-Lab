@@ -706,11 +706,13 @@ async function listTransactions(filters, pagination) {
     // without them every page restarted at today's balance. Same filter, same order, just the
     // rows before this page.
     filters.accountId && pagination.skip > 0
-      ? prisma.financeTransaction.findMany({ where, select: { amount: true, direction: true }, take: pagination.skip, orderBy })
+      ? prisma.financeTransaction.findMany({ where, select: { amount: true, direction: true, occurredAt: true }, take: pagination.skip, orderBy })
       : [],
   ]);
-  // In minus out over every row newer than this page.
-  const newerNet = round2(newerRows.reduce((s, t) => s + (t.direction === 'IN' ? 1 : -1) * toNumber(t.amount), 0));
+  // In minus out over every row newer than this page. Rows before go-live are not in the balance, so
+  // they never move it here either.
+  const inBooks = (t) => !epoch || new Date(t.occurredAt) >= epoch;
+  const newerNet = round2(newerRows.filter(inBooks).reduce((s, t) => s + (t.direction === 'IN' ? 1 : -1) * toNumber(t.amount), 0));
   const brandName = new Map(brands.map((b) => [b.id, b.name]));
   const fromPocket = round2(toNumber(offOutAgg._sum.amount));
   const sumIn = round2(toNumber(inAgg._sum.amount) - toNumber(offInAgg._sum.amount));
@@ -754,6 +756,9 @@ async function listTransactions(filters, pagination) {
     }),
     total,
     newerNet,
+    // Go-live. Rows before it stay listed (history) but are in no balance or total, so a statement
+    // marks them instead of walking its balance through them (audit admin-money-3).
+    epochAt: epoch || null,
     // `fromPocket` is reported beside in/out, never inside them.
     sums: { in: sumIn, out: sumOut, net: round2(sumIn - sumOut), fromPocket },
     byCategory: byCatRows

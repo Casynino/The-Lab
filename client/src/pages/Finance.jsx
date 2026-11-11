@@ -1,5 +1,5 @@
 import { STEADY } from '@/lib/polling';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { Fragment, useState, useRef, useEffect, useMemo } from 'react';
 import ReportsArchive from '@/components/ReportsArchive';
 import ProductPicker, { MoreToggle, DiscardFooter } from '@/components/ProductPicker';
 import { pickerRows, lineCost, primaryWarehouse, shortPlace, buttonPlace } from '@/lib/stockPick';
@@ -1146,12 +1146,12 @@ function AccountStatementModal({ account, onClose }) {
   // account — so the column is dropped rather than filled with zeroes.
   // Page 2 onwards starts below the rows on the pages before it (newerNet = their in minus out),
   // not at today's balance again.
-  let running = Math.round((account.balance - Number(data?.meta?.newerNet || 0)) * 100) / 100;
-  const withBalance = rows.map((t) => {
-    const after = running;
-    running = Math.round((after - (t.direction === 'IN' ? Number(t.amount) : -Number(t.amount))) * 100) / 100;
-    return { ...t, balanceAfter: after };
-  });
+  // Rows from before the books started (finance go-live) are listed as history but are in no balance:
+  // walking the balance back through them invented figures like -1,396,000 on 19 Jun (audit
+  // admin-money-3). They get no balance and sit under a "before the books started" line.
+  const epochAt = data?.meta?.epochAt || null;
+  const withBalance = statementRows(rows, account.balance, data?.meta?.newerNet, epochAt);
+  const firstBefore = withBalance.findIndex((t) => t.beforeBooks);
 
   const Icon = ACCOUNT_ICON[account.type] || Wallet;
   return (
@@ -1212,8 +1212,16 @@ function AccountStatementModal({ account, onClose }) {
                 </TR>
               </THead>
               <TBody>
-                {withBalance.map((t) => (
-                  <TR key={t.id}>
+                {withBalance.map((t, i) => (
+                  <Fragment key={t.id}>
+                  {i === firstBefore && !isRecord && (
+                    <TR>
+                      <TD colSpan={6} className="bg-white/[0.03] text-[11px] text-faint">
+                        Before the books started on {formatDate(epochAt)} — listed for the record, not in the balance or the totals above
+                      </TD>
+                    </TR>
+                  )}
+                  <TR>
                     <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                     <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                     {/* Wraps to two lines rather than pushing Balance past the window's edge (it ran 63 px over at 1440). */}
@@ -1235,10 +1243,14 @@ function AccountStatementModal({ account, onClose }) {
                         <TD className="text-right font-semibold tabular-nums text-rose-400">
                           {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
                         </TD>
-                        <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>
+                        <TD className="text-right font-bold tabular-nums text-foreground"
+                          title={t.beforeBooks ? 'Before the books started — not in the balance' : undefined}>
+                          {t.beforeBooks ? <span className="font-normal text-faint">—</span> : formatCurrency(t.balanceAfter)}
+                        </TD>
                       </>
                     )}
                   </TR>
+                  </Fragment>
                 ))}
               </TBody>
             </Table>
