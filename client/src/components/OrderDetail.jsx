@@ -76,8 +76,7 @@ function SettleDone({ amount, boxes, productName, onClose }) {
     <DoneReceipt
       title="Deposited"
       amount={amount}
-      details={[`${formatNumber(boxes)} ${Number(boxes) === 1 ? 'box' : 'boxes'}${productName ? ` · ${productName}` : ''}`]}
-      note="Your commission is added once it is approved."
+      detail={`${formatNumber(boxes)} ${Number(boxes) === 1 ? 'box' : 'boxes'}${productName ? ` · ${productName}` : ''}`}
       onClose={onClose}
     />
   );

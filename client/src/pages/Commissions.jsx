@@ -71,11 +71,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
         <DoneReceipt
           title="Withdrawal successful"
           amount={done.amount}
-          details={(() => {
-            const parts = String(done.to || '').split(' · ').filter(Boolean);
-            return parts.length > 1 ? [parts.slice(0, -1).join(' · '), parts[parts.length - 1]] : parts;
-          })()}
-          note="The money will be in your account shortly."
+          detail={String(done.to || '').split(' · ').slice(0, 2).join(' · ')}
           onClose={onClose}
         />
       </Modal>
