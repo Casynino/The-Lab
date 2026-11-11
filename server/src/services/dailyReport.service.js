@@ -18,9 +18,18 @@ function reportDay(value) {
   return d.startOf('day').toDate();
 }
 
-// Upsert a rep's opening or closing report for a given day (one of each/day).
-// Only the fields the rep filled in are written: the form starts blank every time, so a blank field
-// means "not filled in", not "clear it" — sending a second time used to null every figure sent before.
+const alreadySent = (type, payload, reportDate) => ApiError.conflict(
+  `You already sent ${payload.reportDate ? `the ${type.toLowerCase()} report for ${reportDate.toISOString().slice(0, 10)}` : `today's ${type.toLowerCase()} report`}. Open it again to see it and change it.`,
+);
+
+// A rep's opening or closing report for a day (one of each per day). Only the fields sent are written; a
+// blank one means "not filled in", and null clears a figure.
+//
+// The second time a day, the rep is changing the first report, knowingly: the app opens it with what was
+// saved and sends `replaces: <its id>` with every field. A second report that does not say which one it
+// replaces is refused, never merged into the first in silence (audit 11 Nov 2026, rep-app-3: a second
+// "Opening" replaced the morning cash figure with no word, and the saved row mixed two submissions).
+// Returns the report and, when one was changed, what it held before (kept in the audit log).
 async function submit(salesRepId, payload) {
   const reportDate = reportDay(payload.reportDate);
   const type = payload.type;
@@ -30,12 +39,20 @@ async function submit(salesRepId, payload) {
     if (v === undefined || (typeof v === 'string' && !v.trim())) continue;
     data[k] = v;
   }
-  return prisma.dailyReport.upsert({
-    where: { salesRepId_reportDate_type: { salesRepId, reportDate, type } },
-    create: { salesRepId, reportDate, type, ...data },
-    update: data,
-    include: INCLUDE,
-  });
+  const existing = await prisma.dailyReport.findUnique({ where: { salesRepId_reportDate_type: { salesRepId, reportDate, type } } });
+  if (existing) {
+    if (!payload.replaces || payload.replaces !== existing.id) throw alreadySent(type, payload, reportDate);
+    const report = await prisma.dailyReport.update({ where: { id: existing.id }, data, include: INCLUDE });
+    return { report, previous: existing };
+  }
+  try {
+    const report = await prisma.dailyReport.create({ data: { salesRepId, reportDate, type, ...data }, include: INCLUDE });
+    return { report, previous: null };
+  } catch (e) {
+    // Sent twice at the same moment: the first one is the report, the second is told so.
+    if (e && e.code === 'P2002') throw alreadySent(type, payload, reportDate);
+    throw e;
+  }
 }
 
 async function list(filters, pagination) {
@@ -60,4 +77,4 @@ async function get(id) {
   return r;
 }
 
-module.exports = { submit, list, get, reportDay };
+module.exports = { submit, list, get, reportDay, FIELDS };
