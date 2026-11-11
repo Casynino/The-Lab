@@ -535,12 +535,15 @@ async function summaryAllReps() {
   const reps = await prisma.salesRepresentative.findMany({
     include: { user: { select: { name: true } } },
   });
+  // Every rep's figures are read at the same time rather than one rep after another (each rep is ~25 DB
+  // round trips, so six reps in a row was the slowest part of the dashboard, Finance and Commissions).
+  // Same reads per rep; the rows are still built in the reps' own order, so totals add up the same.
+  const computed = await Promise.all(reps.map((rep) => computeForRep(rep.id)));
   const items = [];
-  for (const rep of reps) {
-    const c = await computeForRep(rep.id);
-    const row = { salesRepId: rep.id, name: rep.user?.name, code: rep.code, ...c, isActive: rep.isActive !== false };
+  reps.forEach((rep, i) => {
+    const row = { salesRepId: rep.id, name: rep.user?.name, code: rep.code, ...computed[i], isActive: rep.isActive !== false };
     if (row.isActive || row.available > 0 || (row.pendingRequests || 0) > 0) items.push(row);
-  }
+  });
   items.sort((a, b) => b.earned - a.earned);
   return {
     totals: {

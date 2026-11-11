@@ -435,6 +435,20 @@ async function backfillFromHistory() {
   return { incomeCreated, paymentsCreated, brandTagged };
 }
 
+// The self-heal the Finance screens run before they read. The Finance page asks for the overview and the
+// cash flow at the same moment, and each used to start its own pass over the whole sales history at the
+// same time (twice the work, and two passes could both see the same missing row and both add it). Callers
+// that arrive while a pass is running now wait for that pass; the next request after it ends starts a new
+// one, so a missed row is still picked up on the very next read. The explicit rebuild endpoint keeps
+// calling backfillFromHistory() itself.
+let backfillInFlight = null;
+function backfillShared() {
+  if (!backfillInFlight) {
+    backfillInFlight = backfillFromHistory().finally(() => { backfillInFlight = null; });
+  }
+  return backfillInFlight;
+}
+
 // --- Transactions ----------------------------------------------------------
 
 // A date-only value ("2026-07-05") is a day in TANZANIA (audit #62). It was read as a UTC day plus the
@@ -1024,43 +1038,18 @@ async function flowBetween(start, end) {
 // opening balances as the opening figure.
 async function cashflow(opts = {}) {
   await ensureDefaults();
-  await backfillFromHistory().catch(() => {});
+  await backfillShared().catch(() => {});
   const range = rangeFor(opts);
   const epoch = await reports.financeEpoch();
-  const openAgg = await prisma.businessAccount.aggregate({ where: { isActive: true }, _sum: { openingBalance: true } });
-  const baseOpening = round2(toNumber(openAgg._sum.openingBalance));
-  // Opening = account openings (the truth at the epoch) + movements between the
-  // epoch and the window start. Pre-epoch ledger rows never count.
-  const before = range
-    ? await flowBetween(epoch || null, new Date(range.start.getTime() - 1))
-    : { net: 0 };
-  // ...and the owner's own money that went through an account before the window (contributions in,
+  // Every read below depends only on the window and the epoch, never on another read's answer, so they
+  // are sent together: one wait instead of a dozen in a row. Same queries, same arguments, same figures.
+
+  // ...the owner's own money that went through an account before the window (contributions in,
   // drawings out). flowBetween leaves it out because it is not trade — but the stock it paid for IS
   // in `before`, so without it every opening (and so every closing) was short by exactly what he had
   // put in: 3,300,000 on every statement and PDF since 26 Sep (audit #36, 11 Nov 2026).
   const countsBefore = range && (!epoch || range.start > epoch);
-  const ownerBefore = countsBefore
-    ? await ownerFigures({ start: null, end: new Date(range.start.getTime() - 1) })
-    : { accountMovement: 0 };
-  const openingBalance = round2(baseOpening + (countsBefore ? before.net + ownerBefore.accountMovement : 0));
   const start = range && epoch ? (range.start > epoch ? range.start : epoch) : range ? range.start : epoch;
-  const inPeriod = await flowBetween(start || null, range ? range.end : null);
-
-  // The owner's own money is not trading, so it is kept out of money in/out —
-  // but the part of it that went through an account DOES move balances, and
-  // leaving it out of the statement made the closing balance disagree with the
-  // cash actually held (2,439,500 against a real 2,915,500). It gets its own
-  // lines instead: excluded from trade, included in the balance.
-  //
-  // One shape, shared with the Overview and the balance sheet, so no two
-  // screens can print different numbers under the same label.
-  const owner = await ownerFigures({ start: start || null, end: range ? range.end : null });
-  const ownerIn = owner.intoAccounts;
-  const ownerOut = owner.drawn;
-  // ACCOUNT MOVEMENT ONLY, and the closing balance is built from it. Commission
-  // he pays reps from his own hand never lands in an account, so it is not
-  // here; `owner.commissionFromPocket` carries that half.
-  const ownerNet = owner.accountMovement;
 
   // Where the money actually came from and went, by kind — settlements vs
   // counter sales vs other income; stock vs commissions vs expenses. The four
@@ -1069,29 +1058,63 @@ async function cashflow(opts = {}) {
   if (start || (range && range.end)) {
     typeWhere.occurredAt = { ...(start ? { gte: start } : {}), ...(range ? { lte: range.end } : {}) };
   }
-  const byTypeRows = await prisma.financeTransaction.groupBy({
-    by: ['type', 'direction'],
-    where: typeWhere,
-    _sum: { amount: true },
-    _count: true,
-  });
-  const byType = byTypeRows
-    .map((r) => ({ type: r.type, direction: r.direction, amount: round2(toNumber(r._sum.amount)), count: r._count }))
-    .sort((a, b) => b.amount - a.amount);
 
   // Six EAT months of in/out/net, so the tab can show motion, not one frame.
   // Anchored to the business's clock like every other window.
   const { eatNow, eatToUtc } = require('../utils/dates');
-  const series = [];
+  const months = [];
   for (let i = 5; i >= 0; i--) {
     const m = eatNow().subtract(i, 'month');
     const mStart = eatToUtc(m.startOf('month')).toDate();
     const mEnd = eatToUtc(m.endOf('month')).toDate();
     const from = epoch && mStart < epoch ? epoch : mStart;
-    if (epoch && mEnd < epoch) { series.push({ period: m.format('MMM'), moneyIn: 0, moneyOut: 0, net: 0 }); continue; }
-    const f = await flowBetween(from, mEnd);
-    series.push({ period: m.format('MMM'), moneyIn: f.moneyIn, moneyOut: f.moneyOut, net: f.net });
+    months.push({ period: m.format('MMM'), from, mEnd, beforeEpoch: !!(epoch && mEnd < epoch) });
   }
+
+  const [openAgg, before, ownerBefore, inPeriod, owner, byTypeRows, monthFlows] = await Promise.all([
+    prisma.businessAccount.aggregate({ where: { isActive: true }, _sum: { openingBalance: true } }),
+    // Opening = account openings (the truth at the epoch) + movements between the
+    // epoch and the window start. Pre-epoch ledger rows never count.
+    range
+      ? flowBetween(epoch || null, new Date(range.start.getTime() - 1))
+      : { net: 0 },
+    countsBefore
+      ? ownerFigures({ start: null, end: new Date(range.start.getTime() - 1) })
+      : { accountMovement: 0 },
+    flowBetween(start || null, range ? range.end : null),
+    // The owner's own money is not trading, so it is kept out of money in/out —
+    // but the part of it that went through an account DOES move balances, and
+    // leaving it out of the statement made the closing balance disagree with the
+    // cash actually held (2,439,500 against a real 2,915,500). It gets its own
+    // lines instead: excluded from trade, included in the balance.
+    //
+    // One shape, shared with the Overview and the balance sheet, so no two
+    // screens can print different numbers under the same label.
+    ownerFigures({ start: start || null, end: range ? range.end : null }),
+    prisma.financeTransaction.groupBy({
+      by: ['type', 'direction'],
+      where: typeWhere,
+      _sum: { amount: true },
+      _count: true,
+    }),
+    Promise.all(months.map((mo) => (mo.beforeEpoch ? null : flowBetween(mo.from, mo.mEnd)))),
+  ]);
+  const baseOpening = round2(toNumber(openAgg._sum.openingBalance));
+  const openingBalance = round2(baseOpening + (countsBefore ? before.net + ownerBefore.accountMovement : 0));
+  const ownerIn = owner.intoAccounts;
+  const ownerOut = owner.drawn;
+  // ACCOUNT MOVEMENT ONLY, and the closing balance is built from it. Commission
+  // he pays reps from his own hand never lands in an account, so it is not
+  // here; `owner.commissionFromPocket` carries that half.
+  const ownerNet = owner.accountMovement;
+
+  const byType = byTypeRows
+    .map((r) => ({ type: r.type, direction: r.direction, amount: round2(toNumber(r._sum.amount)), count: r._count }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const series = months.map((mo, i) => (mo.beforeEpoch
+    ? { period: mo.period, moneyIn: 0, moneyOut: 0, net: 0 }
+    : { period: mo.period, moneyIn: monthFlows[i].moneyIn, moneyOut: monthFlows[i].moneyOut, net: monthFlows[i].net }));
 
   return {
     period: opts.from || opts.to ? 'custom' : opts.period || 'all',
@@ -1621,40 +1644,43 @@ function buildCapital(input = {}) {
 
 // --- Finance dashboard -----------------------------------------------------
 
-async function overview(period = 'month') {
+// `shared` (optional) lets a caller that has already started the same reads hand them in, so one request
+// does not compute them twice: { commSummary, valuation, supplierSummaries } are promises of
+// commission.summaryAllReps(), inventory.valuation() and supplierSummaries(). Only the dashboard does this.
+async function overview(period = 'month', shared = {}) {
   await ensureDefaults();
   // Self-healing sync: fold any business activity not yet in the ledger
   // (historical or missed) into finance before computing. Idempotent by refId.
-  await backfillFromHistory().catch(() => {});
-  const [accounts, prof, inv, commSummary] = await Promise.all([
+  // Every read below starts only after it, as before.
+  await backfillShared().catch(() => {});
+  const [accounts, prof, inv, commSummary, epoch] = await Promise.all([
     accountBalances(),
     reports.profitOverview(period),
-    inventory.valuation(),
-    commission.summaryAllReps(),
+    shared.valuation || inventory.valuation(),
+    shared.commSummary || commission.summaryAllReps(),
+    reports.financeEpoch(),
   ]);
 
   const cashPosition = round2(accounts.reduce((s, a) => s + a.balance, 0));
-  const epoch = await reports.financeEpoch();
 
   // Money in / out for each window (from the epoch onward).
-  const flow = {};
-  for (const p of ['today', 'week', 'month', 'all']) {
+  const flowFor = async (p) => {
     const r = periodRange(p);
     const base = epochWhere(r, epoch);
-    const [inAgg, outAgg] = await Promise.all([
+    const [inAgg, outAgg, owner] = await Promise.all([
       prisma.financeTransaction.aggregate({ where: { ...base, direction: 'IN', type: { notIn: NON_TRADE_TYPES } }, _sum: { amount: true } }),
       prisma.financeTransaction.aggregate({ where: { ...base, direction: 'OUT', type: { notIn: NON_TRADE_TYPES } }, _sum: { amount: true } }),
+      // The owner's own money is not trade, but the part that went through an
+      // account does move the balances. The overview showed only the trading net
+      // (2,439,500) directly under the cash held (2,915,500) — the same 476,000
+      // gap that made the cash-flow statement disagree with reality. Carried
+      // here, in the SHARED shape, so the strip, the cash-flow tab and the
+      // balance sheet cannot print three different numbers for the same thing.
+      ownerFigures({ start: r ? r.start : null, end: r ? r.end : null }),
     ]);
     const moneyIn = round2(toNumber(inAgg._sum.amount));
     const moneyOut = round2(toNumber(outAgg._sum.amount));
-    // The owner's own money is not trade, but the part that went through an
-    // account does move the balances. The overview showed only the trading net
-    // (2,439,500) directly under the cash held (2,915,500) — the same 476,000
-    // gap that made the cash-flow statement disagree with reality. Carried
-    // here, in the SHARED shape, so the strip, the cash-flow tab and the
-    // balance sheet cannot print three different numbers for the same thing.
-    const owner = await ownerFigures({ start: r ? r.start : null, end: r ? r.end : null });
-    flow[p] = {
+    return {
       moneyIn,
       moneyOut,
       // Account movement only (contributions − drawings). `owner` below is the
@@ -1668,15 +1694,104 @@ async function overview(period = 'month') {
       // Never one merged figure — they are different kinds of money.
       owner,
     };
-  }
+  };
+  const FLOW_PERIODS = ['today', 'week', 'month', 'all'];
 
   // Expenses + breakdown for the selected period.
   const range = periodRange(period);
   const expWhere = { direction: 'OUT', type: 'EXPENSE', ...epochWhere(range, epoch) };
-  const [expAgg, byCat] = await Promise.all([
-    prisma.financeTransaction.aggregate({ where: expWhere, _sum: { amount: true } }),
-    prisma.financeTransaction.groupBy({ by: ['category'], where: expWhere, _sum: { amount: true }, _count: true }),
+
+  // Everything else this page shows needs only the period and the epoch, never another read's answer,
+  // so it is all asked for at once: one wait instead of ~15 in a row. Each figure below is still worked
+  // out from the same query as before, in the same place.
+  const [
+    flowRows, [expAgg, byCat], [allBrands, brandTxnRows, products],
+    [poAgg, poCreditAgg, poPayAgg, wdAgg, pendingApprovals],
+    approvedWdAgg, ownerAllTime, lifetime, lifetimeExpAgg, debtAgg, suppliersForSplit, stockSpendRows,
+  ] = await Promise.all([
+    Promise.all(FLOW_PERIODS.map(flowFor)),
+    Promise.all([
+      prisma.financeTransaction.aggregate({ where: expWhere, _sum: { amount: true } }),
+      prisma.financeTransaction.groupBy({ by: ['category'], where: expWhere, _sum: { amount: true }, _count: true }),
+    ]),
+    // ── Per-brand finance: each brand's P&L, cash movement and inventory value,
+    // computed from real transactions/records only. Scales to any brand count.
+    Promise.all([
+      prisma.brand.findMany({ where: { isActive: true }, select: { id: true, name: true } }),
+      prisma.financeTransaction.groupBy({
+        by: ['brandId', 'direction', 'type'],
+        // A brand's money in/out has to reconcile to the wallets it moved. Rep
+        // commission moved none of them, so it cannot appear in either figure.
+        where: { ...epochWhere(range, epoch), type: { notIn: ['COMMISSION_PAYMENT'] } },
+        _sum: { amount: true },
+      }),
+      prisma.product.findMany({ select: { id: true, brandId: true } }),
+    ]),
+    // What is waiting for the owner, so the Overview can lead with it — the
+    // Target-style "needs you" strip: nothing here means genuinely nothing.
+    // Payments must be counted against the SAME population as the purchases.
+    // Summing every PO payment ever made — including payments against orders
+    // later cancelled, which drop out of the purchased side — understated the
+    // debt here while the Suppliers tab (which excludes them) showed more.
+    prisma.purchaseOrder.findMany({
+      where: { status: { not: 'CANCELLED' } },
+      select: { id: true },
+    }).then((livePos) => {
+      const livePoIds = livePos.map((x) => x.id);
+      return Promise.all([
+        prisma.purchaseOrder.aggregate({ where: { status: { not: 'CANCELLED' } }, _sum: { totalCost: true } }),
+        prisma.supplierCredit.aggregate({ _sum: { amount: true } }),
+        prisma.financeTransaction.aggregate({
+          where: {
+            direction: 'OUT',
+            OR: [
+              { refType: 'PurchaseOrder', refId: { in: livePoIds } },
+              { refType: 'Supplier' },
+            ],
+          },
+          _sum: { amount: true },
+        }),
+        prisma.commissionWithdrawal.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
+        prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
+      ]);
+    }),
+    // Approved but not yet paid. The rep's available balance already treats it
+    // as gone, and no payout has been recorded against it, so without this line
+    // the money the owner has promised a rep sits in no figure at all.
+    prisma.commissionWithdrawal.aggregate({
+      where: { status: 'APPROVED' },
+      _sum: { amount: true },
+    }),
+    // ALL TIME and epoch-clamped, from the same shared shape the period strip and
+    // the cash-flow tab use (see "Where the profit actually IS" below).
+    ownerFigures(),
+    // All-time earnings, so "taken out" and "still working" compare like with
+    // like no matter which period is on screen.
+    period === 'all' ? prof : reports.profitOverview('all'),
+    prisma.financeTransaction.aggregate({
+      where: { direction: 'OUT', type: 'EXPENSE', ...epochWhere(null, epoch) },
+      _sum: { amount: true },
+    }),
+    // What customers still owe on credit sales. The UNPAID balance only, and
+    // `balance > 0` is the same test the Debts page uses, so the two screens can
+    // never quote different debt. A written-off debt is zeroed at source.
+    prisma.creditSale.aggregate({
+      where: { balance: { gt: 0 } },
+      _sum: { balance: true },
+      _count: true,
+    }),
+    shared.supplierSummaries || supplierSummaries(),
+    // What has actually been spent putting stock back — supplier payments and
+    // stock purchases, by the brand the money BOUGHT (not the account it left).
+    prisma.financeTransaction.groupBy({
+      by: ['brandId'],
+      where: { direction: 'OUT', type: 'STOCK_PURCHASE' },
+      _sum: { amount: true },
+    }),
   ]);
+  const flow = {};
+  FLOW_PERIODS.forEach((p, i) => { flow[p] = flowRows[i]; });
+
   const expenses = round2(toNumber(expAgg._sum.amount));
   const expenseBreakdown = byCat
     .map((c) => ({ category: c.category || 'Uncategorised', amount: round2(toNumber(c._sum.amount)), count: c._count }))
@@ -1689,19 +1804,7 @@ async function overview(period = 'month') {
   const commissionAccrued = prof.totals.commission;
   const netProfit = round2(grossProfit - expenses);
 
-  // ── Per-brand finance: each brand's P&L, cash movement and inventory value,
-  // computed from real transactions/records only. Scales to any brand count.
-  const [allBrands, brandTxnRows, products] = await Promise.all([
-    prisma.brand.findMany({ where: { isActive: true }, select: { id: true, name: true } }),
-    prisma.financeTransaction.groupBy({
-      by: ['brandId', 'direction', 'type'],
-      // A brand's money in/out has to reconcile to the wallets it moved. Rep
-      // commission moved none of them, so it cannot appear in either figure.
-      where: { ...epochWhere(range, epoch), type: { notIn: ['COMMISSION_PAYMENT'] } },
-      _sum: { amount: true },
-    }),
-    prisma.product.findMany({ select: { id: true, brandId: true } }),
-  ]);
+  // ── Per-brand finance (rows read above).
   const productBrand = new Map(products.map((p) => [p.id, p.brandId]));
   const invByBrand = new Map();
   for (const it of inv.items) {
@@ -1748,40 +1851,7 @@ async function overview(period = 'month') {
     };
   });
 
-  // What is waiting for the owner, so the Overview can lead with it — the
-  // Target-style "needs you" strip: nothing here means genuinely nothing.
-  // Payments must be counted against the SAME population as the purchases.
-  // Summing every PO payment ever made — including payments against orders
-  // later cancelled, which drop out of the purchased side — understated the
-  // debt here while the Suppliers tab (which excludes them) showed more.
-  const livePos = await prisma.purchaseOrder.findMany({
-    where: { status: { not: 'CANCELLED' } },
-    select: { id: true },
-  });
-  const livePoIds = livePos.map((x) => x.id);
-  const [poAgg, poCreditAgg, poPayAgg, wdAgg, pendingApprovals] = await Promise.all([
-    prisma.purchaseOrder.aggregate({ where: { status: { not: 'CANCELLED' } }, _sum: { totalCost: true } }),
-    prisma.supplierCredit.aggregate({ _sum: { amount: true } }),
-    prisma.financeTransaction.aggregate({
-      where: {
-        direction: 'OUT',
-        OR: [
-          { refType: 'PurchaseOrder', refId: { in: livePoIds } },
-          { refType: 'Supplier' },
-        ],
-      },
-      _sum: { amount: true },
-    }),
-    prisma.commissionWithdrawal.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
-    prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
-  ]);
-  // Approved but not yet paid. The rep's available balance already treats it
-  // as gone, and no payout has been recorded against it, so without this line
-  // the money the owner has promised a rep sits in no figure at all.
-  const approvedWdAgg = await prisma.commissionWithdrawal.aggregate({
-    where: { status: 'APPROVED' },
-    _sum: { amount: true },
-  });
+  // Approved but not yet paid (read above, with the "needs you" figures).
   const approvedUnpaidCommission = round2(toNumber(approvedWdAgg._sum.amount));
   // ── Where the profit actually IS ────────────────────────────────────────
   // The owner has taken nothing out: every shilling earned went back into
@@ -1793,17 +1863,9 @@ async function overview(period = 'month') {
   // the cash-flow tab use. The balance sheet is "as things stand right now", so
   // it never narrows the window — but it must not use a different POPULATION
   // either, which is what let the same label print 476,000 in one place and
-  // 426,000 in another.
-  const ownerAllTime = await ownerFigures();
+  // 426,000 in another. (ownerAllTime, lifetime and lifetimeExpAgg are read above.)
   const ownerIn = ownerAllTime.intoAccounts;
   const ownerOut = ownerAllTime.drawn;
-  // All-time earnings, so "taken out" and "still working" compare like with
-  // like no matter which period is on screen.
-  const lifetime = period === 'all' ? prof : await reports.profitOverview('all');
-  const lifetimeExpAgg = await prisma.financeTransaction.aggregate({
-    where: { direction: 'OUT', type: 'EXPENSE', ...epochWhere(null, epoch) },
-    _sum: { amount: true },
-  });
   const earnedAllTime = round2(lifetime.totals.profit - round2(toNumber(lifetimeExpAgg._sum.amount)));
   // Every shilling of rep commission comes out of the owner's pocket, so the
   // payouts themselves are the record of what he has put in. The business owes
@@ -1811,14 +1873,7 @@ async function overview(period = 'month') {
   // balance moves by it and no money-out aggregate includes it.
   const paidRepsFromPocket = ownerAllTime.commissionFromPocket;
 
-  // What customers still owe on credit sales. The UNPAID balance only, and
-  // `balance > 0` is the same test the Debts page uses, so the two screens can
-  // never quote different debt. A written-off debt is zeroed at source.
-  const debtAgg = await prisma.creditSale.aggregate({
-    where: { balance: { gt: 0 } },
-    _sum: { balance: true },
-    _count: true,
-  });
+  // What customers still owe on credit sales (debtAgg, read above).
   const customersOwe = round2(toNumber(debtAgg._sum.balance));
 
   const needsYou = {
@@ -1838,7 +1893,7 @@ async function overview(period = 'month') {
   // the shelf sell. Setting aside the entire outstanding balance was wrong:
   // it demanded money the owner does not owe yet, and hid the profit that is
   // genuinely his. Everything above the cost of sold goods is his.
-  const suppliersForSplit = await supplierSummaries();
+  // (suppliersForSplit is read above.)
   const supplierByBrand = new Map();
   for (const sup of suppliersForSplit) {
     const key = sup.brandId || 'general';
@@ -1856,11 +1911,7 @@ async function overview(period = 'month') {
   // stock purchases, by the brand the money BOUGHT (not the account it left).
   // This is what decides whether the cost of the boxes sold has been covered
   // yet, and therefore whether the cash on hand is cost or profit.
-  const stockSpendRows = await prisma.financeTransaction.groupBy({
-    by: ['brandId'],
-    where: { direction: 'OUT', type: 'STOCK_PURCHASE' },
-    _sum: { amount: true },
-  });
+  // (stockSpendRows is read above.)
   const stockSpendByBrand = new Map(stockSpendRows.map((r) => [r.brandId || 'general', round2(toNumber(r._sum.amount))]));
 
   const cashByBrand = new Map();

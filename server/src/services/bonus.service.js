@@ -230,11 +230,9 @@ async function summaryAllReps() {
     where: { isActive: true },
     include: { user: { select: { name: true } } },
   });
-  const items = [];
-  for (const rep of reps) {
-    const p = await progressForRep(rep.id);
-    items.push({ salesRepId: rep.id, code: rep.code, name: rep.user?.name || rep.code, ...p });
-  }
+  // All reps at once, not one after another; rows keep the reps' order.
+  const progress = await Promise.all(reps.map((rep) => progressForRep(rep.id)));
+  const items = reps.map((rep, i) => ({ salesRepId: rep.id, code: rep.code, name: rep.user?.name || rep.code, ...progress[i] }));
   items.sort((a, b) => (b.sales || 0) - (a.sales || 0));
   return { items };
 }
