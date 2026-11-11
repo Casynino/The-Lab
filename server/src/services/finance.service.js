@@ -484,6 +484,8 @@ function resolveOccurredAt(v) {
 async function recordTransaction(data, actor, client = prisma, { checkBrand = false } = {}) {
   const amount = round2(toNumber(data.amount));
   if (!(amount > 0)) throw ApiError.badRequest('Amount must be greater than zero');
+  // Bigger than the money column holds: a clean refusal, not a 500 with the database's error text.
+  if (amount > DB_MAX_AMOUNT) throw ApiError.badRequest('That amount is too large — check the number of zeros');
   // Said plainly: without it Prisma answered "Invalid database query".
   if (!data.accountId) throw ApiError.badRequest('Choose the account the money moved through');
   const account = await client.businessAccount.findUnique({ where: { id: data.accountId } });
@@ -807,6 +809,7 @@ async function updateTransaction(id, data) {
       throw ApiError.badRequest('This amount comes from a sale and cannot be edited here. Recall/cancel the sale instead.');
     }
     patch.amount = round2(toNumber(data.amount));
+    if (patch.amount > DB_MAX_AMOUNT) throw ApiError.badRequest('That amount is too large — check the number of zeros');
   }
   // The edit form sends only a DAY. Saving the same day used to restamp the row with the time of the
   // edit (#77); a different day keeps the row's own time of day. A full timestamp is taken as given.

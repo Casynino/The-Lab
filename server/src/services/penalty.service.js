@@ -18,7 +18,7 @@
 
 const prisma = require('../config/prisma');
 const notification = require('./notification.service');
-const { round2, toNumber, formatCurrency } = require('../utils/money');
+const { round2, toNumber, formatCurrency, MAX_COMMISSION_CHANGE } = require('../utils/money');
 
 const PENALTY_PER_DAY = 10000; // TZS — standard 72h programme
 // A rep who self-extends gets 96 extra hours but accepts a steeper price:
@@ -206,27 +206,52 @@ async function totalPenaltiesForRep(salesRepId) {
 // available balance without touching money or future accrual. Lives in the
 // same ledger as fines, so it's permanent, visible on the Commissions page,
 // and reversible with the Forgive button if ever needed.
+// A deduction identical to one made for the same rep within this window is taken as the same press sent
+// twice (a double tap, or a retry after a lost answer), not as a second deduction.
+const REPEAT_WINDOW_MS = 60_000;
+
 async function adjustCommission({ salesRepId, amount, reason }, actor) {
   const ApiError = require('../utils/ApiError');
   const amt = round2(toNumber(amount));
   if (!(amt > 0)) throw ApiError.badRequest('Enter an amount greater than zero');
+  if (amt > MAX_COMMISSION_CHANGE) {
+    throw ApiError.badRequest(`That is more than ${formatCurrency(MAX_COMMISSION_CHANGE)} — check the number of zeros`);
+  }
   if (!salesRepId) throw ApiError.badRequest('Choose a sales rep');
   const rep = await prisma.salesRepresentative.findUnique({
     where: { id: salesRepId },
     include: { user: { select: { id: true, name: true } } },
   });
   if (!rep) throw ApiError.notFound('Sales rep not found');
+  const notes = reason || `Commission deduction by ZELab.`;
 
-  const row = await prisma.settlementPenalty.create({
-    data: {
-      salesRepId,
-      settlementId: null,
-      kind: 'ADJUSTMENT',
-      amount: amt,
-      daysOverdue: 0,
-      notes: reason || `Commission deduction by ZELab.`,
-    },
-  });
+  // Sent twice = deducted once (audit backend-integrity-2). The rep's row is locked, then the same
+  // deduction made in the last minute is looked for and the new one written, all in one transaction —
+  // a second copy waits for the first, finds it, and is refused. No schema change (a request key per
+  // entry is decision D34).
+  const row = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "sales_representatives" WHERE id = ${salesRepId} FOR UPDATE`;
+    const same = await tx.settlementPenalty.findFirst({
+      where: {
+        salesRepId, kind: 'ADJUSTMENT', amount: amt, notes,
+        appliedAt: { gte: new Date(Date.now() - REPEAT_WINDOW_MS) },
+      },
+      select: { id: true },
+    });
+    if (same) {
+      throw ApiError.conflict(`This deduction of ${formatCurrency(amt)} was already recorded a moment ago — it went through. To take off the same amount again on purpose, wait a minute and send it again.`);
+    }
+    return tx.settlementPenalty.create({
+      data: {
+        salesRepId,
+        settlementId: null,
+        kind: 'ADJUSTMENT',
+        amount: amt,
+        daysOverdue: 0,
+        notes,
+      },
+    });
+  }, { maxWait: 10_000, timeout: 20_000 });
 
   if (rep.user?.id) {
     notification.notifyUser(rep.user.id, {
@@ -263,10 +288,18 @@ async function waivePenalty(id, actor, reason) {
     throw ApiError.badRequest('This fine has already been forgiven');
   }
 
-  const updated = await prisma.settlementPenalty.update({
-    where: { id },
+  // Claimed, not just written (audit backend-integrity-3): the status changes only if it is still
+  // APPLIED. Two Forgive presses at the same moment both passed the check above and both told the rep
+  // (two FINE FORGIVEN WhatsApps); now one wins and the other is told it was already done.
+  const claimed = await prisma.settlementPenalty.updateMany({
+    where: { id, status: 'APPLIED' },
     data: { status: 'WAIVED', waivedAt: new Date(), waivedById: actor?.id || null, waiveReason: reason || null },
   });
+  if (claimed.count !== 1) {
+    const ApiError = require('../utils/ApiError');
+    throw ApiError.conflict('This fine has already been forgiven — refresh to see it');
+  }
+  const updated = await prisma.settlementPenalty.findUnique({ where: { id } });
 
   const repUserId = p.salesRep?.user?.id;
   if (repUserId) {
