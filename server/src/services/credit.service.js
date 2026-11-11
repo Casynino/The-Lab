@@ -60,6 +60,13 @@ async function recordPayment(creditSaleId, payload, actor) {
   if (amount <= 0) throw ApiError.badRequest('Payment amount must be greater than zero');
 
   return prisma.$transaction(async (tx) => {
+    // One payment at a time per debt (audit #54, 11 Nov 2026): two payments at the same instant both
+    // read the same balance and each wrote its own "balance - amount", so one payment vanished from the
+    // balance (and the over-payment check could pass twice). The row lock makes the second wait and
+    // read the balance the first one left.
+    if (typeof tx.$queryRaw === 'function') {
+      await tx.$queryRaw`SELECT id FROM "credit_sales" WHERE id = ${creditSaleId} FOR UPDATE`;
+    }
     const credit = await tx.creditSale.findUnique({
       where: { id: creditSaleId },
       include: { sale: true },
