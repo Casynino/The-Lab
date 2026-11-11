@@ -19,9 +19,16 @@
 - Looked at: snapshots across every chapter, the phone-width review sheet, the seams world->phone and
   phone->claim. Fixed: a lift that cut "Deposited" in half, the payoff card running into the title line,
   a stray space before a comma, and the claim overlapping the phone's exit.
-- Sound: taps, whooshes on the big lifts, a pop on "Request sent" and the approval, one bass hit on the
-  payoff ("On its way"). Placed by timing only — measured, not heard. No music bed: there is no music
-  source on this machine (HeyGen is not signed in).
+- Sound (updated 11 Nov): a music bed generated on this Mac with MusicGen (facebook/musicgen-small, free,
+  no account) from the prompt "calm modern uplifting instrumental, warm marimba melody, soft synth pads,
+  light afro house percussion, smooth groove, 104 bpm", looped on a 12-bar boundary (103.4 BPM) with a
+  1.5 s fade in and 3 s fade out; a soft "tok" (cut from the bundled pop) on every tap, a whoosh on each
+  chapter roll and big lift, a pop on "Request sent" and the approval, a riser into the payoff and one bass
+  hit on it. Mix measured: -16.3 LUFS, -1.1 dBTP, no clipping, taps 5-14 dB over the bed. Measured, not
+  heard — the music must be listened to by a person.
+- Intro (updated 11 Nov): 3.5 s of the ZELab mark and "We keep Tanzania stocked." over the sign-in page's
+  moving Lab film (converted from the animated WebP to world.mp4), which carries on, unbroken, into the
+  hook and shrinks into the phone.
 
 ## Weakest shot
 - 43.6–44.0: a short empty beat between the phone leaving and the claim. It reads as a breath; with more
