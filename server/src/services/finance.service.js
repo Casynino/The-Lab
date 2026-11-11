@@ -510,14 +510,14 @@ async function recordTransaction(data, actor, client = prisma, { checkBrand = fa
 // and pushed its brand net TSh 3.3M below the truth. The category the user
 // picks still shows on the row; only the P&L treatment changes.
 const isStockPurchaseCategory = (c) => /stock\s*purchase/i.test(String(c || ''));
-// The owner's own money. A contribution is his personal cash entering the
-// business (he pays rep commissions this way); a drawing is profit he takes
-// out. Neither is trade: excluded from revenue, profit, and money in/out.
 // A hand-typed entry is never tied to a sale, an order, a supplier or a payout
 // (#79): those links decide where a row counts, and only the server makes them.
 const handTyped = ({ refType, refId, ...data }) => data; // eslint-disable-line no-unused-vars
 const HAND_TYPED = { checkBrand: true };
 
+// The owner's own money. A contribution is his personal cash entering the
+// business (he pays rep commissions this way); a drawing is profit he takes
+// out. Neither is trade: excluded from revenue, profit, and money in/out.
 const recordOwnerMoney = ({ direction, ...data }, actor) => recordTransaction({
   ...handTyped(data),
   direction,
