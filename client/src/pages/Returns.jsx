@@ -176,19 +176,47 @@ function ReturnModal({ onClose }) {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState({});
 
+  // A rep can only send back boxes he still holds: per product, what is left on his open orders less
+  // what is already locked in a pending return or a pending settlement — the same count the server
+  // checks on submit. The sheet used to list the whole catalogue with no limit, and the server only
+  // refused it after he pressed Return. Fetched fresh each time the sheet opens.
+  const held = useQuery({
+    queryKey: ['settlements', 'returnable'],
+    enabled: isRep,
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: async () => {
+      const open = unwrap(await api.get('/settlements', { params: { open: true, limit: 200 } })).data || [];
+      const orders = await Promise.all(open.map(async (o) => unwrap(await api.get(`/settlements/${o.id}`)).data));
+      const max = {};
+      for (const order of orders) {
+        const submitted = {};
+        (order?.pendingSubmissionsList || []).forEach((p) => { submitted[p.productId] = (submitted[p.productId] || 0) + p.boxes; });
+        (order?.order?.lines || []).forEach((l) => {
+          const n = Math.max(0, l.remaining - (submitted[l.productId] || 0) - (l.pendingReturn || 0));
+          if (n > 0) max[l.productId] = (max[l.productId] || 0) + n;
+        });
+      }
+      return max;
+    },
+  });
+  const capOf = (id) => (isRep ? held.data?.[id] || 0 : Infinity);
+
   function setQty(productId, qty) {
+    const n = Math.min(qty, capOf(productId));
     setCart((prev) => {
-      if (qty <= 0) { const n = { ...prev }; delete n[productId]; return n; }
-      return { ...prev, [productId]: qty };
+      if (n <= 0) { const next = { ...prev }; delete next[productId]; return next; }
+      return { ...prev, [productId]: n };
     });
   }
   const inc = (id) => setQty(id, (cart[id] || 0) + 1);
   const dec = (id) => setQty(id, (cart[id] || 0) - 1);
 
   const filtered = useMemo(() => {
+    const list = isRep ? products.filter((p) => (held.data?.[p.id] || 0) > 0) : products;
     const q = search.trim().toLowerCase();
-    return q ? products.filter((p) => p.name.toLowerCase().includes(q)) : products;
-  }, [products, search]);
+    return q ? list.filter((p) => p.name.toLowerCase().includes(q)) : list;
+  }, [products, search, isRep, held.data]);
 
   const totalBoxes = Object.values(cart).reduce((s, q) => s + q, 0);
   const hasCart = totalBoxes > 0;
@@ -298,23 +326,32 @@ function ReturnModal({ onClose }) {
         </div>
 
         {/* Product list */}
+        {isRep && (held.isLoading || held.isError || !filtered.length) && !search && (
+          <p className="py-4 text-center text-sm text-muted">
+            {held.isLoading ? 'Loading the boxes on your orders…'
+              : held.isError ? 'Your open orders could not be loaded. Close this and try again.'
+              : 'You have no boxes left on an open order, so there is nothing to send back.'}
+          </p>
+        )}
         <div className="-mx-1 max-h-56 divide-y divide-border overflow-y-auto">
           {filtered.map((product) => {
             const qty = cart[product.id] || 0;
             const inCart = qty > 0;
+            const cap = capOf(product.id);
             return (
               <div key={product.id} className={`px-1 py-2.5 transition ${inCart ? 'bg-brand-500/5' : ''}`}>
                 {/* The name has the line to itself and stays on it; the stepper sits under it. */}
                 <div title={product.name} className={`truncate text-sm font-medium ${inCart ? 'text-foreground' : 'text-muted'}`}>{product.name}</div>
                 <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                  {isRep && <span className="mr-auto text-[11px] text-faint">{formatNumber(cap)} on your orders</span>}
                   <button onClick={() => dec(product.id)} disabled={qty === 0}
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-lg font-bold text-muted transition hover:text-foreground disabled:opacity-30">−</button>
                   <input type="number" min="0" value={qty === 0 ? '' : qty}
                     onChange={(e) => { const v = parseInt(e.target.value, 10); setQty(product.id, isNaN(v) || v < 0 ? 0 : v); }}
                     placeholder="0"
                     className="h-8 w-14 rounded-lg border border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                  <button onClick={() => inc(product.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-lg font-bold text-brand-500 transition hover:bg-brand-500/25">+</button>
+                  <button onClick={() => inc(product.id)} disabled={qty >= cap}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-lg font-bold text-brand-500 transition hover:bg-brand-500/25 disabled:opacity-30">+</button>
                 </div>
               </div>
             );
