@@ -66,16 +66,20 @@ const owner = {
   // request (a carton counts as the boxes it holds: `boxes`), and the value.
   // The totals are what the owner needs most, so a very long request drops products from the
   // END of the list ("+3 more, see ZELab") and never the totals.
-  // A rep who works two or more cities names the city the stock is for; it stands under the name.
+  // The city the stock is for stands under the name; a request split between cities says each line's city
+  // after its boxes instead.
   stockRequest: ({ by, city, items = [], total, when }) => {
-    const head = [lines(bold('STOCK REQUEST'), dateTime(when)), city ? lines(`By: ${by}`, `City: ${city}`) : `By: ${by}`];
+    const itemCities = [...new Set(items.map((i) => i.city).filter(Boolean))];
+    const split = itemCities.length > 1;
+    const oneCity = split ? null : (city || itemCities[0] || null);
+    const head = [lines(bold('STOCK REQUEST'), dateTime(when)), oneCity ? lines(`By: ${by}`, `City: ${oneCity}`) : `By: ${by}`];
     const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes ?? i.qty) || 0), 0);
     const tail = items.length > 1
       ? lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`)
       : `Total Value: ${money(total)}`;
     const build = ({ shown }) => doc(
       ...head,
-      lines(...items.slice(0, shown).map((i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.qty, i.unit)}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
+      lines(...items.slice(0, shown).map((i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.qty, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
       tail,
     );
     const steps = [];

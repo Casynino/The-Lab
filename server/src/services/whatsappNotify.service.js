@@ -280,7 +280,7 @@ async function stockRequestSubmitted(req) {
     items: (req.items || []).map((i) => {
       // How many boxes one unit of the chosen packaging holds (a carton is more than one box).
       const factor = (i.product?.packagings || []).find((k) => k.packagingUnitId === i.packagingUnitId)?.baseQuantity ?? 1;
-      return { name: i.product?.name, qty: i.quantityRequested, unit: i.packagingUnit?.name, boxes: (i.quantityRequested || 0) * factor };
+      return { name: i.product?.name, qty: i.quantityRequested, unit: i.packagingUnit?.name, boxes: (i.quantityRequested || 0) * factor, city: i.region || null };
     }),
     total: req.totalValue,
     when: req.createdAt,

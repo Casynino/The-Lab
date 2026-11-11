@@ -124,3 +124,84 @@ Total Value: TSh 144,000`);
   const without = t.owner.stockRequest({ by: 'Juma', items: [{ name: 'Pepa', qty: 4 }], total: 144000, when: at });
   assert.ok(!/City:/.test(without));
 });
+
+// ── One request, several cities (Nino, 11 Nov 2026: "tell which box belongs to which city") ─────────
+const { requestItemRegions } = require('../src/constants/regions');
+
+test('each line keeps its own city; the request has one only when every line shares it', () => {
+  const split = requestItemRegions(TWO, [{ productId: 'p1', region: 'Arusha' }, { productId: 'p1', region: 'kilimanjaro' }]);
+  assert.deepEqual(split.items.map((i) => i.region), ['Arusha', 'Kilimanjaro']);
+  assert.equal(split.region, null);
+  const same = requestItemRegions(TWO, [{ productId: 'p1', region: 'Arusha' }, { productId: 'p2', region: 'Arusha' }]);
+  assert.equal(same.region, 'Arusha');
+});
+
+test('a line with no city takes the request\'s city; a line for a city not his is refused', () => {
+  assert.equal(requestItemRegions(TWO, [{ productId: 'p1' }], 'Kilimanjaro').items[0].region, 'Kilimanjaro');
+  assert.ok(requestItemRegions(TWO, [{ productId: 'p1', region: 'Arusha' }, { productId: 'p2' }]).error);
+  assert.match(requestItemRegions(TWO, [{ productId: 'p1', region: 'Mwanza' }]).error, /not one of your cities/);
+});
+
+test('a one-city rep\'s lines are all his city, whatever is sent', () => {
+  const r = requestItemRegions(ONE, [{ productId: 'p1', region: 'Kilimanjaro' }, { productId: 'p2' }]);
+  assert.deepEqual(r.items.map((i) => i.region), ['Arusha', 'Arusha']);
+  assert.equal(r.region, 'Arusha');
+});
+
+test('create: one product split between two cities is saved as two lines, each with its city', async () => {
+  const { svc, written } = loadService({ rep: TWO });
+  await svc.create('s1', { items: [
+    { productId: 'p1', packagingUnitId: 'u1', quantity: 2, region: 'Arusha' },
+    { productId: 'p1', packagingUnitId: 'u1', quantity: 3, region: 'Kilimanjaro' },
+  ] });
+  const lines = written.create.items.create;
+  assert.deepEqual(lines.map((l) => [l.region, l.quantityRequested]), [['Arusha', 2], ['Kilimanjaro', 3]]);
+  assert.equal(written.create.region, null);
+});
+
+test('approve: the stock is issued as one line per product, the cities stay on the request', async () => {
+  const issued = [];
+  const updates = [];
+  const prisma = {
+    stockRequest: {
+      findUnique: async () => ({ id: 'r1', status: 'PENDING', salesRepId: 's1', warehouseId: null, requestNumber: 'REQ-1', items: [
+        { id: 'i1', productId: 'p1', packagingUnitId: 'u1', quantityRequested: 2, unitPrice: 36000, region: 'Arusha' },
+        { id: 'i2', productId: 'p1', packagingUnitId: 'u1', quantityRequested: 3, unitPrice: 36000, region: 'Kilimanjaro' },
+        { id: 'i3', productId: 'p2', packagingUnitId: 'u1', quantityRequested: 1, unitPrice: 32000, region: 'Arusha' },
+      ] }),
+      update: async ({ data }) => ({ id: 'r1', ...data }),
+    },
+    stockRequestItem: { update: async ({ where, data }) => { updates.push([where.id, data.quantityApproved]); return {}; } },
+    settlement: { findFirst: async () => ({ id: 'stl1' }) },
+    salesRepresentative: { findUnique: async () => ({ userId: 'u1' }) },
+    warehouse: { findFirst: async () => ({ id: 'w1' }) },
+  };
+  const stub = (rel, exports) => { const f = require.resolve(rel); require.cache[f] = { id: f, filename: f, loaded: true, exports }; };
+  stub('../src/config/prisma', prisma);
+  stub('../src/services/inventory.service', {
+    convertToBase: async (_c, _p, _u, qty) => ({ packaging: { unitPrice: 36000, baseQuantity: 1 }, baseQuantity: qty }),
+    warehouseBalances: async () => [{ productId: 'p1', baseQuantity: 99 }, { productId: 'p2', baseQuantity: 99 }],
+  });
+  stub('../src/services/transfers.service', { createTransfer: async (args) => { issued.push(args); return { id: 't1' }; } });
+  stub('../src/services/notification.service', { notifyAdmins: async () => {}, notifyUser: async () => {}, checkProductLowStock: async () => {} });
+  stub('../src/services/whatsappNotify.service', { background: () => {}, stockRequestSubmitted: async () => {} });
+  delete require.cache[require.resolve('../src/services/stockRequest.service')];
+  const svc = require('../src/services/stockRequest.service');
+  await svc.approve('r1', { id: 'admin' });
+  assert.equal(issued.length, 1);
+  assert.deepEqual(issued[0].items, [
+    { productId: 'p1', packagingUnitId: 'u1', quantity: 5 },
+    { productId: 'p2', packagingUnitId: 'u1', quantity: 1 },
+  ]);
+  // every request line still gets its own approved quantity
+  assert.deepEqual(updates.sort(), [['i1', 2], ['i2', 3], ['i3', 1]]);
+});
+
+test('STOCK REQUEST text split between cities says each line\'s city', () => {
+  const t = require('../src/services/whatsappText');
+  const at = new Date('2026-11-10T11:32:00Z');
+  const text = t.owner.stockRequest({ by: 'Juma', items: [{ name: 'Pepa', qty: 2, city: 'Arusha' }, { name: 'Pepa', qty: 3, city: 'Kilimanjaro' }], total: 180000, when: at });
+  assert.match(text, /\(a\) Pepa: 2 Boxes · Arusha/);
+  assert.match(text, /\(b\) Pepa: 3 Boxes · Kilimanjaro/);
+  assert.ok(!/City:/.test(text));
+});

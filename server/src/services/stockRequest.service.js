@@ -7,7 +7,17 @@ const transfers = require('./transfers.service');
 const notification = require('./notification.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2, formatCurrency } = require('../utils/money');
-const { requestRegion } = require('../constants/regions');
+const { requestItemRegions } = require('../constants/regions');
+
+// The same product, unit and city sent twice becomes one line (a defensive merge; the app sends each once).
+function mergeLines(items) {
+  const out = [];
+  for (const i of items) {
+    const same = out.find((o) => o.productId === i.productId && o.packagingUnitId === i.packagingUnitId && (o.region || null) === (i.region || null));
+    if (same) same.quantity += i.quantity; else out.push({ ...i });
+  }
+  return out;
+}
 
 const INCLUDE = {
   salesRep: { include: { user: { select: { name: true } } } },
@@ -57,13 +67,14 @@ async function create(salesRepId, payload) {
     throw ApiError.badRequest('A stock request needs at least one item');
   }
 
-  // A rep with two or more cities says which one this stock is for; with one city nothing changes.
+  // Every line's city: a one-city rep's own, or — for a rep with two or more — the one he chose for it.
   const rep = await prisma.salesRepresentative.findUnique({ where: { id: salesRepId }, select: { region: true, regions: true } });
-  const city = requestRegion(rep, payload.region);
+  const city = requestItemRegions(rep, payload.items, payload.region);
   if (city.error) throw ApiError.badRequest(city.error);
+  const items = mergeLines(city.items);
 
   const result = await prisma.$transaction(async (tx) => {
-    const productIds = [...new Set(payload.items.map((i) => i.productId))];
+    const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
     const pMap = new Map(products.map((p) => [p.id, p]));
     if (pMap.size !== productIds.length) throw ApiError.badRequest('One or more products were not found');
@@ -72,7 +83,7 @@ async function create(salesRepId, payload) {
     const lines = [];
     let totalValue = 0;
     const requestedByProduct = new Map();
-    for (const i of payload.items) {
+    for (const i of items) {
       const { packaging, baseQuantity } = await inventory.convertToBase(tx, i.productId, i.packagingUnitId, i.quantity);
       requestedByProduct.set(i.productId, (requestedByProduct.get(i.productId) || 0) + baseQuantity);
       const product = pMap.get(i.productId);
@@ -88,6 +99,7 @@ async function create(salesRepId, payload) {
         quantityRequested: i.quantity,
         unitPrice,
         lineTotal,
+        region: i.region || null,
       });
     }
 
@@ -253,13 +265,14 @@ async function update(id, payload) {
     throw ApiError.badRequest(`Only pending orders can be edited (this one is ${existing.status})`);
   }
 
-  // An edit may change the city; one that does not mention it keeps the one already chosen.
+  // An edit may change the cities; a line that does not name one keeps the request's city.
   const rep = await prisma.salesRepresentative.findUnique({ where: { id: existing.salesRepId }, select: { region: true, regions: true } });
-  const city = requestRegion(rep, payload.region !== undefined ? payload.region : existing.region);
+  const city = requestItemRegions(rep, payload.items, payload.region !== undefined ? payload.region : existing.region);
   if (city.error) throw ApiError.badRequest(city.error);
+  const items = mergeLines(city.items);
 
   const result = await prisma.$transaction(async (tx) => {
-    const productIds = [...new Set(payload.items.map((i) => i.productId))];
+    const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
     const pMap = new Map(products.map((p) => [p.id, p]));
     if (pMap.size !== productIds.length) throw ApiError.badRequest('One or more products were not found');
@@ -267,7 +280,7 @@ async function update(id, payload) {
     const lines = [];
     let totalValue = 0;
     const requestedByProduct = new Map();
-    for (const i of payload.items) {
+    for (const i of items) {
       const { packaging, baseQuantity } = await inventory.convertToBase(tx, i.productId, i.packagingUnitId, i.quantity);
       requestedByProduct.set(i.productId, (requestedByProduct.get(i.productId) || 0) + baseQuantity);
       const product = pMap.get(i.productId);
@@ -283,6 +296,7 @@ async function update(id, payload) {
         quantityRequested: i.quantity,
         unitPrice,
         lineTotal,
+        region: i.region || null,
       });
     }
 
@@ -354,7 +368,10 @@ async function approve(id, actor, approvals = []) {
       direction: 'WAREHOUSE_TO_REP',
       fromWarehouseId,
       toRepId: request.salesRepId,
-      items: toIssue.map((d) => ({ productId: d.productId, packagingUnitId: d.packagingUnitId, quantity: d.quantityApproved })),
+      // One line per product and unit, as before cities: a product split between two cities is one
+      // issue of stock to the rep (the cities stay on the request's own lines).
+      items: mergeLines(toIssue.map((d) => ({ productId: d.productId, packagingUnitId: d.packagingUnitId, quantity: d.quantityApproved })))
+        .map(({ productId, packagingUnitId, quantity }) => ({ productId, packagingUnitId, quantity })),
       notes: `Stock request ${request.requestNumber}`,
     },
     actor,

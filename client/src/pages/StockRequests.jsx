@@ -36,8 +36,9 @@ function orderDisplayValue(r) {
 function requestQty(r, i) {
   return r.status === 'FULFILLED' ? (i.quantityApproved ?? 0) : i.quantityRequested;
 }
+// Distinct products: one product split between two cities is still one product.
 function productCount(r) {
-  return r.items.filter((i) => requestQty(r, i) > 0).length;
+  return new Set(r.items.filter((i) => requestQty(r, i) > 0).map((i) => i.productId)).size;
 }
 function boxCount(r) {
   return r.items.reduce((s, i) => s + (requestQty(r, i) || 0), 0);
@@ -53,6 +54,13 @@ function requestDisplayStatus(r) {
   }
   const m = REQUEST_STATUS_META[r.status] || {};
   return { label: m.label || r.status, cls: m.cls || 'bg-elevated text-muted' };
+}
+
+// The cities a request is for, in short form: its lines' cities (a rep with several cities can split one
+// request between them), else the request's own city. Empty for old requests and one-city-less reps.
+function requestCities(r) {
+  const fromLines = [...new Set((r?.items || []).map((i) => i.region).filter(Boolean))];
+  return (fromLines.length ? fromLines : r?.region ? [r.region] : []).map(shortRegion);
 }
 
 function defaultPkg(product) {
@@ -78,24 +86,47 @@ function CartOrderSheet({ onClose, existing }) {
     queryFn: async () => unwrap(await api.get('/stock-requests/available-products')).data,
     refetchInterval: STEADY,
   });
-  const [cart, setCart] = useState(() =>
-    existing ? Object.fromEntries(existing.items.map((i) => [i.productId, i.quantityRequested])) : {},
-  );
   const [search, setSearch] = useState('');
   const [notes, setNotes] = useState(existing?.notes || '');
   const qc = useQueryClient();
-  // The city this stock is for (Nino, 11 Nov 2026). One city: it is shown, already chosen, nothing to tap.
-  // Two or more: he picks one of his own — whenever he likes, products first is fine; only a Request
-  // without a city is stopped, with "Choose the city".
+  // The city each box is for (Nino, 11 Nov 2026). One city: it is shown, already chosen, nothing to tap.
+  // Two or more: the city words are tabs — the boxes set while a city is chosen are that city's, so one
+  // request can carry boxes for several cities ("tell which box belongs to which city, but keep it simple").
+  // Products first is fine: boxes set before any city is chosen go to the first city he taps; a Request
+  // with boxes that still have no city is stopped with "Choose the city".
   const { user } = useAuth();
   const cities = repRegions(user?.salesRep);
   const hasCity = cities.length > 0;
   const multiCity = cities.length > 1;
+  const cityOf = (r) => (cities.length === 1 ? cities[0] : r && cities.includes(r) ? r : '');
   const [city, setCity] = useState(() => (cities.length === 1
     ? cities[0]
-    : existing?.region && cities.includes(existing.region) ? existing.region : ''));
+    : cityOf(existing?.region) || cityOf(existing?.items?.find((i) => cityOf(i.region))?.region)));
   const [askCity, setAskCity] = useState(false);
   const cityRef = useRef(null);
+  // cart: { [city or '']: { [productId]: boxes } } — '' holds boxes set before a city was chosen
+  const [cart, setCart] = useState(() => {
+    const init = {};
+    for (const i of existing?.items || []) {
+      const c = cityOf(i.region);
+      init[c] = { ...(init[c] || {}), [i.productId]: ((init[c] || {})[i.productId] || 0) + i.quantityRequested };
+    }
+    return init;
+  });
+  const bucket = cart[city] || {};
+  const chooseCity = (c) => {
+    setCart((prev) => {
+      const loose = prev[''];
+      if (!loose || !Object.keys(loose).length || !c) return prev;
+      const merged = { ...(prev[c] || {}) };
+      for (const [pid, q] of Object.entries(loose)) merged[pid] = (merged[pid] || 0) + q;
+      const next = { ...prev, [c]: merged };
+      delete next[''];
+      return next;
+    });
+    setCity(c);
+    setAskCity(false);
+  };
 
   // In-stock set; when editing, keep this order's existing products visible too
   // so they can still be reduced/removed even if now out of stock.
@@ -107,24 +138,33 @@ function CartOrderSheet({ onClose, existing }) {
 
   function setQty(productId, qty) {
     setCart((prev) => {
-      if (qty <= 0) { const n = { ...prev }; delete n[productId]; return n; }
-      return { ...prev, [productId]: qty };
+      const b = { ...(prev[city] || {}) };
+      if (qty <= 0) delete b[productId]; else b[productId] = qty;
+      return { ...prev, [city]: b };
     });
   }
-  const inc = (id) => setQty(id, (cart[id] || 0) + 1);
-  const dec = (id) => setQty(id, (cart[id] || 0) - 1);
+  const inc = (id) => setQty(id, (bucket[id] || 0) + 1);
+  const dec = (id) => setQty(id, (bucket[id] || 0) - 1);
 
-  const cartEntries = useMemo(() =>
-    Object.entries(cart).map(([productId, qty]) => {
-      const product = products.find((p) => p.id === productId);
-      if (!product) return null;
-      const pkg = defaultPkg(product);
-      const price = pkgPrice(product, pkg);
-      return { productId, product, pkg, qty, price, lineTotal: price * qty };
-    }).filter(Boolean),
-  [cart, products]);
+  // One line per city and product, in the order the cities are listed.
+  const cartEntries = useMemo(() => {
+    const order = ['', ...cities];
+    return Object.entries(cart)
+      .sort(([a], [b]) => order.indexOf(a) - order.indexOf(b))
+      .flatMap(([c, items]) => Object.entries(items).filter(([, qty]) => qty > 0).map(([productId, qty]) => {
+        const product = products.find((p) => p.id === productId);
+        if (!product) return null;
+        const pkg = defaultPkg(product);
+        const price = pkgPrice(product, pkg);
+        return { city: c, productId, product, pkg, qty, price, lineTotal: price * qty };
+      }))
+      .filter(Boolean);
+  }, [cart, products, cities]);
 
-  const cartCount = Object.keys(cart).length;
+  const cartCount = new Set(cartEntries.map((e) => e.productId)).size;
+  const boxesIn = (c) => cartEntries.filter((e) => e.city === c).reduce((n, e) => n + e.qty, 0);
+  const usedCities = cities.filter((c) => boxesIn(c) > 0);
+  const loose = boxesIn('');
   const totalBoxes = cartEntries.reduce((s, e) => s + e.qty, 0);
   const totalAmount = cartEntries.reduce((s, e) => s + e.lineTotal, 0);
 
@@ -136,13 +176,14 @@ function CartOrderSheet({ onClose, existing }) {
   const create = useMutation({
     mutationFn: () => {
       const body = {
-        items: cartEntries.map(({ productId, pkg, qty }) => ({
+        items: cartEntries.map(({ city: c, productId, pkg, qty }) => ({
           productId,
           packagingUnitId: pkg.packagingUnitId,
           quantity: qty,
+          ...(c ? { region: c } : {}),
         })),
         notes: notes || undefined,
-        ...(hasCity && city ? { region: city } : {}),
+        ...(usedCities.length === 1 ? { region: usedCities[0] } : {}),
       };
       return editing
         ? api.put(`/stock-requests/${existing.id}`, body)
@@ -166,7 +207,12 @@ function CartOrderSheet({ onClose, existing }) {
         <div className="flex items-baseline justify-between gap-3 px-1">
           <span className="text-[13px] text-muted">
             {formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} · {cartCount} product{cartCount !== 1 ? 's' : ''}
-            {hasCity && city ? ` · ${shortRegion(city)}` : ''}
+            {usedCities.length === 1 && !loose ? ` · ${shortRegion(usedCities[0])}` : ''}
+            {usedCities.length > 1 && (
+              <span className="mt-0.5 block text-[12px] text-faint">
+                {usedCities.map((c) => `${shortRegion(c)} ${formatNumber(boxesIn(c))}`).join(' · ')}
+              </span>
+            )}
           </span>
           <span className="text-base font-bold tabular-nums text-foreground">{formatCurrency(totalAmount)}</span>
         </div>
@@ -180,7 +226,7 @@ function CartOrderSheet({ onClose, existing }) {
           className="h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold"
           disabled={cartCount === 0 || create.isPending}
           onClick={() => {
-            if (multiCity && !city) {
+            if (multiCity && loose > 0) {
               setAskCity(true);
               toast.error('Choose the city');
               cityRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -204,8 +250,8 @@ function CartOrderSheet({ onClose, existing }) {
           "Choose the city" only after a Request was tapped without one. */}
       {hasCity && (
         <div ref={cityRef} className="mb-4 px-1">
-          <p className={clsx('text-xs', askCity && !city ? 'font-medium text-brand-600' : 'text-muted')}>
-            {askCity && !city ? 'Choose the city' : 'City'}
+          <p className={clsx('text-xs', askCity && loose > 0 ? 'font-medium text-brand-600' : 'text-muted')}>
+            {askCity && loose > 0 ? 'Choose the city' : 'City'}
           </p>
           <div role="radiogroup" aria-label="City" className="flex flex-wrap gap-x-5">
             {cities.map((c) => (
@@ -215,13 +261,14 @@ function CartOrderSheet({ onClose, existing }) {
                 role="radio"
                 aria-checked={city === c}
                 disabled={!multiCity}
-                onClick={() => { setCity(c); setAskCity(false); }}
+                onClick={() => chooseCity(c)}
                 className={clsx(
                   'relative py-2.5 text-[15px] transition disabled:cursor-default',
                   city === c ? 'font-semibold text-foreground' : 'font-medium text-muted hover:text-foreground',
                 )}
               >
                 {shortRegion(c)}
+                {multiCity && boxesIn(c) > 0 && <span className="ml-1.5 text-[12px] font-medium tabular-nums text-muted">{formatNumber(boxesIn(c))}</span>}
                 <span aria-hidden="true" className={clsx('absolute inset-x-0 bottom-1 h-[2px] rounded-full bg-brand-500 transition-opacity', city === c ? 'opacity-100' : 'opacity-0')} />
               </button>
             ))}
@@ -256,8 +303,12 @@ function CartOrderSheet({ onClose, existing }) {
           {filtered.map((product) => {
             const pkg = defaultPkg(product);
             const price = pkgPrice(product, pkg);
-            const qty = cart[product.id] || 0;
+            const qty = bucket[product.id] || 0;
             const inCart = qty > 0;
+            // The same product's boxes for the rep's other cities, said quietly under the price.
+            const elsewhere = multiCity
+              ? cities.filter((c) => c !== city && (cart[c] || {})[product.id] > 0).map((c) => `+${cart[c][product.id]} ${shortRegion(c)}`)
+              : [];
 
             return (
               <li
@@ -280,6 +331,7 @@ function CartOrderSheet({ onClose, existing }) {
                 <div className="mt-1.5 flex items-center gap-3 pl-7">
                   <div className="min-w-0 flex-1 text-xs text-faint">
                     {formatCurrency(price)} / {pkg?.packagingUnit?.name || 'box'}
+                    {elsewhere.length > 0 && <span className="block truncate text-muted">{elsewhere.join(' · ')}</span>}
                   </div>
 
                   {/* qty controls — type directly or tap +/- */}
@@ -333,9 +385,9 @@ function CartOrderSheet({ onClose, existing }) {
           </div>
           <NumberedLines
             items={cartEntries.map((e) => ({
-              key: e.productId,
+              key: `${e.city}|${e.productId}`,
               name: e.product.name,
-              detail: `${e.qty} ${e.pkg?.packagingUnit?.name || 'box'} × ${formatCurrency(e.price)}`,
+              detail: `${e.qty} ${e.pkg?.packagingUnit?.name || 'box'} × ${formatCurrency(e.price)}${multiCity && e.city ? ` · ${shortRegion(e.city)}` : ''}`,
               value: formatCurrency(e.lineTotal),
             }))}
           />
@@ -427,7 +479,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div><div className="text-xs text-faint">Rep</div><div className="font-medium">{request.salesRep?.user?.name}</div></div>
-          {request.region && <div><div className="text-xs text-faint">City</div><div className="font-medium">{shortRegion(request.region)}</div></div>}
+          {requestCities(request).length > 0 && <div><div className="text-xs text-faint">{requestCities(request).length > 1 ? 'Cities' : 'City'}</div><div className="font-medium">{requestCities(request).join(' · ')}</div></div>}
           <div><div className="text-xs text-faint">Status</div><div className={clsx('font-medium', requestDisplayStatus(request).cls?.split(' ').find((c) => c.startsWith('text-')) || 'text-foreground')}>{requestDisplayStatus(request).label}</div></div>
           <div><div className="text-xs text-faint">Requested</div><div className="font-medium">{formatDateTime(request.requestedAt)}</div></div>
           <div><div className="text-xs text-faint">Lines</div><div className="font-medium">{displayItems.length}</div></div>
@@ -446,7 +498,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
             return {
               key: i.id,
               name: i.product.name,
-              detail: `${fulfilled ? 'Approved' : 'Requested'} ${qty} ${i.packagingUnit.name} × ${formatCurrency(i.unitPrice)}`,
+              detail: `${fulfilled ? 'Approved' : 'Requested'} ${qty} ${i.packagingUnit.name} × ${formatCurrency(i.unitPrice)}${requestCities(request).length > 1 && i.region ? ` · ${shortRegion(i.region)}` : ''}`,
               value: formatCurrency(lineTotal),
               extra: editable && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-faint">
@@ -496,7 +548,7 @@ function RepRequestCard({ r, onClick }) {
       </div>
 
       <div className="mt-1.5 text-xs text-faint">
-        {r.region && <span className="font-medium text-muted">{shortRegion(r.region)} · </span>}
+        {requestCities(r).length > 0 && <span className="font-medium text-muted">{requestCities(r).join(' · ')} · </span>}
         {products} product{products !== 1 ? 's' : ''} · {formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatDateTime(r.requestedAt)}
       </div>
 
@@ -523,7 +575,7 @@ function RepRequestRow({ r, onClick }) {
     >
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-foreground">{r.requestNumber}</p>
-        <p className="mt-0.5 text-xs tabular-nums text-muted">{formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}{r.region ? ` · ${shortRegion(r.region)}` : ''}</p>
+        <p className="mt-0.5 text-xs tabular-nums text-muted">{formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}{requestCities(r).length ? ` · ${requestCities(r).join(' · ')}` : ''}</p>
       </div>
       <div className="shrink-0 text-right">
         <p className={clsx('text-[13px] font-medium', tone)}>{ds.label}</p>
@@ -629,11 +681,12 @@ function PendingRequestApprovals({ onReview }) {
             <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
               <button onClick={() => onReview(r)} className="min-w-0 flex-1 text-left" title="Open to review or adjust quantities">
                 <div className="text-sm font-semibold text-foreground">
-                  {r.salesRep?.user?.name} ({r.salesRep?.code}){r.region ? ` · ${shortRegion(r.region)}` : ''} · {formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}
+                  {r.salesRep?.user?.name} ({r.salesRep?.code}){requestCities(r).length ? ` · ${requestCities(r).join(' · ')}` : ''} · {formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}
                 </div>
                 {r.items.map((i) => (
                   <div key={i.id} className="mt-0.5 text-xs text-faint">
                     <span className="font-semibold text-muted">{i.quantityRequested}×</span> {i.product?.name}
+                    {requestCities(r).length > 1 && i.region ? <span className="text-muted"> · {shortRegion(i.region)}</span> : null}
                   </div>
                 ))}
                 <div className="mt-0.5 text-xs text-faint">
@@ -773,7 +826,7 @@ function StaffRequestTable({ onView }) {
                   return (
                     <TR key={r.id} className="cursor-pointer" onClick={() => onView(r)}>
                       <TD className="font-medium">{r.requestNumber}</TD>
-                      <TD>{r.salesRep?.user?.name}{r.region && <div className="text-xs text-muted">{shortRegion(r.region)}</div>}</TD>
+                      <TD>{r.salesRep?.user?.name}{requestCities(r).length > 0 && <div className="text-xs text-muted">{requestCities(r).join(' · ')}</div>}</TD>
                       {/* The number this page exists to record. */}
                       <TD>
                         <span className="font-semibold tabular-nums text-foreground">{formatNumber(given)}</span>

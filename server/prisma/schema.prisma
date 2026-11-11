@@ -1179,6 +1179,9 @@ model StockRequestItem {
   quantityRequested Int
   quantityApproved  Int?
   baseQuantity      Int      @default(0) // approved base qty, set on approval
+  // The city these boxes are for. A rep with several cities can split one request between them (Nino,
+  // 11 Nov 2026), so the same product may appear once per city. Empty for old requests.
+  region            String?
   unitPrice         Decimal? @db.Decimal(14, 2) // selling price per chosen unit
   lineTotal         Decimal? @db.Decimal(16, 2) // unitPrice * quantityRequested
 

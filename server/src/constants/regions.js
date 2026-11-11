@@ -158,4 +158,24 @@ function requestRegion(rep, asked) {
   return { region: picked };
 }
 
-module.exports = { TZ_REGIONS, canonicalRegion, DEFAULT_REGION, cleanRegions, repRegions, regionWrite, regionWhere, mergeRegionRevenue, requestRegion };
+// The city of every line of a stock request (Nino, 11 Nov 2026: "a rep with two or more cities can put boxes
+// for each city in the same request — tell which box belongs to which city"). One city: every line is that
+// city. None: no city. Two or more: each line must name one of HIS cities (a line without one takes the
+// request's own city, `fallback`). Returns { items, region } — region is the request's city when every line
+// shares one, else null — or { error }.
+function requestItemRegions(rep, items, fallback) {
+  const mine = repRegions(rep);
+  if (mine.length === 0) return { items: items.map((i) => ({ ...i, region: null })), region: null };
+  if (mine.length === 1) return { items: items.map((i) => ({ ...i, region: mine[0] })), region: mine[0] };
+  const out = [];
+  for (const i of items) {
+    const picked = canonicalRegion(i.region || fallback);
+    if (!picked) return { error: 'Pick the city for every box.' };
+    if (!mine.includes(picked)) return { error: `${picked} is not one of your cities.` };
+    out.push({ ...i, region: picked });
+  }
+  const used = [...new Set(out.map((i) => i.region))];
+  return { items: out, region: used.length === 1 ? used[0] : null };
+}
+
+module.exports = { TZ_REGIONS, canonicalRegion, DEFAULT_REGION, cleanRegions, repRegions, regionWrite, regionWhere, mergeRegionRevenue, requestRegion, requestItemRegions };
