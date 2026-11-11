@@ -368,7 +368,7 @@ function RepsThisMonth({ reps, onOpen }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
               <p className="mt-0.5 truncate text-xs text-muted">
-                {r.code} · {formatNumber(r.boxesHeld)} boxes · {formatNumber(r.activeOrders)} open
+                {r.code} · {formatNumber(r.boxesHeld)} {r.boxesHeld === 1 ? 'box' : 'boxes'} · {formatNumber(r.activeOrders)} open
                 {r.overdueOrders > 0 && <span className="text-rose-300"> · {formatNumber(r.overdueOrders)} overdue</span>}
               </p>
             </div>
