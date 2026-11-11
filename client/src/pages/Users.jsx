@@ -186,10 +186,10 @@ export default function Users() {
                         {/* Your own account is never offered for Suspend or Delete — the server refuses
                             both, but the buttons should not be there to click. */}
                         {u.id !== me?.id && (
-                          <button title={u.isActive ? 'Suspend' : 'Activate'} className="btn-ghost px-2 py-1 text-rose-600" onClick={() => (u.isActive ? setSuspending(u) : toggle.mutate(u))}><Power className="h-4 w-4" /></button>
+                          <button title={u.isActive ? 'Suspend' : 'Activate'} className="btn-ghost px-2 py-1 text-faint hover:text-rose-400" onClick={() => (u.isActive ? setSuspending(u) : toggle.mutate(u))}><Power className="h-4 w-4" /></button>
                         )}
                         {u.id !== me?.id && (
-                          <button title="Delete for good" className="btn-ghost px-2 py-1 text-rose-600" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4" /></button>
+                          <button title="Delete for good" className="btn-ghost px-2 py-1 text-faint hover:text-rose-400" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4" /></button>
                         )}
                       </div>
                     </TD>
