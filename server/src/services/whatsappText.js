@@ -87,16 +87,17 @@ const owner = {
     return fitted(build, steps.length ? steps : [{ shown: 0 }]);
   },
 
-  // Who and which order / the product / the money: small groups, not one block.
-  // Several products sent together (`items`) are "Product 1:", "Product 2:" each with its Boxes
-  // Sold, then the total boxes, then what was paid to each account and the commission. Like a long
-  // stock request, a very long one drops lines from the LIST and never from the money.
+  // Who and which order / the products / the money: small groups, not one block.
+  // Every product is lettered like the stock request — "(a) Name" with its Boxes Sold under it (Nino,
+  // 11 Nov 2026: "any text that comes with a list of products must come with a b c d"), one product too.
+  // Several products then show the total boxes, then what was paid to each account and the commission.
+  // Like a long stock request, a very long one drops lines from the LIST and never from the money.
   settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when, items, payments }) => {
     const head = [lines(bold('SETTLEMENT SUBMITTED'), dateOnly(when)), lines(`By: ${by}`, `Order: ${order}`)];
     if (!items || items.length <= 1) {
       return doc(
         ...head,
-        lines(`Product: ${product}`, `Boxes Sold: ${Math.round(Number(n) || 0)}`),
+        lines(`(a) ${product}`, `Boxes Sold: ${Math.round(Number(n) || 0)}`),
         lines(`Payment: ${money(amount)}${method ? ` (${method})` : ''}`, Number(commission) > 0 && `Commission: ${money(commission)}`),
       );
     }
@@ -107,7 +108,7 @@ const owner = {
     );
     const build = ({ gap, shown }) => doc(
       ...head,
-      items.slice(0, shown).map((i, k) => lines(`Product ${k + 1}: ${i.product}`, `Boxes Sold: ${Math.round(Number(i.boxes) || 0)}`)).join(gap ? '\n\n' : '\n'),
+      items.slice(0, shown).map((i, k) => lines(`(${letter(k)}) ${i.product}`, `Boxes Sold: ${Math.round(Number(i.boxes) || 0)}`)).join(gap ? '\n\n' : '\n'),
       shown < items.length && `+${items.length - shown} more, see ZELab`,
       `Total Boxes: ${Math.round(totalBoxes)}`,
       paid,
@@ -117,13 +118,18 @@ const owner = {
     return fitted(build, steps);
   },
 
-  // Who and which order, then each product with its quantity, then the reason.
-  returnRequest: ({ by, order, items = [], reason }) => doc(
-    bold('RETURN REQUEST'),
-    lines(`By: ${by}`, order && `Order: ${order}`),
-    ...items.map((i) => lines(`Product: ${i.name}`, `Quantity: ${boxes(i.quantity)}`)),
-    reason && `Reason: ${reason}`,
-  ),
+  // Who and which order, then the products lettered like the stock request ("(a) Name: 4 Boxes"), the
+  // total when there are several, then the reason.
+  returnRequest: ({ by, order, items = [], reason }) => {
+    const total = items.reduce((t, i) => t + (Number(i.quantity) || 0), 0);
+    return doc(
+      bold('RETURN REQUEST'),
+      lines(`By: ${by}`, order && `Order: ${order}`),
+      items.length > 0 && lines(...items.map((i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.quantity)}`)),
+      items.length > 1 && `Total Boxes: ${Math.round(total)}`,
+      reason && `Reason: ${reason}`,
+    );
+  },
 
   commissionReady: ({ rep, available, earned, penalties, minimum }) => doc(
     bold('COMMISSION READY'),

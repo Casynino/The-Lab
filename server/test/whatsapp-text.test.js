@@ -76,7 +76,7 @@ test('SETTLEMENT SUBMITTED', () => {
 By: Asha Mwinyi
 Order: STL-20261110-0001
 
-Product: Pepa King Size
+(a) Pepa King Size
 Boxes Sold: 10
 
 Payment: TSh 380,000 (CRDB)
@@ -97,15 +97,14 @@ test('RETURN REQUEST', () => {
 By: Asha Mwinyi
 Order: STL-20261110-0001
 
-Product: Pepa Roll
-Quantity: 4 Boxes
+(a) Pepa Roll: 4 Boxes
 
 Reason: Damaged`);
 });
 
-test('RETURN REQUEST with several products gives each its own Product / Quantity', () => {
+test('RETURN REQUEST with several products letters them like the stock request, with the total', () => {
   const text = t.owner.returnRequest({ by: 'W', order: null, items: [{ name: 'A', quantity: 1 }, { name: 'B', quantity: 2 }], reason: null });
-  assert.equal(text, '*RETURN REQUEST*\n\nBy: W\n\nProduct: A\nQuantity: 1 Box\n\nProduct: B\nQuantity: 2 Boxes');
+  assert.equal(text, '*RETURN REQUEST*\n\nBy: W\n\n(a) A: 1 Box\n(b) B: 2 Boxes\n\nTotal Boxes: 3');
 });
 
 test('COMMISSION READY', () => {
@@ -523,7 +522,7 @@ test('no alert is a wall of text: every block is at most 4 lines, with a blank l
 });
 
 // ── several products in one settlement message ───────────────────────────────
-test('SETTLEMENT SUBMITTED with several products: Product 1 / Boxes Sold, the total, then the money', () => {
+test('SETTLEMENT SUBMITTED with several products: (a) / (b) with Boxes Sold, the total, then the money', () => {
   assert.equal(t.owner.settlementSubmitted({
     by: 'Mrema', order: 'STL-20261101-0001', when: at, commission: 15000,
     items: [{ product: 'OHIS Pepa Ndogo (White) – Bila Filter', boxes: 2 }, { product: 'Civlily Pepa Kubwa (Brown) – Bila Filter', boxes: 1 }],
@@ -535,10 +534,10 @@ test('SETTLEMENT SUBMITTED with several products: Product 1 / Boxes Sold, the to
 By: Mrema
 Order: STL-20261101-0001
 
-Product 1: OHIS Pepa Ndogo (White) – Bila Filter
+(a) OHIS Pepa Ndogo (White) – Bila Filter
 Boxes Sold: 2
 
-Product 2: Civlily Pepa Kubwa (Brown) – Bila Filter
+(b) Civlily Pepa Kubwa (Brown) – Bila Filter
 Boxes Sold: 1
 
 Total Boxes: 3
@@ -553,4 +552,20 @@ test('SETTLEMENT SUBMITTED, a very long batch keeps the total and the money; onl
   const text = t.owner.settlementSubmitted({ by: 'Mrema', order: 'STL-1', when: at, commission: 160000, items, payments: [{ method: 'M-Pesa', amount: 960000 }] });
   assert.ok(text.length <= t.MAX_REPORT_CHARS, `${text.length} characters`);
   assert.match(text, /\+\d+ more, see ZELab\n\nTotal Boxes: 32\n\nPayment: TSh 960,000 \(M-Pesa\)\nCommission: TSh 160,000$/);
+});
+
+// Nino's own sample (11 Nov 2026): one product is lettered too.
+test('SETTLEMENT SUBMITTED for one product reads exactly like the owner\'s sample', () => {
+  assert.equal(t.owner.settlementSubmitted({ by: 'Nyoya', order: 'STL-20261110-0001', product: 'OHIS Pepa Ndogo (Brown) – Bila Filter', boxes: 1, amount: 30000, method: 'M-Pesa', commission: 5000, when: at }),
+`*SETTLEMENT SUBMITTED*
+10 Nov 2026
+
+By: Nyoya
+Order: STL-20261110-0001
+
+(a) OHIS Pepa Ndogo (Brown) – Bila Filter
+Boxes Sold: 1
+
+Payment: TSh 30,000 (M-Pesa)
+Commission: TSh 5,000`);
 });
