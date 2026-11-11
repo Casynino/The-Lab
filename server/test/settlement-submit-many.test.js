@@ -142,3 +142,26 @@ test('the original single submit still works the same way', async () => {
   assert.equal(calls.waSingle.length, 1);
   await assert.rejects(svc.submit('ord1', { productId: 'p2', boxes: 3, accountId: 'airtel' }, rep), /Only 2 box/);
 });
+
+test('no account sent: the brand\'s one account is used, and a typed method ("CASH") is never stored (audit, 11 Nov 2026)', async () => {
+  reset();
+  const sub = await svc.submit('ord1', { productId: 'p2', boxes: 1, method: 'CASH' }, rep);
+  assert.equal(sub.method, 'Airtel Money', 'the owner reads where the money is booked');
+  assert.equal(sub.accountId, 'airtel');
+  const [line] = await svc.submitMany('ord1', { items: [{ productId: 'p1', boxes: 1, method: 'CASH' }] }, rep);
+  assert.deepEqual([line.method, line.accountId], ['M-Pesa', 'mpesa']);
+});
+
+test('no account sent where there is a choice, or no account at all: refused, nothing saved', async () => {
+  reset();
+  PRODUCTS.p3 = { id: 'p3', name: 'Unbranded box', sellingPrice: 10000, brandId: 'two' };
+  OUTSTANDING.p3 = 3;
+  ACCOUNTS.two = [{ id: 'a1', name: 'M-Pesa' }, { id: 'a2', name: 'Airtel Money' }];
+  await assert.rejects(svc.submit('ord1', { productId: 'p3', boxes: 1, method: 'CASH' }, rep), /Select a valid payment account/);
+  const sub = await svc.submit('ord1', { productId: 'p3', boxes: 1, accountId: 'a2' }, rep);
+  assert.equal(sub.method, 'Airtel Money', 'a chosen account still works');
+  ACCOUNTS.two = [];
+  await assert.rejects(svc.submit('ord1', { productId: 'p3', boxes: 1 }, rep), /Select a valid payment account/);
+  assert.equal(db.committed.length, 1);
+  delete PRODUCTS.p3; delete OUTSTANDING.p3; delete ACCOUNTS.two;
+});
