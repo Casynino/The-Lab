@@ -421,54 +421,57 @@ function GlassSidebar({
    10 Nov 2026: "keep the name simple, just one name, not too many words").
    The full name and the role are on My profile. In the rail only the initials
    show. */
-function Footer({ rail, mode, user, unread, onProfile, onPassword, onNotifications, onSignOut }) {
+function Footer({ rail, mode, user, onProfile, onPassword, onSignOut }) {
   const [open, setOpen] = useState(false);
   const firstName = (user?.name || '').trim().split(/\s+/)[0] || user?.name;
   const item = 'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-muted transition hover:bg-white/[0.06] hover:text-foreground';
 
+  // The list (Nino, 11 Nov 2026: "no pop-up, just make the list simple and clean — and no notifications here,
+  // the bell has those"): My profile (where the name and details are), Change password, Get the app, Sign out.
+  const list = (
+    <>
+      <button className={item} onClick={() => { setOpen(false); onProfile(); }}><User className="h-3.5 w-3.5" /> My profile</button>
+      <button className={item} onClick={() => { setOpen(false); onPassword(); }}><Lock className="h-3.5 w-3.5" /> Change password</button>
+      {/* Draws nothing on a computer, or once it is on the home screen. */}
+      <InstallButton render={(openSheet) => (
+        <button className={item} onClick={() => { setOpen(false); openSheet(); }}>
+          <Smartphone className="h-3.5 w-3.5" /> Get the app
+        </button>
+      )} />
+      <button className={clsx(item, 'text-rose-400 hover:bg-rose-500/10 hover:text-rose-300')} onClick={onSignOut}>
+        <LogOut className="h-3.5 w-3.5" /> Sign out
+      </button>
+    </>
+  );
+
   return (
     <div className={clsx('relative shrink-0', rail ? 'flex flex-col items-center pb-3' : 'px-3 pb-3', mode === 'sheet' && 'pb-[max(0.75rem,env(safe-area-inset-bottom))]')}>
       <div aria-hidden className="glass-divider mb-2 w-full" />
-      {open && <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />}
-      {open && (
-        <div className={clsx(
-          'modal-glass absolute z-30 w-48 overflow-hidden !rounded-2xl p-1.5',
-          rail ? 'bottom-2 left-[calc(100%+0.75rem)]' : 'bottom-[calc(100%-0.5rem)] left-3',
-        )}>
-          <div className="px-2.5 pb-1.5 pt-1">
-            <span className="block truncate text-[13px] font-semibold leading-snug text-foreground">{firstName}</span>
-          </div>
-          <button className={item} onClick={() => { setOpen(false); onProfile(); }}><User className="h-3.5 w-3.5" /> My profile</button>
-          <button className={item} onClick={() => { setOpen(false); onNotifications(); }}>
-            <Bell className="h-3.5 w-3.5" /><span className="flex-1">Notifications</span><CountPill count={unread} />
-          </button>
-          <button className={item} onClick={() => { setOpen(false); onPassword(); }}><Lock className="h-3.5 w-3.5" /> Change password</button>
-          {/* Draws nothing on a computer, or once it is on the home screen. */}
-          <InstallButton render={(openSheet) => (
-            <button className={item} onClick={() => { setOpen(false); openSheet(); }}>
-              <Smartphone className="h-3.5 w-3.5" /> Get the app
-            </button>
-          )} />
-          <div className="my-1 border-t border-white/[0.07]" />
-          <button className={clsx(item, 'text-rose-400 hover:bg-rose-500/10 hover:text-rose-300')} onClick={onSignOut}>
-            <LogOut className="h-3.5 w-3.5" /> Sign out
-          </button>
-        </div>
+      {/* Only the folded icon strip still needs a pop-up: there is no room for a list beside icons. */}
+      {rail && open && <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />}
+      {rail && open && (
+        <div className="modal-glass absolute bottom-2 left-[calc(100%+0.75rem)] z-30 w-48 overflow-hidden !rounded-2xl p-1.5">{list}</div>
       )}
       <button
         type="button"
         title={firstName}
         data-hint={firstName}
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className={clsx('glass-row flex w-full cursor-pointer items-center gap-3 rounded-full text-left', FOCUS, rail ? 'justify-center p-1' : 'px-2 py-2')}
       >
-        <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#2b3b20] to-[#141d0e] text-xs font-semibold text-brand-200 ring-1 ring-white/20">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#2b3b20] to-[#141d0e] text-xs font-semibold text-brand-200 ring-1 ring-white/20">
           {initials(user?.name)}
-          {unread > 0 && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-[#12150f]" />}
         </span>
-        {rail ? <span className="sr-only">{firstName}</span>
-          : <span className="g-strong min-w-0 flex-1 truncate text-sm font-semibold">{firstName}</span>}
+        {rail ? <span className="sr-only">{firstName}</span> : (
+          <>
+            <span className="g-strong min-w-0 flex-1 truncate text-sm font-semibold">{firstName}</span>
+            <ChevronDown className={clsx('mr-1 h-4 w-4 shrink-0 text-faint transition-transform duration-200', open && 'rotate-180')} aria-hidden="true" />
+          </>
+        )}
       </button>
+      {/* On the phone and the open desk panel the list simply opens under the name, in the sidebar itself. */}
+      {!rail && open && <div className="mt-1 space-y-0.5 px-1">{list}</div>}
     </div>
   );
 }
