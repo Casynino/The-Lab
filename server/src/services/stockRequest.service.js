@@ -5,9 +5,17 @@ const ApiError = require('../utils/ApiError');
 const inventory = require('./inventory.service');
 const transfers = require('./transfers.service');
 const notification = require('./notification.service');
-const { nextDocNumber } = require('../utils/numbering');
+const { nextDocNumber, withDocNumberRetry } = require('../utils/numbering');
 const { toNumber, round2, formatCurrency } = require('../utils/money');
 const { requestItemRegions } = require('../constants/regions');
+const { dateTime, boxes: unitCount } = require('./whatsappText'); // "3 Boxes", "1 Carton"
+
+// A product switched off in Products cannot be requested or issued any more (audit, 11 Nov 2026): the
+// app hid it, but the API took it, and an approved order for it could never be settled.
+function assertAllActive(products) {
+  const off = products.find((p) => p.isActive === false);
+  if (off) throw ApiError.badRequest(`${off.name} is no longer available — remove it from the request.`);
+}
 
 // The same product, unit and city sent twice becomes one line (a defensive merge; the app sends each once).
 function mergeLines(items) {
@@ -54,20 +62,30 @@ async function availabilityMap(client, warehouseId) {
 
 // Throw if any product's requested base units exceed warehouse stock. The
 // quantities/levels themselves are never surfaced to the rep (Rule 5).
+// `message` is a string, or a function of the short product's id.
 async function assertWithinStock(client, warehouseId, requestedByProduct, message) {
   const avail = await availabilityMap(client, warehouseId);
   for (const [productId, reqBase] of requestedByProduct) {
-    if (reqBase > (avail.get(productId) || 0)) throw ApiError.badRequest(message);
+    if (reqBase > (avail.get(productId) || 0)) {
+      throw ApiError.badRequest(typeof message === 'function' ? message(productId) : message);
+    }
   }
 }
 
-// Product ids currently in stock at the fulfilling warehouse (no counts exposed).
+// Product ids currently in stock at the fulfilling warehouse (no counts exposed). Only products that
+// are still switched on: the rep's list must not offer one he can no longer request.
 async function availableProductIds() {
   const avail = await availabilityMap(prisma);
-  return [...avail.entries()].filter(([, qty]) => qty > 0).map(([pid]) => pid);
+  const ids = [...avail.entries()].filter(([, qty]) => qty > 0).map(([pid]) => pid);
+  if (ids.length === 0) return ids;
+  const active = await prisma.product.findMany({ where: { id: { in: ids }, isActive: true }, select: { id: true } });
+  const on = new Set(active.map((p) => p.id));
+  return ids.filter((pid) => on.has(pid));
 }
 
-const STOCK_EXCEEDED_MSG = 'Requested quantity exceeds available stock..contact the lab';
+// Names the product that is short, never how many are left (Rule 5).
+const stockExceeded = (pMap) => (productId) =>
+  `Not enough ${pMap.get(productId)?.name || 'of one product'} in stock — lower that line or contact the lab.`;
 
 async function create(salesRepId, payload) {
   if (!payload.items || payload.items.length === 0) {
@@ -80,11 +98,13 @@ async function create(salesRepId, payload) {
   if (city.error) throw ApiError.badRequest(city.error);
   const items = mergeLines(city.items);
 
-  const result = await prisma.$transaction(async (tx) => {
+  // Two requests sent at the same moment can pick the same REQ number; the loser is run again.
+  const result = await withDocNumberRetry(() => prisma.$transaction(async (tx) => {
     const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
     const pMap = new Map(products.map((p) => [p.id, p]));
     if (pMap.size !== productIds.length) throw ApiError.badRequest('One or more products were not found');
+    assertAllActive(products);
 
     // Price every line at the selling price for its chosen unit (Box/Carton).
     const lines = [];
@@ -111,7 +131,7 @@ async function create(salesRepId, payload) {
     }
 
     // Can't request products/quantities beyond what ZELab currently holds.
-    await assertWithinStock(tx, payload.warehouseId, requestedByProduct, STOCK_EXCEEDED_MSG);
+    await assertWithinStock(tx, payload.warehouseId, requestedByProduct, stockExceeded(pMap));
 
     const requestNumber = await nextDocNumber(tx.stockRequest, 'requestNumber', 'REQ');
     return tx.stockRequest.create({
@@ -127,7 +147,7 @@ async function create(salesRepId, payload) {
       },
       include: INCLUDE,
     });
-  });
+  }));
 
   notification.notifyAdmins({
     type: 'GENERAL',
@@ -185,9 +205,13 @@ async function list(filters, pagination) {
   const where = {};
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
   if (filters.status) where.status = filters.status;
+  // `decided`: the admin's history table, which leaves the pending ones to the approval strip. They are
+  // left out here, before paging, so the rows and the pager's count agree (they were dropped on screen
+  // after paging: 12 rows under a pager counting 15 a page). The summary below still covers everything.
+  const pageWhere = filters.decided && !filters.status ? { ...where, status: { not: 'PENDING' } } : where;
   const [items, total] = await Promise.all([
-    prisma.stockRequest.findMany({ where, include: INCLUDE, skip: pagination.skip, take: pagination.take, orderBy: pagination.orderBy }),
-    prisma.stockRequest.count({ where }),
+    prisma.stockRequest.findMany({ where: pageWhere, include: INCLUDE, skip: pagination.skip, take: pagination.take, orderBy: pagination.orderBy }),
+    prisma.stockRequest.count({ where: pageWhere }),
   ]);
   // Totals over EVERY matching request, not the page on screen. Page-scoped
   // figures changed when you turned the page and their counts did not add up
@@ -261,8 +285,10 @@ async function get(id) {
 
 // Edit a still-pending request: replace its line items wholesale and reprice.
 // Only allowed while PENDING (nothing has been issued yet). Ownership is
-// enforced by the controller.
-async function update(id, payload) {
+// enforced by the controller. `actor` is who made the edit: the rep himself,
+// or staff changing the rep's order (then the rep is told, and the notice to
+// the admins says who changed it).
+async function update(id, payload, actor = null) {
   if (!payload.items || payload.items.length === 0) {
     throw ApiError.badRequest('A stock request needs at least one item');
   }
@@ -288,6 +314,7 @@ async function update(id, payload) {
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
     const pMap = new Map(products.map((p) => [p.id, p]));
     if (pMap.size !== productIds.length) throw ApiError.badRequest('One or more products were not found');
+    assertAllActive(products);
 
     const lines = [];
     let totalValue = 0;
@@ -313,7 +340,7 @@ async function update(id, payload) {
     }
 
     // Same stock guard as creation applies to edits.
-    await assertWithinStock(tx, payload.warehouseId !== undefined ? payload.warehouseId : existing.warehouseId, requestedByProduct, STOCK_EXCEEDED_MSG);
+    await assertWithinStock(tx, payload.warehouseId !== undefined ? payload.warehouseId : existing.warehouseId, requestedByProduct, stockExceeded(pMap));
 
     // The request is still pending — nothing issued — so swap the items wholesale.
     await tx.stockRequestItem.deleteMany({ where: { stockRequestId: id } });
@@ -330,14 +357,31 @@ async function update(id, payload) {
     });
   });
 
+  // Staff changing a rep's order is said as such, and the rep is told what his order is now (it used to
+  // be announced as the rep's own edit, and the rep heard nothing).
+  const repName = result.salesRep?.user?.name || 'A rep';
+  const byStaff = !!actor && actor.role !== 'SALES_REP';
   notification.notifyAdmins({
     type: 'GENERAL',
     severity: 'INFO',
     title: `Stock request updated: ${result.requestNumber}`,
-    message: `${result.salesRep?.user?.name || 'A rep'} edited their pending order — now worth ${formatCurrency(result.totalValue)}. Review and approve.`,
+    message: byStaff
+      ? `${actor.name || 'Staff'} changed ${repName}'s pending order — now worth ${formatCurrency(result.totalValue)}. Review and approve.`
+      : `${repName} edited their pending order — now worth ${formatCurrency(result.totalValue)}. Review and approve.`,
     entityType: 'StockRequest',
     entityId: result.id,
   }).catch(() => {});
+  if (byStaff) {
+    const now = (result.items || []).map((i) => `${i.product?.name || 'Product'}: ${unitCount(i.quantityRequested, i.packagingUnit?.name)}`).join(', ');
+    notification.notifyUser(result.salesRep?.userId, {
+      type: 'GENERAL',
+      severity: 'INFO',
+      title: 'Stock request changed',
+      message: `${actor.name || 'ZELab'} changed your pending request (${result.requestNumber}). It is now ${now}, worth ${formatCurrency(result.totalValue)}.`,
+      entityType: 'StockRequest',
+      entityId: result.id,
+    }).catch(() => {});
+  }
 
   return result;
 }
@@ -351,7 +395,9 @@ async function update(id, payload) {
 async function approve(id, actor, approvals = []) {
   const approvalMap = new Map(approvals.map((a) => [a.itemId, a.quantityApproved]));
 
-  const { finalResult, request, toIssue } = await prisma.$transaction(async (tx) => {
+  // Two approvals of two requests at the same moment can pick the same TRF/STL number; the one that loses
+  // the race is undone completely and run again (its claim too, so it is still pending for the retry).
+  const { finalResult, request, toIssue, settlement } = await withDocNumberRetry(() => prisma.$transaction(async (tx) => {
     const claimed = await tx.stockRequest.updateMany({
       where: { id, status: 'PENDING' },
       data: { status: 'FULFILLED', decidedAt: new Date(), decidedById: actor ? actor.id : null },
@@ -371,6 +417,14 @@ async function approve(id, actor, approvals = []) {
     });
     const toIssue = decided.filter((d) => d.quantityApproved > 0);
     if (toIssue.length === 0) throw ApiError.badRequest('Nothing approved to issue');
+
+    // A product switched off since the request was made is not issued: its order could never be settled.
+    const issuing = await tx.product.findMany({
+      where: { id: { in: [...new Set(toIssue.map((d) => d.productId))] } },
+      select: { id: true, name: true, isActive: true },
+    });
+    const off = issuing.find((p) => p.isActive === false);
+    if (off) throw ApiError.badRequest(`${off.name} is no longer active — set its line to 0 to approve the rest.`);
 
     // The approved order value from the issued lines only.
     const approvedTotal = round2(toIssue.reduce((acc, d) => acc + round2(toNumber(d.unitPrice) * d.quantityApproved), 0));
@@ -419,20 +473,31 @@ async function approve(id, actor, approvals = []) {
       },
       include: INCLUDE,
     });
-    return { finalResult, request, toIssue };
-  }, { timeout: 30000 });
+    return { finalResult, request, toIssue, settlement };
+  }, { timeout: 30000 }));
 
-  // Notify the rep their request was approved
+  // Notify the rep their request was approved: which order it opened, its deadline, and what was issued
+  // against what he asked for (a cut line reads "3 of 4 Boxes"), so a part-approval is never a surprise.
   const rep = await prisma.salesRepresentative.findUnique({
     where: { id: request.salesRepId },
     select: { userId: true },
   });
+  const issuedLines = (finalResult.items || []).map((i) => ({
+    name: i.product?.name || 'Product',
+    approved: i.quantityApproved ?? 0,
+    requested: i.quantityRequested,
+    unit: i.packagingUnit?.name || null,
+  }));
+  const cut = issuedLines.some((l) => l.approved < l.requested);
+  const order = settlement?.settlementNumber || null;
+  const deadline = settlement?.deadlineAt || null;
+  const orderPart = order ? ` Order ${order}${deadline ? `, settle by ${dateTime(deadline)}` : ''}.` : '';
   notification.notifyUser(rep?.userId, {
     type: 'GENERAL',
     severity: 'INFO',
     title: 'Stock request approved',
-    message: `Your request (${request.requestNumber}) has been approved and issued. Check your open orders.`,
-    whatsapp: { kind: 'STOCK_REQUEST_APPROVED', request: request.requestNumber },
+    message: `Your request (${request.requestNumber}) has been approved and issued${cut ? ', with less than you asked for on some products' : ''}.${orderPart} Check your open orders.`,
+    whatsapp: { kind: 'STOCK_REQUEST_APPROVED', request: request.requestNumber, order, deadline, items: issuedLines },
     entityType: 'StockRequest',
     entityId: id,
   }).catch(() => {});
@@ -448,9 +513,15 @@ async function reject(id, actor, notes) {
   const request = await prisma.stockRequest.findUnique({ where: { id } });
   if (!request) throw ApiError.notFound('Stock request not found');
   // Only if it is still pending at the moment of writing (an approval may be landing at the same time).
+  // The reason is added under the rep's own note, never written over it (there is one notes column).
   const done = await prisma.stockRequest.updateMany({
     where: { id, status: 'PENDING' },
-    data: { status: 'REJECTED', decidedAt: new Date(), decidedById: actor ? actor.id : null, notes: notes || request.notes },
+    data: {
+      status: 'REJECTED',
+      decidedAt: new Date(),
+      decidedById: actor ? actor.id : null,
+      notes: notes ? [request.notes, `Rejected: ${notes}`].filter(Boolean).join('\n') : request.notes,
+    },
   });
   if (done.count !== 1) throw ApiError.conflict('This request was already decided.');
   const result = await prisma.stockRequest.findUnique({ where: { id }, include: INCLUDE });

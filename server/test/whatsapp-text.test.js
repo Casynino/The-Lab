@@ -346,6 +346,45 @@ Your stock request has been approved and issued.
 ZELab`);
 });
 
+// Audit, 11 Nov 2026: a part-approval was never told. The order, its deadline and every product are
+// added to Nino's sample; a cut line reads "N of M", a dropped one "0 of M".
+test('STOCK REQUEST APPROVED (rep) with its order, deadline and a part-approval', () => {
+  assert.equal(t.repText({
+    kind: 'STOCK_REQUEST_APPROVED',
+    request: 'REQ-20261111-0001',
+    order: 'STL-20261111-0001',
+    deadline: at,
+    items: [
+      { name: 'Civlily Pepa Ndogo (Brown)', approved: 3, requested: 4, unit: 'Box' },
+      { name: 'OHIS Pepa Kubwa (Brown)', approved: 2, requested: 2, unit: 'Box' },
+      { name: 'OHIS Pepa Ndogo (White)', approved: 0, requested: 1, unit: 'Carton' },
+    ],
+  }),
+`*STOCK REQUEST APPROVED*
+
+Request: REQ-20261111-0001
+Order: STL-20261111-0001
+Deadline: 10 Nov 2026 | 14:32 EAT
+
+(a) Civlily Pepa Ndogo (Brown): 3 of 4 Boxes
+(b) OHIS Pepa Kubwa (Brown): 2 Boxes
+(c) OHIS Pepa Ndogo (White): 0 of 1 Carton
+
+Your stock request has been approved and issued.
+Some products were approved in a smaller quantity than you asked for.
+
+ZELab`);
+  // Everything approved as asked: no "of", no extra sentence.
+  const full = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', order: 'O', deadline: at, items: [{ name: 'P', approved: 2, requested: 2, unit: 'Box' }] });
+  assert.match(full, /\(a\) P: 2 Boxes\n\nYour stock request has been approved and issued\.\n\nZELab$/);
+  // A very long request keeps the order and deadline and drops products from the end.
+  const many = Array.from({ length: 40 }, (_, k) => ({ name: `OHIS Pepa Kubwa (Brown) – Bila Filter ${k}`, approved: 1, requested: 2, unit: 'Box' }));
+  const long = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', order: 'STL-1', deadline: at, items: many });
+  assert.ok(long.length <= 700, `${long.length} characters`);
+  assert.match(long, /Order: STL-1\nDeadline: /);
+  assert.match(long, /\+\d+ more, see ZELab/);
+});
+
 test('every rep template is plain text in the same frame: capitals title, blank line, ZELab at the foot, no emoji', () => {
   const sample = {
     request: 'SR-1', reason: 'r', product: 'P', boxes: 2, order: 'STL-1', attached: true, amount: 1000, earned: 1, available: 1, closed: false,

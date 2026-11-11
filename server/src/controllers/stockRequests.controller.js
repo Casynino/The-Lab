@@ -43,7 +43,7 @@ const update = asyncHandler(async (req, res) => {
   if (req.user.role === ROLES.SALES_REP && existing.salesRepId !== req.user.salesRepId) {
     throw ApiError.forbidden('This order does not belong to you');
   }
-  const request = await stockRequest.update(req.params.id, req.body);
+  const request = await stockRequest.update(req.params.id, req.body, req.user);
   await audit.record(req, {
     action: 'UPDATE',
     entityType: 'StockRequest',

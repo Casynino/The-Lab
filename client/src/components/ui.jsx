@@ -462,11 +462,11 @@ export function Pagination({ page, totalPages, total, onChange }) {
         {total != null ? ` · ${total} records` : ''}
       </span>
       <div className="flex gap-1">
-        <button className="btn-secondary px-2 py-1" disabled={page <= 1} onClick={() => onChange(page - 1)}>
-          <ChevronLeft className="h-4 w-4" />
+        <button className="btn-secondary px-2 py-1" aria-label="Previous page" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button className="btn-secondary px-2 py-1" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
-          <ChevronRight className="h-4 w-4" />
+        <button className="btn-secondary px-2 py-1" aria-label="Next page" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -499,7 +499,26 @@ export function SearchInput({ value, onChange, placeholder = 'Search…' }) {
 // `modal-safe` / `modal-panel` (index.css) keep the window inside what the phone
 // leaves visible; on a screen with no notch they are the old 0.75rem / 1.5rem.
 const SIZES = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
+// Escape closes the window, like its X. With one window open over another (a "Reject?" step over an
+// order) only the top one closes: the open windows are kept in the order they opened.
+const openModals = [];
 export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!open) return undefined;
+    const me = {};
+    openModals.push(me);
+    const onKey = (e) => {
+      if (e.key === 'Escape' && openModals[openModals.length - 1] === me) closeRef.current?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      const at = openModals.indexOf(me);
+      if (at >= 0) openModals.splice(at, 1);
+    };
+  }, [open]);
   if (!open) return null;
   return (
     <div className="modal-safe fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 backdrop-blur-md">
