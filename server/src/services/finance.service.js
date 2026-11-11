@@ -632,6 +632,11 @@ async function listTransactions(filters, pagination) {
   // Composed with AND, never by spreading: `where` may already carry an `OR`
   // from the free-text search, and a second `OR` key would silently replace it.
   const and = (...parts) => ({ AND: [where, ...parts] });
+  // The totals count from the finance epoch, like every balance: rows before it stay in the LIST (audit
+  // history) but are not money the accounts hold. Without this an account statement's "came in / went
+  // out" did not add up to its "balance now" (Airtel showed -480,000 by the strip, 1,060,000 held).
+  const epoch = await reports.financeEpoch();
+  const sinceEpoch = epoch ? { occurredAt: { gte: epoch } } : {};
   const [items, total, brands, inAgg, outAgg, offInAgg, offOutAgg, byCatRows] = await Promise.all([
     prisma.financeTransaction.findMany({
       where,
@@ -644,18 +649,18 @@ async function listTransactions(filters, pagination) {
     prisma.brand.findMany({ select: { id: true, name: true } }),
     // Totals of the WHOLE filtered view, not the visible page — a strip that
     // changes as you page through it is worse than none.
-    prisma.financeTransaction.aggregate({ where: and({ direction: 'IN' }), _sum: { amount: true } }),
-    prisma.financeTransaction.aggregate({ where: and({ direction: 'OUT' }), _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: and({ direction: 'IN' }, sinceEpoch), _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: and({ direction: 'OUT' }, sinceEpoch), _sum: { amount: true } }),
     // Rows that moved no account balance — rep commission out of the owner's
     // pocket. The ROWS stay in the list (they are the record of what each rep
     // was paid); they come off the money in/out strip so the Ledger agrees with
     // the account balances and with every other screen.
-    prisma.financeTransaction.aggregate({ where: and(OFF_ACCOUNT_WHERE, { direction: 'IN' }), _sum: { amount: true } }),
-    prisma.financeTransaction.aggregate({ where: and(OFF_ACCOUNT_WHERE, { direction: 'OUT' }), _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: and(OFF_ACCOUNT_WHERE, { direction: 'IN' }, sinceEpoch), _sum: { amount: true } }),
+    prisma.financeTransaction.aggregate({ where: and(OFF_ACCOUNT_WHERE, { direction: 'OUT' }, sinceEpoch), _sum: { amount: true } }),
     prisma.financeTransaction.groupBy({
       by: ['category'],
       // Spending by category, so rep commission has no place in it.
-      where: and({ direction: 'OUT' }, { type: { notIn: ['COMMISSION_PAYMENT'] } }),
+      where: and({ direction: 'OUT' }, { type: { notIn: ['COMMISSION_PAYMENT'] } }, sinceEpoch),
       _sum: { amount: true },
       _count: true,
     }),
@@ -723,7 +728,26 @@ async function updateTransaction(id, data) {
     }
     patch.amount = round2(toNumber(data.amount));
   }
-  if (data.occurredAt !== undefined) patch.occurredAt = resolveOccurredAt(data.occurredAt);
+  // The edit form sends only a DAY. Saving the same day used to restamp the row with the time of the
+  // edit (#77); a different day keeps the row's own time of day. A full timestamp is taken as given.
+  if (data.occurredAt !== undefined && data.occurredAt !== null && data.occurredAt !== '') {
+    const s = String(data.occurredAt);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const prev = new Date(existing.occurredAt);
+      if (prev.toISOString().slice(0, 10) !== s) {
+        const d = new Date(`${s}T00:00:00Z`);
+        d.setUTCHours(prev.getUTCHours(), prev.getUTCMinutes(), prev.getUTCSeconds(), prev.getUTCMilliseconds());
+        patch.occurredAt = d;
+      }
+    } else {
+      patch.occurredAt = new Date(s);
+    }
+  }
+  const amountChanged = patch.amount !== undefined && patch.amount !== round2(toNumber(existing.amount));
+  // A payout's record IS the withdrawal's amount — like deleting it, changing it is done on the payout.
+  if (existing.refType === 'CommissionWithdrawal' && amountChanged) {
+    throw ApiError.badRequest('This row mirrors a commission payout — its amount is the payout\'s. Reverse or redo the payout from the Commissions screen instead.');
+  }
 
   // A brand-reserved account only holds its own brand's money.
   const targetAccountId = patch.accountId ?? existing.accountId;
@@ -741,6 +765,31 @@ async function updateTransaction(id, data) {
   }
   if (account.brandId && targetBrandId && targetBrandId !== account.brandId) {
     throw ApiError.badRequest(`${account.name} is reserved for another brand's payments`);
+  }
+
+  // A transfer is two legs of one movement (audit #21, 11 Nov 2026). Correcting one leg's amount or day
+  // alone made money vanish: OUT 1,000 -> 5,000 took 4,000 off M-Pesa that never reached Airtel. The
+  // amount and the day now move on both legs together, in one transaction, and a leg cannot be put on
+  // the same account as its other half.
+  if (existing.type === 'TRANSFER') {
+    const partner = existing.refType === 'Transfer' && existing.refId
+      ? await prisma.financeTransaction.findUnique({ where: { id: existing.refId } })
+      : await prisma.financeTransaction.findFirst({ where: { type: 'TRANSFER', refType: 'Transfer', refId: id } });
+    if (partner) {
+      if (partner.accountId === targetAccountId) {
+        throw ApiError.badRequest('Both sides of a transfer cannot be on the same account.');
+      }
+      const both = {};
+      if (amountChanged) both.amount = patch.amount;
+      if (patch.occurredAt) both.occurredAt = patch.occurredAt;
+      if (Object.keys(both).length) {
+        const [updated] = await prisma.$transaction([
+          prisma.financeTransaction.update({ where: { id }, data: patch }),
+          prisma.financeTransaction.update({ where: { id: partner.id }, data: both }),
+        ]);
+        return { updated, previous: existing };
+      }
+    }
   }
 
   const updated = await prisma.financeTransaction.update({ where: { id }, data: patch });
@@ -954,7 +1003,15 @@ async function cashflow(opts = {}) {
   const before = range
     ? await flowBetween(epoch || null, new Date(range.start.getTime() - 1))
     : { net: 0 };
-  const openingBalance = round2(baseOpening + (range && (!epoch || range.start > epoch) ? before.net : 0));
+  // ...and the owner's own money that went through an account before the window (contributions in,
+  // drawings out). flowBetween leaves it out because it is not trade — but the stock it paid for IS
+  // in `before`, so without it every opening (and so every closing) was short by exactly what he had
+  // put in: 3,300,000 on every statement and PDF since 26 Sep (audit #36, 11 Nov 2026).
+  const countsBefore = range && (!epoch || range.start > epoch);
+  const ownerBefore = countsBefore
+    ? await ownerFigures({ start: null, end: new Date(range.start.getTime() - 1) })
+    : { accountMovement: 0 };
+  const openingBalance = round2(baseOpening + (countsBefore ? before.net + ownerBefore.accountMovement : 0));
   const start = range && epoch ? (range.start > epoch ? range.start : epoch) : range ? range.start : epoch;
   const inPeriod = await flowBetween(start || null, range ? range.end : null);
 

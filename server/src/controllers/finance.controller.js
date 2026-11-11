@@ -52,6 +52,9 @@ const transactions = asyncHandler(async (req, res) => {
     direction: q.direction,
     type: q.type,
     category: q.category,
+    // The brand chip on the Ledger (OHIS / Civlily / General = 'none'). It was never passed on, so the
+    // filter showed every row whatever was picked (audit 11 Nov 2026).
+    brandId: q.brandId,
     from: q.from,
     to: q.to,
     minAmount: q.minAmount != null && q.minAmount !== '' ? Number(q.minAmount) : null,

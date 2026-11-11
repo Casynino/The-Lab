@@ -1,5 +1,5 @@
 import { STEADY } from '@/lib/polling';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -1401,7 +1401,18 @@ function Ledger({ expensesOnly }) {
                   <TD>
                     <div className="flex items-center justify-end gap-2">
                       <button title="Correct this transaction" onClick={() => setEditing(t)} className="text-faint hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
-                      <button title="Delete" onClick={() => del.mutate(t.id)} className="text-faint hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
+                      {/* Asks first and ignores repeat taps (audit #22): one tap used to delete the row —
+                          both legs of a transfer — with nothing to stop a slip of the finger. */}
+                      <button
+                        title="Delete"
+                        disabled={del.isPending}
+                        onClick={() => {
+                          const what = `${t.txnNumber || 'this entry'} (${formatCurrency(t.amount)})`;
+                          const legs = t.type === 'TRANSFER' ? ' Both sides of the transfer will be removed.' : '';
+                          if (confirm(`Delete ${what}? This cannot be undone.${legs}`)) del.mutate(t.id);
+                        }}
+                        className="text-faint hover:text-rose-500 disabled:opacity-40"
+                      ><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </TD>
                 </TR>
@@ -1982,22 +1993,38 @@ function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
   const overpaid = paidNow && paying > total + 0.001;
   const valid = validLines.length > 0 && (!paidNow || (payAccountId && paying > 0 && !overpaid));
 
+  // The purchase once it is saved. Saving and receiving are two calls; if the receive fails, pressing
+  // Save again must only retry the receive — it used to create the whole purchase (and its payment) a
+  // second time, doubling what the supplier is owed (audit #20).
+  const createdPo = useRef(null);
   const save = useMutation({
     mutationFn: async () => {
-      const items = validLines.map((l) => {
-        const prod = products.find((p) => p.id === l.productId);
-        const pkg = prod?.packagings?.find((pk) => pk.isBaseUnit) || prod?.packagings?.[0];
-        return { productId: l.productId, packagingUnitId: pkg?.packagingUnitId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) };
-      });
-      const po = unwrap(await api.post('/purchase-orders', {
-        supplierId: supplier.id, currency: 'TZS', items,
-        shippingCost: Number(shippingCost) || 0, otherCost: Number(otherCost) || 0,
-        orderedAt: new Date(`${date}T12:00:00`).toISOString(), notes: notes.trim() || undefined,
-        // Paid as it was bought: the money leaves the account on the purchase
-        // date, not the day this was typed in.
-        payment: paidNow ? { accountId: payAccountId, amount: paying, occurredAt: date } : undefined,
-      })).data;
-      await api.post(`/purchase-orders/${po.id}/receive`, { actualArrival: new Date(`${date}T12:00:00`).toISOString() });
+      let po = createdPo.current;
+      if (!po) {
+        const items = validLines.map((l) => {
+          const prod = products.find((p) => p.id === l.productId);
+          const pkg = prod?.packagings?.find((pk) => pk.isBaseUnit) || prod?.packagings?.[0];
+          return { productId: l.productId, packagingUnitId: pkg?.packagingUnitId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) };
+        });
+        po = unwrap(await api.post('/purchase-orders', {
+          supplierId: supplier.id, currency: 'TZS', items,
+          shippingCost: Number(shippingCost) || 0, otherCost: Number(otherCost) || 0,
+          orderedAt: new Date(`${date}T12:00:00`).toISOString(), notes: notes.trim() || undefined,
+          // Paid as it was bought: the money leaves the account on the purchase
+          // date, not the day this was typed in.
+          payment: paidNow ? { accountId: payAccountId, amount: paying, occurredAt: date } : undefined,
+        })).data;
+        createdPo.current = po;
+      }
+      try {
+        await api.post(`/purchase-orders/${po.id}/receive`, { actualArrival: new Date(`${date}T12:00:00`).toISOString() });
+      } catch (e) {
+        // A receive that went through but whose answer was lost comes back as "already received".
+        if (e?.response?.status !== 409) {
+          const err = new Error(`${po.poNumber} is saved but not received yet — ${apiError(e)} Press Save again to receive it.`);
+          throw err;
+        }
+      }
       return po;
     },
     onSuccess: (po) => {
@@ -2011,7 +2038,7 @@ function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
       );
       onDone(); onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => toast.error(e?.response ? apiError(e) : e.message),
   });
 
   return (
