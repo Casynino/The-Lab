@@ -32,6 +32,7 @@ export default function ReportsArchive() {
   const [type, setType] = useState('');
   const [year, setYear] = useState('');
   const [search, setSearch] = useState('');
+  const [shown, setShown] = useState(24);
   const { data: rows = [], isLoading, isFetching } = useQuery({
     queryKey: ['report-archive', type, year, search],
     queryFn: async () => {
@@ -86,43 +87,72 @@ export default function ReportsArchive() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
-          {Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[136px] animate-pulse rounded-[1.4rem] bg-white/[0.04]" />)}
-        </div>
+        <Card>
+          <ul className="divide-y divide-white/[0.06]" aria-hidden="true">
+            {Array.from({ length: 6 }, (_, i) => (
+              <li key={i} className="flex items-center gap-3 px-4 py-3"><span className="h-5 w-16 animate-pulse rounded-full bg-white/[0.06]" /><span className="h-3 flex-1 animate-pulse rounded bg-white/[0.06]" /></li>
+            ))}
+          </ul>
+        </Card>
       ) : rows.length === 0 ? (
         <Card><EmptyState icon={FileBarChart} title="No reports here yet" message="Reports are kept here automatically the moment they are sent." /></Card>
       ) : (
-        <div className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-3 transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
-          {rows.map((r) => {
-            const m = r.meta || {};
-            return (
-              <Card key={r.id} className="flex flex-col p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${TONE[r.type] || 'bg-white/[0.07] text-white/60'}`}>{NAME[r.type] || r.type}</span>
-                  <span className="text-[11px] tabular-nums text-faint">{r.periodKey}</span>
-                </div>
-                <p className="mt-2.5 text-[15px] font-semibold leading-snug text-white">{period(r)}</p>
-                {(m.revenue != null || m.boxes != null) && (
-                  <p className="mt-1 text-xs text-muted">
-                    {m.revenue != null && <>Sales <span className="tabular-nums text-white/85">{formatCurrency(m.revenue)}</span></>}
-                    {m.boxes != null && <> · <span className="tabular-nums text-white/85">{formatNumber(m.boxes)}</span> {m.boxes === 1 ? 'box' : 'boxes'}</>}
-                  </p>
-                )}
-                <div className="mt-auto flex gap-2 pt-4">
-                  <a href={r.link} target="_blank" rel="noreferrer"
-                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-600">
-                    <ExternalLink className="h-3.5 w-3.5" /> Open
-                  </a>
-                  <button type="button" onClick={() => download(r)}
-                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white/80 ring-1 ring-white/15 transition hover:bg-white/[0.06]">
-                    <Download className="h-3.5 w-3.5" /> Download
-                  </button>
-                </div>
+        // One slim line per report, grouped by month (Nino, 11 Nov 2026: "they will be many — list them
+        // nicely, not taking so much space; they can be opened").
+        <div className={`space-y-5 transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
+          {byMonth(rows.slice(0, shown)).map((g) => (
+            <section key={g.label}>
+              <h3 className="mb-2 px-1 text-[12px] font-semibold uppercase tracking-wide text-white/45">{g.label}</h3>
+              <Card>
+                <ul className="divide-y divide-white/[0.06]">
+                  {g.items.map((r) => {
+                    const m = r.meta || {};
+                    return (
+                      <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className={`w-[68px] shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold ${TONE[r.type] || 'bg-white/[0.07] text-white/60'}`}>{NAME[r.type] || r.type}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-white">{period(r)}</p>
+                          {(m.revenue != null || m.boxes != null) && (
+                            <p className="truncate text-[11px] text-faint">
+                              {m.revenue != null && <>Sales {formatCurrency(m.revenue)}</>}
+                              {m.boxes != null && <> · {formatNumber(m.boxes)} {m.boxes === 1 ? 'box' : 'boxes'}</>}
+                            </p>
+                          )}
+                        </div>
+                        <a href={r.link} target="_blank" rel="noreferrer" aria-label={`Open ${period(r)}`}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-500/90 px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-500">
+                          <ExternalLink className="h-3.5 w-3.5" /> Open
+                        </a>
+                        <button type="button" onClick={() => download(r)} aria-label={`Download ${period(r)}`} title="Download"
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/60 ring-1 ring-white/15 transition hover:bg-white/[0.06] hover:text-white">
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </Card>
-            );
-          })}
+            </section>
+          ))}
+          {rows.length > shown && (
+            <button type="button" onClick={() => setShown((n) => n + 24)} className="text-xs font-semibold text-brand-400 hover:text-brand-300">
+              Show more ({rows.length - shown})
+            </button>
+          )}
         </div>
       )}
     </section>
   );
+}
+
+// Reports grouped by the month their period starts in, newest first (the rows already come newest first).
+function byMonth(rows) {
+  const out = [];
+  for (const r of rows) {
+    const label = dayjs(r.from).format('MMMM YYYY');
+    const last = out[out.length - 1];
+    if (last && last.label === label) last.items.push(r);
+    else out.push({ label, items: [r] });
+  }
+  return out;
 }
