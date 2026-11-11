@@ -414,22 +414,26 @@ async function backfillFromHistory() {
   for (const w of paidWithdrawals) {
     if (haveW.has(w.id)) continue;
     if (!commAcc) break;
-    const txnNumber = await nextDocNumber(prisma.financeTransaction, 'txnNumber', 'FTX');
-    await prisma.financeTransaction.create({
-      data: {
-        txnNumber,
-        accountId: commAcc.id,
-        direction: 'OUT',
-        type: 'COMMISSION_PAYMENT',
-        amount: round2(toNumber(w.amount)),
-        category: 'Commission Payments',
-        description: `Commission paid${w.salesRep?.user?.name ? ` — ${w.salesRep.user.name}` : ''}`,
-        refType: 'CommissionWithdrawal',
-        refId: w.id,
-        occurredAt: w.paidAt || w.decidedAt || w.createdAt,
-      },
-    });
-    paymentsCreated++;
+    // Checked again under the withdrawal's lock: the admin's own write (or another rebuild) may have
+    // landed since `haveW` was read (audit backend-integrity-1).
+    const { created } = await writePayoutRowOnce(w.id, async (tx) => {
+      const txnNumber = await nextDocNumber(tx.financeTransaction, 'txnNumber', 'FTX');
+      return tx.financeTransaction.create({
+        data: {
+          txnNumber,
+          accountId: commAcc.id,
+          direction: 'OUT',
+          type: 'COMMISSION_PAYMENT',
+          amount: round2(toNumber(w.amount)),
+          category: 'Commission Payments',
+          description: `Commission paid${w.salesRep?.user?.name ? ` — ${w.salesRep.user.name}` : ''}`,
+          refType: 'CommissionWithdrawal',
+          refId: w.id,
+          occurredAt: w.paidAt || w.decidedAt || w.createdAt,
+        },
+      });
+    }).catch(() => ({ created: false }));
+    if (created) paymentsCreated++;
   }
 
   return { incomeCreated, paymentsCreated, brandTagged };
@@ -587,6 +591,24 @@ async function recordSaleIncome({ saleId, saleNumber, amount, fromSettlement, wh
 }
 
 // Automatic money-out when a commission withdrawal is paid.
+// Write a payout's ledger row at most once. The withdrawal row is locked first (FOR UPDATE), then the
+// check for an existing COMMISSION_PAYMENT row and the write run in the same transaction. Approve & pay
+// and a Finance page read (the self-heal rebuild) used to both see "missing" in the same few
+// milliseconds and both write, so one 20,000 payout was booked twice and "Paid reps from your pocket"
+// went up by 20,000 for good (audit backend-integrity-1). No schema change: the lock serialises them,
+// so the second one finds the first one's row and writes nothing. Returns { row, created }.
+async function writePayoutRowOnce(withdrawalId, makeData) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "commission_withdrawals" WHERE id = ${withdrawalId} FOR UPDATE`;
+    const existing = await tx.financeTransaction.findFirst({
+      where: { type: 'COMMISSION_PAYMENT', refType: 'CommissionWithdrawal', refId: withdrawalId },
+    });
+    if (existing) return { row: existing, created: false };
+    const row = await makeData(tx);
+    return { row, created: !!row };
+  });
+}
+
 async function recordCommissionPayment({ amount, who, reference, refId, occurredAt, fromOwnPocket }, actor) {
   try {
     const amt = round2(toNumber(amount));
@@ -616,7 +638,7 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
     // treats it as account movement: OFF_ACCOUNT_WHERE takes it back out of
     // every balance, and NON_TRADE_TYPES keeps it out of money in/out. What he
     // lays out is an investment the business owes him — see ownerFigures().
-    return await recordTransaction(
+    const write = (client) => recordTransaction(
       {
         accountId: acc.id,
         direction: 'OUT',
@@ -630,7 +652,12 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
         occurredAt,
       },
       actor,
+      client,
     );
+    // Tied to a withdrawal: written under that withdrawal's lock, so a rebuild running at the same
+    // moment cannot write it a second time.
+    if (refId) return (await writePayoutRowOnce(refId, write)).row;
+    return await write(prisma);
   } catch (e) {
     return null;
   }
