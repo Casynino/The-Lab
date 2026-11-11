@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { UserPlus, Pencil, Power, Trash2 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { keepOnPageTurn } from '@/lib/pageQueries';
 import { useWarehouses, useDebounce } from '@/lib/hooks';
 import { ROLE_LABELS } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
@@ -139,6 +140,7 @@ export default function Users() {
   const { data, isLoading } = useQuery({
     queryKey: ['users', { page, search: debounced }],
     queryFn: async () => unwrap(await api.get('/users', { params: { page, limit: 20, search: debounced } })),
+    placeholderData: keepOnPageTurn(),
   });
   const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: async () => unwrap(await api.get('/roles')).data });
   const { data: warehouses = [] } = useWarehouses();

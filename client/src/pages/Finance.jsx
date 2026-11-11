@@ -2,7 +2,7 @@ import { STEADY } from '@/lib/polling';
 import { useState, useRef } from 'react';
 import ReportsArchive from '@/components/ReportsArchive';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   Wallet, TrendingUp, TrendingDown, Banknote, Landmark, Smartphone, Coins,
@@ -11,6 +11,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useBrands } from '@/lib/hooks';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
@@ -465,14 +466,10 @@ function SectionHead({ label, sub }) {
 function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
   const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'overview', period],
-    queryFn: async () => unwrap(await api.get('/finance/overview', { params: { period } })).data,
+    ...pageQueries.financeOverview(period),
     refetchInterval: STEADY,
   });
-  const { data: cf } = useQuery({
-    queryKey: ['finance', 'cashflow', 'all'],
-    queryFn: async () => unwrap(await api.get('/finance/cashflow', { params: { period: 'all' } })).data,
-  });
+  const { data: cf } = useQuery(pageQueries.financeCashflow('all'));
   if (isLoading || !data) return <PageSpinner />;
   const flow = data.flow?.[period] || data.flow?.month || { moneyIn: 0, moneyOut: 0, net: 0 };
   const donut = data.expenseBreakdown.map((e) => ({ name: e.category, value: e.amount }));
@@ -999,6 +996,8 @@ function AccountStatementModal({ account, onClose }) {
     queryFn: async () => unwrap(await api.get('/finance/transactions', {
       params: { accountId: account.id, page, limit: 25, sortBy: 'occurredAt', sortDir: 'desc' },
     })),
+    // One account per window, so the previous page is always this account's.
+    placeholderData: keepPreviousData,
   });
   const rows = data?.data || [];
   const sums = data?.meta?.sums;
@@ -1259,6 +1258,7 @@ function Ledger({ expensesOnly }) {
   const { data, isLoading } = useQuery({
     queryKey: ['finance', 'transactions', { page, account, type, brand, category, search, expensesOnly }],
     queryFn: async () => unwrap(await api.get('/finance/transactions', { params })),
+    placeholderData: keepOnPageTurn({ account, type, brand, category, expensesOnly }),
   });
   const del = useMutation({
     mutationFn: (id) => api.delete(`/finance/transactions/${id}`, { data: { reason: 'Removed from finance ledger' } }),
@@ -2387,8 +2387,8 @@ export default function Finance() {
   const setTab = (k) => { setTabState(k); setSearchParams(k === 'overview' ? {} : { tab: k }, { replace: true }); };
   const [money, setMoney] = useState(null); // 'income' | 'expense'
   const [ownerMoney, setOwnerMoney] = useState(null); // 'in' | 'out'
-  const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
-  const { data: categories = [] } = useQuery({ queryKey: ['finance', 'categories'], queryFn: async () => unwrap(await api.get('/finance/categories')).data });
+  const { data: accounts = [] } = useQuery(pageQueries.financeAccounts());
+  const { data: categories = [] } = useQuery(pageQueries.financeCategories());
 
   return (
     <div>

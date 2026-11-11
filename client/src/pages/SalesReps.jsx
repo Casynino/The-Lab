@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, UserCog, AlertTriangle } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { formatCurrency, formatNumber, fromNow } from '@/lib/format';
 import RegionPicker from '@/components/RegionPicker';
 import { repRegions } from '@/lib/repRegions';
@@ -122,8 +123,8 @@ export default function SalesReps() {
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['sales-reps', { page }],
-    queryFn: async () => unwrap(await api.get('/sales-reps', { params: { page, limit: 100 } })),
+    ...pageQueries.salesReps({ page }),
+    placeholderData: keepOnPageTurn(),
   });
 
   // Late first, then whoever is holding the most of your stock.

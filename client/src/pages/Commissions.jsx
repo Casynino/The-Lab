@@ -7,6 +7,7 @@ import WalletCard from '@/components/WalletCard';
 import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard } from '@/components/RepCharts';
 import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck, Boxes } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
@@ -690,10 +691,10 @@ function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('overview');
-  const { data: insights } = useQuery({ queryKey: ['commissions', 'me', 'insights'], queryFn: async () => unwrap(await api.get('/commissions/me/insights')).data });
-  const { data: c, isLoading } = useQuery({ queryKey: ['commissions', 'me'], queryFn: async () => unwrap(await api.get('/commissions/me')).data });
-  const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'mine'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 20 } })) });
-  const { data: bonusProgress } = useQuery({ queryKey: ['bonus', 'me'], queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data });
+  const { data: insights } = useQuery(pageQueries.commissionsInsights());
+  const { data: c, isLoading } = useQuery(pageQueries.commissionsMine());
+  const { data: wd } = useQuery(pageQueries.withdrawalsMine());
+  const { data: bonusProgress } = useQuery(pageQueries.bonusMe());
 
   if (isLoading || !c) return <PageSpinner />;
 
@@ -1453,18 +1454,15 @@ function AdminView() {
   const [tab, setTab] = useState('balances');
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
   const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
-  const { data: summary, isLoading } = useQuery({ queryKey: ['commissions', 'summary'], queryFn: async () => unwrap(await api.get('/commissions/summary')).data });
-  const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'all'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 30 } })) });
+  const { data: summary, isLoading } = useQuery(pageQueries.commissionsSummary());
+  const { data: wd } = useQuery(pageQueries.withdrawalsAll());
   // Only the whole-table counts are read here (meta.counts), so one row is enough. FinesHistory asks for
   // its own lists by status under longer keys; invalidating ['penalties'] refreshes both.
-  const { data: penaltyData } = useQuery({
-    queryKey: ['penalties', 'all'],
-    queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 1 } })),
-  });
+  const { data: penaltyData } = useQuery(pageQueries.penaltiesCount());
   // The sales bonus, for the balances table. Same key BonusSettings uses, so
   // the two share one cache entry and paying a bonus over on Rates & bonus
   // already invalidates this.
-  const { data: bonusRun } = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
+  const { data: bonusRun } = useQuery(pageQueries.bonusSummary());
   // Only fines still charged are worth a badge — counted by the SERVER over
   // the whole table. Counting the visible page understated it as soon as the
   // history outgrew one page.

@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { CheckCheck, Bell } from 'lucide-react';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { fromNow, formatDate } from '@/lib/format';
 import { PageSpinner, Pagination, LoadError } from '@/components/ui';
 
@@ -37,8 +38,8 @@ export default function Notifications() {
   const [page, setPage] = useState(1);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['notifications', { page }],
-    queryFn: async () => unwrap(await api.get('/notifications', { params: { page, limit: 20 } })),
+    ...pageQueries.notifications({ page }),
+    placeholderData: keepOnPageTurn(),
   });
 
   const markRead = useMutation({
