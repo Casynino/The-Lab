@@ -230,22 +230,22 @@ function ProductsCatalogue() {
           something to act on. */}
       {(() => {
         const rows = data?.data || [];
-        // A failed load shows dashes, not a catalogue of zero.
-        const shown = (text) => (isError && !data ? '—' : text);
         const onHand = rows.reduce((n, p) => n + (p.onHandBase || 0), 0);
         const lowCount = rows.filter((p) => p.lowStock).length;
         const value = rows.reduce((n, p) => n + (p.onHandBase || 0) * Number(p.sellingPrice || 0), 0);
         const cards = [
-          { label: 'Products', value: shown(formatNumber(data?.meta?.total ?? rows.length)), icon: Package, sub: 'in the catalogue',
+          { label: 'Products', value: formatNumber(data?.meta?.total ?? rows.length), icon: Package, sub: 'in the catalogue',
             ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
-          { label: 'Boxes on hand', value: shown(formatNumber(onHand)), icon: Boxes, sub: 'across these products',
+          { label: 'Boxes on hand', value: formatNumber(onHand), icon: Boxes, sub: 'across these products',
             ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
-          { label: 'Worth at selling price', value: shown(formatCurrency(value)), icon: Wallet, sub: 'if every box sold',
+          { label: 'Worth at selling price', value: formatCurrency(value), icon: Wallet, sub: 'if every box sold',
             ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
-          { label: 'Running low', value: shown(formatNumber(lowCount)), icon: TrendingDown, sub: isError && !data ? "couldn't load" : lowCount ? 'reorder before they run out' : 'nothing needs reordering',
+          { label: 'Running low', value: formatNumber(lowCount), icon: TrendingDown, sub: lowCount ? 'reorder before they run out' : 'nothing needs reordering',
             ring: lowCount ? 'ring-rose-500/30' : 'ring-white/[0.07]', glow: lowCount ? 'from-rose-500/[0.14]' : 'from-white/[0.02]',
             chip: 'bg-rose-500/15 text-rose-300', num: lowCount ? 'text-rose-300' : 'text-foreground' },
         ];
+        // A failed load shows dashes, not a catalogue of zero (kept apart from the tiles above).
+        if (isError && !data) cards.forEach((c) => { c.value = '—'; c.sub = "couldn't load"; });
         return (
           <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
             {cards.map((c) => (
