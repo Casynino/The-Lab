@@ -58,7 +58,8 @@ export const NAV = [
 
   // ── Money ──
   // `keywords`: other words the page search finds a page by (its tabs, what people call it).
-  { to: '/finance', label: 'Finance', icon: 'Wallet', roles: STAFF, group: 'money', keywords: ['profit', 'reports', 'accounts', 'ledger', 'expenses', 'cash flow', 'suppliers', 'statements'] },
+  // Called "Wallet" in the staff sidebar (Nino, 11 Nov 2026); search still finds it as Finance.
+  { to: '/finance', label: 'Wallet', icon: 'Wallet', roles: STAFF, group: 'money', keywords: ['finance', 'money', 'profit', 'reports', 'accounts', 'ledger', 'expenses', 'cash flow', 'suppliers', 'statements'] },
   // Everyone who deals with commission gets it in the sidebar. The same page
   // serves a rep their own earnings and an admin the approvals; it is also a
   // tab inside Finance, which is where staff used to be sent instead.
