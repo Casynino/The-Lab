@@ -130,9 +130,24 @@ async function productOnHand(client) {
 
 // --- Availability guard ----------------------------------------------------
 
+// Serialise stock leaving one place (audit #48, 11 Nov 2026): the availability check below reads the
+// ledger and the movement is written after it, so two issues at the same instant could both see
+// "5 left", both take 5 and leave -5. A transaction-scoped advisory lock on (product, place) makes the
+// second one wait until the first has committed, then read the true balance. It is keyed on the
+// place, not on a row, because the balance is summed from the ledger and a cache row may not exist.
+// (No-op on a client without raw SQL, e.g. a unit-test stub.)
+async function lockStock(client, productId, loc) {
+  if (typeof client.$queryRaw !== 'function') return;
+  const key = `stock:${productId}:${loc.locationType}:${loc.warehouseId || loc.salesRepId}`;
+  await client.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+}
+
 async function assertAvailable(client, { productId, location, requiredBase }) {
   const loc = resolveLocation(location);
-  const balance = await getBalance(client, { productId, ...loc });
+  await lockStock(client, productId, loc);
+  // getBalance reads `type`; resolveLocation says `locationType`. Passing it on keeps a warehouse
+  // check to THAT warehouse (it summed every warehouse's rows — the same while there is only one).
+  const balance = await getBalance(client, { productId, type: loc.locationType, warehouseId: loc.warehouseId, salesRepId: loc.salesRepId });
   if (balance < requiredBase) {
     const product = await client.product.findUnique({
       where: { id: productId },
