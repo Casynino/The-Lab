@@ -10,6 +10,13 @@ export const ROLE_LABELS = {
   SALES_REP: 'Sales Representative',
 };
 
+// The role a new account starts with in Users > New user: Sales rep, never Administrator. GET /roles comes
+// back sorted by name, so taking the first one pre-selected Administrator and a hurried "Create" handed out
+// full owner powers (audit 11 Nov 2026, admin-system-1). No Sales rep role: blank, so one must be chosen.
+export function defaultUserRoleId(roles = []) {
+  return roles.find((r) => r?.name === ROLES.SALES_REP)?.id || '';
+}
+
 // Navigation. `roles` lists who can see the item; ADMIN sees everything.
 const ALL = ['ADMIN', 'WAREHOUSE_STAFF', 'SALES_REP'];
 const STAFF = ['ADMIN', 'WAREHOUSE_STAFF'];
