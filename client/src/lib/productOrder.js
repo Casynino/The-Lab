@@ -7,33 +7,37 @@
 // whether it's shown (stock filtering is handled by each list separately).
 //
 // Matching is by product NAME, normalized so dash / whitespace / case variants
-// don't matter. Anything not in the list sorts last (alphabetically), so adding
+// don't matter — and the old long names ("OHIS Pepa Ndogo …", "(Mix Colors)") match the
+// short ones Nino chose on 11 Nov 2026 ("OHIS Ndogo …", "(Mix)"), so the order holds before
+// and after the rename. Anything not in the list sorts last (alphabetically), so adding
 // a new product never breaks the UI — it just appends until it's listed here.
 // OHIS group first (the main brand), then Civlily, as specified by The Doctor.
 // ============================================================================
 
 const CANONICAL = [
   // ── OHIS (main brand — shown first) ──
-  'OHIS Pepa Ndogo (Brown) - Bila Filter',
-  'OHIS Pepa Ndogo (White) - Bila Filter',
-  'OHIS Pepa Ndogo (Brown) - Na Filter',
-  'OHIS Pepa Kubwa (Brown) - Na Filter',
-  'OHIS Pepa Kubwa (Brown) - Bila Filter',
+  'OHIS Ndogo (Brown) - Bila Filter',
+  'OHIS Ndogo (White) - Bila Filter',
+  'OHIS Ndogo (Brown) - Na Filter',
+  'OHIS Kubwa (Brown) - Na Filter',
+  'OHIS Kubwa (Brown) - Bila Filter',
   // ── Civlily ──
-  'Civlily Pepa Ndogo (Brown) - Bila Filter',
-  'Civlily Pepa Ndogo (White) - Bila Filter',
-  'Civlily Pepa Ndogo (Brown) - Na Filter',
-  'Civlily Pepa Kubwa (Brown) - Bila Filter',
-  'Civlily Pepa Kubwa (White) - Bila Filter',
-  'Civlily Pepa Kubwa (Brown) - Na Filter',
-  'Civlily Pepa Kubwa (Mix Colors) - Na Filter',
-  'Civlily Pepa Ndogo (Mix Colors) - Bila Filter',
+  'Civlily Ndogo (Brown) - Bila Filter',
+  'Civlily Ndogo (White) - Bila Filter',
+  'Civlily Ndogo (Brown) - Na Filter',
+  'Civlily Kubwa (Brown) - Bila Filter',
+  'Civlily Kubwa (White) - Bila Filter',
+  'Civlily Kubwa (Brown) - Na Filter',
+  'Civlily Kubwa (Mix) - Na Filter',
+  'Civlily Ndogo (Mix) - Bila Filter',
 ];
 
 // Normalize a name so en/em dashes, double spaces and case don't affect matching.
 function normalizeName(s) {
   return (s || '')
     .toLowerCase()
+    .replace(/\bpepa\s+/g, '') // the old long names had "Pepa" in them
+    .replace(/\(mix colou?rs\)/g, '(mix)')
     .replace(/[‒–—―]/g, '-') // figure/en/em/horizontal dash → hyphen
     .replace(/-+/g, '-')
     .replace(/\s+/g, ' ')
