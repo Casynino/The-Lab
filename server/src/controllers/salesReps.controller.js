@@ -626,9 +626,12 @@ const getReconciliation = asyncHandler(async (req, res) => {
 });
 
 const create = asyncHandler(async (req, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.body.userId }, include: { salesRep: true } });
+  const user = await prisma.user.findUnique({ where: { id: req.body.userId }, include: { salesRep: true, role: { select: { name: true } } } });
   if (!user) throw ApiError.badRequest('User not found');
   if (user.salesRep) throw ApiError.conflict('This user is already a sales representative');
+  // A rep profile on an admin or staff login would hand rep data and their own powers to one account —
+  // the same rule users.update enforces when a rep's role is changed.
+  if (user.role?.name !== 'SALES_REP') throw ApiError.badRequest('Only a user with the Sales rep role can be made a rep');
 
   let code = req.body.code;
   if (!code) {

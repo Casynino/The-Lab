@@ -933,7 +933,9 @@ function StaffRequestTable({ onView }) {
             <Table>
               <THead>
                 <TR>
-                  <TH>Order</TH><TH>Rep</TH><TH>Boxes out</TH><TH>Products</TH><TH>Value</TH><TH>Status</TH><TH>Requested</TH><TH />
+                  {/* On a phone the status sits under the order number and Products, Requested and the View
+                      link drop out (the whole row opens it), so the row fits the screen. */}
+                  <TH>Order</TH><TH>Rep</TH><TH>Boxes out</TH><TH className="hidden sm:table-cell">Products</TH><TH>Value</TH><TH className="hidden sm:table-cell">Status</TH><TH className="hidden sm:table-cell">Requested</TH><TH className="hidden sm:table-cell" />
                 </TR>
               </THead>
               <TBody>
@@ -941,9 +943,13 @@ function StaffRequestTable({ onView }) {
                   const asked = r.boxesRequested ?? boxCount(r);
                   const given = r.boxesApproved ?? boxCount(r);
                   const shortfall = r.status === 'FULFILLED' && asked > given;
+                  const ds = requestDisplayStatus(r);
                   return (
                     <TR key={r.id} className="group cursor-pointer" onClick={() => onView(r)}>
-                      <TD className="font-medium">{r.requestNumber}</TD>
+                      <TD className="font-medium">
+                        {r.requestNumber}
+                        <div className="mt-1 sm:hidden"><Badge className={ds.cls}>{ds.label}</Badge></div>
+                      </TD>
                       <TD>{r.salesRep?.user?.name}{requestCities(r).length > 0 && <div className="text-xs text-muted">{requestCities(r).join(' · ')}</div>}</TD>
                       {/* The number this page exists to record. */}
                       <TD>
@@ -952,11 +958,11 @@ function StaffRequestTable({ onView }) {
                           <span className="ml-1.5 text-[11px] text-amber-400">of {formatNumber(asked)} asked</span>
                         )}
                       </TD>
-                      <TD className="text-muted">{productCount(r)}</TD>
+                      <TD className="hidden text-muted sm:table-cell">{productCount(r)}</TD>
                       <TD className="font-medium">{formatCurrency(orderDisplayValue(r))}</TD>
-                      <TD>{(() => { const ds = requestDisplayStatus(r); return <Badge className={ds.cls}>{ds.label}</Badge>; })()}</TD>
-                      <TD className="text-faint">{formatDateTime(r.requestedAt)}</TD>
-                      <TD>
+                      <TD className="hidden sm:table-cell"><Badge className={ds.cls}>{ds.label}</Badge></TD>
+                      <TD className="hidden text-faint sm:table-cell">{formatDateTime(r.requestedAt)}</TD>
+                      <TD className="hidden sm:table-cell">
                         {/* A quiet link on every row, not a red one: red is kept for what needs action. A request
                             still waiting is amber, like the rep's own waiting card. */}
                         <span className={clsx('inline-flex items-center gap-1 text-xs font-medium transition-colors',

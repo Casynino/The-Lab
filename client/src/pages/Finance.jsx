@@ -541,7 +541,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
         const split = (om.contributed || 0) > 0 && (om.paidRepsFromPocket || 0) > 0;
         return (
         <div className="space-y-3">
-          <SectionHead label="Whose money is this?" sub={`Every wallet you hold — what ${supplierLabel} is owed, and what is yours.`} />
+          <SectionHead label="Whose money is this?" sub={`Every wallet you hold — what you owe ${supplierLabel}, and what is yours.`} />
 
           {/* The headline split, as one joined strip. */}
           {/* "Yours, free to use" only appears when it differs from the cash
@@ -593,7 +593,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
             ) : totalOwed > 0 ? (
               <>
                 You owe {supplierLabel} <b className="text-foreground">{formatCurrency(totalOwed)}</b> in total — but none of it is due yet.
-                {' '}{supplierLabel} is paid the cost of the boxes as they sell, and the boxes you have already sold are covered
+                {' '}You pay {supplierLabel} the cost of the boxes as they sell, and the boxes you have already sold are covered
                 {data.cashSplit.paidAhead > 0 && <> ({formatCurrency(data.cashSplit.paidAhead)} more than covered)</>}.
                 {' '}The rest falls due as the stock on your shelf sells.
               </>

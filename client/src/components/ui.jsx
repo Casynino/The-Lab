@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useId, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import {
   withCommas, meaning, sameNumber, toPlain, readTyped, readPaste, stepPlain, rangeMessage, countsForCaret, caretAfter,
@@ -519,6 +519,8 @@ const openModals = [];
 export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  // The title names the window for a screen reader.
+  const titleId = useId();
   useEffect(() => {
     if (!open) return undefined;
     const me = {};
@@ -536,9 +538,9 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   if (!open) return null;
   return (
     <div className="modal-safe fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 backdrop-blur-md">
-      <div className={clsx('modal-panel modal-glass my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true">
+      <div className={clsx('modal-panel modal-glass my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-5 py-4">
-          <h3 className="text-base font-semibold text-foreground">{title}</h3>
+          <h3 id={titleId} className="text-base font-semibold text-foreground">{title}</h3>
           <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-faint hover:bg-elevated hover:text-muted">
             <X className="h-5 w-5" />
           </button>
