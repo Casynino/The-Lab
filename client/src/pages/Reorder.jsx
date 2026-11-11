@@ -5,7 +5,7 @@ import { AlertTriangle, Clock, Wallet, Gauge, ChevronDown, PackageSearch, CheckC
 import api, { unwrap } from '@/lib/api';
 import { formatCurrency, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
-  PageHeader, Card, CardHeader, PageSpinner, EmptyState, Badge,
+  PageHeader, Card, CardHeader, PageSpinner, EmptyState, Badge, LoadError,
   Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -48,7 +48,7 @@ function CoverCell({ item }) {
 }
 
 export default function Reorder() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['reorder'],
     queryFn: async () => unwrap(await api.get('/reorder')).data,
   });
@@ -63,6 +63,8 @@ export default function Reorder() {
   const shown = band ? recs.filter((r) => r.urgency === band) : recs;
 
   if (isLoading) return <PageSpinner />;
+  // Not "nothing to reorder": the list never came back.
+  if (isError && !data) return <LoadError what="the reorder list" onRetry={refetch} />;
 
   const pace = `the last ${s.lookbackDays} days`;
   const urgent = (s.criticalCount || 0) + (s.highCount || 0);

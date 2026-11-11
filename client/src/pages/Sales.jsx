@@ -11,7 +11,7 @@ import { ROLES, SALE_STATUS_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, NumberInput,
-  Pagination, Table, THead, TBody, TR, TH, TD,
+  Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function NewSaleModal({ open, onClose }) {
@@ -329,7 +329,7 @@ export default function Sales() {
   const [modalOpen, setModalOpen] = useState(false);
   const [detailId, setDetailId] = useState(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['sales', { page, type, status }],
     queryFn: async () => unwrap(await api.get('/sales', { params: { page, limit: 15, type: type || undefined, status: status || undefined } })),
   });
@@ -346,7 +346,10 @@ export default function Sales() {
   const saleWord = (n) => `sale${n === 1 ? '' : 's'}`;
   // An empty result under a filter is not an empty business — say which.
   const filtered = !!(type || status);
-  const nothing = filtered ? 'nothing matches this filter' : 'nothing sold yet';
+  // A failed load is not "nothing sold": its figures show a dash, never TSh 0.
+  const failed = isError && !data;
+  const nothing = failed ? "couldn't load the sales" : filtered ? 'nothing matches this filter' : 'nothing sold yet';
+  const shown = (text) => (failed ? '—' : text);
 
   // Chip counts are taken over the OTHER filter, so they hold still as you
   // click through them instead of collapsing onto whatever is selected.
@@ -376,7 +379,7 @@ export default function Sales() {
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           {[
             {
-              label: 'Revenue taken', value: formatCurrency(sum?.revenue ?? 0), icon: Wallet,
+              label: 'Revenue taken', value: shown(formatCurrency(sum?.revenue ?? 0)), icon: Wallet,
               sub: period ? `${formatNumber(sum.sales)} ${saleWord(sum.sales)} ${period}` : nothing,
               ring: (sum?.revenue ?? 0) > 0 ? 'ring-brand-500/25' : 'ring-white/[0.08]',
               glow: (sum?.revenue ?? 0) > 0 ? 'from-brand-500/[0.12]' : 'from-white/[0.03]',
@@ -384,7 +387,7 @@ export default function Sales() {
               num: (sum?.revenue ?? 0) > 0 ? 'text-brand-600' : 'text-foreground',
             },
             {
-              label: 'Profit kept', value: formatCurrency(sum?.profit ?? 0), icon: TrendingUp,
+              label: 'Profit kept', value: shown(formatCurrency(sum?.profit ?? 0)), icon: TrendingUp,
               sub: (sum?.sales ?? 0) > 0
                 ? `${formatPercent(sum.margin)} margin on the same ${formatNumber(sum.sales)} ${saleWord(sum.sales)}`
                 : nothing,
@@ -394,7 +397,7 @@ export default function Sales() {
               num: (sum?.profit ?? 0) > 0 ? 'text-emerald-300' : (sum?.profit ?? 0) < 0 ? 'text-rose-300' : 'text-foreground',
             },
             {
-              label: 'Boxes sold', value: formatNumber(sum?.boxes ?? 0), icon: Boxes,
+              label: 'Boxes sold', value: shown(formatNumber(sum?.boxes ?? 0)), icon: Boxes,
               sub: period ? `left the shelves ${period}` : nothing,
               ring: (sum?.boxes ?? 0) > 0 ? 'ring-violet-500/25' : 'ring-white/[0.08]',
               glow: (sum?.boxes ?? 0) > 0 ? 'from-violet-500/[0.14]' : 'from-white/[0.03]',
@@ -402,7 +405,7 @@ export default function Sales() {
               num: (sum?.boxes ?? 0) > 0 ? 'text-violet-300' : 'text-foreground',
             },
             {
-              label: 'Money still owed', value: formatCurrency(sum?.owed ?? 0), icon: Timer,
+              label: 'Money still owed', value: shown(formatCurrency(sum?.owed ?? 0)), icon: Timer,
               sub: (sum?.owed ?? 0) > 0
                 ? `unpaid on ${formatNumber(sum.unpaid)} of those ${saleWord(sum.unpaid)}`
                 : period ? `every sale ${period} was paid in full` : nothing,
@@ -460,7 +463,7 @@ export default function Sales() {
             ))}
           </div>
 
-          {isLoading ? <PageSpinner /> : !data?.data?.length ? (
+          {isLoading ? <PageSpinner /> : failed ? <LoadError what="the sales" onRetry={refetch} /> : !data?.data?.length ? (
             <EmptyState
               title={filtered ? 'No sales match these filters' : 'No sales yet'}
               message={filtered ? 'Widen the filters above to see the rest.' : 'Record your first sale.'}

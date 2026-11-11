@@ -11,7 +11,7 @@ import { useBrands, useCategories, usePackagingUnits, useDebounce } from '@/lib/
 import { formatCurrency, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
-  SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
+  SearchInput, Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function PackagingEditor({ rows, setRows, units }) {
@@ -208,7 +208,7 @@ function ProductsCatalogue() {
   const { data: categories = [] } = useCategories();
   const { data: units = [] } = usePackagingUnits();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['products', { page, search: debounced, brandId, categoryId }],
     queryFn: async () => unwrap(await api.get('/products', { params: { page, limit: 15, search: debounced, brandId: brandId || undefined, categoryId: categoryId || undefined } })),
   });
@@ -230,17 +230,19 @@ function ProductsCatalogue() {
           something to act on. */}
       {(() => {
         const rows = data?.data || [];
+        // A failed load shows dashes, not a catalogue of zero.
+        const shown = (text) => (isError && !data ? '—' : text);
         const onHand = rows.reduce((n, p) => n + (p.onHandBase || 0), 0);
         const lowCount = rows.filter((p) => p.lowStock).length;
         const value = rows.reduce((n, p) => n + (p.onHandBase || 0) * Number(p.sellingPrice || 0), 0);
         const cards = [
-          { label: 'Products', value: formatNumber(data?.meta?.total ?? rows.length), icon: Package, sub: 'in the catalogue',
+          { label: 'Products', value: shown(formatNumber(data?.meta?.total ?? rows.length)), icon: Package, sub: 'in the catalogue',
             ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
-          { label: 'Boxes on hand', value: formatNumber(onHand), icon: Boxes, sub: 'across these products',
+          { label: 'Boxes on hand', value: shown(formatNumber(onHand)), icon: Boxes, sub: 'across these products',
             ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
-          { label: 'Worth at selling price', value: formatCurrency(value), icon: Wallet, sub: 'if every box sold',
+          { label: 'Worth at selling price', value: shown(formatCurrency(value)), icon: Wallet, sub: 'if every box sold',
             ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
-          { label: 'Running low', value: formatNumber(lowCount), icon: TrendingDown, sub: lowCount ? 'reorder before they run out' : 'nothing needs reordering',
+          { label: 'Running low', value: shown(formatNumber(lowCount)), icon: TrendingDown, sub: isError && !data ? "couldn't load" : lowCount ? 'reorder before they run out' : 'nothing needs reordering',
             ring: lowCount ? 'ring-rose-500/30' : 'ring-white/[0.07]', glow: lowCount ? 'from-rose-500/[0.14]' : 'from-white/[0.02]',
             chip: 'bg-rose-500/15 text-rose-300', num: lowCount ? 'text-rose-300' : 'text-foreground' },
         ];
@@ -281,9 +283,13 @@ function ProductsCatalogue() {
           </div>
         </div>
 
-        {isLoading ? <PageSpinner /> : !data?.data?.length ? (
-          <EmptyState title="No products" message="Create your first product to start tracking stock." icon={Package}
-            action={<Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New product</Button>} />
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the products" onRetry={refetch} /> : !data?.data?.length ? (
+          debounced || brandId || categoryId ? (
+            <EmptyState title="No products match" message="Nothing matches this search or filter. Try another, or clear it." icon={Package} />
+          ) : (
+            <EmptyState title="No products" message="Create your first product to start tracking stock." icon={Package}
+              action={<Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New product</Button>} />
+          )
         ) : (
           <>
             <Table>

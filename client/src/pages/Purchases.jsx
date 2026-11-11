@@ -8,7 +8,7 @@ import { PO_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
-  Pagination, Table, THead, TBody, TR, TH, TD,
+  Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function POModal({ onClose, editing }) {
@@ -290,7 +290,7 @@ function PurchaseOrders() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
-  const { data, isLoading } = useQuery({ queryKey: ['purchase-orders', { page }], queryFn: async () => unwrap(await api.get('/purchase-orders', { params: { page, limit: 15 } })) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['purchase-orders', { page }], queryFn: async () => unwrap(await api.get('/purchase-orders', { params: { page, limit: 15 } })) });
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const askDelete = (po) => {
@@ -368,7 +368,7 @@ function PurchaseOrders() {
         <span className="text-sm font-semibold text-foreground">Purchase orders</span>
         <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New PO</Button>
       </div>
-      {isLoading ? <PageSpinner /> : !data?.data?.length ? <EmptyState title="No purchase orders" icon={Ship} /> : (
+      {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the purchase orders" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No purchase orders" icon={Ship} /> : (
         <>
           <Table>
             <THead><TR><TH>PO</TH><TH>Supplier</TH><TH>Boxes</TH><TH>Products</TH><TH>Total cost</TH><TH>Expected</TH><TH>Status</TH><TH /></TR></THead>
@@ -445,14 +445,14 @@ function PurchaseOrders() {
 
 function Suppliers() {
   const [modal, setModal] = useState({ open: false, editing: null });
-  const { data, isLoading } = useQuery({ queryKey: ['suppliers'], queryFn: async () => unwrap(await api.get('/suppliers', { params: { limit: 100 } })) });
+  const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['suppliers'], queryFn: async () => unwrap(await api.get('/suppliers', { params: { limit: 100 } })) });
   return (
     <Card>
       <div className="flex items-center justify-between border-b border-border p-4">
         <span className="text-sm font-semibold text-foreground">Suppliers</span>
         <Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New supplier</Button>
       </div>
-      {isLoading ? <PageSpinner /> : !data?.data?.length ? <EmptyState title="No suppliers" /> : (
+      {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the suppliers" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No suppliers" /> : (
         <Table>
           <THead><TR><TH>Name</TH><TH>Country</TH><TH>Contact</TH><TH>Phone</TH><TH>POs</TH><TH /></TR></THead>
           <TBody>{data.data.map((s) => (
