@@ -883,8 +883,8 @@ export default function Layout() {
 
       {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
 
-      {/* Offered once, a moment after a phone's browser reaches the app: a tab
-          keeps its address bar, and only an installed app is full screen. */}
+      {/* Opens by itself only right after someone signs in on a phone, and never again once it is
+          closed (Nino, 11 Nov 2026). "Get the app" in the sidebar is the way back to it. */}
       <InstallPrompt />
     </div>
   );

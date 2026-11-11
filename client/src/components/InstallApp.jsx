@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, Download, EllipsisVertical, Menu, Share, SquarePlus, X } from 'lucide-react';
+import { installOffer } from '@/lib/installOffer';
 
 /**
  * Use it like an app.
@@ -37,16 +38,6 @@ if (typeof window !== 'undefined') {
     tell();
   });
 }
-
-/* "Not now" is remembered for this visit only. Nino, 10 Nov 2026, holding up
-   Super Drive on a rep's Android: the app must keep asking, one tap, until it
-   is installed — a rep who waves it away once on a Monday is not meant to be
-   left on the browser's address bar for good. */
-const ASKED = 'lab.install.asked';
-
-const read = (key) => {
-  try { return window.sessionStorage.getItem(key); } catch { return null; }
-};
 
 /** Which phone browser this is — see the note at the top of the file. */
 function browserOf(ua, ios) {
@@ -229,25 +220,39 @@ export function InstallSheet({ open, onClose }) {
 }
 
 /**
- * Opens by itself a moment after a phone's browser reaches the app, on every
- * visit until the app is installed. On Android (Chrome, Samsung, Huawei's
- * browser) that is one tap on "Install the app" — the browser's own install
- * dialog, caught above. Apple allows no such tap, so an iPhone gets the three
- * steps instead; that is the shortest road Safari has.
+ * Opens by itself a moment after someone signs in on a phone — and only then
+ * (Nino, 11 Nov 2026: "only when someone logs in, not all the time; if they
+ * cancel, they must not see it again unless they want to"). A reload, a new
+ * page or opening the app again with the session alive does not open it, and
+ * neither does any later sign-in once it has been closed. The rules live in
+ * lib/installOffer.js; "Get the app" in the sidebar always opens it.
+ *
+ * On Android (Chrome, Samsung, Huawei's browser) the sheet is one tap on
+ * "Install the app" — the browser's own install dialog, caught above. Apple
+ * allows no such tap, so an iPhone gets the three steps instead; that is the
+ * shortest road Safari has.
  */
 export function InstallPrompt() {
   const { ready, phone, installed } = useInstall();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!ready || !phone || installed || read(ASKED)) return undefined;
-    const t = window.setTimeout(() => setOpen(true), 1500);
+    if (!ready || !installOffer.pending()) return undefined;
+    // Nothing to offer: not a phone, already installed, or the person said no before.
+    if (!phone || installed || installOffer.dismissed()) {
+      installOffer.spend();
+      return undefined;
+    }
+    const t = window.setTimeout(() => {
+      installOffer.spend();
+      setOpen(true);
+    }, 1500);
     return () => window.clearTimeout(t);
   }, [ready, phone, installed]);
 
   const close = () => {
     setOpen(false);
-    try { window.sessionStorage.setItem(ASKED, '1'); } catch { /* private window: it asks once more next time */ }
+    installOffer.dismiss();
   };
 
   return <InstallSheet open={open} onClose={close} />;

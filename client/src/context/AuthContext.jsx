@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback } 
 import api, { tokenStore, unwrap, apiError } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { idle } from '@/lib/idle';
+import { installOffer } from '@/lib/installOffer';
 
 const AuthContext = createContext(null);
 
@@ -73,6 +74,8 @@ export function AuthProvider({ children }) {
       const { user: u, tokens } = unwrap(res).data;
       tokenStore.set(tokens.accessToken, tokens.refreshToken);
       idle.touch(true);
+      // A real sign-in is the one moment the "Use it like an app" sheet may open by itself.
+      installOffer.offerAfterSignIn();
       setUser(u);
       return { ok: true, user: u };
     } catch (err) {
