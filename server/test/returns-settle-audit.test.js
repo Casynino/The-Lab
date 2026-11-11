@@ -65,6 +65,20 @@ test('lines that together fit what is left still go through', async () => {
   assert.equal(created.returns[0].items.reduce((n, i) => n + i.baseQuantity, 0), 2);
 });
 
+// The over-the-open-orders refusal speaks to whoever sent it (audit, 12 Nov 2026): the rep is "you",
+// ZELab staff returning for him are not, and one box is never "box(es)".
+test('the over-return refusal addresses the rep as you and staff as staff', () => {
+  const name = 'OHIS Ndogo (Brown) – Bila Filter';
+  const mine = returns.overReturnMessage(name, 1, rep, 'repA');
+  assert.match(mine, /only 1 box is still unaccounted on your open orders — you can't return more than that\./);
+  const staff = { id: 'admin1', name: 'Nino', salesRepId: null };
+  const theirs = returns.overReturnMessage(name, 0, staff, 'repA');
+  assert.match(theirs, /only 0 boxes are still unaccounted on the rep's open orders — no more than that can be returned\./);
+  assert.doesNotMatch(theirs, /\byour?\b/i);
+  // another rep's login is not "you" for this rep's orders either
+  assert.match(returns.overReturnMessage(name, 3, { id: 'u9', salesRepId: 'repB' }, 'repA'), /3 boxes are still unaccounted on the rep's/);
+});
+
 test('a rep notice with a WhatsApp dedupeSalt is saved without it and still mirrored with it', async () => {
   created.notifications.length = 0;
   mirrored.length = 0;

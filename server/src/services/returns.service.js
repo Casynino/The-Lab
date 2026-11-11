@@ -123,6 +123,17 @@ async function openOrderAvailability(client, salesRepId) {
 
 // ── Create (PENDING — no inventory moves yet) ─────────────────────────────────
 
+// The refusal when more boxes are sent back than are still on the rep's open orders. It used to say "your
+// open orders … you can't" to everybody, so ZELab staff returning for a rep were addressed as the rep (audit,
+// 12 Nov 2026). Only the rep himself is "you"; staff read "the rep's".
+function overReturnMessage(productName, boxes, actor, salesRepId) {
+  const own = Boolean(actor?.salesRepId) && actor.salesRepId === salesRepId;
+  const count = `${boxes} ${boxes === 1 ? 'box is' : 'boxes are'}`;
+  return own
+    ? `${productName}: only ${count} still unaccounted on your open orders — you can't return more than that.`
+    : `${productName}: only ${count} still unaccounted on the rep's open orders — no more than that can be returned.`;
+}
+
 async function createReturn(payload, actor) {
   const { type, customerId, salesRepId, settlementId, warehouseId, items, reason, notes, processedAt } = payload;
 
@@ -236,9 +247,7 @@ async function createReturn(payload, actor) {
         if (leftBase > 0) {
           const name = productMap.get(l.productId)?.name || 'This product';
           const onOrders = l.baseQuantity - leftBase;
-          throw ApiError.badRequest(
-            `${name}: only ${Math.floor(onOrders / perUnit)} box(es) are still unaccounted on your open orders — you can't return more than that.`,
-          );
+          throw ApiError.badRequest(overReturnMessage(name, Math.floor(onOrders / perUnit), actor, salesRepId));
         }
       }
 
@@ -722,6 +731,7 @@ async function returnsSummary(filters = {}) {
 }
 
 module.exports = {
+  overReturnMessage,
   cancelReturn,
   expireStaleReturns,
   returnsSummary, createReturn, approveReturn, rejectReturn, listReturns, getReturn, RETURN_INCLUDE };
