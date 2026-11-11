@@ -29,7 +29,9 @@ const login = asyncHandler(async (req, res) => {
     await recordRefusedLogin(req, res, email, err);
     throw err;
   }
-  await auditService.record(req, {
+  // The person who signed in did it: there is no req.user yet at sign-in, so the row had no person, read
+  // "The system signed in" and was missed by a search for his name (audit 11 Nov 2026, admin-system-6).
+  await auditService.record({ headers: req.headers, ip: req.ip, socket: req.socket, user: { id: result.user.id } }, {
     action: 'LOGIN',
     entityType: 'User',
     entityId: result.user.id,

@@ -25,7 +25,7 @@ const ACTION = {
   APPROVE: { verb: 'approved', icon: CheckCircle2, cls: 'bg-emerald-500/15 text-emerald-300' },
   REJECT: { verb: 'rejected', icon: XCircle, cls: 'bg-rose-500/15 text-rose-300' },
   PAY: { verb: 'paid', icon: HandCoins, cls: 'bg-emerald-500/15 text-emerald-300' },
-  LOGIN: { verb: 'signed in', icon: LogIn, cls: 'bg-sky-500/15 text-sky-300', self: true, also: 'sign in log in login' },
+  LOGIN: { verb: 'signed in', icon: LogIn, cls: 'bg-sky-500/15 text-sky-300', self: true, also: 'sign in log in login', anon: 'An account' },
   LOGOUT: { verb: 'signed out', icon: LogOut, cls: 'bg-white/[0.07] text-white/60', self: true, also: 'sign out log out logout' },
   LOGIN_FAILED: { verb: 'refused a sign-in', icon: Ban, cls: 'bg-rose-500/15 text-rose-300', self: true, also: 'failed sign in login wrong password' },
   CHANGE_PASSWORD: { verb: 'changed the password', icon: KeyRound, cls: 'bg-amber-500/15 text-amber-300', self: true },
@@ -79,7 +79,8 @@ function searchParams(text) {
 
 function line(log) {
   const a = ACTION[log.action] || { verb: words(log.action), icon: ScrollText, cls: 'bg-white/[0.07] text-white/60' };
-  const who = log.user?.name || 'The system';
+  // Sign-ins written before 12 Nov 2026 have no person (the account is the subject): not "The system".
+  const who = log.user?.name || a.anon || 'The system';
   const what = a.self ? '' : ` ${a.obj || ENTITY[log.entityType] || `a ${words(log.entityType)}`}`;
   return { ...a, text: `${who} ${a.verb}${what}` };
 }

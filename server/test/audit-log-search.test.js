@@ -22,6 +22,7 @@ install('../src/config/prisma', {
     findMany: async ({ where }) => { seen.push(where); return []; },
     count: async () => 0,
   },
+  user: { findMany: async ({ where }) => (where.OR[0].name.contains === 'Nino' ? [{ id: 'u-nino' }] : []) },
 });
 
 const { list, searchWhere } = require('../src/controllers/auditLogs.controller');
@@ -57,4 +58,13 @@ test('GET /audit-logs passes the search through, and the query check keeps the n
     list({ query: {}, validatedQuery: parsed }, res, (e) => (e ? reject(e) : resolve()));
   });
   assert.ok(seen[0].OR.some((c) => JSON.stringify(c.action?.in) === '["DEACTIVATE"]'));
+});
+
+test('a person\'s own sign-ins (written with the account as the subject and no person) are found by his name', async () => {
+  seen.length = 0;
+  await new Promise((resolve, reject) => {
+    const res = { status: () => res, json: resolve };
+    list({ query: {}, validatedQuery: { search: 'Nino' } }, res, (e) => (e ? reject(e) : resolve()));
+  });
+  assert.ok(seen[0].OR.some((c) => c.entityType === 'User' && JSON.stringify(c.entityId?.in) === '["u-nino"]'));
 });

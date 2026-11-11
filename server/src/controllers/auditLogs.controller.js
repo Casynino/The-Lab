@@ -11,8 +11,10 @@ const codes = (s) => String(s || '').split(',').map((c) => c.trim()).filter((c) 
 // What a search matches (audit 11 Nov 2026, admin-system-6: "Nino", an email, "signed in" or "refused" found
 // nothing, because only the raw codes and ids were searched). Now also: the person who did it (name or
 // email), the email tried on a refused sign-in, and the action and object codes whose words on the screen
-// match — the page knows those words and sends the codes (searchActions, searchEntities).
-function searchWhere(search, { searchActions, searchEntities } = {}) {
+// match — the page knows those words and sends the codes (searchActions, searchEntities). `peopleIds`: the
+// accounts whose name or email matches, for the rows about that account (its sign-ins were written with the
+// account as the subject and no person, so a search for the name missed them).
+function searchWhere(search, { searchActions, searchEntities } = {}, peopleIds = []) {
   const text = String(search || '').trim();
   if (!text) return null;
   const like = { contains: text, mode: 'insensitive' };
@@ -29,7 +31,17 @@ function searchWhere(search, { searchActions, searchEntities } = {}) {
   if (actions.length) or.push({ action: { in: actions } });
   const entities = codes(searchEntities);
   if (entities.length) or.push({ entityType: { in: entities } });
+  if (peopleIds.length) or.push({ entityType: 'User', entityId: { in: peopleIds } });
   return or;
+}
+
+// The accounts a search names (at most 50; the users table is small).
+async function peopleMatching(search) {
+  const text = String(search || '').trim();
+  if (!text) return [];
+  const like = { contains: text, mode: 'insensitive' };
+  const rows = await prisma.user.findMany({ where: { OR: [{ name: like }, { email: like }] }, select: { id: true }, take: 50 });
+  return rows.map((r) => r.id);
 }
 
 const list = asyncHandler(async (req, res) => {
@@ -44,7 +56,7 @@ const list = asyncHandler(async (req, res) => {
     if (q.from) where.createdAt.gte = new Date(q.from);
     if (q.to) where.createdAt.lte = new Date(q.to);
   }
-  const or = searchWhere(q.search, q);
+  const or = searchWhere(q.search, q, await peopleMatching(q.search));
   if (or) where.OR = or;
 
   const [items, total] = await Promise.all([
