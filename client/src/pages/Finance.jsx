@@ -1389,7 +1389,7 @@ function RecordWalletCard({ account, hidden, onToggleHide, onOpen }) {
   );
 }
 
-function Accounts({ onQuick }) {
+function Accounts({ onQuick, onNavigate }) {
   const [addOpen, setAddOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [correctOpen, setCorrectOpen] = useState(false);
@@ -1401,6 +1401,12 @@ function Accounts({ onQuick }) {
   // Transfers and balance corrections are the owner's (the server refuses staff); staff do not see them.
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
   const { data: accounts = [], isLoading } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
+  // The newest movements across every account (the Ledger's own list, first eight rows). Under the 'finance'
+  // key, so recording income, an expense or a transfer refreshes it with everything else.
+  const { data: latest } = useQuery({
+    queryKey: ['finance', 'transactions', 'latest'],
+    queryFn: async () => unwrap(await api.get('/finance/transactions', { params: { page: 1, limit: 8, sortBy: 'occurredAt', sortDir: 'desc' } })).data,
+  });
   if (isLoading) return <PageSpinner />;
   // Wallets hold the money; the Commission account holds a record of money the
   // owner paid out of his own hand. Adding a record into a cash total would
@@ -1456,17 +1462,17 @@ function Accounts({ onQuick }) {
         {/* Which pocket holds the money: one big donut, each account in its own colour. */}
         <Panel title="Where the cash sits" sub={round2ui(above) === round2ui(total) ? "Each account's share" : "Each account's share of what is held above zero"}>
           {slices.length ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-5 sm:flex-row sm:gap-8 xl:flex-col xl:gap-5">
-              <div className="relative w-full max-w-[270px] shrink-0">
-                <DonutChart data={slices.map(({ a }) => ({ name: a.name, value: a.balance }))} height={256} legend={false}
-                  innerRadius={86} outerRadius={122} stroke="none"
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 sm:flex-row sm:gap-8 xl:flex-col xl:gap-3">
+              <div className="relative w-full max-w-[230px] shrink-0">
+                <DonutChart data={slices.map(({ a }) => ({ name: a.name, value: a.balance }))} height={210} legend={false}
+                  innerRadius={70} outerRadius={100} stroke="none"
                   colors={slices.map(({ a }) => ACCOUNT_HEX[colourIdx(a)])} />
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                   <span className="whitespace-nowrap text-[15px] font-bold tabular-nums text-foreground">{mask(formatCurrency(above))}</span>
                   <span className="mt-0.5 text-[10px] uppercase tracking-wider text-white/50">{round2ui(above) === round2ui(total) ? 'held' : 'above zero'}</span>
                 </div>
               </div>
-              <ul className="w-full min-w-0 space-y-2 sm:flex-1 xl:flex-none">
+              <ul className="w-full min-w-0 space-y-1 sm:flex-1 xl:flex-none">
                 {slices.map(({ a }) => {
                   const Icon = ACCOUNT_ICON[a.type] || Wallet;
                   const hex = ACCOUNT_HEX[colourIdx(a)];
@@ -1504,6 +1510,42 @@ function Accounts({ onQuick }) {
           )}
         </Panel>
       </div>
+
+      {/* What just happened to the money: the newest movements across every account, in two columns (newest at
+          the top left). A row opens its account's statement; the Ledger has the rest. */}
+      <Panel title="Latest movements" sub="Across every account · newest first" link={{ tab: 'ledger', label: 'Ledger' }} onNavigate={onNavigate}>
+        {latest?.length ? (
+          <ul className="-mx-1 grid grid-cols-1 gap-x-8 lg:grid-flow-col lg:grid-rows-4">
+            {latest.map((t, k) => {
+              const acc = accounts.find((a) => a.id === t.accountId);
+              const idx = acc && !acc.isCommissionRecord ? colourIdx(acc) : null;
+              const payout = isPayoutRow(t);
+              const tone = payout ? 'text-violet-300' : t.direction === 'IN' ? 'text-emerald-300' : 'text-rose-300';
+              const sign = payout ? '' : t.direction === 'IN' ? '+' : '−';
+              const what = (payout && t.payee ? `Commission to ${t.payee}` : t.description) || t.category || TXN_TYPE_LABEL[t.type] || t.type;
+              return (
+                <li key={t.id} className={`border-b border-white/[0.06] last:border-0 ${k === 3 ? 'lg:border-0' : ''}`}>
+                  <button type="button" disabled={!acc} onClick={() => acc && setViewing(acc)} title={what}
+                    className="flex w-full items-center gap-3 rounded-lg px-1 py-2 text-left transition enabled:cursor-pointer enabled:hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: idx == null ? 'rgba(255,255,255,.35)' : ACCOUNT_LIGHT[idx] }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] text-foreground">{what}</span>
+                      <span className="block truncate text-[11px] text-white/45">
+                        {t.account?.name || acc?.name || '—'} · {TXN_TYPE_LABEL[t.type] || t.type} · {formatDate(t.occurredAt)}
+                      </span>
+                    </span>
+                    <span className={`shrink-0 whitespace-nowrap text-[13px] font-semibold tabular-nums ${tone}`}>
+                      {hidden ? '•••' : `${sign}${formatCurrency(t.amount)}`}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="py-6 text-center text-sm text-white/50">{latest ? 'Nothing has moved through any account yet.' : 'Loading…'}</p>
+        )}
+      </Panel>
 
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
@@ -2877,7 +2919,7 @@ export default function Finance() {
       {tab === 'profit' && <ProfitTab accounts={accounts} />}
       {tab === 'cashflow' && <CashFlowTab />}
       {tab === 'suppliers' && <SuppliersTab accounts={accounts} />}
-      {tab === 'accounts' && <Accounts onQuick={setMoney} />}
+      {tab === 'accounts' && <Accounts onQuick={setMoney} onNavigate={setTab} />}
       {tab === 'expenses' && <Ledger expensesOnly />}
       {tab === 'ledger' && <Ledger />}
       {tab === 'commissions' && <CommissionsPage embedded />}
