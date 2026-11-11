@@ -203,7 +203,8 @@ function createReport({ kind, title, period, number, generatedAt, blurb, logo, a
   // ── a numbered part ────────────────────────────────────────────────────────
   function section(titleText, subtitle) {
     sectionNo += 1;
-    ensure(46);
+    // the heading never stands alone at the foot of a page: it keeps room for the first block under it
+    ensure(46 + 110);
     put(String(sectionNo).padStart(2, '0'), PAGE.left, y + 2, { size: 8.5, bold: true, color: C.red, spacing: 0.5 });
     put(titleText, PAGE.left + 22, y, { w: W - 22, size: 12.5, bold: true });
     let h = 17;
@@ -308,6 +309,51 @@ function createReport({ kind, title, period, number, generatedAt, blurb, logo, a
     };
   }
 
+  // columns that can go below the line (profit month by month): [{ label, value, highlight, muted }].
+  // Above the line in near-black (the highlighted one in green), below it in red, each with its figure;
+  // a muted point (a month not reached yet) is a faint dash on the line.
+  function signedColumns({ title: t, points, w = W, height = 124, empty: emptyText }) {
+    const head = t ? 18 : 0;
+    const all = points.map((p) => Number(p.value) || 0);
+    if (!points.length || all.every((v) => v === 0)) {
+      const e = empty(emptyText, w);
+      return { h: head + e.h, paint: (x, yy) => { if (t) put(t, x, yy, { size: 9, bold: true }); e.paint(x, yy + head); } };
+    }
+    const h = head + height + 22;
+    const maxPos = Math.max(0, ...all);
+    const maxNeg = Math.max(0, ...all.map((v) => -v));
+    const span = Math.max(1, maxPos + maxNeg);
+    return {
+      h,
+      paint: (x, yy) => {
+        let cy = yy;
+        if (t) { put(t, x, cy, { size: 9, bold: true }); cy += head; }
+        const top = cy + 12;
+        const bottom = cy + height - 12;
+        const usable = bottom - top;
+        const zero = top + (maxPos / span) * usable;
+        const gap = Math.min(8, w / points.length / 4);
+        const bw = (w - gap * (points.length - 1)) / points.length;
+        points.forEach((p, i) => {
+          const v = all[i];
+          const bx = x + i * (bw + gap);
+          const bh = v !== 0 ? Math.max(1.5, (Math.abs(v) / span) * usable) : 0;
+          if (p.muted || v === 0) {
+            doc.save().rect(bx, zero - 0.5, bw, 1).fill(C.line).restore();
+          } else if (v > 0) {
+            doc.save().roundedRect(bx, zero - bh, bw, bh, Math.min(2.5, bw / 3)).fill(p.highlight ? C.good : '#2b2824').restore();
+            if (bw > 16) put(compact(v), bx - 4, zero - bh - 9.5, { w: bw + 8, size: 6.8, color: C.soft, align: 'center' });
+          } else {
+            doc.save().roundedRect(bx, zero, bw, bh, Math.min(2.5, bw / 3)).fill(C.bad).restore();
+            if (bw > 16) put(compact(v), bx - 4, zero + bh + 2.5, { w: bw + 8, size: 6.8, color: C.bad, align: 'center' });
+          }
+          put(p.label, bx - 6, cy + height + 4, { w: bw + 12, size: 6.8, color: p.muted ? C.line : C.faint, align: 'center' });
+        });
+        hline(x, x + w, zero, C.lineStrong, 0.7);
+      },
+    };
+  }
+
   // a statement: { rows: [{ label, value, style: sub|total|grand|less|note, text }] }
   function statement({ title: t, rows, w = W }) {
     const head = t ? 18 : 0;
@@ -354,7 +400,7 @@ function createReport({ kind, title, period, number, generatedAt, blurb, logo, a
           doc.save().roundedRect(tx, ty, tw, th, 5).fill(C.tile).restore();
           put(String(it.label).toUpperCase(), tx + 10, ty + 9, { w: tw - 20, size: 6.4, bold: true, color: C.faint, spacing: 0.6 });
           const size = fitSize(it.value, tw - 20, 11.5, 8, true);
-          put(it.value, tx + 10, ty + 21, { w: tw - 20, size, bold: true, color: it.tone === 'red' ? C.red : C.ink });
+          put(it.value, tx + 10, ty + 21, { w: tw - 20, size, bold: true, color: it.tone === 'red' ? C.red : it.tone === 'good' ? C.good : it.tone === 'bad' ? C.bad : C.ink });
           if (it.sub) put(it.sub, tx + 10, ty + 38, { w: tw - 20, size: 7, color: C.soft });
         });
       },
@@ -411,7 +457,8 @@ function createReport({ kind, title, period, number, generatedAt, blurb, logo, a
   // ── a table that may run over many pages ───────────────────────────────────
   // columns: [{ label, w (weight), align: 'left'|'right', money, muted }]; rows: arrays; foot: array
   function table({ title: t, columns: cols, rows, foot, empty: emptyText, more }) {
-    if (t) { ensure(30); put(t, PAGE.left, y, { size: 9, bold: true }); y += 16; }
+    // the title travels with the table's head and first row, never alone at the foot of a page
+    if (t) { ensure(16 + 17 + 30); put(t, PAGE.left, y, { size: 9, bold: true }); y += 16; }
     if (!rows.length) { add(empty(emptyText, W)); return; }
     const total = cols.reduce((s, c) => s + (c.w || 1), 0);
     const xs = [];
@@ -477,7 +524,7 @@ function createReport({ kind, title, period, number, generatedAt, blurb, logo, a
   return {
     doc, half, W,
     figures, section, add, pair, table, done,
-    bars, columns, statement, highlights, callout, note,
+    bars, columns, signedColumns, statement, highlights, callout, note,
     gap: (h = 8) => { y += h; },
     get y() { return y; },
   };

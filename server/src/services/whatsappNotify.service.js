@@ -45,6 +45,7 @@ const TYPES = {
   DAILY_SUMMARY: { label: 'Daily business report (21:00, with PDF)', priority: 'INFO' },
   WEEKLY_REPORT: { label: 'Weekly business report (Tuesday 08:00, with PDF)', priority: 'INFO' },
   MONTHLY_REPORT: { label: 'Monthly business report (1st of month 08:00, with PDF)', priority: 'INFO' },
+  YEARLY_REPORT: { label: 'Yearly business report (1 January 08:00, with PDF)', priority: 'INFO' },
   DEADLINE_IMMINENT: { label: 'An order is minutes from its deadline', priority: 'WARNING' },
   EXTENSION_TAKEN: { label: 'A rep took the 96-hour extension', priority: 'ACTION' },
   REP_ALERT: { label: "Sales rep alerts (to the rep's own WhatsApp)", priority: 'INFO' },
@@ -643,6 +644,14 @@ async function catchUpReports(now = nowEAT()) {
   const monthKey = (now.isBefore(first.hour(8)) ? first.subtract(2, 'month') : first.subtract(1, 'month')).format('YYYY-MM');
   await attempt('monthly', 'Monthly report', monthKey, `monthly:${monthKey}`, 'MONTHLY_REPORT', () =>
     require('./monthlyReport.service').sendMonthlyReport({ monthKey }));
+
+  // Yearly: due on 1 January at 08:00 for the year before it. Only looked for in January, so the rest of the
+  // year this check costs nothing; a January run that failed is sent late on any later January morning.
+  if (now.month() === 0 && !now.isBefore(now.startOf('year').hour(8))) {
+    const yearKey = now.subtract(1, 'year').format('YYYY');
+    await attempt('yearly', 'Yearly report', yearKey, `yearly:${yearKey}`, 'YEARLY_REPORT', () =>
+      require('./yearlyReport.service').sendYearlyReport({ yearKey }));
+  }
 
   return out;
 }

@@ -221,6 +221,35 @@ const periodReport = (title, linkLabel) => (d) => {
 owner.weeklyReport = periodReport('ZELAB — WEEKLY REPORT', 'Full Statement (PDF):');
 owner.monthlyReport = periodReport('ZELAB — MONTHLY REPORT', 'Full Report (PDF):');
 
+// The year in one message (Nino, 11 Nov 2026: "which month made more, or a loss"): the totals, the best and
+// the weakest month, the months that lost money, the leaders, the link. Leaders, then the weakest month, are
+// the first lines dropped when the message would run past CallMeBot's limit — the link always stays.
+owner.yearlyReport = (d) => {
+  const growth = d.growthPct == null ? null : Math.round(d.growthPct);
+  const loss = Array.isArray(d.lossMonths) ? d.lossMonths : [];
+  const build = ({ leaders, weakest }) => doc(
+    lines(bold('ZELAB — YEARLY REPORT'), d.year),
+    lines(`Revenue: ${money(d.revenue)}`, `Gross Profit: ${money(d.grossProfit)}`, `Expenses: ${money(d.expenses)}`, `Net Profit: ${money(d.netProfit)}`, `Boxes Sold: ${boxes(d.boxes)}`),
+    growth !== null && `Revenue Growth: ${growth > 0 ? '+' : ''}${growth}% on ${d.prevLabel}`,
+    lines(
+      d.bestMonth && `Best Month: ${d.bestMonth.name} — ${money(d.bestMonth.netProfit)} profit`,
+      weakest && d.weakestMonth && `Weakest Month: ${d.weakestMonth.name} — ${money(d.weakestMonth.netProfit)}`,
+      `Loss Months: ${loss.length ? loss.join(', ') : 'None'}`,
+    ),
+    leaders && lines(
+      d.topBrand && `Top Brand: ${d.topBrand.name} — ${money(d.topBrand.revenue)}`,
+      d.topRep && `Top Rep: ${d.topRep.name} — ${money(d.topRep.revenue)}`,
+      d.topProduct && `Top Product: ${d.topProduct.name}`,
+    ),
+    `Cash Balance: ${money(d.cashBalance)}`,
+    d.link && lines('Full Year Report (PDF):', d.link),
+  );
+  return fitted(build, [
+    { leaders: true, weakest: true }, { leaders: true, weakest: false },
+    { leaders: false, weakest: true }, { leaders: false, weakest: false },
+  ]);
+};
+
 // ═══ To a rep ════════════════════════════════════════════════════════════════
 // Same shape, and a plain "ZELab" at the foot so they know whom it is from.
 

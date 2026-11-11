@@ -125,7 +125,32 @@ router.get(
     const monthly = require('../services/monthlyReport.service');
     return reportGuard(
       'Monthly report',
-      () => monthly.sendMonthlyReport({ force: req.query.force === '1', silent: req.query.silent === '1', monthKey: req.query.month || undefined }),
+      async () => {
+        const result = await monthly.sendMonthlyReport({ force: req.query.force === '1', silent: req.query.silent === '1', monthKey: req.query.month || undefined });
+        // On 1 January the month just reported is December, so the year is over too: send its yearly report
+        // right after. Its own failure never spoils the monthly answer — the morning sweep sends it late.
+        if (!req.query.month && require('../utils/dates').eatNow().month() === 0) {
+          result.yearly = await require('../services/yearlyReport.service').sendYearlyReport({})
+            .catch((err) => ({ error: String(err.message).slice(0, 200) }));
+        }
+        return result;
+      },
+      res,
+    );
+  }),
+);
+
+// Yearly WhatsApp business report + archived PDF (1 January 08:00 EAT, for the year just ended — normally sent
+// by the monthly run above). ?year=YYYY pins a finished year; ?force=1 resends for a test; ?silent=1 only
+// rebuilds the archived PDF.
+router.get(
+  '/yearly-report',
+  guard,
+  asyncHandler(async (req, res) => {
+    const yearly = require('../services/yearlyReport.service');
+    return reportGuard(
+      'Yearly report',
+      () => yearly.sendYearlyReport({ force: req.query.force === '1', silent: req.query.silent === '1', yearKey: req.query.year || undefined }),
       res,
     );
   }),

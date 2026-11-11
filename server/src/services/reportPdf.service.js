@@ -1,7 +1,7 @@
 'use strict';
 
 // ===========================================================================
-// The daily, weekly and monthly report PDFs.
+// The daily, weekly, monthly and yearly report PDFs.
 //
 // One composition, three lengths: the same parts in the same order, so a reader
 // who knows the weekly report can read the daily one at a glance. Every number
@@ -44,6 +44,13 @@ const KINDS = {
     compare: null, // taken from d.prevLabel
     chart: { title: 'Sales by day', sub: 'best day in red' },
   },
+  yearly: {
+    kind: 'Yearly report',
+    title: 'Yearly business report',
+    blurb: (d) => `Everything sold, spent and moved through the business accounts in ${d.period.label}, month by month. The arrows compare with ${d.prevLabel}.`,
+    compare: null, // taken from d.prevLabel
+    chart: null, // the months take the place of the days
+  },
 };
 
 function headlineFigures(d) {
@@ -64,8 +71,97 @@ function headlineFigures(d) {
   ];
 }
 
+// The year in a few plain sentences: the total, then the months — which made the most, the least, a loss.
+function yearShort(d) {
+  const f = d.finance;
+  const ex = d.extras;
+  const s = d.summary;
+  const lines = [];
+  if (!(f.revenue > 0) && !ex.orders) {
+    lines.push(`No sales were recorded in ${d.period.label}.`);
+  } else {
+    const ch = ex.prev ? pct(f.revenue, ex.prev.revenue) : null;
+    let t = `Sales came to ${tsh(f.revenue)} from ${plural(ex.orders, 'sale', 'sales')} and ${plural(f.boxesSold, 'box', 'boxes')}`;
+    if (ch != null) t += `, ${ch >= 0 ? 'up' : 'down'} ${Math.abs(Math.round(ch))}% on ${d.prevLabel}`;
+    lines.push(`${t}.`);
+  }
+  lines.push(`Net profit for the year was ${tsh(f.netProfit)}${f.netProfit < 0 ? ' (a loss)' : ''} after ${tsh(f.expenses)} of expenses.`);
+  if (s.bestProfit) lines.push(`The best month was ${s.bestProfit.label}: ${tsh(s.bestProfit.netProfit)} net profit on ${tsh(s.bestProfit.revenue)} of sales.`);
+  if (s.weakestProfit) lines.push(`The weakest was ${s.weakestProfit.label}, at ${tsh(s.weakestProfit.netProfit)}${s.weakestProfit.netProfit < 0 ? ' (a loss)' : ''}.`);
+  if (s.lossMonths.length) lines.push(`${plural(s.lossMonths.length, 'month', 'months')} made a loss: ${s.lossMonths.map((m) => m.short).join(', ')}.`);
+  else if (s.tradedCount) lines.push(`No month made a loss — all ${plural(s.tradedCount, 'trading month', 'trading months')} kept a profit.`);
+  const brand = [...d.brands].sort((a, b) => b.revenue - a.revenue)[0];
+  if (brand && brand.revenue > 0) lines.push(`${brand.name} led the brands with ${tsh(brand.revenue)}, ${oneDp(share(brand.revenue, f.revenue))} of sales.`);
+  const rep = ex.reps[0];
+  if (rep) lines.push(`Best sales rep of the year: ${rep.name}, ${tsh(rep.revenue)} from ${plural(rep.boxes, 'box', 'boxes')}.`);
+  lines.push(`${tsh(d.cashPosition)} is held across the business accounts.`);
+  return lines;
+}
+
+// The twelve months: sales, profit (a loss below the line), the best and weakest, a table, the quarters.
+function monthSection(r, d) {
+  const f = d.finance;
+  const s = d.summary;
+  const months = d.months;
+  r.section('Month by month', 'what each month sold, what it kept, and which made a loss');
+  const bestRev = s.bestRevenue ? s.bestRevenue.index : -1;
+  r.add(r.columns({
+    title: 'Sales by month  ·  best month in red',
+    points: months.map((m) => ({ label: m.short, value: m.revenue, highlight: m.index === bestRev ? true : undefined })),
+    empty: 'No sales this year.',
+    valueLabels: true,
+    height: 84,
+  }));
+  r.add(r.signedColumns({
+    title: 'Net profit by month  ·  the best in green, a loss in red below the line',
+    points: months.map((m) => ({ label: m.short, value: m.netProfit, muted: m.future, highlight: !!s.bestProfit && m.index === s.bestProfit.index && m.netProfit > 0 })),
+    empty: 'No profit or loss was recorded this year.',
+    height: 88,
+  }));
+  // Months before the first one with any figure are not "bad months" — the accounts simply start later.
+  const first = months.find((m) => !m.quiet && !m.future);
+  if (first && first.index > 0) r.add(r.note(`${months[0].short} to ${months[first.index - 1].short} show no figures: the business accounts start in ${first.label}. They never count as the weakest month.`));
+  r.add(r.highlights({
+    perRow: 4,
+    items: [
+      { label: 'Best month', value: s.bestProfit ? s.bestProfit.label : 'None yet', sub: s.bestProfit ? `${tsh(s.bestProfit.netProfit)} net profit` : 'no trading month', tone: s.bestProfit && s.bestProfit.netProfit > 0 ? 'good' : undefined },
+      { label: 'Weakest month', value: s.weakestProfit ? s.weakestProfit.label : '—', sub: s.weakestProfit ? `${tsh(s.weakestProfit.netProfit)} net profit` : 'needs two trading months', tone: s.weakestProfit && s.weakestProfit.netProfit < 0 ? 'bad' : undefined },
+      { label: 'Months in loss', value: n0(s.lossMonths.length), sub: s.lossMonths.length ? s.lossMonths.map((m) => m.short).join(', ') : 'every trading month made a profit', tone: s.lossMonths.length ? 'bad' : 'good' },
+      { label: 'Average month', value: tsh(s.avgRevenue), sub: `sales, over ${plural(s.tradedCount, 'trading month', 'trading months')}` },
+    ],
+  }));
+  r.table({
+    title: 'Month by month',
+    columns: [
+      { label: 'Month', w: 2.6, bold: true },
+      { label: 'Boxes', w: 1, align: 'right' },
+      { label: 'Revenue', w: 1.9, align: 'right', money: true },
+      { label: 'Gross profit', w: 1.9, align: 'right', money: true },
+      { label: 'Expenses', w: 1.7, align: 'right', money: true, muted: true },
+      { label: 'Net profit', w: 1.9, align: 'right', money: true },
+      { label: 'Margin', w: 1.1, align: 'right' },
+      { label: 'Change', w: 1.3, align: 'right' },
+    ],
+    // A month not reached yet, or one before the accounts start, is a row of dashes, not of zeros.
+    rows: months.map((m) => (m.future || (m.quiet && (!first || m.index < first.index))
+      ? [m.label, null, null, null, null, null, null, '']
+      : [
+        `${m.label}${m.partial ? ' (so far)' : ''}`,
+        m.boxes, m.revenue, m.grossProfit, m.expenses, m.netProfit,
+        m.margin == null ? null : oneDp(m.margin),
+        m.vsPrev == null ? null : `${m.vsPrev > 0 ? '+' : ''}${oneDp(m.vsPrev)}`,
+      ])),
+    foot: ['The year', f.boxesSold, f.revenue, f.grossProfit, f.expenses, f.netProfit, oneDp(share(f.grossProfit, f.revenue)), ''],
+  });
+  r.pair(
+    r.bars({ title: 'Sales by quarter', items: s.quarters.map((q) => ({ label: `${q.label}  ·  ${q.months}`, value: q.revenue })), empty: 'No sales this year.', w: r.half }),
+    r.bars({ title: 'Net profit by quarter', items: s.quarters.map((q) => ({ label: `${q.label}  ·  ${q.months}`, value: q.netProfit, color: q.netProfit < 0 ? '#be123c' : undefined })), empty: 'No profit or loss this year.', w: r.half }),
+  );
+}
+
 // The period in a few plain sentences, built only from figures that are printed below.
 function inShort(d, cfg) {
+  if (cfg === KINDS.yearly) return yearShort(d);
   const f = d.finance;
   const ex = d.extras;
   const lines = [];
@@ -105,7 +201,8 @@ function render(kindKey, d) {
   });
 
   r.figures(headlineFigures(d));
-  r.add(r.callout({ title: 'The period in short', items: inShort(d, cfg), tone: 'insight' }));
+  r.add(r.callout({ title: kindKey === 'yearly' ? 'The year in short' : 'The period in short', items: inShort(d, cfg), tone: 'insight' }));
+  if (kindKey === 'yearly') monthSection(r, d);
 
   // ── 01 Profit and loss ────────────────────────────────────────────────────
   r.section('Profit and loss', 'what was sold, what the boxes cost and what was left');
@@ -115,7 +212,13 @@ function render(kindKey, d) {
     { label: 'Gross margin', value: oneDp(share(f.grossProfit, f.revenue)), sub: 'of sales' },
     { label: 'Net margin', value: oneDp(share(f.netProfit, f.revenue)), sub: 'after expenses' },
   ];
-  if (kindKey === 'daily') {
+  if (kindKey === 'yearly') {
+    const bm = d.summary.bestRevenue;
+    ratioTiles.push(
+      { label: 'Average per month', value: tsh(d.summary.avgRevenue), sub: `over ${plural(d.summary.tradedCount, 'trading month', 'trading months')}` },
+      { label: 'Best sales month', value: tsh(bm ? bm.revenue : 0), sub: bm ? bm.label : 'no sales' },
+    );
+  } else if (kindKey === 'daily') {
     ratioTiles.push(
       { label: 'Sales made', value: n0(ex.orders), sub: 'orders today' },
       { label: 'Average sale', value: tsh(ex.orders ? f.revenue / ex.orders : 0), sub: 'per order' },
@@ -140,7 +243,7 @@ function render(kindKey, d) {
     }),
     r.highlights({ items: ratioTiles, perRow: 2, w: r.half }),
   );
-  r.add(r.columns({
+  if (cfg.chart) r.add(r.columns({
     title: `${cfg.chart.title}  ·  ${cfg.chart.sub}`,
     points: ex.byDay.map((p, i) => ({
       label: kindKey === 'monthly' ? p.day : p.short,
@@ -333,5 +436,6 @@ function render(kindKey, d) {
 const dailyPdf = (d) => render('daily', d);
 const weeklyPdf = (d) => render('weekly', d);
 const monthlyPdf = (d) => render('monthly', d);
+const yearlyPdf = (d) => render('yearly', d);
 
-module.exports = { dailyPdf, weeklyPdf, monthlyPdf, inShort, headlineFigures };
+module.exports = { dailyPdf, weeklyPdf, monthlyPdf, yearlyPdf, inShort, headlineFigures };

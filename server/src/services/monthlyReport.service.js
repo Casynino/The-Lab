@@ -43,10 +43,10 @@ async function stockBoxesAt(when) {
   return agg._sum.baseQuantity || 0;
 }
 
-async function buildMonthlyData(monthKey) {
-  const { start, end, eatStart } = reportMonth(monthKey);
-  const prev = eatRange('month', eatStart.subtract(1, 'month'));
-
+// Everything a month or a year report says about one window [start, end], compared with the window
+// `prev` before it. Shared by the monthly and the yearly report, so the two always count the same way.
+// The headline figures come from finance.report() — the same call the Finance screen reads.
+async function buildPeriodBody({ start, end, prev, topProducts = 8 }) {
   const [rep, prof, prevRep, cf, accounts, low, movementRows, pending, stlSummary, suppliers, val] = await Promise.all([
     finance.report({ start, end }),
     reports.profitOverview({ start, end }),
@@ -70,10 +70,10 @@ async function buildMonthlyData(monthKey) {
   ]);
 
   // Sales day by day, expenses by category, what the money was made of, who sold what — and the
-  // month before (already read above) for the arrows.
+  // window before (already read above) for the arrows.
   const extras = await reportData.periodExtras({ start, end }, null, { prevReport: prevRep, cashflow: cf });
 
-  // Commission per rep for the month.
+  // Commission per rep for the window.
   const [paidRows, commissionAll] = await Promise.all([
     prisma.commissionWithdrawal.groupBy({
       by: ['salesRepId'],
@@ -100,7 +100,7 @@ async function buildMonthlyData(monthKey) {
     outstanding: outstandingByRep.get(r.id) ?? null,
   }));
 
-  // Inventory summary: opening/closing from the ledger + monthly movement.
+  // Inventory summary: opening/closing from the ledger + the window's movement.
   const mv = new Map(movementRows.map((mrow) => [mrow.type, mrow._sum.baseQuantity || 0]));
   const closingBoxes = await stockBoxesAt(end);
   const netMove = movementRows.reduce((s, mrow) => s + (mrow._sum.baseQuantity || 0), 0);
@@ -116,7 +116,6 @@ async function buildMonthlyData(monthKey) {
 
   const supplierDue = suppliers.reduce((s, x) => s + x.outstanding, 0);
   const cashPosition = accounts.reduce((s, a) => s + a.balance, 0);
-  const days = eatStart.daysInMonth();
 
   const attention = [];
   if (pending[0]) attention.push(`${pending[0]} stock request(s) waiting for approval`);
@@ -127,16 +126,6 @@ async function buildMonthlyData(monthKey) {
   if (supplierDue > 0) attention.push(`Owed to suppliers: ${fmt(supplierDue)}`);
 
   return {
-    period: {
-      start: eatStart,
-      label: eatStart.format('MMMM YYYY'),
-      monthKey: monthKeyOf(eatStart),
-      from: start,
-      to: end,
-    },
-    generatedAt: eatNow().format('D MMM YYYY, HH:mm') + ' EAT',
-    number: `ZL-${monthKeyOf(eatStart)}`,
-    prevLabel: prev.eatStart.format('MMMM YYYY'),
     extras,
     finance: {
       revenue: rep.revenue,
@@ -156,14 +145,13 @@ async function buildMonthlyData(monthKey) {
       netProfitPct: pct(rep.netProfit, prevRep.netProfit),
       prevRevenue: prevRep.revenue,
       prevNetProfit: prevRep.netProfit,
-      prevLabel: prev.eatStart.format('MMMM YYYY'),
     },
     accounts: accounts.map((a) => ({ name: a.name, balance: a.balance })),
     cashPosition,
     brands: (prof.byBrand || []).map((b) => ({
       name: b.name, revenue: b.revenue, cost: b.cost, profit: b.profit, margin: b.margin, boxes: b.boxes,
     })),
-    topProducts: (prof.byProduct || []).slice(0, 8).map((p) => ({ name: p.name, revenue: p.revenue, boxes: p.boxes })),
+    topProducts: (prof.byProduct || []).slice(0, topProducts).map((p) => ({ name: p.name, revenue: p.revenue, boxes: p.boxes })),
     repPerformance,
     inventory,
     movement: inventory,
@@ -174,7 +162,6 @@ async function buildMonthlyData(monthKey) {
       outstanding: [...outstandingByRep.values()].reduce((a, b) => a + Math.max(0, b), 0),
     },
     metrics: {
-      avgDailyRevenue: round2(rep.revenue / days),
       marginPct: rep.revenue > 0 ? Math.round((rep.grossProfit / rep.revenue) * 1000) / 10 : 0,
       activeReps: repPerformance.length,
       lowStockCount: low.length,
@@ -188,6 +175,29 @@ async function buildMonthlyData(monthKey) {
     pending: { requests: pending[0], settlements: pending[1], returns: pending[2] },
     attention,
     supplierDue,
+  };
+}
+
+async function buildMonthlyData(monthKey) {
+  const { start, end, eatStart } = reportMonth(monthKey);
+  const prev = eatRange('month', eatStart.subtract(1, 'month'));
+  const body = await buildPeriodBody({ start, end, prev });
+  const days = eatStart.daysInMonth();
+  const prevLabel = prev.eatStart.format('MMMM YYYY');
+  return {
+    period: {
+      start: eatStart,
+      label: eatStart.format('MMMM YYYY'),
+      monthKey: monthKeyOf(eatStart),
+      from: start,
+      to: end,
+    },
+    generatedAt: eatNow().format('D MMM YYYY, HH:mm') + ' EAT',
+    number: `ZL-${monthKeyOf(eatStart)}`,
+    prevLabel,
+    ...body,
+    growth: { ...body.growth, prevLabel },
+    metrics: { avgDailyRevenue: round2(body.finance.revenue / days), ...body.metrics },
   };
 }
 
@@ -261,4 +271,4 @@ async function sendMonthlyReport({ force = false, silent = false, monthKey } = {
   return { ...result, monthKey: key, pdf: link, archiveId: saved.id, chars: text.length };
 }
 
-module.exports = { buildMonthlyData, buildWhatsAppText, sendMonthlyReport, reportMonth };
+module.exports = { buildMonthlyData, buildPeriodBody, buildWhatsAppText, sendMonthlyReport, reportMonth };
