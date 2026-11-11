@@ -128,12 +128,14 @@ async function me(userId) {
   return publicUser(user);
 }
 
+const WRONG_CURRENT_PASSWORD = 'Current password is incorrect';
+
 async function changePassword(userId, currentPassword, newPassword) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw ApiError.notFound('User not found');
 
   const valid = await bcrypt.compare(currentPassword, user.passwordHash);
-  if (!valid) throw ApiError.badRequest('Current password is incorrect');
+  if (!valid) throw ApiError.badRequest(WRONG_CURRENT_PASSWORD);
 
   const passwordHash = await bcrypt.hash(newPassword, env.bcryptSaltRounds);
   // Every other session ends; this device gets fresh tokens so it stays signed in.
@@ -156,4 +158,4 @@ async function changePassword(userId, currentPassword, newPassword) {
   return { success: true, tokens: issueTokens(updated) };
 }
 
-module.exports = { login, refresh, me, changePassword, publicUser, issueTokens };
+module.exports = { login, refresh, me, changePassword, publicUser, issueTokens, WRONG_CURRENT_PASSWORD };

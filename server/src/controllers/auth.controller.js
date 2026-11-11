@@ -49,7 +49,24 @@ const me = asyncHandler(async (req, res) => {
 
 const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  const result = await authService.changePassword(req.user.id, currentPassword, newPassword);
+  let result;
+  try {
+    result = await authService.changePassword(req.user.id, currentPassword, newPassword);
+  } catch (err) {
+    // A wrong current password is a guess at the password by whoever holds this session: it is written
+    // down (never the password itself) and counted by the per-account limiter in auth.routes.js, which
+    // counts only these (audit 11 Nov 2026, auth-device-2).
+    if (err && err.statusCode === 400 && err.message === authService.WRONG_CURRENT_PASSWORD) {
+      res.locals.wrongPassword = true;
+      await auditService.record(req, {
+        action: 'CHANGE_PASSWORD_FAILED',
+        entityType: 'User',
+        entityId: req.user.id,
+        newValues: { reason: err.message },
+      });
+    }
+    throw err;
+  }
   await auditService.record(req, {
     action: 'CHANGE_PASSWORD',
     entityType: 'User',
