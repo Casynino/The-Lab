@@ -291,9 +291,12 @@ export default function Transfers() {
         <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New transfer</Button>
       </PageHeader>
 
-      {sum && (
-        <>
-          <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {/* The four figures hold their place while the answer is on its way (a dash, then the figure), so the
+          chips and the list under them no longer jump down when it lands (audit pwa-brand-load-7, CLS 0.19).
+          A failed load keeps the dashes and says so, never zeros. */}
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {sum ? (
+          <>
             <TintCard label="Boxes moved" value={formatNumber(sum.boxes)} sub={period} icon={Boxes}
               ring="ring-violet-500/25" glow="from-violet-500/[0.14]" chip="bg-violet-500/15 text-violet-300" num="text-violet-300" />
             <TintCard label="Movements" value={formatNumber(sum.movements)} sub="completed transfers" icon={Truck}
@@ -305,34 +308,14 @@ export default function Transfers() {
               ring={sum.cancelled > 0 ? 'ring-rose-500/25' : 'ring-white/[0.07]'}
               glow={sum.cancelled > 0 ? 'from-rose-500/[0.12]' : 'from-white/[0.02]'}
               chip="bg-rose-500/15 text-rose-300" num={sum.cancelled > 0 ? 'text-rose-300' : 'text-foreground'} />
-          </div>
-
-          {/* Where the boxes actually went — the question a list of movements provokes. */}
-          {sum.destinations?.length > 0 && (
-            <div className="card mb-4 p-5">
-              <p className="text-sm font-semibold text-foreground">Where the boxes went</p>
-              <p className="mt-0.5 text-xs text-faint">Share of the {formatNumber(sum.boxes)} boxes dispatched, biggest first.</p>
-              <div className="mt-4 space-y-2.5">
-                {sum.destinations.slice(0, 8).map((d, i) => {
-                  const pct = sum.boxes > 0 ? (d.boxes / sum.boxes) * 100 : 0;
-                  const tone = ['bg-brand-400', 'bg-violet-400', 'bg-sky-400', 'bg-amber-400', 'bg-emerald-400', 'bg-rose-400'][i % 6];
-                  return (
-                    <div key={d.name} className="flex items-center gap-3">
-                      <span className="w-40 shrink-0 truncate text-xs text-muted">{d.name}</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(2, pct)}%` }} />
-                      </div>
-                      <span className="w-24 shrink-0 text-right text-xs font-semibold tabular-nums text-foreground">
-                        {formatNumber(d.boxes)} <span className="font-normal text-faint">· {Math.round(pct)}%</span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </>
-      )}
+          </>
+        ) : (
+          [['Boxes moved', Boxes, 'bg-violet-500/15 text-violet-300'], ['Movements', Truck, 'bg-sky-500/15 text-sky-300'],
+            ['Took the most', UserRound, 'bg-emerald-500/15 text-emerald-300'], ['Reversed', Ban, 'bg-rose-500/15 text-rose-300']].map(([label, icon, chip]) => (
+            <TintCard key={label} label={label} value="—" sub={isError && !data ? "couldn't load" : 'loading…'} icon={icon} chip={chip} num="text-faint" />
+          ))
+        )}
+      </div>
 
       <div className="mb-3 flex flex-wrap gap-2">
         {DIR_FILTERS.map((f) => (
@@ -438,6 +421,32 @@ export default function Transfers() {
           </>
         )}
       </Card>
+
+      {/* Where the boxes actually went — the question a list of movements provokes. Under the list, not above
+          it: its height depends on the answer, and above the list it pushed everything down when it arrived. */}
+      {sum?.destinations?.length > 0 && (
+        <div className="card mt-4 p-5">
+          <p className="text-sm font-semibold text-foreground">Where the boxes went</p>
+          <p className="mt-0.5 text-xs text-faint">Share of the {formatNumber(sum.boxes)} boxes dispatched, biggest first.</p>
+          <div className="mt-4 space-y-2.5">
+            {sum.destinations.slice(0, 8).map((d, i) => {
+              const pct = sum.boxes > 0 ? (d.boxes / sum.boxes) * 100 : 0;
+              const tone = ['bg-brand-400', 'bg-violet-400', 'bg-sky-400', 'bg-amber-400', 'bg-emerald-400', 'bg-rose-400'][i % 6];
+              return (
+                <div key={d.name} className="flex items-center gap-3">
+                  <span className="w-40 shrink-0 truncate text-xs text-muted">{d.name}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
+                    <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(2, pct)}%` }} />
+                  </div>
+                  <span className="w-24 shrink-0 text-right text-xs font-semibold tabular-nums text-foreground">
+                    {formatNumber(d.boxes)} <span className="font-normal text-faint">· {Math.round(pct)}%</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {open && <TransferModal onClose={() => setOpen(false)} />}
     </div>
   );
