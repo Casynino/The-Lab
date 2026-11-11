@@ -616,11 +616,14 @@ function Overview({ onNavigate, onOwnerMoney }) {
     ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
     ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
     // Only what needs a DECISION: the supplier is paid as the stock sells, so the whole invoice is not
-    // listed — only money genuinely payable now.
-    (cs?.setAside || 0) > 0 && {
+    // listed — only money genuinely payable now. The amount is what is DUE (the tile's figure), never
+    // setAside: setAside is only the part a brand wallet holds, so it followed the wallet balance and
+    // gave this screen two different "due" amounts.
+    dueNow > 0 && {
       icon: Factory,
       tone: 'text-rose-300 bg-rose-500/15',
-      text: `${formatCurrency(cs.setAside)} is due to ${cs.supplierLabel || 'your supplier'} for boxes already sold`,
+      text: `${formatCurrency(dueNow)} is due to ${supplierLabel} for boxes already sold`
+        + ((cs?.setAside || 0) > 0 && round2ui(cs.setAside) < dueNow ? ` (${formatCurrency(cs.setAside)} of it is in the wallet)` : ''),
       tab: 'suppliers',
     },
     ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
