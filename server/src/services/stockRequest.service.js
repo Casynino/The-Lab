@@ -416,6 +416,17 @@ async function approve(id, actor, approvals = []) {
       throw ApiError.conflict(`This request is already ${exists.status.toLowerCase()}.`);
     }
     const request = await tx.stockRequest.findUnique({ where: { id }, include: { items: true } });
+    // Every named line must be one of this request's own lines, named once. An unknown id (a stale
+    // screen, a hand-made call) used to be ignored, and the whole request was issued at the asked
+    // amounts instead of the amounts the approver meant (audit backend-integrity-7). Thrown inside the
+    // transaction, so the claim above is undone and the request stays pending.
+    const own = new Set(request.items.map((it) => it.id));
+    const seen = new Set();
+    for (const a of approvals) {
+      if (!own.has(a.itemId)) throw ApiError.badRequest('A line in this approval is not on the request — reload and try again.');
+      if (seen.has(a.itemId)) throw ApiError.badRequest('A line is named twice in this approval — reload and try again.');
+      seen.add(a.itemId);
+    }
     const fromWarehouseId = await resolveWarehouseIdTx(tx, request.warehouseId);
 
     // Decide approved quantity per line (default: full requested amount).
