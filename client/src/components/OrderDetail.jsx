@@ -403,9 +403,12 @@ function RecordReturnModal({ order, onClose, onDone }) {
   const { data: warehouses = [] } = useWarehouses();
   const warehouseId = warehouses[0]?.id;
 
-  // Boxes already inside a pending return are LOCKED — only the rest can be
-  // put on a new return request.
-  const returnAvail = (l) => Math.max(0, l.remaining - (l.pendingReturn || 0));
+  // Boxes already inside a pending return are LOCKED, and boxes in a settlement waiting for ZELab are
+  // spoken for too — only the rest can be put on a new return request. The same rule as Settle, as
+  // Returns > New return and as the server (audit rep-app-1: it said "2 available" with both boxes
+  // waiting in a settlement, and the server refused).
+  const pendingSettle = pendingBoxesByProduct(order);
+  const returnAvail = (l) => settleAvail(order, l);
   const returnableLines = order.order.lines.filter((l) => returnAvail(l) > 0);
 
   // cart: { [productId]: qty }
@@ -456,7 +459,11 @@ function RecordReturnModal({ order, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} size="lg" title="Return boxes" footer={footer}>
       {returnableLines.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted">No boxes left to return on this order.</p>
+        <p className="py-4 text-center text-sm text-muted">
+          {Object.values(pendingSettle).some((n) => n > 0)
+            ? 'No boxes left to return — the rest are in a settlement waiting for ZELab.'
+            : 'No boxes left to return on this order.'}
+        </p>
       ) : (
         <StepperLines
           items={returnableLines.map((line) => ({
@@ -468,6 +475,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
               <>
                 {formatNumber(returnAvail(line))} available
                 {(line.pendingReturn || 0) > 0 && <span className="text-amber-500"> · {formatNumber(line.pendingReturn)} locked</span>}
+                {(pendingSettle[line.productId] || 0) > 0 && <span className="text-amber-500"> · {formatNumber(pendingSettle[line.productId])} in a settlement</span>}
               </>
             ),
           }))}
