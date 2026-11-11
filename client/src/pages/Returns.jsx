@@ -10,7 +10,7 @@ import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/ho
 import { ROLES } from '@/lib/constants';
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from '@/lib/format';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, Modal, Field, Select, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
@@ -492,7 +492,7 @@ function HistoryRow({ r, onView }) {
 // showed me for requests — nice, not this"): a premium New return card, the returns still waiting as soft
 // cards, the rest in a History list that opens and closes. The tiles and the paragraph under them are gone;
 // the owner's and the warehouse's page is untouched.
-function RepReturnsView({ all, isLoading, onNew, onView, onCancel, cancellingId = null }) {
+function RepReturnsView({ all, isLoading, failed = false, onRetry, onNew, onView, onCancel, cancellingId = null }) {
   const pending = all.filter((r) => r.status === 'PENDING');
   const done = all.filter((r) => r.status !== 'PENDING');
   return (
@@ -508,6 +508,8 @@ function RepReturnsView({ all, isLoading, onNew, onView, onCancel, cancellingId 
 
       {isLoading ? (
         <PageSpinner />
+      ) : failed ? (
+        <LoadError what="your returns" onRetry={onRetry} />
       ) : all.length === 0 ? (
         <div className="mt-14 px-1 text-center">
           <PackageOpen className="mx-auto h-6 w-6 text-muted" aria-hidden="true" />
@@ -617,7 +619,7 @@ export default function Returns() {
     queryFn: async () => unwrap(await api.get('/returns/summary')).data,
     refetchInterval: LIVE,
   });
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['returns', { type: typeFilter, page }],
     queryFn: async () => unwrap(await api.get('/returns', { params: { page, limit: 100, type: typeFilter || undefined } })),
     refetchInterval: LIVE,
@@ -645,7 +647,7 @@ export default function Returns() {
   if (isRep) {
     return (
       <div>
-        <RepReturnsView all={all} isLoading={isLoading} onNew={() => setOpen(true)} onView={setViewingId} onCancel={(id) => cancel.mutate(id)} cancellingId={cancel.isPending ? cancel.variables : null} />
+        <RepReturnsView all={all} isLoading={isLoading} failed={isError && !data} onRetry={refetch} onNew={() => setOpen(true)} onView={setViewingId} onCancel={(id) => cancel.mutate(id)} cancellingId={cancel.isPending ? cancel.variables : null} />
         {open && <ReturnModal onClose={() => setOpen(false)} />}
         {viewingId && <ReturnDetailModal returnId={viewingId} canDecide={false} onClose={() => setViewingId(null)} />}
       </div>
@@ -786,6 +788,8 @@ export default function Returns() {
       {/* The list is one page of records (the pager below walks the rest); the cards above are the full history. */}
       {isLoading ? (
         <Card className="mt-4"><PageSpinner /></Card>
+      ) : isError && !data ? (
+        <Card className="mt-4"><LoadError what="the returns" onRetry={refetch} /></Card>
       ) : all.length === 0 ? (
         <Card className="mt-4">
           <EmptyState icon={PackageOpen} title="No returns to show"

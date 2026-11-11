@@ -673,13 +673,15 @@ function RepRequestRow({ r, onClick }) {
 }
 
 function RepRequestsView({ onView }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['stock-requests', 'rep-all'],
     queryFn: async () => unwrap(await api.get('/stock-requests', { params: { limit: 100 } })),
     refetchInterval: STEADY,
   });
 
   if (isLoading) return <PageSpinner />;
+  // A request that never came back is not "No requests yet" (audit #68).
+  if (isError && !data) return <LoadError what="your requests" onRetry={refetch} />;
 
   const all = data?.data || [];
   const active = all.filter((r) => r.status === 'PENDING');

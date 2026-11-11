@@ -18,7 +18,7 @@ import ActiveOrderCard from '@/components/ActiveOrderCard';
 import CollapsibleList from '@/components/CollapsibleList';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
-  Pagination, Table, THead, TBody, TR, TH, TD,
+  Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
   Remaining,
 } from '@/components/ui';
 
@@ -43,13 +43,15 @@ function CompletedRow({ s, onClick }) {
 // ── Rep view: two-section layout ─────────────────────────────────────────────
 
 function RepSettlements({ viewing, setViewing }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settlements', 'rep-all'],
     queryFn: async () => unwrap(await api.get('/settlements', { params: { limit: 100 } })),
     refetchInterval: STEADY,
   });
 
   if (isLoading) return <PageSpinner />;
+  // A request that never came back is not "No orders yet" (audit #68).
+  if (isError && !data) return <LoadError what="your orders" onRetry={refetch} />;
 
   const all = data?.data || [];
   const active = all.filter((s) => s.status !== 'SETTLED');
@@ -213,7 +215,7 @@ function StaffSettlements({ viewing, setViewing }) {
     refetchInterval: STEADY,
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settlements', { page, status }],
     queryFn: async () => unwrap(await api.get('/settlements', { params: { page, limit: 15, status: status || undefined } })),
   });
@@ -306,7 +308,7 @@ function StaffSettlements({ viewing, setViewing }) {
           ))}
         </div>
 
-        {isLoading ? <PageSpinner /> : !data?.data?.length ? (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the orders" onRetry={refetch} /> : !data?.data?.length ? (
           <EmptyState title="No orders here" message="Orders open automatically when stock is issued to a rep." icon={Timer} />
         ) : (
           <>
