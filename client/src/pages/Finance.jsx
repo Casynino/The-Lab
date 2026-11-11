@@ -1,5 +1,6 @@
 import { STEADY } from '@/lib/polling';
 import { useState, useRef } from 'react';
+import ReportsArchive from '@/components/ReportsArchive';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -2402,95 +2403,9 @@ function SuppliersTab({ accounts }) {
   );
 }
 
-// ── Reports Archive (generated weekly/monthly statement PDFs) ─────────────────
+// ── Reports Archive: the same card view as the owner's profile (components/ReportsArchive) ──
 function ArchiveTab() {
-  const [type, setType] = useState('');
-  const [year, setYear] = useState('');
-  const [search, setSearch] = useState('');
-  const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['finance', 'report-archive', type, year, search],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (type) params.set('type', type);
-      if (year) params.set('year', year);
-      if (search) params.set('search', search);
-      return unwrap(await api.get(`/finance/report-archive?${params}`)).data;
-    },
-  });
-
-  const years = [];
-  for (let y = new Date().getFullYear(); y >= 2026; y -= 1) years.push(String(y));
-
-  const download = async (row) => {
-    try {
-      const res = await api.get(`/finance/report-archive/${row.id}/pdf`, { responseType: 'blob' });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `ZELab-${row.type.toLowerCase()}-${row.periodKey}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      toast.error(apiError(e));
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader
-        title="Reports archive"
-        subtitle="Every daily, weekly and monthly report PDF, exactly as it was generated and sent — nothing is lost."
-      />
-      <CardBody>
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Select value={type} onChange={(e) => setType(e.target.value)} className="w-36">
-            <option value="">Weekly and monthly</option>
-            <option value="DAILY">Daily</option>
-            <option value="WEEKLY">Weekly</option>
-            <option value="MONTHLY">Monthly</option>
-          </Select>
-          <Select value={year} onChange={(e) => setYear(e.target.value)} className="w-28">
-            <option value="">All years</option>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </Select>
-          <Input placeholder="Search period… (e.g. W27, 2026-06, 2026-11-10)" value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" />
-        </div>
-        {isLoading ? (
-          <PageSpinner label="Loading archive…" />
-        ) : rows.length === 0 ? (
-          <EmptyState icon={FileBarChart} title="No reports yet" message="Daily, weekly and monthly PDFs are archived here automatically when they are sent." />
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <THead>
-                <TR><TH>Period</TH><TH>Type</TH><TH>Key</TH><TH>Generated</TH><TH className="text-right">Actions</TH></TR>
-              </THead>
-              <TBody>
-                {rows.map((r) => (
-                  <TR key={r.id}>
-                    <TD className="font-medium">{r.label}</TD>
-                    <TD>
-                      <Badge className={r.type === 'MONTHLY' ? 'bg-violet-500/15 text-violet-500' : r.type === 'DAILY' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'}>
-                        {r.type === 'MONTHLY' ? 'Monthly' : r.type === 'DAILY' ? 'Daily' : 'Weekly'}
-                      </Badge>
-                    </TD>
-                    <TD className="text-xs text-muted">{r.periodKey}</TD>
-                    <TD className="text-xs">{formatDateTime(r.updatedAt || r.createdAt)}</TD>
-                    <TD className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="secondary" onClick={() => window.open(r.link, '_blank')}>Open</Button>
-                        <Button variant="secondary" onClick={() => download(r)}>Download</Button>
-                      </div>
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          </div>
-        )}
-      </CardBody>
-    </Card>
-  );
+  return <ReportsArchive />;
 }
 
 // ── Page shell ────────────────────────────────────────────────────────────────

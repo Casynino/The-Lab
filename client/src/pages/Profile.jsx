@@ -13,6 +13,17 @@ import SettingsPage from '@/pages/Settings';
 import ActivityPage from '@/pages/Activity';
 import AuditLogsPage from '@/pages/AuditLogs';
 import DailyReportsPage from '@/pages/DailyReports';
+import ReportsArchive from '@/components/ReportsArchive';
+
+// Reports: the business reports he receives on WhatsApp (kept as sent), then the reps' daily reports.
+function ReportsSection() {
+  return (
+    <div className="space-y-10">
+      <ReportsArchive />
+      <DailyReportsPage />
+    </div>
+  );
+}
 import { useAuth } from '@/context/AuthContext';
 import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
@@ -454,7 +465,7 @@ export const LAB_SECTIONS = [
   { key: 'settings', label: 'Settings', hint: 'WhatsApp alerts and the system', icon: SettingsIcon, Page: SettingsPage },
   { key: 'activity', label: 'Activity', hint: 'Everything happening, live', icon: ActivityIcon, Page: ActivityPage },
   { key: 'audit', label: 'Audit log', hint: 'Who did what, and when', icon: ScrollText, Page: AuditLogsPage },
-  { key: 'reports', label: 'Daily reports', hint: "The reps' opening and closing reports", icon: NotebookPen, Page: DailyReportsPage },
+  { key: 'reports', label: 'Reports', hint: "Your business reports and the reps' daily ones", icon: NotebookPen, Page: ReportsSection },
 ];
 
 // The owner's pages as one premium card (Nino, 11 Nov 2026: "the list should be nice — the selected one
@@ -540,6 +551,7 @@ function AdminProfile({ user, sub }) {
         [['activity'], async () => unwrap(await get('/activity', { limit: 50 })).data],
         [['audit-logs', { page: 1, search: '' }], async () => unwrap(await get('/audit-logs', { page: 1, limit: 25, search: '' }))],
         [['daily-reports', { page: 1 }], async () => unwrap(await get('/daily-reports', { page: 1, limit: 20 }))],
+        [['report-archive', '', '', ''], async () => unwrap(await get('/finance/report-archive')).data],
       ];
       warm.forEach(([queryKey, queryFn]) => qc.prefetchQuery({ queryKey, queryFn }).catch(() => {}));
     }, 1200);
