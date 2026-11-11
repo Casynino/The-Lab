@@ -145,9 +145,11 @@ export default function Users() {
 
   const toggle = useMutation({
     mutationFn: (u) => (u.isActive ? api.delete(`/users/${u.id}`) : api.put(`/users/${u.id}`, { isActive: true })),
-    onSuccess: () => { toast.success('Updated'); qc.invalidateQueries({ queryKey: ['users'] }); },
+    onSuccess: () => { toast.success('Updated'); qc.invalidateQueries({ queryKey: ['users'] }); setSuspending(null); },
     onError: (e) => toast.error(apiError(e)),
   });
+  // Suspending asks first; activating is one tap.
+  const [suspending, setSuspending] = useState(null);
   // Removing an account for good, rather than parking it as Inactive.
   const { user: me } = useAuth();
   const [deleting, setDeleting] = useState(null);
@@ -181,9 +183,11 @@ export default function Users() {
                     <TD>
                       <div className="flex justify-end gap-1">
                         <button title="Edit" className="btn-ghost px-2 py-1" onClick={() => setModal({ open: true, editing: u })}><Pencil className="h-4 w-4" /></button>
-                        <button title={u.isActive ? 'Suspend' : 'Activate'} className="btn-ghost px-2 py-1 text-rose-600" onClick={() => toggle.mutate(u)}><Power className="h-4 w-4" /></button>
-                        {/* Your own account is never offered — the server refuses
-                            it too, but the button should not be there to click. */}
+                        {/* Your own account is never offered for Suspend or Delete — the server refuses
+                            both, but the buttons should not be there to click. */}
+                        {u.id !== me?.id && (
+                          <button title={u.isActive ? 'Suspend' : 'Activate'} className="btn-ghost px-2 py-1 text-rose-600" onClick={() => (u.isActive ? setSuspending(u) : toggle.mutate(u))}><Power className="h-4 w-4" /></button>
+                        )}
                         {u.id !== me?.id && (
                           <button title="Delete for good" className="btn-ghost px-2 py-1 text-rose-600" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4" /></button>
                         )}
@@ -197,6 +201,20 @@ export default function Users() {
           </>
         )}
       </Card>
+
+      {suspending && (
+        <Modal open onClose={() => setSuspending(null)} title={`Suspend ${suspending.name}?`}
+          footer={<>
+            <Button variant="secondary" onClick={() => setSuspending(null)}>Cancel</Button>
+            <Button variant="danger" loading={toggle.isPending} onClick={() => toggle.mutate(suspending)} autoFocus>
+              <Power className="h-4 w-4" /> Suspend
+            </Button>
+          </>}>
+          <p className="text-sm text-muted">
+            {suspending.name} is signed out and cannot sign in until you activate the account again. Nothing is deleted.
+          </p>
+        </Modal>
+      )}
 
       {deleting && (
         <DeleteUserModal
