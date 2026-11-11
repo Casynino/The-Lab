@@ -1,7 +1,7 @@
 import { useId } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
+  CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend, ComposedChart, Line, ReferenceLine,
 } from 'recharts';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { RED } from '@/lib/brand';
@@ -91,16 +91,19 @@ export function BarChartCard({ data, dataKey = 'value', labelKey = 'name', money
 // slices to colours the page already uses (Finance gives each account its Accounts-tab colour).
 const DONUT_MIX = ['#38bdf8', '#a78bfa', '#fbbf24', '#34d399', '#fb7185', RED, '#f472b6', '#facc15'];
 
-export function DonutChart({ data, dataKey = 'value', nameKey = 'name', height = 260, colors = DONUT_MIX }) {
+// `legend={false}` when the page draws its own list beside the ring (the Finance Overview does); the radii
+// shrink a ring to fit a small panel; `stroke` left out keeps recharts' own slice edge. The defaults are what
+// every other donut already used.
+export function DonutChart({ data, dataKey = 'value', nameKey = 'name', height = 260, colors = DONUT_MIX, legend = true, innerRadius = 55, outerRadius = 85, stroke }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
-        <Pie data={data} dataKey={dataKey} nameKey={nameKey} innerRadius={55} outerRadius={85} paddingAngle={2}>
+        <Pie data={data} dataKey={dataKey} nameKey={nameKey} innerRadius={innerRadius} outerRadius={outerRadius} paddingAngle={2} stroke={stroke}>
           {data.map((_, i) => (
             <Cell key={i} fill={colors[i % colors.length]} />
           ))}
         </Pie>
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {legend && <Legend wrapperStyle={{ fontSize: 12 }} />}
         <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ fontSize: 12, borderRadius: 8, background: '#151517', border: '1px solid #2a2a30', color: '#f4f4f5' }} />
       </PieChart>
     </ResponsiveContainer>
@@ -121,6 +124,26 @@ export function MonthBars({ data, series, height = 230, money = true }) {
           <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={14} />
         ))}
       </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+/* Bars with a line over them — money in and out as bars, the net as a line (the Finance Overview's
+   "Month by month"). `bars` and `line` are { key, name, color }. */
+export function BarsWithLine({ data, bars, line, height = 220 }) {
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={3}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+        <XAxis dataKey="period" tick={AXIS} tickLine={false} axisLine={false} interval={0} />
+        <YAxis tick={AXIS} tickLine={false} axisLine={false} tickFormatter={(v) => formatNumber(v, { compact: true })} width={44} />
+        <ReferenceLine y={0} stroke="rgba(255,255,255,0.14)" />
+        <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} content={<MoneyTooltip />} />
+        {bars.map((s) => (
+          <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={16} />
+        ))}
+        {line && <Line type="monotone" dataKey={line.key} name={line.name} stroke={line.color} strokeWidth={2} dot={{ r: 2.5, strokeWidth: 0, fill: line.color }} activeDot={{ r: 4 }} />}
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }

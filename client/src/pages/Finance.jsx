@@ -1,5 +1,5 @@
 import { STEADY } from '@/lib/polling';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import ReportsArchive from '@/components/ReportsArchive';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import {
   Wallet, TrendingUp, TrendingDown, Banknote, Landmark, Smartphone, Coins,
   Plus, Trash2, Pencil, ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Boxes, Receipt, PiggyBank,
   Factory, Package, Scale, FileBarChart, ChevronRight, ShieldCheck, AlertTriangle, Search as SearchIcon,
-  Undo2,
+  Undo2, CheckCircle2,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useBrands } from '@/lib/hooks';
@@ -18,8 +18,8 @@ import ReportsPage from '@/pages/Reports';
 import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
-import { eatISODate } from '@/lib/tz';
-import { DonutChart, BarChartCard, TrendChart } from '@/components/charts';
+import { eatISODate, eatDay } from '@/lib/tz';
+import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
   PageHeader, Card, CardHeader, CardBody, StatCard, PageSpinner, EmptyState, Badge, Button,
   Modal, Field, Input, NumberInput, Select, Textarea, Table, THead, TBody, TR, TH, TD, Pagination,
@@ -451,16 +451,86 @@ function OwnerMoneyModal({ mode, accounts: all, onClose }) {
 }
 
 // ── Overview tab ──────────────────────────────────────────────────────────────
-// Uppercase micro-header with a plain-English subtitle — the section rhythm
-// the owner pointed at in the Target admin.
-function SectionHead({ label, sub }) {
+// Nino, 11 Nov 2026: "good, but the cards and tables feel very big and there is too much wording — show the
+// big picture and the money well, in little, nice, well-arranged cards". So: one header strip (the period,
+// sales − goods − expenses = earned, the cash ring), a row of small figure tiles, the month chart, tidy
+// lists, a compact table, one line per thing waiting, one footnote. The long explanations moved into
+// `title` tooltips. Every figure the old Overview showed is still on it.
+const ACCOUNT_HEX = ['#10b981', '#8b5cf6', '#0ea5e9', '#f59e0b']; // ACCOUNT_BAR as hex, for the cash donut
+const PERIOD_WORDS = { today: 'today', week: 'this week', month: 'this month', all: 'all time' };
+
+// A small glass panel: a one-line title, a short sub-line, and a pill that opens the tab with the detail.
+function Panel({ title, sub, link, onNavigate, className, children }) {
   return (
-    <div className="border-l-2 border-brand-500/70 pl-3">
-      <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-600">{label}</h2>
-      {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
+    <section className={clsx('stat-glass flex flex-col p-4', className)}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold leading-tight text-foreground">{title}</h3>
+          {sub && <div className="mt-0.5 text-[11px] text-white/50">{sub}</div>}
+        </div>
+        {link && (
+          <button type="button" onClick={() => onNavigate?.(link.tab)}
+            className="shrink-0 cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-medium text-muted ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-white/30">
+            {link.label}
+          </button>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// A small figure tile: label, number, one short caption. Opens its tab when it has one.
+function Tile({ label, value, tone = 'text-foreground', caption, title, onClick }) {
+  // A flex column, so a <button> tile does not centre its content and every tile's label sits on one line.
+  const cls = 'stat-glass flex min-w-0 flex-col justify-start px-3.5 py-3 text-left';
+  const body = (
+    <>
+      <p className="truncate text-[11px] font-medium text-white/55">{label}</p>
+      <p className={`mt-1 truncate text-base font-bold leading-tight tabular-nums sm:text-lg ${tone}`}>{value}</p>
+      {caption && <div className="mt-1 text-[11px] leading-snug text-white/50">{caption}</div>}
+    </>
+  );
+  return onClick ? (
+    <button type="button" title={title} onClick={onClick}
+      className={`${cls} cursor-pointer transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30`}>
+      {body}
+    </button>
+  ) : <div className={cls} title={title}>{body}</div>;
+}
+
+// The header's ring: how much of the cash held is yours once the supplier is covered.
+function Ring({ pct, size = 54, stroke = 5 }) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const p = Math.max(0, Math.min(100, pct));
+  return (
+    <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#34d399" strokeWidth={stroke} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - p / 100)} />
+      </svg>
+      <span className="absolute text-[11px] font-bold tabular-nums text-foreground">{Math.round(p)}%</span>
+    </span>
+  );
+}
+
+// One term of the header's sum: a dot, a label, the number, a short caption.
+function Term({ label, sign, value, tone, dot, caption, big }) {
+  return (
+    <div className="min-w-0">
+      <p className="flex items-center gap-1.5 text-[11px] font-medium text-white/55">
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+        {sign && <span className="sm:hidden">{sign}</span>}{label}
+      </p>
+      {/* Never shortened with an ellipsis: a money figure is always shown whole. */}
+      <p className={`mt-1 whitespace-nowrap font-bold leading-none tabular-nums ${big ? 'text-xl 2xl:text-2xl' : 'text-[15px] sm:text-base 2xl:text-lg'} ${tone}`}>{value}</p>
+      {caption && <div className="mt-1 text-[11px] leading-snug text-white/50">{caption}</div>}
     </div>
   );
 }
+const Op = ({ children }) => <span className="hidden self-center px-1 pt-3 text-lg font-light text-white/30 sm:block" aria-hidden="true">{children}</span>;
 
 function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
@@ -473,11 +543,18 @@ function Overview({ onNavigate, onOwnerMoney }) {
     queryKey: ['finance', 'cashflow', 'all'],
     queryFn: async () => unwrap(await api.get('/finance/cashflow', { params: { period: 'all' } })).data,
   });
+  // On a very wide screen the month chart grows a little so it does not look flat.
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1800px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.('(min-width: 1800px)');
+    if (!mq) return undefined;
+    const on = () => setWide(mq.matches);
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
   if (isLoading || !data) return <PageSpinner />;
   const flow = data.flow?.[period] || data.flow?.month || { moneyIn: 0, moneyOut: 0, net: 0 };
-  const donut = data.expenseBreakdown.map((e) => ({ name: e.category, value: e.amount }));
-  const accountsDonut = data.accounts.filter((a) => a.balance > 0).map((a) => ({ name: a.name, value: a.balance }));
-  const periodLabel = PERIODS.find((p) => p[0] === period)[1].toLowerCase();
+  const words = PERIOD_WORDS[period];
   // Everything of his that went in, however it went: cash through an account,
   // and commission handed to reps. Only the first can ever appear in cash flow.
   const flowOwner = flow.owner || {};
@@ -488,19 +565,82 @@ function Overview({ onNavigate, onOwnerMoney }) {
       ? 'all of it commission you paid reps by hand'
       : null;
   const ny = data.needsYou || {};
-  const hasSeries = (cf?.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
+  const cs = data.cashSplit;
+  const om = data.ownerMoney || {};
+  const net = flow.netWithOwner ?? flow.net;
+
+  // Whose money. The whole bill and what is due now, as owed — not capped at what a wallet holds (that made
+  // the total 10,410,000 against a 12,000,000 bill). Older servers without the fields fall back.
+  const supplierLabel = cs?.supplierLabel || 'your suppliers';
+  const totalOwed = cs
+    ? (cs.owedTotal != null ? round2ui(cs.owedTotal) : round2ui((cs.setAside || 0) + (cs.dueLater || 0)))
+    : round2ui(ny.supplierOutstanding || 0);
+  const dueNow = cs ? (cs.dueNow != null ? round2ui(cs.dueNow) : round2ui(cs.setAside || 0)) : 0;
+  const cashHeld = cs ? cs.totalCash : data.cashPosition;
+  const yoursPct = cs && cs.totalCash > 0 ? (cs.yours / cs.totalCash) * 100 : null;
+  const owedTitle = totalOwed > 0 && dueNow > 0
+    ? `You owe ${supplierLabel} ${formatCurrency(totalOwed)} in total. Of that, ${formatCurrency(dueNow)} is due now — the cost of boxes already sold. The rest falls due as the stock on your shelf sells.`
+    : totalOwed > 0
+      ? `You owe ${supplierLabel} ${formatCurrency(totalOwed)} in total — but none of it is due yet. You pay ${supplierLabel} the cost of the boxes as they sell, and the boxes you have already sold are covered. The rest falls due as the stock on your shelf sells.`
+      : `You owe ${supplierLabel} nothing — every box you have taken is paid for.`;
+
+  // His own money. All time, the period's "your own money" IS the money in the business — the same total
+  // from the same two parts — so it is said once; in a shorter period it shows under the tile.
+  const ownerBrands = (om.byBrand || []).filter((b) => b.brandId && b.amount > 0);
+  const split = (om.contributed || 0) > 0 && (om.paidRepsFromPocket || 0) > 0;
+  const ownerFlowValue = ownerPutIn !== 0 ? ownerPutIn : (flow.ownerNet ?? 0);
+  const ownerFlowIsDup = period === 'all'
+    && round2ui(ownerFlowValue) === round2ui(om.owedBackToOwner || 0)
+    && round2ui(flowOwner.intoAccounts || 0) === round2ui(om.contributed || 0)
+    && round2ui(flowOwner.commissionFromPocket || 0) === round2ui(om.paidRepsFromPocket || 0);
+  const showOwnerFlow = (flow.ownerNet ?? 0) !== 0 && !ownerFlowIsDup;
+
+  const margin = data.revenue > 0 ? Math.round((data.netProfit / data.revenue) * 100) : null;
+  const accountsDonut = data.accounts.filter((a) => a.balance > 0).map((a) => ({ name: a.name, value: a.balance, type: a.type }));
+  const accountsTotal = accountsDonut.reduce((s, a) => s + a.value, 0);
+  // Accounts below zero are not a slice, but they are listed under the donut so the list adds up to the cash held.
+  const accountsBelow = data.accounts.filter((a) => a.balance < 0 && !a.isCommissionRecord);
+  const expenses = data.expenseBreakdown || [];
+  const expenseSum = expenses.reduce((s, e) => s + e.amount, 0);
+  const buckets = cs ? cs.buckets.filter((b) => b.cash > 0 || b.revenue > 0) : [];
+  // One colour per brand everywhere on the Overview: its wallet, its accounts in the donut, its sales dot.
+  const brandIdx = new Map(buckets.map((b, i) => [b.key, i]));
+  const accountIdx = new Map(buckets.flatMap((b, i) => b.accounts.map((a) => [a.name, i])));
+  const accountHex = (name, i) => ACCOUNT_HEX[(accountIdx.get(name) ?? buckets.length + i) % ACCOUNT_HEX.length];
+
+  // The month chart and the three figures under it.
+  const series = cf?.series || [];
+  const active = series.filter((m) => m.moneyIn > 0 || m.moneyOut > 0);
+  const hasSeries = active.length > 0;
+  const best = active.reduce((a, m) => (!a || m.moneyIn > a.moneyIn ? m : a), null);
+  const avgIn = hasSeries ? active.reduce((s, m) => s + m.moneyIn, 0) / active.length : 0;
+  const thisMonthIn = series.length > 0 && active.includes(series[series.length - 1]);
+  // In − out over the chart's months only; the owner's own money is not in this series.
+  const chartNet = series.reduce((s, m) => s + (m.net ?? (m.moneyIn - m.moneyOut)), 0);
+
+  const now = new Date();
+  const periodTitle = {
+    today: eatDay(now, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+    week: 'This week',
+    month: eatDay(now, { month: 'long', year: 'numeric' }),
+    all: 'All time',
+  }[period];
+  const periodSub = {
+    today: 'today so far',
+    week: 'Monday to today',
+    month: 'month to date',
+    all: data.epochAt ? `everything since ${formatDate(data.epochAt)}` : 'everything recorded so far',
+  }[period];
 
   const attention = [
     ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
     ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
-    // Only what needs a DECISION. The whole invoice was listed here as if it
-    // were due, directly contradicting the cards that say nothing is due
-    // today — the supplier is paid as the stock sells. It appears only when
-    // money is genuinely payable now.
-    (data.cashSplit?.setAside || 0) > 0 && {
+    // Only what needs a DECISION: the supplier is paid as the stock sells, so the whole invoice is not
+    // listed — only money genuinely payable now.
+    (cs?.setAside || 0) > 0 && {
       icon: Factory,
       tone: 'text-rose-300 bg-rose-500/15',
-      text: `${formatCurrency(data.cashSplit.setAside)} is due to ${data.cashSplit.supplierLabel || 'your supplier'} for boxes already sold`,
+      text: `${formatCurrency(cs.setAside)} is due to ${cs.supplierLabel || 'your supplier'} for boxes already sold`,
       tab: 'suppliers',
     },
     ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
@@ -512,364 +652,471 @@ function Overview({ onNavigate, onOwnerMoney }) {
     { tab: 'suppliers', title: 'Suppliers', line: 'Who you buy from and what you owe them', value: formatCurrency(ny.supplierOutstanding || 0), tone: ny.supplierOutstanding > 0 ? 'text-rose-300' : 'text-faint' },
     { tab: 'expenses', title: 'Expenses', line: 'What the business spends, by category', value: formatCurrency(data.expenses), tone: 'text-foreground' },
     { tab: 'commissions', title: 'Commissions', line: 'What the reps have earned and can withdraw', value: formatCurrency(data.outstandingCommission), tone: data.outstandingCommission > 0 ? 'text-amber-300' : 'text-faint' },
-    { tab: 'ledger', title: 'The Ledger', line: 'Every shilling in and out, in one register', value: null, tone: '' },
+    { tab: 'ledger', title: 'Ledger', line: 'Every shilling in and out, in one register', value: null, tone: '' },
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap gap-1.5">
-        {PERIODS.map(([k, label]) => (
-          <button key={k} onClick={() => setPeriod(k)}
-            className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'border border-white/25 bg-white/[0.12] text-foreground' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
-        ))}
+    <div className="space-y-4">
+      {/* ── The period and his two money buttons ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded-full bg-white/[0.04] p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Period">
+          {PERIODS.map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={period === k} onClick={() => setPeriod(k)}
+              className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition sm:px-3.5 sm:text-[13px] ${period === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')} title="Cash of your own going into an account — owed back to you">
+            <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
+          </Button>
+          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
+            <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
+          </Button>
+        </div>
       </div>
 
-      {/* ── Whose money is this? ───────────────────────────────────────────
-             Rebuilt as wallet cards: an icon chip, the account's own colour,
-             a thick split bar, and the three figures that made the money —
-             cost of the boxes, what the reps took, what is left. The plain
-             stacked rows this replaced read as a document, not a dashboard. */}
-      {data.cashSplit && (() => {
-        const supplierLabel = data.cashSplit.supplierLabel || 'your suppliers';
-        // The whole bill and what is due now, as owed — not capped at what a wallet holds (that made the
-        // total 10,410,000 against a 12,000,000 bill). Older servers without the fields fall back.
-        const totalOwed = data.cashSplit.owedTotal != null
-          ? round2ui(data.cashSplit.owedTotal)
-          : round2ui((data.cashSplit.setAside || 0) + (data.cashSplit.dueLater || 0));
-        const dueNow = data.cashSplit.dueNow != null ? round2ui(data.cashSplit.dueNow) : round2ui(data.cashSplit.setAside || 0);
-        const om = data.ownerMoney || {};
-        // Only brands he actually put money behind; untagged rows stay out of
-        // the sentence rather than being described as a brand.
-        const ownerBrands = (om.byBrand || []).filter((b) => b.brandId && b.amount > 0);
-        const split = (om.contributed || 0) > 0 && (om.paidRepsFromPocket || 0) > 0;
-        return (
-        <div className="space-y-3">
-          <SectionHead label="Whose money is this?" sub={`Every wallet you hold — what you owe ${supplierLabel}, and what is yours.`} />
+      {/* ── Header strip: the period · sales − goods − expenses = earned · the cash ring ── */}
+      {/* One row only from 2xl (1536px): below that the sum is too narrow for its figures, so it keeps its own
+          full-width row under the period and the ring. */}
+      <div className="stat-glass grid grid-cols-1 gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5 2xl:grid-cols-[minmax(0,11rem)_minmax(0,1fr)_auto] 2xl:gap-6">
+        <div className="min-w-0">
+          <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45 sm:block">Overview</p>
+          <p className="text-[15px] font-semibold leading-tight text-foreground sm:mt-1 sm:whitespace-nowrap">{periodTitle}</p>
+          <p className="mt-0.5 hidden text-[11px] text-white/50 sm:block">{periodSub}</p>
+        </div>
 
-          {/* The headline split, as one joined strip. */}
-          {/* "Yours, free to use" only appears when it differs from the cash
-              held. With nothing owed the two were the same figure printed
-              twice, side by side, which reads as a mistake. */}
-          {/* "Owed to suppliers now: 0" beside a 12,242,000 invoice made the
-              owner ask whether he owes anything at all. He does — the whole
-              bill — but none of it is due until the stock sells. The labels
-              now say TOTAL and DUE TODAY, which cannot be read as each other. */}
-          <SegmentStrip segments={[
-            {
-              label: 'Cash you hold',
-              value: formatCurrency(data.cashSplit.totalCash),
-              sub: data.cashSplit.setAside > 0 ? 'across every account' : 'across every account — all of it yours',
-              tone: 'slate',
-            },
-            {
-              label: `Total you owe ${supplierLabel}`,
-              value: formatCurrency(totalOwed),
-              sub: totalOwed > 0 ? 'the whole bill, paid as stock sells' : 'nothing outstanding',
-              tone: totalOwed > 0 ? 'amber' : 'slate',
-            },
-            // DUE TODAY only when something is. At zero it was a card reading
-            // "TSh 0 — you are 381,000 ahead" directly above a sentence saying
-            // none of it is due and you are 381,000 ahead: the same fact, and
-            // the same figure, twice. The sentence says it better, in words.
-            ...(dueNow > 0
-              ? [
-                  {
-                    label: 'Of that, due today',
-                    value: formatCurrency(dueNow),
-                    sub: 'cost of boxes already sold',
-                    tone: 'rose',
-                  },
-                  { label: 'Yours, free to use', value: formatCurrency(data.cashSplit.yours), sub: 'after the supplier is covered', tone: 'emerald' },
-                ]
-              : []),
-          ]} />
+        <div className="order-last grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-4 sm:col-span-2 sm:flex sm:items-start sm:justify-start sm:gap-5 lg:gap-7 2xl:order-none 2xl:col-span-1 2xl:justify-center 2xl:border-l 2xl:border-t-0 2xl:pl-6 2xl:pt-0"
+          title={`Earned = sales − cost of goods − expenses, ${words}. Rep pay is yours, not the business's.`}>
+          <Term label="Sales" value={formatCurrency(data.revenue)} tone="text-foreground" dot="bg-sky-400"
+            caption={`${formatNumber(data.boxesSold ?? 0)} boxes`} />
+          <Op>−</Op>
+          <Term label="Cost of goods" sign="− " value={formatCurrency(data.cogs)} tone="text-foreground" dot="bg-rose-400"
+            caption={<>gross <span className={`tabular-nums ${data.grossProfit >= 0 ? 'text-white/80' : 'text-rose-300'}`}>{formatCurrency(data.grossProfit)}</span></>} />
+          <Op>−</Op>
+          <Term label="Expenses" sign="− " value={formatCurrency(data.expenses)} tone="text-foreground" dot="bg-amber-400"
+            caption={expenses.length ? `${expenses.length} categor${expenses.length === 1 ? 'y' : 'ies'}` : 'none recorded'} />
+          <Op>=</Op>
+          <Term label="Earned" sign="= " big value={formatCurrency(data.netProfit)} tone={data.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'} dot="bg-emerald-400"
+            caption={<>{margin != null && <span className={`mr-1 inline-block whitespace-nowrap rounded-full px-1.5 py-px text-[10px] font-semibold ${data.netProfit >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>{margin}% of sales</span>}reps earned <span className="whitespace-nowrap tabular-nums text-amber-300">{formatCurrency(data.commissionAccrued ?? 0)}</span></>} />
+        </div>
 
-          <p className="text-xs leading-relaxed text-muted">
-            {totalOwed > 0 && dueNow > 0 ? (
-              // Said only when something IS due — it used to read "none of it is due yet" right beside a
-              // "due today" card.
-              <>
-                You owe {supplierLabel} <b className="text-foreground">{formatCurrency(totalOwed)}</b> in total. Of that,
-                {' '}<b className="text-foreground">{formatCurrency(dueNow)}</b> is due now — the cost of boxes already sold.
-                {' '}The rest falls due as the stock on your shelf sells.
-              </>
-            ) : totalOwed > 0 ? (
-              <>
-                You owe {supplierLabel} <b className="text-foreground">{formatCurrency(totalOwed)}</b> in total — but none of it is due yet.
-                {' '}You pay {supplierLabel} the cost of the boxes as they sell, and the boxes you have already sold are covered
-                {data.cashSplit.paidAhead > 0 && <> ({formatCurrency(data.cashSplit.paidAhead)} more than covered)</>}.
-                {' '}The rest falls due as the stock on your shelf sells.
-              </>
-            ) : (
-              <>You owe {supplierLabel} nothing — every box you have taken is paid for.</>
+        <div className="flex items-center gap-3 border-t border-white/[0.07] pt-4 sm:border-t-0 sm:pt-0 2xl:border-l 2xl:pl-6"
+          title={cs ? `Cash in every account. ${dueNow > 0 ? `${formatCurrency(cs.yours)} of it is yours, free to use, after the supplier is covered.` : 'All of it is yours.'}` : undefined}>
+          {yoursPct != null && <Ring pct={yoursPct} />}
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-white/55">Cash you hold</p>
+            <p className="mt-0.5 whitespace-nowrap text-xl font-bold leading-tight tabular-nums text-foreground">{formatCurrency(cashHeld)}</p>
+            {cs && (
+              <p className="mt-0.5 text-[11px] text-white/50">
+                {dueNow > 0
+                  ? <>yours <span className="tabular-nums text-emerald-300">{formatCurrency(cs.yours)}</span></>
+                  : 'all of it yours'}
+              </p>
             )}
-          </p>
-
-          {/* One compact premium card per wallet (Nino, 11 Nov 2026: "too big, too much — keep the clear
-              picture, well arranged, the new design"): the cash, one bar for whose it is, three small
-              figures, the cost/profit split on one line, and one short line on what is due. */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {data.cashSplit.buckets.filter((b) => b.cash > 0 || b.revenue > 0).map((b, i) => {
-              const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
-              const named = b.accounts.filter((a) => a.balance !== 0);
-              const Icon = named[0] ? (ACCOUNT_ICON[data.accounts.find((a) => a.name === named[0].name)?.type] || Wallet) : Wallet;
-              const yoursPct = b.cash > 0 ? (b.yours / b.cash) * 100 : 0;
-              return (
-                <div key={b.key} className="stat-glass p-4 sm:p-5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${tint.chip}`}><Icon className="h-4 w-4" /></span>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{b.brandName}</p>
-                        <p className="truncate text-[11px] text-faint">{named.map((a) => a.name).join(', ') || 'no account holds money'}</p>
-                      </div>
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${b.setAside > 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
-                      {b.setAside > 0 ? 'Supplier owed' : 'All yours'}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 flex items-baseline gap-2">
-                    <p className="text-2xl font-bold leading-none tabular-nums text-white">{formatCurrency(b.cash)}</p>
-                    <p className="text-[11px] text-faint">in this wallet</p>
-                  </div>
-
-                  {b.cash > 0 && (
-                    <>
-                      <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className="h-full bg-rose-500" style={{ width: `${100 - yoursPct}%` }} />
-                        <div className="h-full bg-emerald-500" style={{ width: `${yoursPct}%` }} />
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-                        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose-400" />{b.supplierName || 'Supplier'} <b className="tabular-nums text-white/90">{formatCurrency(b.setAside)}</b></span>
-                        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Yours <b className="tabular-nums text-white/90">{formatCurrency(b.yours)}</b></span>
-                      </div>
-                    </>
-                  )}
-
-                  {(b.moneyIn > 0 || b.moneyOut > 0) && (
-                    <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/[0.08] pt-3">
-                      <div className="min-w-0">
-                        <p className="text-[10.5px] text-faint">Came in</p>
-                        <p className="truncate text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(b.moneyIn)}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10.5px] text-faint">Went out</p>
-                        <p className="truncate text-sm font-semibold tabular-nums text-rose-300">{formatCurrency(b.moneyOut)}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[10.5px] text-faint">Profit in it</p>
-                        <p className="truncate text-sm font-semibold tabular-nums text-white/90">{formatCurrency(b.profitPart)}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {b.cash > 0 && b.revenue > 0 && (
-                    // What the money held is made of — the same mix as the sales that brought it in.
-                    <div className="mt-3">
-                      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className="h-full bg-rose-400/80" style={{ width: `${b.costShare}%` }} />
-                        <div className="h-full bg-emerald-400/80" style={{ width: `${b.profitShare}%` }} />
-                      </div>
-                      <p className="mt-1.5 text-[11px] text-faint">
-                        Cost of goods <b className="tabular-nums text-white/80">{formatCurrency(b.costPart)}</b> ({Math.round(b.costShare)}%) · profit <b className="tabular-nums text-white/80">{formatCurrency(b.profitPart)}</b> ({Math.round(b.profitShare)}%)
-                      </p>
-                    </div>
-                  )}
-
-                  <p className="mt-3 border-t border-white/[0.08] pt-2.5 text-[11px] leading-snug text-faint">
-                    {b.setAside > 0
-                      ? <>{formatCurrency(b.setAside)} is {b.supplierName}&apos;s, for boxes already sold.</>
-                      : <>Nothing due now{b.paidAhead > 0 && <> — {formatCurrency(b.paidAhead)} paid ahead</>}.</>}
-                    {b.dueLater > 0 && <> {formatCurrency(b.dueLater)} more as shelf stock sells.</>}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-          {/* What the owner has laid out for the business — chiefly rep
-              commissions, which he pays himself. It is money the business
-              owes him back, not a balance it is holding. */}
-          {/* The total, then the two ways it went in. It was one run-on
-              sentence, which is a poor way to read three numbers. */}
-          <div className="stat-glass flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5 sm:px-5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-inset ring-sky-500/30"><PiggyBank className="h-4 w-4" /></span>
-
-            <span className="min-w-[9rem]">
-              <span className="block text-[11px] font-medium text-white/55">Your money in the business</span>
-              <span className="block text-lg font-bold tabular-nums text-sky-300">{formatCurrency(om.owedBackToOwner || 0)}</span>
-              <span className="block text-[11px] text-faint">
-                {split
-                  ? 'owed back to you when it can afford it'
-                  : (om.paidRepsFromPocket || 0) > 0
-                    ? 'total commission paid to reps from your own pocket — owed back to you'
-                    : ownerBrands.length > 0
-                      ? `cash you put in behind ${ownerBrands.map((b) => b.name).join(' and ')} — owed back to you`
-                      : 'owed back to you when it can afford it'}
-              </span>
-            </span>
-
-            {/* Only worth splitting when there are two parts. With one, the
-                breakdown would print the total a second time. */}
-            {split && (om.contributed || 0) > 0 && (
-              <span className="min-w-[8rem]">
-                <span className="block text-[11px] font-medium text-white/55">Cash you put in</span>
-                <span className="block text-base font-semibold tabular-nums text-foreground">{formatCurrency(om.contributed)}</span>
-                <span className="block text-[11px] text-faint">
-                  {ownerBrands.length > 0
-                    ? `behind ${ownerBrands.map((b) => b.name).join(' and ')}`
-                    : 'straight into an account'}
-                </span>
-              </span>
-            )}
-
-            {split && (om.paidRepsFromPocket || 0) > 0 && (
-              <span className="min-w-[8rem]">
-                <span className="block text-[11px] font-medium text-white/55">Commission from your pocket</span>
-                <span className="block text-base font-semibold tabular-nums text-foreground">{formatCurrency(om.paidRepsFromPocket)}</span>
-                <span className="block text-[11px] text-faint">hand to hand — never through an account</span>
-              </span>
-            )}
-            <div className="ml-auto flex gap-2">
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')}>
-                <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
-              </Button>
-              <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
-                <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
-              </Button>
-            </div>
           </div>
         </div>
-        );
-      })()}
+      </div>
 
-      {/* ── One joined strip: the flow of the period ── */}
-      {/* The net here must be the net that reaches the accounts, or it sits
-          near "cash you hold" disagreeing with it by the owner's own money. */}
-      <SegmentStrip segments={[
-        { label: 'Money in', value: formatCurrency(flow.moneyIn), sub: `the business collected ${periodLabel}`, tone: 'emerald' },
-        { label: 'Money out', value: formatCurrency(flow.moneyOut), sub: `the business paid ${periodLabel}`, tone: 'rose' },
-        ...((flow.ownerNet ?? 0) !== 0
-          ? [{
-              label: 'Your own money',
-              value: formatCurrency(ownerPutIn !== 0 ? ownerPutIn : flow.ownerNet),
-              sub: ownerParts || (flow.ownerNet >= 0 ? 'you put in' : 'you took out'),
-              tone: 'sky',
-            }]
-          : []),
-        {
-          label: 'Net movement',
-          value: formatCurrency(flow.netWithOwner ?? flow.net),
-          sub: `what the accounts ${(flow.netWithOwner ?? flow.net) >= 0 ? 'gained' : 'lost'}${
-            ownerParts ? ' — counting only money that moved through them' : ''}`,
-          tone: (flow.netWithOwner ?? flow.net) >= 0 ? 'sky' : 'amber',
-        },
-      ]} />
+      {/* ── Six small figures ── */}
+      {/* Colour only where it carries meaning: in green, out red, an amount owed amber. */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+        <Tile label="Money in" value={formatCurrency(flow.moneyIn)} tone="text-emerald-300" caption={`collected ${words}`}
+          title={`What the business collected ${words}`} onClick={() => onNavigate?.('cashflow')} />
+        <Tile label="Money out" value={formatCurrency(flow.moneyOut)} tone="text-rose-300" caption={`paid ${words}`}
+          title={`What the business paid ${words}`} onClick={() => onNavigate?.('cashflow')} />
+        <Tile label="Net movement" value={formatCurrency(net)} tone={net >= 0 ? 'text-foreground' : 'text-rose-300'}
+          caption={`accounts ${net >= 0 ? 'gained' : 'lost'}`}
+          title={`What the accounts ${net >= 0 ? 'gained' : 'lost'} ${words}${ownerParts ? ' — counting only money that moved through them' : ''}`}
+          onClick={() => onNavigate?.('cashflow')} />
+        <Tile label={`You owe ${supplierLabel}`} value={formatCurrency(totalOwed)} tone={totalOwed > 0 ? 'text-amber-300' : 'text-foreground'}
+          title={owedTitle} onClick={() => onNavigate?.('suppliers')}
+          caption={dueNow > 0
+            ? <span className="inline-block rounded-full bg-rose-500/15 px-1.5 py-px text-[10.5px] font-semibold tabular-nums text-rose-300">{formatCurrency(dueNow)} due now</span>
+            : totalOwed > 0
+              ? <>none due yet{(cs?.paidAhead || 0) > 0 && <> · <span className="tabular-nums">{formatCurrency(cs.paidAhead)}</span> paid ahead</>}</>
+              : 'nothing outstanding'} />
+        <Tile label="Your money in it" value={formatCurrency(om.owedBackToOwner || 0)} tone="text-foreground"
+          title="What you have put into the business — owed back to you when it can afford it"
+          caption={(
+            <>
+              {split ? (
+                <>
+                  <span className="block"><span className="tabular-nums">{formatCurrency(om.contributed)}</span> {ownerBrands.length > 0 ? `behind ${ownerBrands.map((b) => b.name).join(' and ')}` : 'put in'}</span>
+                  <span className="block"><span className="tabular-nums">{formatCurrency(om.paidRepsFromPocket)}</span> paid reps by hand</span>
+                </>
+              ) : (om.paidRepsFromPocket || 0) > 0
+                ? 'commission you paid reps by hand'
+                : ownerBrands.length > 0
+                  ? `cash behind ${ownerBrands.map((b) => b.name).join(' and ')}`
+                  : 'owed back to you'}
+              {showOwnerFlow && (
+                <span className="mt-0.5 block text-white/70" title={ownerParts || undefined}>
+                  {words}: <span className="tabular-nums">{formatCurrency(ownerFlowValue)}</span>
+                  {ownerParts
+                    ? <span className="block text-white/50">{ownerParts}</span>
+                    : <span className="text-white/50"> · {(flow.ownerNet ?? 0) >= 0 ? 'you put in' : 'you took out'}</span>}
+                </span>
+              )}
+            </>
+          )} />
+        <Tile label="Reps can withdraw" value={formatCurrency(data.outstandingCommission)}
+          tone={data.outstandingCommission > 0 ? 'text-amber-300' : 'text-foreground'}
+          caption="commission owed to reps" title="What the reps have earned and can withdraw"
+          onClick={() => onNavigate?.('commissions')} />
+      </div>
 
-      {/* ── The business, by brand ──────────────────────────────────────────
-             The owner said plainly he did not understand "TSh 2,112,500".
-             A profit figure alone is an abstraction; the three steps that
-             produced it are not. Money came in, money paid for it, what was
-             left — in that order, in words. ── */}
-      {(data.brandFinance || []).length > 0 && (
-        <div className="space-y-3">
-          <SectionHead
-            label="How each brand did"
-            sub={`Money in, what the boxes cost, what was left — ${
-              period === 'all'
-                ? (data.epochAt ? `everything since ${formatDate(data.epochAt)}` : 'everything recorded so far')
-                : `${periodLabel} only`
-            }.`}
-          />
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {data.brandFinance.map((b) => {
-              const keptPct = b.revenue > 0 ? Math.round(((b.revenue - b.cogs) / b.revenue) * 100) : 0;
-              return (
-                <div key={b.brandId} className="stat-glass">
-                  <div className="relative p-5">
-                    <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-white/[0.08] px-3 py-1 text-sm font-bold text-foreground ring-1 ring-inset ring-white/10">{b.name}</span>
-                      <span className="text-xs text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'} sold · {periodLabel}</span>
+      {/* ── Month by month · where the cash sits (two cards of the same height) ── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2" title="Month by month" sub={(
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              <span>The last six months</span>
+              <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />In</span>
+              <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-rose-400" />Out</span>
+              <span className="inline-flex items-center gap-1"><span className="h-0.5 w-2.5 rounded-full bg-sky-300" />Left</span>
+            </span>
+          )}
+          link={{ tab: 'cashflow', label: 'Cash Flow' }} onNavigate={onNavigate}>
+          {hasSeries ? (
+            <>
+              <div className="-ml-2">
+                <BarsWithLine data={series} height={wide ? 240 : 200}
+                  bars={[{ key: 'moneyIn', name: 'Money in', color: '#34d399' }, { key: 'moneyOut', name: 'Money out', color: '#fb7185' }]}
+                  line={{ key: 'net', name: 'Net', color: '#7dd3fc' }} />
+              </div>
+              <div className="mt-auto grid grid-cols-3 gap-3 border-t border-white/[0.07] pt-3">
+                <div className="min-w-0">
+                  <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">Average month in</p>
+                  <p className="truncate text-sm font-semibold tabular-nums text-foreground">{formatCurrency(avgIn)}</p>
+                  <p className="text-[10.5px] text-white/50">{active.length} month{active.length === 1 ? '' : 's'}{thisMonthIn ? ', this one so far' : ' with money'}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">Best month in</p>
+                  <p className="truncate text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(best?.moneyIn)}</p>
+                  <p className="text-[10.5px] text-white/50">{best?.period}</p>
+                </div>
+                <div className="min-w-0" title="Money in minus money out over the months in this chart. Your own money put in or taken out is not counted here, so this is not the same as Net movement.">
+                  <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">In − out, these {series.length} months</p>
+                  <p className={`truncate text-sm font-semibold tabular-nums ${chartNet >= 0 ? 'text-foreground' : 'text-rose-300'}`}>{formatCurrency(chartNet)}</p>
+                  <p className="text-[10.5px] text-white/50">your own money not counted</p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-[170px] items-center justify-center text-sm text-white/50">Fills in as months of activity add up.</div>
+          )}
+        </Panel>
+
+        <Panel title="Where the cash sits" sub="Each account's share" link={{ tab: 'accounts', label: 'Accounts' }} onNavigate={onNavigate}>
+          {accountsDonut.length ? (
+            <div className="flex flex-1 flex-col justify-center gap-3">
+              <div className="relative mx-auto w-full max-w-[200px]">
+                {/* each account in its brand's colour — the same as its wallet and its sales dot */}
+                <DonutChart data={accountsDonut} height={176} legend={false} innerRadius={58} outerRadius={80} stroke="none"
+                  colors={accountsDonut.map((a, i) => accountHex(a.name, i))} />
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-sm font-bold tabular-nums text-foreground">TSh {formatNumber(accountsTotal, { compact: true })}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-white/50">{round2ui(accountsTotal) === round2ui(cashHeld) ? 'held' : 'above zero'}</span>
+                </div>
+              </div>
+              <ul className="space-y-1.5">
+                {accountsDonut.map((a, i) => {
+                  const Icon = ACCOUNT_ICON[a.type] || Wallet;
+                  const hex = accountHex(a.name, i);
+                  return (
+                    <li key={a.name} className="flex items-center gap-2 text-[13px]">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ background: `${hex}26`, color: hex }}>
+                        <Icon className="h-3 w-3" />
+                      </span>
+                      <span className="min-w-0 flex-1 leading-tight text-muted">{a.name}</span>
+                      <span className="shrink-0 font-semibold tabular-nums text-foreground">{formatCurrency(a.value)}</span>
+                      <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-faint">{accountsTotal > 0 ? Math.round((a.value / accountsTotal) * 100) : 0}%</span>
+                    </li>
+                  );
+                })}
+                {accountsBelow.map((a) => {
+                  const Icon = ACCOUNT_ICON[a.type] || Wallet;
+                  return (
+                    <li key={a.name} className="flex items-center gap-2 text-[13px]" title={`${a.name} is below zero — it is not a slice of the donut, but it is counted in the cash you hold.`}>
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-white/40">
+                        <Icon className="h-3 w-3" />
+                      </span>
+                      <span className="min-w-0 flex-1 leading-tight text-white/50">{a.name}</span>
+                      <span className="shrink-0 font-semibold tabular-nums text-rose-300">{formatCurrency(a.balance)}</span>
+                      <span className="w-8 shrink-0 text-right text-[11px] text-faint">—</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/50">No account holds money right now.</div>
+          )}
+        </Panel>
+      </div>
+
+      {/* ── Sales by brand · wallets · where the money went ── */}
+      <div className={clsx('grid grid-cols-1 gap-4 lg:grid-cols-2', cs && 'xl:grid-cols-3')}>
+        <Panel title="Sales by brand" sub={`What was kept · ${words}`}
+          link={{ tab: 'profit', label: 'Profit' }} onNavigate={onNavigate}>
+          {(data.brandFinance || []).length === 0 ? (
+            <p className="py-6 text-center text-sm text-white/50">No sales in this period.</p>
+          ) : (
+            <div className="flex flex-1 flex-col gap-4">
+              {data.brandFinance.map((b, i) => {
+                const kept = b.revenue - b.cogs;
+                const keptPct = b.revenue > 0 ? Math.round((kept / b.revenue) * 100) : 0;
+                const cogsPct = b.revenue > 0 ? Math.min(100, (b.cogs / b.revenue) * 100) : 0;
+                return (
+                  <div key={b.brandId}
+                    title={`Sales over ${period === 'all' ? 'the whole period' : words}, not money sitting in an account — most of it has already gone back out to buy stock. Out of every 100 shillings of ${b.name} sold, ${keptPct} stayed in the business after paying for the boxes.${(b.commission ?? 0) > 0 ? ` Reps earned ${formatCurrency(b.commission)} on these sales, which you pay yourself.` : ''}`}>
+                    <div className="flex items-baseline gap-2">
+                      <span className={`h-2 w-2 shrink-0 self-center rounded-full ${ACCOUNT_DOT[(brandIdx.get(b.brandId) ?? buckets.length + i) % ACCOUNT_DOT.length]}`} />
+                      <span className="text-[13px] font-semibold text-foreground">{b.name}</span>
+                      <span className="text-[11px] text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'}</span>
+                      <span className={`ml-auto text-sm font-bold tabular-nums ${kept >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{formatCurrency(kept)}</span>
                     </div>
-
-                    {/* The three steps, top to bottom, in plain words. */}
-                    <div className="mt-4 space-y-2.5">
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-sm text-muted">Customers paid you</span>
-                        <span className="text-base font-bold tabular-nums text-emerald-400">{formatCurrency(b.revenue)}</span>
-                      </div>
-                      <div className="flex items-baseline justify-between gap-3">
-                        <span className="text-sm text-muted">The boxes cost</span>
-                        <span className="text-base font-bold tabular-nums text-rose-400">− {formatCurrency(b.cogs)}</span>
-                      </div>
-                      <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.08] pt-2.5">
-                        <span className="text-sm font-semibold text-foreground">Earned on these sales</span>
-                        <span className={`text-xl font-bold tabular-nums ${(b.revenue - b.cogs) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {formatCurrency(b.revenue - b.cogs)}
-                        </span>
-                      </div>
+                    <div className="mt-1.5 flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                      <div className="h-full bg-rose-400/45" style={{ width: `${cogsPct}%` }} />
+                      <div className="h-full bg-emerald-400" style={{ width: `${Math.max(0, 100 - cogsPct)}%` }} />
                     </div>
-
-                    <p className="mt-3 rounded-lg bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-muted">
-                      These are <b className="text-foreground">sales over {period === 'all' ? 'the whole period' : periodLabel}</b>, not money sitting in an account —
-                      most of it has already gone back out to buy stock. Out of every 100 shillings of {b.name} sold,
-                      {' '}<b className="text-foreground">{keptPct}</b> stayed in the business after paying for the boxes.
-                      {(b.commission ?? 0) > 0 && <> Reps earned {formatCurrency(b.commission)} on these sales, which you pay yourself.</>}
+                    <p className="mt-1.5 text-[11px] text-white/50">
+                      <span className="whitespace-nowrap">Sales <span className="tabular-nums text-white/80">{formatCurrency(b.revenue)}</span></span>{' '}
+                      <span className="whitespace-nowrap">− goods <span className="tabular-nums text-white/80">{formatCurrency(b.cogs)}</span></span>
+                    </p>
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-white/50">
+                      <span className={`rounded-full px-1.5 py-px text-[10px] font-semibold ${kept >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>{keptPct}% kept</span>
+                      {(b.commission ?? 0) > 0 && <span className="whitespace-nowrap">reps earned <span className="tabular-nums text-amber-300/90">{formatCurrency(b.commission)}</span></span>}
                     </p>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                );
+              })}
+              {data.brandFinance.length > 1 && (() => {
+                const rev = data.brandFinance.reduce((t, b) => t + b.revenue, 0);
+                const kept = data.brandFinance.reduce((t, b) => t + (b.revenue - b.cogs), 0);
+                return (
+                  <div className="mt-auto flex items-center gap-2 border-t border-white/[0.07] pt-2.5 text-[13px]">
+                    <span className="flex-1 font-semibold text-foreground">All brands</span>
+                    {rev > 0 && <span className="rounded-full bg-white/[0.06] px-1.5 py-px text-[10px] font-semibold tabular-nums text-muted">{Math.round((kept / rev) * 100)}% kept</span>}
+                    <span className={`font-bold tabular-nums ${kept >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{formatCurrency(kept)}</span>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </Panel>
 
-      {/* ── Charts row: motion + where the cash sits ── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader title="The money, in motion" subtitle="Money in and out, month by month — the last six" />
-          <div className="px-2 pb-3">
-            {hasSeries ? (
-              <TrendChart
-                data={cf.series}
-                series={[
-                  { key: 'moneyIn', name: 'Money in', color: '#34d399' },
-                  { key: 'moneyOut', name: 'Money out', color: '#fb7185' },
-                ]}
-                height={230}
-              />
+        {cs && (
+          <Panel title="Wallets" sub="Whose money each one holds"
+            link={{ tab: 'accounts', label: 'Accounts' }} onNavigate={onNavigate}>
+            {buckets.length === 0 ? (
+              <p className="py-6 text-center text-sm text-white/50">No wallet holds money yet.</p>
             ) : (
-              <div className="flex h-[170px] items-center justify-center text-sm text-faint">The trend fills in as months of activity accumulate.</div>
+              <div className="divide-y divide-white/[0.06]">
+                {buckets.map((b, i) => {
+                  const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
+                  const named = b.accounts.filter((a) => a.balance !== 0);
+                  const Icon = named[0] ? (ACCOUNT_ICON[data.accounts.find((a) => a.name === named[0].name)?.type] || Wallet) : Wallet;
+                  const yoursPct2 = b.cash > 0 ? Math.max(0, Math.min(100, (b.yours / b.cash) * 100)) : 0;
+                  const mix = b.cash > 0 && b.revenue > 0;
+                  return (
+                    <div key={b.key} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${tint.chip}`}><Icon className="h-3.5 w-3.5" /></span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-semibold text-foreground">{b.brandName}</p>
+                          <p className="truncate text-[11px] text-white/50">{named.map((a) => a.name).join(', ') || 'no account holds money'}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(b.cash)}</p>
+                          <span className={`mt-0.5 inline-block rounded-full px-1.5 py-px text-[10px] font-semibold ${b.setAside > 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                            {b.setAside > 0 ? 'Supplier owed' : 'All yours'}
+                          </span>
+                        </div>
+                      </div>
+                      {b.cash > 0 && (
+                        <>
+                          <div className="mt-2.5 flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                            <div className="h-full bg-rose-400/45" style={{ width: `${100 - yoursPct2}%` }} />
+                            <div className="h-full bg-emerald-400" style={{ width: `${yoursPct2}%` }} />
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted">
+                            <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose-400/60" />{b.supplierName || 'Supplier'} <b className="font-semibold tabular-nums text-white/90">{formatCurrency(b.setAside)}</b></span>
+                            <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Yours <b className="font-semibold tabular-nums text-white/90">{formatCurrency(b.yours)}</b></span>
+                          </div>
+                        </>
+                      )}
+                      {(b.moneyIn > 0 || b.moneyOut > 0) && (
+                        <div className="mt-2 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-2">
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-white/50">Came in</p>
+                            <p className="truncate text-xs font-semibold tabular-nums text-emerald-300">{formatCurrency(b.moneyIn)}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-white/50">Went out</p>
+                            <p className="truncate text-xs font-semibold tabular-nums text-rose-300">{formatCurrency(b.moneyOut)}</p>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] text-white/50">Profit in it</p>
+                            <p className="truncate text-xs font-semibold tabular-nums text-white/90">{formatCurrency(b.profitPart)}</p>
+                          </div>
+                        </div>
+                      )}
+                      {/* What the money held is made of (the same mix as the sales that brought it in), and
+                          what falls due later. "X is the supplier's" is the legend above, so it is not repeated.
+                          Each part stays whole, so a line only breaks at a " · ". */}
+                      {(mix || b.dueLater > 0 || b.paidAhead > 0) && (
+                        <p className="mt-1.5 text-[11px] leading-snug text-white/50">
+                          {mix && (
+                            <span className="whitespace-nowrap">Goods <span className="tabular-nums text-white/75">{formatCurrency(b.costPart)}</span> ({Math.round(b.costShare)}%) · profit {Math.round(b.profitShare)}%</span>
+                          )}
+                          {b.paidAhead > 0 && <>{mix && ' · '}<span className="whitespace-nowrap"><span className="tabular-nums text-white/75">{formatCurrency(b.paidAhead)}</span> paid ahead</span></>}
+                          {b.dueLater > 0 && <>{(mix || b.paidAhead > 0) && ' · '}<span className="whitespace-nowrap"><span className="tabular-nums text-white/75">{formatCurrency(b.dueLater)}</span> more as stock sells</span></>}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
-          </div>
-        </Card>
-        <Card>
-          <CardHeader title="Where the cash sits" subtitle="Each account's share" />
-          <CardBody>
-            {accountsDonut.length ? (
-              // each account in its Accounts-tab colour (ACCOUNT_BAR: emerald, violet, sky, amber)
-              <DonutChart data={accountsDonut} height={230} colors={['#10b981', '#8b5cf6', '#0ea5e9', '#f59e0b']} />
-            ) : (
-              <div className="flex h-[200px] items-center justify-center text-sm text-faint">No account holds money right now.</div>
-            )}
-          </CardBody>
-        </Card>
+          </Panel>
+        )}
+
+        <Panel className={cs ? 'lg:col-span-2 xl:col-span-1' : ''} title="Where the money went" sub={`Expenses by category · ${words}`}
+          link={{ tab: 'expenses', label: 'Expenses' }} onNavigate={onNavigate}>
+          {expenses.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-1 py-6 text-center"
+              title={`When you buy boxes you have not lost the money, you have turned it into stock on your shelf. The cost counts the day a box sells — that is the cost of goods. Paying ${cs?.supplierLabel || 'your supplier'} is settling a debt, not a cost. Running costs like rent, transport and airtime belong here; record them with the Expense button.`}>
+              <p className="text-sm text-muted">No running costs recorded</p>
+              <p className="max-w-[18rem] text-[11px] leading-snug text-white/50">
+                Buying stock is not one — it counts as goods when the boxes sell: <span className="tabular-nums text-white/75">{formatCurrency(data.cogs)}</span> for {formatNumber(data.boxesSold ?? 0)} boxes.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* One hue for every category (money out); the length of the bar is the share. */}
+              <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 xl:grid-cols-1">
+                {expenses.map((e) => {
+                  const pct = expenseSum > 0 ? (e.amount / expenseSum) * 100 : 0;
+                  return (
+                    <div key={e.category}>
+                      <div className="flex items-center gap-2 text-[13px]">
+                        <span className="min-w-0 flex-1 truncate text-muted">{e.category}</span>
+                        {e.count != null && <span className="shrink-0 text-[10.5px] tabular-nums text-faint">{formatNumber(e.count)}×</span>}
+                        <span className="shrink-0 font-semibold tabular-nums text-foreground">{formatCurrency(e.amount)}</span>
+                        <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-faint">{pct > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`}</span>
+                      </div>
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div className="h-full rounded-full bg-rose-400/60" style={{ width: `${Math.max(2, pct)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-auto pt-3">
+                <div className="flex items-center justify-between border-t border-white/[0.07] pt-2.5 text-[13px]">
+                  <span className="font-semibold text-foreground">Total</span>
+                  <span className="font-bold tabular-nums text-rose-300">{formatCurrency(data.expenses)}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </Panel>
       </div>
 
-      {/* ── Needs you ── */}
-      <div className="space-y-3">
-        <SectionHead label="Needs you" sub="Only what is actually waiting for a decision." />
+      {/* ── Best products · the desk ── */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel className="lg:col-span-2" title="Best products" sub={`By what you keep · ${words}`}
+          link={{ tab: 'profit', label: 'Profit' }} onNavigate={onNavigate}>
+          {!(data.topProducts || []).length ? (
+            <p className="py-6 text-center text-sm text-white/50">No sales in this period.</p>
+          ) : (
+            <>
+            <ul className="-mx-4 -mb-4 divide-y divide-white/[0.05] border-t border-white/[0.06] sm:hidden">
+              {data.topProducts.map((p) => (
+                <li key={p.productId}>
+                  <button type="button" onClick={() => onNavigate?.('profit')} className="w-full cursor-pointer px-4 py-2.5 text-left transition hover:bg-white/[0.035]">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 text-[13px] font-medium leading-snug text-foreground">
+                        {p.name}
+                        {p.brandName && !p.name.startsWith(p.brandName) && <span className="ml-1.5 text-[11px] font-normal text-faint">{p.brandName}</span>}
+                      </span>
+                      <span className={`shrink-0 text-[13px] font-semibold tabular-nums ${p.contribution >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{formatCurrency(p.contribution)}</span>
+                    </span>
+                    <span className="mt-0.5 block text-[11px] tabular-nums text-white/50">
+                      {formatNumber(p.boxes)} boxes · revenue {formatCurrency(p.revenue)} · margin <span title={`${p.contributionMargin}%`}>{Math.round(p.contributionMargin)}%</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="-mx-4 -mb-4 hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[34rem] text-[13px]">
+                <thead>
+                  <tr className="border-y border-white/[0.06] bg-white/[0.025] text-[10.5px] font-semibold uppercase tracking-wider text-white/45">
+                    <th className="px-4 py-2 text-left font-semibold">Product</th>
+                    <th className="w-px whitespace-nowrap px-3 py-2 text-right font-semibold">Boxes</th>
+                    <th className="w-px whitespace-nowrap px-3 py-2 text-right font-semibold">Revenue</th>
+                    <th className="w-px whitespace-nowrap px-3 py-2 text-right font-semibold">Earned</th>
+                    <th className="w-px whitespace-nowrap px-4 py-2 text-right font-semibold">Margin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.topProducts.map((p) => (
+                    <tr key={p.productId} onClick={() => onNavigate?.('profit')}
+                      className="cursor-pointer border-b border-white/[0.05] transition last:border-0 hover:bg-white/[0.035]">
+                      <td className="px-4 py-2">
+                        <span className="block font-medium leading-snug text-foreground">
+                          {p.name}
+                          {p.brandName && !p.name.startsWith(p.brandName) && <span className="ml-1.5 text-[11px] font-normal text-faint">{p.brandName}</span>}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-muted">{formatNumber(p.boxes)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-muted">{formatCurrency(p.revenue)}</td>
+                      <td className={`px-3 py-2 text-right font-semibold tabular-nums ${p.contribution >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{formatCurrency(p.contribution)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted" title={`${p.contributionMargin}%`}>{Math.round(p.contributionMargin)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            </>
+          )}
+        </Panel>
+
+        <Panel title="The finance desk" sub="Each tab and its number">
+          <div className="-mx-1 divide-y divide-white/[0.06]">
+            {desks.map((d) => (
+              <button key={d.tab} type="button" title={d.line} onClick={() => onNavigate?.(d.tab)}
+                className="flex w-full cursor-pointer items-center gap-2 rounded-lg px-1 py-2 text-left text-[13px] transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
+                <span className="flex-1 font-medium text-foreground">{d.title}</span>
+                {d.value != null
+                  ? <span className={`font-semibold tabular-nums ${d.tone}`}>{d.value}</span>
+                  : <span className="text-[11px] text-faint">every shilling</span>}
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" />
+              </button>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      {/* ── Needs attention: one line each ── */}
+      <div>
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">Needs attention</h3>
+          <span className={`rounded-full px-1.5 py-px text-[10px] font-bold tabular-nums ${attention.length ? 'bg-brand-500/20 text-brand-600' : 'bg-emerald-500/15 text-emerald-300'}`}>{attention.length}</span>
+        </div>
         {attention.length === 0 ? (
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] px-5 py-4 text-sm text-muted">
-            Nothing is waiting. Every settlement is decided, no withdrawal is pending, and no account is below zero.
+          <div className="glass-list flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-muted">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            All clear — no settlement or withdrawal waiting, no account below zero.
           </div>
         ) : (
           <div className="glass-list">
             {attention.map((a, i) => (
               <button key={i} type="button" onClick={() => onNavigate?.(a.tab)}
-                className="flex w-full cursor-pointer items-center gap-3 border-b border-white/[0.05] px-5 py-3 text-left transition duration-200 last:border-0 hover:bg-white/[0.04]">
-                <span className={`rounded-lg p-1.5 ${a.tone}`}><a.icon className="h-3.5 w-3.5" /></span>
-                <span className="flex-1 text-sm text-foreground">{a.text}</span>
+                className="flex w-full cursor-pointer items-center gap-3 border-b border-white/[0.05] px-4 py-2.5 text-left transition duration-200 last:border-0 hover:bg-white/[0.04]">
+                <span className={`rounded-md p-1 ${a.tone}`}><a.icon className="h-3.5 w-3.5" /></span>
+                <span className="min-w-0 flex-1 text-[13px] leading-snug text-foreground sm:truncate">{a.text}</span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
               </button>
             ))}
@@ -877,101 +1124,9 @@ function Overview({ onNavigate, onOwnerMoney }) {
         )}
       </div>
 
-      {/* ── Real profit ── */}
-      <div className="space-y-3">
-        <SectionHead label="What the business earned" sub={`Revenue − goods − expenses · ${periodLabel} · rep pay is yours, not the business's`} />
-        <Card>
-          <CardBody>
-            <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
-              <Money label="Revenue" value={data.revenue} tone="emerald" />
-              <Money label="− COGS" value={data.cogs} tone="slate" />
-              <Money label="= Gross profit" value={data.grossProfit} tone={data.grossProfit >= 0 ? 'sky' : 'rose'} />
-              <Money label="Reps earned" value={data.commissionAccrued ?? 0} tone="amber" />
-              <Money label="− Expenses" value={data.expenses} tone="rose" />
-              <Money label="= Earned" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
-            </div>
-            {/* A bare "Expenses 0" reads as broken. It is not: money spent on
-                stock is not a running cost — it becomes cost of goods when the
-                boxes sell, and it is already inside COGS above. Say so. */}
-            {data.expenses === 0 && (
-              <div className="mt-3 space-y-1.5 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
-                <p className="text-xs font-semibold text-foreground">No running costs recorded yet — and buying stock is not one</p>
-                <p className="text-xs leading-relaxed text-muted">
-                  When you buy boxes you have not lost the money, you have turned it into stock on your shelf. The cost counts
-                  the day a box <b className="text-foreground">sells</b> — that is the {formatCurrency(data.cogs)} of COGS above,
-                  the cost of the {formatNumber(data.boxesSold ?? 0)} boxes sold. Counting it when you buy instead would show a
-                  huge loss in the month you stock up and a false profit in the month you sell.
-                </p>
-                <p className="text-xs leading-relaxed text-muted">
-                  Paying {data.cashSplit?.supplierLabel || 'your supplier'} is settling a debt, not a cost — the cost was already
-                  taken on when you received the goods. Running costs like rent, transport and airtime belong here; record them
-                  with the <b className="text-foreground">Expense</b> button and they will show.
-                </p>
-              </div>
-            )}
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* ── Products table + expense donut ── */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader title="The products carrying the business" subtitle={`Best first, by what you keep · ${periodLabel}`} />
-          {!(data.topProducts || []).length ? (
-            <CardBody><div className="py-6 text-center text-sm text-faint">No sales in this period.</div></CardBody>
-          ) : (
-            <Table>
-              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Earned</TH><TH>Margin</TH></TR></THead>
-              <TBody>
-                {data.topProducts.map((p) => (
-                  <TR key={p.productId} className="cursor-pointer" onClick={() => onNavigate?.('profit')}>
-                    <TD className="font-medium text-foreground">
-                      {p.name}
-                      {p.brandName && <span className="ml-1.5 text-[11px] text-faint">{p.brandName}</span>}
-                    </TD>
-                    <TD>{formatNumber(p.boxes)}</TD>
-                    <TD>{formatCurrency(p.revenue)}</TD>
-                    <TD className={`font-semibold ${p.contribution >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(p.contribution)}</TD>
-                    <TD>{p.contributionMargin}%</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-          )}
-        </Card>
-        <Card>
-          <CardHeader title="Where money goes" subtitle={`Expenses by category · ${periodLabel}`} />
-          <CardBody>
-            {donut.length === 0 ? (
-              <div className="flex h-[200px] flex-col items-center justify-center gap-1 px-6 text-center">
-                <p className="text-sm text-muted">No running costs recorded</p>
-                <p className="text-xs leading-relaxed text-faint">
-                  Stock purchases are not expenses — they count as cost of goods when the boxes sell.
-                </p>
-              </div>
-            ) : (
-              <DonutChart data={donut} height={230} />
-            )}
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* ── The desk ── */}
-      <div className="space-y-3">
-        <SectionHead label="The finance desk" sub="Every department, its job, and its number." />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {desks.map((d) => (
-            <button key={d.tab} type="button" onClick={() => onNavigate?.(d.tab)}
-              className="stat-glass cursor-pointer p-4 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-semibold text-foreground">{d.title}</span>
-                {d.value != null && <span className={`text-sm font-bold tabular-nums ${d.tone}`}>{d.value}</span>}
-              </div>
-              <p className="mt-1 text-xs text-muted">{d.line}</p>
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className="text-[11px] leading-relaxed text-white/50">
+        Earned is sales − cost of goods − expenses. Rep commission is yours to pay, not the business&apos;s. Buying stock is not an expense — it counts as goods the day a box sells.
+      </p>
     </div>
   );
 }
