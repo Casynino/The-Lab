@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+} from 'recharts';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
 import WalletCard from '@/components/WalletCard';
-import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard } from '@/components/RepCharts';
-import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck, Boxes } from 'lucide-react';
+import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard, Ring } from '@/components/RepCharts';
+import { Coins, Crown, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { PayoutHistory, earnedOn } from '@/components/WithdrawalNote';
 import {
-  PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
+  PageHeader, Card, CardHeader, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import DoneReceipt from '@/components/DoneReceipt';
@@ -321,7 +325,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
   if (!items.length) return null;
 
   return (
-    <Card className="mb-6 !border-amber-500/30">
+    <Card className="mb-5 !border-amber-500/30">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Coins className="h-4 w-4 text-amber-400" />
         <h2 className="text-sm font-bold text-foreground">Commission requests</h2>
@@ -333,7 +337,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
           const busy = decide.isPending && decide.variables?.id === w.id;
           return (
             <div key={w.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <button type="button" onClick={() => onOpen?.(w)} className="min-w-0 flex-1 text-left" title="Open to see the details">
+              <button type="button" onClick={() => onOpen?.(w)} className="min-w-[13rem] flex-1 text-left" title="Open to see the details">
                 <div className="text-sm font-semibold text-foreground">
                   {w.salesRep?.user?.name}{w.salesRep?.code ? ` (${w.salesRep.code})` : ''} · {formatCurrency(w.amount)}
                 </div>
@@ -341,7 +345,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
                 {w.notes && <div className="mt-0.5 font-mono text-xs text-amber-300">{w.notes}</div>}
                 <div className="mt-0.5 text-xs text-faint">{formatDateTime(w.requestedAt)}</div>
               </button>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:justify-end">
                 <Button variant="ghost" className="text-rose-400" disabled={busy}
                   onClick={() => setRejecting(w)}>Reject</Button>
                 <Button loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
@@ -505,23 +509,51 @@ function FinesHistory({ admin, canForgive = admin }) {
       </section>
     );
   }
+  // Badge takes no title, so the forgiven reason sits on a span round it (hover to read it).
+  const statusBadge = (p) => (p.status === 'WAIVED'
+    ? <span title={p.waiveReason || undefined}><Badge className="bg-emerald-500/15 text-emerald-300">Forgiven</Badge></span>
+    : <Badge className="bg-rose-500/15 text-rose-300">Applied</Badge>);
+  const dateLine = (p) => (p.status === 'WAIVED' && p.waivedAt
+    ? `${formatDateTime(p.appliedAt)} · forgiven ${formatDateTime(p.waivedAt)}`
+    : formatDateTime(p.appliedAt));
+  // On a phone Type and Order move under the rep, Status and Date under the amount, so a 390 px screen
+  // shows the whole fine (and its Forgive) without scrolling sideways. Below xl the order sits under the
+  // type, so a 1024 px screen keeps Forgive inside the card.
   const head = (
-    <THead><TR>{admin && <TH>Rep</TH>}<TH>Type</TH><TH>Order</TH><TH className="text-right">Amount</TH><TH>Status</TH><TH>Date</TH>{admin && <TH />}</TR></THead>
+    <THead><TR>{admin && <TH>Rep</TH>}<TH className="hidden sm:table-cell">Type</TH><TH className="hidden xl:table-cell">Order</TH><TH className="text-right">Amount</TH><TH className="hidden sm:table-cell">Status</TH><TH className="hidden sm:table-cell">Date</TH>{admin && <TH />}</TR></THead>
   );
   const row = (p) => {
     const waived = p.status === 'WAIVED';
     return (
       <TR key={p.id}>
-        {admin && <TD className="font-medium">{p.salesRep?.user?.name}</TD>}
-        <TD>{p.kind === 'ADJUSTMENT' ? 'Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return Delay Fine (24h)' : 'Late Settlement Fine'}</TD>
-        <TD className="text-faint" title={p.notes || undefined}>{p.settlement?.settlementNumber || '—'}</TD>
-        <TD className={`text-right font-semibold ${waived ? 'text-faint line-through' : 'text-rose-400'}`}>−{formatCurrency(p.amount)}</TD>
-        <TD>
-          {waived
-            ? <Badge className="bg-emerald-500/15 text-emerald-300" title={p.waiveReason || undefined}>Forgiven</Badge>
-            : <Badge className="bg-rose-500/15 text-rose-300">Applied</Badge>}
+        {admin && (
+          <TD className="font-medium">
+            {p.salesRepId
+              ? <Link to={`/reps/${p.salesRepId}`} className="hover:underline">{p.salesRep?.user?.name}</Link>
+              : p.salesRep?.user?.name}
+            <div className="mt-0.5 whitespace-normal text-[11px] font-normal text-muted sm:hidden">
+              {kindLabel(p)}
+              {p.settlement?.settlementNumber && <span className="block whitespace-nowrap text-faint">{p.settlement.settlementNumber}</span>}
+            </div>
+          </TD>
+        )}
+        <TD className="hidden sm:table-cell">
+          {kindLabel(p)}
+          {p.settlement?.settlementNumber && (
+            <div className="mt-0.5 text-[11px] text-faint xl:hidden" title={p.notes || undefined}>{p.settlement.settlementNumber}</div>
+          )}
         </TD>
-        <TD className="text-faint">{waived && p.waivedAt ? `${formatDateTime(p.appliedAt)} · forgiven ${formatDateTime(p.waivedAt)}` : formatDateTime(p.appliedAt)}</TD>
+        <TD className="hidden text-faint xl:table-cell" title={p.notes || undefined}>{p.settlement?.settlementNumber || '—'}</TD>
+        <TD className="text-right">
+          <span className={`font-semibold tabular-nums ${waived ? 'text-faint line-through' : 'text-rose-300'}`}>−{formatCurrency(p.amount)}</span>
+          <div className="mt-1 flex flex-col items-end gap-0.5 text-[11px] text-faint sm:hidden">
+            {statusBadge(p)}
+            <span className="mt-0.5 whitespace-nowrap">{formatDateTime(p.appliedAt)}</span>
+            {waived && p.waivedAt && <span className="whitespace-nowrap">forgiven {formatDateTime(p.waivedAt)}</span>}
+          </div>
+        </TD>
+        <TD className="hidden sm:table-cell">{statusBadge(p)}</TD>
+        <TD className="hidden text-faint sm:table-cell">{dateLine(p)}</TD>
         {admin && (
           <TD>
             {!waived && canForgive && (
@@ -538,7 +570,7 @@ function FinesHistory({ admin, canForgive = admin }) {
     );
   };
   return (
-    <Card className="mt-6">
+    <Card className="mt-5">
       <CardHeader
         title="Penalty transactions"
         subtitle={activeCount
@@ -965,8 +997,8 @@ function CommissionRateSettings({ canEdit }) {
   const valid = Number(perBox) > 0 && from && new Date(from).getTime() > now;
 
   return (
-    <Card className="mt-6">
-      <CardHeader title="Commission rates" subtitle="What one settled box earns, per brand. Add a rate to change it from a future date." />
+    <Card className="mt-5">
+      <CardHeader title="Commission rates" subtitle="What one settled box earns, per brand." />
       {canEdit && (
       <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
         <Field label="Brand" hint="Leave blank for all other brands">
@@ -1012,9 +1044,11 @@ function CommissionRateSettings({ canEdit }) {
           })}
         </TBody>
       </Table>
-      <p className="px-4 py-3 text-xs text-faint">
-        A rate can only start in the future, and rates already in force cannot be edited or removed. That is what keeps
-        settled commission fixed: every box is paid at the rate that was in force when its order was created.
+      <p
+        className="px-5 py-3 text-xs text-faint"
+        title="A rate can only start in the future, and rates already in force cannot be edited or removed. That is what keeps settled commission fixed: every box is paid at the rate that was in force when its order was created."
+      >
+        New rates start in the future; a rate in force is fixed.
       </p>
     </Card>
   );
@@ -1078,8 +1112,8 @@ function BonusSettings({ canEdit }) {
 
   const valid = Number(target) > 0 && Number(amount) > 0;
   return (
-    <Card className="mt-6">
-      <CardHeader title="Sales bonus" subtitle="Reach a sales target, earn a bonus. Kept entirely separate from box commission." />
+    <Card className="mt-5">
+      <CardHeader title="Sales bonus" subtitle="Reach a sales target, earn a bonus — separate from box commission." />
       {canEdit && (
       <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
         <Field label="Sales target" required><NumberInput min="0" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="10000000" /></Field>
@@ -1139,7 +1173,7 @@ function BonusSettings({ canEdit }) {
                   <TD>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/10">
-                        <div className={clsx('h-full rounded-full', i.claimable ? 'bg-emerald-400' : 'bg-brand-500')} style={{ width: `${Math.min(100, i.progress)}%` }} />
+                        <div className={clsx('h-full rounded-full', i.claimable ? 'bg-emerald-400' : 'bg-sky-400/80')} style={{ width: `${Math.min(100, i.progress)}%` }} />
                       </div>
                       <span className="text-xs text-muted">{i.progress}%</span>
                     </div>
@@ -1191,103 +1225,494 @@ function BonusSettings({ canEdit }) {
           </Table>
         </>
       )}
-      <p className="px-4 py-3 text-xs text-faint">
-        Bonus money never enters a rep's commission balance and never changes what a box is worth — it is paid on its own.
-        Sales count from the date set above, so moving that date back counts selling the reps have already done. A rule
-        can be edited freely until someone earns it; after that the terms are fixed and a new rule replaces it.
+      <p
+        className="px-5 py-3 text-xs text-faint"
+        title="Bonus money never enters a rep's commission balance and never changes what a box is worth — it is paid on its own. Sales count from the date set above, so moving that date back counts selling the reps have already done. A rule can be edited freely until someone earns it; after that the terms are fixed and a new rule replaces it."
+      >
+        Paid on its own, never into the balance · editable until someone earns it.
       </p>
     </Card>
   );
 }
 
-// Where a rep stands in the SALES BONUS run — which is not the commission run.
-// It restarts when a bonus is paid, not when a withdrawal is, so the two dates
-// can differ and this cell never borrows the one printed under the rep's name.
-//
-// Written as figures rather than a bar on purpose. The server's `progress` and
-// `target` track the NEXT UNREACHED tier (bonus.service.js), so a bar drawn
-// from them falls from 99% to 67% the instant a rep crosses 10,000,000 — it
-// would shrink at the exact moment he did well, and turn green as it shrank.
-// Two numbers that both rise, with the target named, cannot do that.
-function BonusCell({ b, sharedStart }) {
-  if (!b) return <span className="text-faint">—</span>;
-  // `claimable` is the highest tier PASSED; `next` is the one still ahead. They
-  // are different tiers with different money, so each amount is only ever
-  // printed next to the target that actually pays it.
+// ── Admin: the picture at a glance ───────────────────────────────────────────
+// Nino, 11 Nov 2026: "it should feel nice like the rep's Wallet — nice cards, nice progress, how each one is
+// performing, the pies, the tables". The rep's own pieces (the wallet card, the progress rows, the rings)
+// told for the whole business, in the admin's neutral glass: colour lives on the figures, the chips and the
+// bars; red only on fines and the main buttons.
+
+// Chart colours without the house red, so a slice never reads as an alarm.
+const PIE = ['#34d399', '#38bdf8', '#a78bfa', '#fbbf24', '#f472b6', '#2dd4bf', '#94a3b8', '#fb923c'];
+const AXIS = { fontSize: 11, fill: '#94a3b8' };
+const compactNumber = (v) => formatNumber(v, { compact: true });
+const clampPct = (n) => Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));
+
+// A small figure: a muted label over a bold number, the way the wallet card shows its three.
+function Fig({ label, value, sub, tone, title, className }) {
+  return (
+    <div className={clsx('min-w-0', className)} title={title}>
+      <dt className="truncate text-[11px] text-muted xl:text-xs">{label}</dt>
+      <dd className={clsx('mt-0.5 whitespace-nowrap text-[14px] font-semibold leading-tight tabular-nums', tone || 'text-foreground')}>{value}</dd>
+      {sub && <dd className="mt-0.5 truncate text-[11px] text-muted">{sub}</dd>}
+    </div>
+  );
+}
+
+// A signed amount with a real minus sign (formatCurrency prints a hyphen), so fines and an overdrawn
+// balance read the same everywhere on the page.
+const minusCurrency = (n) => `−${formatCurrency(Math.abs(Number(n) || 0))}`;
+const signedCurrency = (n) => (Number(n) < 0 ? minusCurrency(n) : formatCurrency(n));
+
+// The business's wallet: what the reps can take out today, how much of what they earned has been paid,
+// and the fines — the rep's wallet card, told for everyone, on neutral glass (no red-lit card on admin).
+// `wide`: on the tabs without the payout chart it runs the full width — from lg the figures sit beside the
+// balance, and from xl the buttons join that row too. The row wraps rather than overlaps if figures grow.
+function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, onApply, onDeduct }) {
+  const earned = Number(totals.earned) || 0;
+  const paid = Number(totals.paid) || 0;
+  const paidPct = earned > 0 ? clampPct((paid / earned) * 100) : 0;
+  // The server's Available adds up only balances above zero, so a rep paid ahead of what he earned is
+  // named here: earned − paid − fines − requested + overdrawn is then exactly the figure above.
+  const overdrawn = items.filter((i) => (Number(i.available) || 0) < 0);
+  const overdrawnSum = overdrawn.reduce((sum, i) => sum + Number(i.available), 0);
+  const fines = Number(totals.penalties) || 0;
+  return (
+    <section className={clsx('stat-glass flex flex-col p-5', wide && 'lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-8')}>
+      {/* Two hair-thin arcs, as on the rep's wallet card: decoration only, behind everything. */}
+      <svg aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 h-full w-full" viewBox="0 0 360 220" preserveAspectRatio="none">
+        <path d="M-10 190 C 100 110, 240 70, 380 120" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="1" />
+        <path d="M-10 218 C 120 140, 250 108, 380 156" fill="none" stroke="rgba(255,255,255,.04)" strokeWidth="1" />
+      </svg>
+      <div className={clsx(wide && 'lg:w-[22rem] lg:shrink-0')}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-white/60">Available to withdraw</p>
+            {/* "Total pending" was earned − paid, which still contained fines the reps will never receive — this
+                is the money actually withdrawable. */}
+            <p className="mt-2 whitespace-nowrap text-[28px] font-bold leading-none tabular-nums text-foreground sm:text-[32px]">
+              {formatCurrency(totals.available ?? totals.pending)}
+            </p>
+            <p className={clsx('mt-1.5 text-[11px]', totals.requested > 0 ? 'font-medium text-amber-300' : 'text-muted')}>
+              {totals.requested > 0 ? `+ ${formatCurrency(totals.requested)} requested` : 'after fines & payouts'}
+            </p>
+          </div>
+          {overdrawn.length > 0 && (
+            <dl className="shrink-0 pt-0.5 text-right">
+              <Fig
+                label="Overdrawn"
+                value={minusCurrency(overdrawnSum)}
+                tone="text-rose-300"
+                sub={overdrawn.length === 1 ? `${overdrawn[0].name} · not counted` : `${overdrawn.length} reps · not counted`}
+                title={`Below zero, so left out of Available: ${overdrawn.map((i) => `${i.name} ${minusCurrency(i.available)}`).join(', ')}`}
+              />
+            </dl>
+          )}
+        </div>
+
+        <div className="mt-5">
+          <div className="flex items-baseline justify-between gap-3 text-[11px]">
+            <span className="text-muted">Paid out of earned</span>
+            <span className="font-semibold tabular-nums text-emerald-300">{Math.round(paidPct)}%</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-300 transition-[width] duration-700 ease-out" style={{ width: `${paidPct}%` }} />
+          </div>
+        </div>
+      </div>
+
+      <dl className={clsx('mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4', wide ? 'lg:mt-0 lg:flex-1 lg:grid-cols-2 xl:grid-cols-4' : 'lg:grid-cols-2 2xl:grid-cols-4')}>
+        <Fig label="Earned · all time" value={formatCurrency(totals.earned)} />
+        <Fig label="Paid out" value={formatCurrency(totals.paid)} tone="text-emerald-300" />
+        <Fig label="Fines" value={fines > 0 ? minusCurrency(fines) : formatCurrency(0)} tone={fines > 0 ? 'text-rose-300' : undefined} />
+        <Fig
+          label="This run"
+          value={`${formatNumber(totals.runBoxes ?? 0)} boxes`}
+          sub={`${formatCurrency(totals.runEarned ?? 0)} earned`}
+          title="Since each rep's last payout"
+        />
+      </dl>
+
+      {isAdmin && (
+        <div className={clsx('mt-auto pt-5', wide && 'lg:mt-0 lg:basis-full xl:basis-52 xl:shrink-0 xl:pt-0')}>
+          <div className={clsx('grid grid-cols-2 gap-2 border-t border-white/[0.06] pt-4', wide && 'xl:grid-cols-1 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0')}>
+            <Button variant="secondary" className="justify-center px-2 text-xs" loading={applying} onClick={onApply}>
+              <AlertTriangle className="hidden h-4 w-4 shrink-0 min-[400px]:block" /> Apply daily penalties
+            </Button>
+            <Button variant="secondary" className="justify-center px-2 text-xs" onClick={onDeduct}>
+              <Coins className="hidden h-4 w-4 shrink-0 min-[400px]:block" /> Deduct commission
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PaidTip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs shadow-md">
+      <div className="mb-0.5 font-semibold text-foreground">{label}</div>
+      <div className="text-muted">{formatCurrency(row.amount)} paid out</div>
+      <div className="text-faint">{row.count} payout{row.count === 1 ? '' : 's'}</div>
+    </div>
+  );
+}
+
+// Paid out, month by month — the rep's "Paid out" bars, for everyone. Built from the withdrawals list
+// (PAID, or APPROVED from before approving meant paying, as the server's own Paid counts them), in East
+// Africa time. It waits for the 200-row list rather than drawing from the 30 newest and then changing.
+// The list is newest-requested first and capped at 200: when more exist and the oldest one loaded is still
+// inside the six months, older payouts in the window were not loaded, and the subtitle says so.
+function PayoutTrend({ items, loading, hasMore }) {
+  const eatMonth = (d) => { const t = new Date(new Date(d).getTime() + 3 * 3600e3); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`; };
+  const now = new Date(Date.now() + 3 * 3600e3);
+  const windowStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1) - 3 * 3600e3;
+  const oldestRequested = (items || []).reduce((m, w) => Math.min(m, new Date(w.requestedAt).getTime()), Infinity);
+  const capped = Boolean(hasMore) && oldestRequested >= windowStart;
+  const months = [];
+  for (let k = 5; k >= 0; k -= 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k, 1));
+    months.push({ key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`, label: d.toLocaleString('en', { month: 'short', timeZone: 'UTC' }), amount: 0, count: 0 });
+  }
+  for (const w of items || []) {
+    if (w.status !== 'PAID' && w.status !== 'APPROVED') continue;
+    const m = months.find((x) => x.key === eatMonth(w.paidAt || w.decidedAt || w.requestedAt));
+    if (m) { m.amount += Number(w.amount) || 0; m.count += 1; }
+  }
+  const total = months.reduce((s, m) => s + m.amount, 0);
+  const count = months.reduce((s, m) => s + m.count, 0);
+  const best = months.reduce((b, m) => (m.amount > (b?.amount || 0) ? m : b), null);
+  return (
+    <section className="card flex flex-col p-5">
+      <h3 className="text-sm font-semibold text-foreground">Paid out</h3>
+      <p className={clsx('mt-0.5 text-xs', capped ? 'text-amber-300' : 'text-muted')}>
+        {capped ? `Last 6 months · latest ${formatNumber(items.length)} payouts` : 'Last 6 months'}
+      </p>
+      {loading ? (
+        <p className="my-auto py-10 text-center text-xs text-muted">Loading payouts…</p>
+      ) : count === 0 ? (
+        <p className="my-auto py-10 text-center text-xs text-muted">No payouts in the last 6 months.</p>
+      ) : (
+        <>
+          <dl className="mt-4 flex flex-wrap justify-between gap-x-4 gap-y-3 sm:justify-start sm:gap-x-10">
+            <Fig label="Paid" value={formatCurrency(total)} tone="text-emerald-300" />
+            <Fig label="Payouts" value={formatNumber(count)} />
+            {best && <Fig label={`Best month · ${best.label}`} value={formatCurrency(best.amount)} />}
+          </dl>
+          <div className="mt-4 min-h-[150px] flex-1">
+            <ResponsiveContainer width="100%" height="100%" minHeight={150}>
+              <BarChart data={months} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="label" tick={AXIS} tickLine={false} axisLine={false} />
+                <YAxis tick={AXIS} tickLine={false} axisLine={false} tickFormatter={compactNumber} width={46} />
+                <Tooltip content={<PaidTip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                <Bar dataKey="amount" radius={[6, 6, 0, 0]} maxBarSize={38}>
+                  {months.map((m) => <Cell key={m.key} fill="#34d399" fillOpacity={best && m.key === best.key ? 0.95 : 0.5} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+// A ring and its legend in one glass card: the share of each part, the amount on the right. It fills its
+// grid cell and centres the ring, so short legends never leave a blank half-card. `twoCol` lays a long
+// legend in two columns while the card spans a full row (md–lg).
+function ShareCard({ title, said, rows, center, centerUnit, twoCol = false }) {
+  const total = rows.reduce((sum, r) => sum + r.value, 0);
+  return (
+    <section className="card flex h-full flex-col p-5">
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {said && <p className="mt-0.5 text-xs text-muted">{said}</p>}
+      <div className="my-auto flex items-center gap-5 pt-4">
+        <Ring size={112} stroke={12} total={total} segments={rows.map((r) => ({ value: r.value, color: r.color }))}>
+          <span className="text-base font-bold leading-none tabular-nums text-foreground">{center}</span>
+          {centerUnit && <span className="mt-1 max-w-[76px] truncate text-[10px] font-semibold uppercase tracking-wide text-faint">{centerUnit}</span>}
+        </Ring>
+        {/* Two columns read down, then across, so the ranking still runs top to bottom. */}
+        <ul
+          className={clsx('grid min-w-0 flex-1 grid-cols-1 gap-y-2', twoCol && 'md:grid-flow-col md:grid-cols-2 md:gap-x-8 xl:grid-flow-row xl:grid-cols-1')}
+          style={twoCol ? { gridTemplateRows: `repeat(${Math.ceil(rows.length / 2)}, auto)` } : undefined}
+        >
+          {rows.map((r) => (
+            <li key={r.label} className="flex items-center gap-2 text-[13px]">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: r.color }} aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-muted">{r.label}</span>
+                {r.sub && <span className="block whitespace-nowrap text-[11px] leading-snug text-faint">{r.sub}</span>}
+              </span>
+              <span className="shrink-0 text-right">
+                <span className={clsx('block font-semibold tabular-nums', r.tone || 'text-foreground')}>{r.shown}</span>
+                {r.subRight && <span className="block whitespace-nowrap text-[11px] leading-snug text-faint">{r.subRight}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+// Who earns the commission, all time — one slice per rep. Shares by largest remainder, so they add to 100.
+function EarnedByRep({ items, className }) {
+  const rows = items
+    .map((i) => ({ name: i.name, earned: Math.max(0, Number(i.earned) || 0) }))
+    .filter((r) => r.earned > 0)
+    .sort((a, b) => b.earned - a.earned);
+  if (!rows.length) return null;
+  const total = rows.reduce((sum, r) => sum + r.earned, 0);
+  const shares = sharePercents(rows.map((r) => r.earned), total);
+  return (
+    <div className={className}>
+      <ShareCard
+        title="Who earns it"
+        said={`${rows[0].name} has earned ${shares[0]}% of it, all time.`}
+        center={compactNumber(total)}
+        centerUnit="TSh"
+        twoCol={rows.length > 3}
+        rows={rows.map((r, n) => ({
+          label: r.name, sub: `${shares[n]}%`, value: r.earned, shown: formatCurrency(r.earned), color: PIE[n % PIE.length],
+        }))}
+      />
+    </div>
+  );
+}
+
+// Brands take colours from the far end of the palette, so a brand never wears a rep's colour beside it.
+const BRAND_PIE = ['#2dd4bf', '#fb923c', '#94a3b8', '#fbbf24', '#f472b6', '#a78bfa', '#38bdf8', '#34d399'];
+
+// Where it comes from — the box commission by brand, added up over every rep. The centre is the top
+// brand's share, the rep's own wording, so the two rings never read as the same chart twice.
+function EarnedByBrand({ items }) {
+  const byBrand = new Map();
+  for (const i of items) {
+    for (const b of i.earnedByBrand || []) {
+      const r = byBrand.get(b.brand) || { brand: b.brand, amount: 0, boxes: 0 };
+      r.amount += Number(b.amount) || 0;
+      r.boxes += Number(b.boxes) || 0;
+      byBrand.set(b.brand, r);
+    }
+  }
+  const rows = [...byBrand.values()].filter((r) => r.amount > 0).sort((a, b) => b.amount - a.amount);
+  if (!rows.length) return null;
+  const total = rows.reduce((sum, r) => sum + r.amount, 0);
+  const shares = sharePercents(rows.map((r) => r.amount), total);
+  return (
+    <ShareCard
+      title="Where it comes from"
+      said={rows.length > 1 ? `${rows[0].brand} brings ${shares[0]}% of it, all time.` : `All of it from ${rows[0].brand}, all time.`}
+      center={`${shares[0]}%`}
+      centerUnit={rows[0].brand}
+      rows={rows.map((r, n) => ({
+        label: r.brand, sub: `${shares[n]}%`, subRight: `${formatNumber(r.boxes)} boxes`, value: r.amount, shown: formatCurrency(r.amount), color: BRAND_PIE[n % BRAND_PIE.length],
+      }))}
+    />
+  );
+}
+
+// How the orders get settled — the rep's "Settlement record" ring, for everyone (/settlements/analytics).
+function SettlementRecord({ a, className }) {
+  const o = a?.onTime;
+  if (!o || !(o.decided + o.liveOrders > 0)) return null;
+  const late = Math.max(0, o.decided - o.inside);
+  const overdue = o.currentlyLate || 0;
+  const open = Math.max(0, (o.liveOrders || 0) - overdue);
+  const rows = [
+    { label: 'Settled on time', value: o.inside, color: '#34d399' },
+    { label: 'Settled late', value: late, color: '#fbbf24' },
+    { label: 'Still open', value: open, color: '#38bdf8' },
+    { label: 'Overdue', value: overdue, color: '#fb7185', tone: overdue > 0 ? 'text-rose-300' : undefined },
+  ].filter((r) => r.value > 0).map((r) => ({ ...r, shown: formatNumber(r.value) }));
+  return (
+    <div className={className}>
+      <ShareCard
+        title="Settlement record"
+        said={o.decided ? `${formatNumber(o.inside)} of ${formatNumber(o.decided)} closed orders settled on time.` : 'No order closed yet.'}
+        center={o.decided ? `${Math.round(o.rate)}%` : formatNumber(o.liveOrders)}
+        centerUnit={o.decided ? 'on time' : 'open'}
+        rows={rows}
+      />
+    </div>
+  );
+}
+
+// The sales bonus as a bar with a notch per tier. Drawn against the TOP tier, never the next one: the
+// server's own `progress` tracks the next unreached tier, so a bar built from it would fall from 99% to
+// 67% the moment a rep crossed a tier — shrinking exactly when he did well. Against the top tier it only
+// ever rises. The figures under it are the same as before: what he has sold, what is already earned, and
+// the distance to the next bonus with the money it unlocks (never beside a target it does not belong to).
+// That caption leads with the server's own % to the next tier — the figure Rates & bonus shows — so the
+// two tabs never give two answers; the bar's scale is named beside the amount ("of" the top target).
+function BonusBar({ b, sharedStart }) {
+  const tiers = b.tiers || [];
+  const top = tiers.reduce((m, t) => Math.max(m, Number(t.target) || 0), 0);
+  const pct = top > 0 ? clampPct((Number(b.sales) / top) * 100) : 0;
   const won = b.claimable;
   const next = b.next;
-  // Once one rep has been paid a bonus the runs diverge, and no single date in
-  // the footnote is true for everybody — so every row states its own instead.
+  // Once one rep has been paid a bonus the runs diverge, and each card states its own start instead.
   const ownStart = sharedStart == null && b.cycleStart;
   return (
-    <div className="leading-tight">
-      {/* Written out in full. Millions shorthand hid the figure he wanted to
-          read, and rounding it invited a rep 40,000 short of a target to
-          render as though he had reached it. */}
-      <div className="tabular-nums">{formatCurrency(b.sales)}</div>
-      {won && (
-        <div className="mt-0.5 text-[11px] font-semibold text-emerald-300">
-          {formatCurrency(won.bonusAmount)} earned
+    <div className="mt-3 border-t border-white/[0.06] pt-3">
+      <div className="flex items-baseline justify-between gap-3 text-[11px]">
+        <span className="shrink-0 text-muted">Sold toward bonus</span>
+        <span className="min-w-0 truncate text-right">
+          <span className="text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(b.sales)}</span>
+          {top > 0 && <span className="tabular-nums text-faint"> of {formatCurrency(top)}</span>}
+        </span>
+      </div>
+      <div className="relative mt-1.5">
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+          <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-out', won ? 'bg-emerald-400' : 'bg-sky-400/80')} style={{ width: `${pct}%` }} />
         </div>
-      )}
-      {next && (
-        // Distance and the money it unlocks, never distance and the target —
-        // a rep who has sold nothing would read "TSh 10.0M to TSh 10.0M", and
-        // a reward printed beside a target belongs to that target or nowhere.
-        <div className="mt-0.5 text-[11px] text-faint">
-          {formatCurrency(next.remaining)} more → {formatCurrency(next.bonusAmount)}
-        </div>
-      )}
-      {!next && !won && <div className="mt-0.5 text-[11px] text-faint">no target set</div>}
-      {ownStart && (
-        <div className="mt-0.5 text-[10px] text-faint">from {formatDate(b.cycleStart)}</div>
-      )}
+        {top > 0 && tiers.map((t) => (
+          <span
+            key={t.ruleId}
+            title={`Sell ${formatCurrency(t.target)} → ${formatCurrency(t.bonusAmount)}`}
+            className={clsx('absolute top-1/2 h-2.5 w-[2px] -translate-y-1/2 rounded-full', t.reached ? 'bg-emerald-200' : 'bg-white/35')}
+            style={{ left: `calc(${Math.min(100, ((Number(t.target) || 0) / top) * 100)}% - 1px)` }}
+          />
+        ))}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[11px]">
+        {won && <span className="font-semibold text-emerald-300">{formatCurrency(won.bonusAmount)} earned</span>}
+        {next && (
+          <span className="text-muted">
+            <span className="font-semibold tabular-nums text-sky-300">{next.progress}%</span> · {formatCurrency(next.remaining)} more → {formatCurrency(next.bonusAmount)}
+          </span>
+        )}
+        {!next && !won && <span className="text-muted">no target set</span>}
+        {ownStart && <span className="text-faint">from {formatDate(b.cycleStart)}</span>}
+      </div>
     </div>
   );
 }
 
-// How far a rep is from being able to take money out. The minimum is a FLOOR,
-// not a target — nobody is made to withdraw when they reach it, and a rep who
-// would rather let the balance build simply carries on. So this never reads as
-// finished, never fills up, and never resets anything: past the line it just
-// says the money can be taken whenever they want it.
+// One card per rep: who, what he can take out today and how far that is from his withdrawal minimum,
+// the run in progress (or his lifetime), the sales bonus, and how reliably he settles.
 //
-// Quoted from the rep's OWN minimum, never a literal 250,000 — the figure is a
-// setting and can be agreed differently per rep.
-function ToMinimum({ i, sharedMin }) {
-  // A rep off commission has no balance to reach a minimum with.
-  if (i.earnsCommission === false) return null;
-  const min = Number(i.minWithdrawal) || 0;
-  if (!(min > 0)) return null;
+// The minimum is a FLOOR, not a target — nobody is made to withdraw when they reach it — so past the line
+// the bar simply says he can withdraw. It is quoted from the rep's OWN minimum (a setting that can differ
+// per rep): when everyone is on the same one it is named once, under the cards.
+function RepCard({ i, runView, leads, bonus, sharedMin, sharedStart, onTime }) {
+  const run = i.run || {};
+  const offCommission = i.earnsCommission === false;
   const avail = Number(i.available) || 0;
-  if (avail >= min) {
-    return <div className="mt-0.5 text-[11px] font-semibold text-emerald-300">can withdraw</div>;
-  }
+  const carried = runView ? wholeShillings(run.broughtForward) : 0;
+  const fines = runView ? (run.penalties || 0) : (Number(i.penalties) || 0);
+  const min = Number(i.minWithdrawal) || 0;
+  const showMin = !offCommission && min > 0;
+  const ready = showMin && avail >= min;
+  const minPct = showMin ? clampPct((Math.max(0, avail) / min) * 100) : 0;
+  const rate = onTime && onTime.decided > 0 ? Math.round(onTime.onTimeRate) : null;
+  // Every rep's run starts on their own date, so the card says which date it is measuring from.
+  const since = [
+    offCommission && 'not on commission',
+    !offCommission && !run.since && 'never withdrawn',
+    run.since && `since ${formatDate(run.since)}`,
+  ].filter(Boolean).join(' · ');
   return (
-    <div className="mt-0.5 text-[11px] text-faint">
-      {formatCurrency(min - avail)} to the {sharedMin ? 'minimum' : `${formatCurrency(min)} minimum`}
-    </div>
+    <article className="stat-glass flex flex-col p-3.5 sm:p-4">
+      <header className="flex items-start gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-sm font-semibold text-white/80 ring-1 ring-inset ring-white/10 sm:h-9 sm:w-9" aria-hidden="true">
+          {String(i.name || '?').trim().charAt(0).toUpperCase()}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link to={`/reps/${i.salesRepId}`} className={clsx('truncate text-[15px] font-semibold hover:underline', leads ? 'text-amber-300' : 'text-foreground')}>
+              {i.name}
+            </Link>
+            {leads && <Crown className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-label="Most earned this run" />}
+          </div>
+          <p className="mt-0.5 truncate text-[11px] text-faint">{runView ? since : (i.code || '')}</p>
+        </div>
+        {rate != null && (
+          <span
+            title={`${formatNumber(onTime.decided)} closed orders`}
+            className={clsx(
+              'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ring-1 ring-inset',
+              rate >= 80 ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25'
+                : rate >= 50 ? 'bg-amber-500/10 text-amber-300 ring-amber-500/25'
+                  : 'bg-rose-500/10 text-rose-300 ring-rose-500/25',
+            )}
+          >
+            {rate}% on time
+          </span>
+        )}
+      </header>
+
+      <div className="mt-3 flex items-end justify-between gap-3 sm:mt-4">
+        <div className="min-w-0">
+          <p className="text-[11px] text-muted">Available</p>
+          <p className={clsx('mt-1 whitespace-nowrap text-[22px] font-bold leading-none tabular-nums', avail < 0 ? 'text-rose-300' : 'text-foreground')}>
+            {signedCurrency(avail)}
+          </p>
+        </div>
+        <div className="min-w-0 text-right text-[11px] leading-snug">
+          {/* What the balance was already carrying when this run opened, so that earned − fines + this
+              always comes to the figure beside it. */}
+          {carried !== 0 && <p className="text-faint">{carried > 0 ? '+' : '−'}{formatCurrency(Math.abs(carried))} brought forward</p>}
+          {i.pendingRequests > 0 && <p className="font-medium text-amber-300">{formatCurrency(i.pendingRequests)} requested</p>}
+        </div>
+      </div>
+
+      {showMin && (
+        <div className="mt-3">
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+            <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-out', ready ? 'bg-emerald-400' : 'bg-emerald-400/50')} style={{ width: `${minPct}%` }} />
+          </div>
+          <p className="mt-1.5 text-[11px]">
+            {ready
+              ? <span className="font-semibold text-emerald-300">can withdraw</span>
+              : <span className="text-muted">{formatCurrency(min - avail)} to the {sharedMin ? 'minimum' : `${formatCurrency(min)} minimum`}</span>}
+          </p>
+        </div>
+      )}
+
+      <dl className={clsx('mt-3 grid gap-3 border-t border-white/[0.06] pt-3 sm:mt-4', runView ? 'grid-cols-3' : 'grid-cols-2')}>
+        {runView ? (
+          <>
+            <Fig label="Boxes this run" value={formatNumber(run.boxes || 0)} />
+            <Fig label="Fines" value={fines > 0 ? minusCurrency(fines) : '—'} tone={fines > 0 ? 'text-rose-300' : 'text-faint'} />
+            <Fig label="Last paid" value={run.lastPayout ? formatCurrency(run.lastPayout.amount) : '—'} tone={run.lastPayout ? undefined : 'text-faint'} />
+          </>
+        ) : (
+          <>
+            <Fig
+              label="Earned"
+              // An agreed one-off adjustment makes lifetime Earned differ from boxes × rate — say so, or the
+              // arithmetic looks broken.
+              value={<>{formatCurrency(i.earned)}{Number(i.adjustment) !== 0 && <span className="ml-0.5 cursor-help text-amber-400">*</span>}</>}
+              title={Number(i.adjustment) !== 0
+                ? `${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`
+                : undefined}
+            />
+            <Fig label="Boxes settled" value={formatNumber(i.boxesSettled)} />
+            <Fig label="Penalties" value={fines > 0 ? minusCurrency(fines) : '—'} tone={fines > 0 ? 'text-rose-300' : 'text-faint'} />
+            <Fig label="Paid" value={formatCurrency(i.paid)} tone={Number(i.paid) > 0 ? 'text-emerald-300' : undefined} />
+          </>
+        )}
+      </dl>
+
+      {runView && bonus && <BonusBar b={bonus} sharedStart={sharedStart} />}
+    </article>
   );
 }
 
-// One row per rep. It opens on the RUN IN PROGRESS — boxes settled and money
-// owed since that rep was last paid — because a lifetime total answers "how big
-// has this rep been", while the question the owner is actually asking at this
-// table is "since I paid him, how is he doing, and what do I owe him now".
-//
-// Nothing is lost: the lifetime figures are the other half of the switch, with
-// total boxes, total earned and everything ever paid out.
-function BalancesTable({ items, bonus }) {
+// The reps, one card each. It opens on the RUN IN PROGRESS — boxes settled and money owed since that rep
+// was last paid — because the question here is "since I paid him, how is he doing, and what do I owe him
+// now". All time is the other half of the switch: total boxes, total earned, everything ever paid out.
+function RepBoard({ items, bonus, onTime }) {
   const [view, setView] = useState('run');
   const runView = view === 'run';
 
-  // The leader of the round comes first. Ranked on money earned this run, not
-  // boxes: brands pay different rates, so boxes would crown whoever happens to
-  // carry the dearer stock, and this is the table for what leaves his pocket.
-  // Not `available` either — that carries brought-forward money from BEFORE the
-  // run opened, which is the two-periods mistake expressed as a sort order.
-  // Copied before sorting: `items` is react-query's cached array, shared with
-  // the deduct dialog's rep list.
+  // The leader of the round comes first, ranked on money earned this run (brands pay different rates, so
+  // boxes would crown whoever carries the dearer stock; `available` carries money from before the run).
+  // Copied before sorting: `items` is react-query's cached array, shared with the deduct dialog.
   const rows = runView
     ? [...items].sort((a, b) => (
       (b.run?.earned || 0) - (a.run?.earned || 0)
@@ -1295,127 +1720,82 @@ function BalancesTable({ items, bonus }) {
         || String(a.name || '').localeCompare(String(b.name || ''))
     ))
     : items;
-  // Nobody is crowned in a table of zeros, and All time has no leader — it is a
-  // ledger, and the top of it is just whoever has been here longest.
+  // Nobody is crowned in a table of zeros, and All time has no leader — it is a ledger.
   const leadEarned = runView ? (rows[0]?.run?.earned || 0) : 0;
 
-  // The bonus keeps a run of its own. Only reps the server says are on a
-  // configured bonus appear; when no rule is live the column does not exist.
+  // The bonus keeps a run of its own; only reps on a configured bonus get the bar.
   const bonusFor = new Map((bonus || []).filter((b) => b.configured).map((b) => [b.salesRepId, b]));
   const showBonus = runView && bonusFor.size > 0;
   const starts = [...bonusFor.values()].map((b) => new Date(b.cycleStart).getTime());
-  // When every rep is counting from the same day the period is stated once, in
-  // the footnote. The moment one of them has been paid a bonus their run starts
-  // somewhere else, and then each row carries its own date instead of a header
-  // date that would be true for eight reps and wrong for the ninth.
   const sharedStart = starts.length && starts.every((t) => t === starts[0]) ? starts[0] : null;
-
-  // The same question for the withdrawal floor: when everyone is on the house
-  // minimum it is stated once, in the footnote, and the rows only carry the
-  // distance. A rep on terms of their own has their own figure on their row.
   const mins = items.filter((i) => i.earnsCommission !== false).map((i) => Number(i.minWithdrawal) || 0);
   const sharedMin = mins.length && mins.every((m) => m === mins[0]) ? mins[0] : null;
+  const onTimeFor = new Map((onTime || []).map((r) => [r.salesRepId, r]));
 
   return (
-    <Card className="mt-4">
-      <CardHeader
-        title="Commission by representative"
-        subtitle={runView ? 'Since each rep was last paid · most earned first' : 'Everything since day one'}
-        action={<RunSwitch value={view} onChange={setView} />}
-      />
-      <Table>
-        <THead>
-          <TR>
-            <TH>Rep</TH>
-            {/* Earned only survives in All time. In the run view it was the same
-                figure as Available on six rows out of nine — the two only part
-                company when a rep carries a fine or something brought forward,
-                and both of those already say so under Available. */}
-            {!runView && <TH>Earned</TH>}
-            <TH>{runView ? 'Boxes this run' : 'Boxes settled'}</TH>
-            <TH>{runView ? 'Fines' : 'Penalties'}</TH>
-            {!runView && <TH>Paid</TH>}
-            <TH>Available</TH>
-            {showBonus && <TH>Sales bonus</TH>}
-          </TR>
-        </THead>
-        <TBody>{rows.map((i, n) => {
-          const run = i.run || {};
-          const fines = runView ? (run.penalties || 0) : i.penalties;
-          const carried = runView ? wholeShillings(run.broughtForward) : 0;
-          const leads = runView && n === 0 && leadEarned > 0;
-          const offCommission = i.earnsCommission === false;
-          return (
-            <TR key={i.salesRepId}>
-              <TD className={clsx('font-medium', leads && 'text-amber-300')}>
-                {i.name}
-                {runView && (
-                  // Every rep's run starts on their own date, so the row has to
-                  // say which date it is measuring from or the boxes mean nothing.
-                  <div className="mt-0.5 text-[11px] font-normal text-faint">
-                    {offCommission && 'not on commission'}
-                    {offCommission && run.since && ' · '}
-                    {!offCommission && !run.since && 'never withdrawn'}
-                    {run.since && `since ${formatDate(run.since)}`}
-                  </div>
-                )}
-              </TD>
-              {!runView && (
-              <TD className="tabular-nums">
-                {formatCurrency(i.earned)}
-                {/* An agreed one-off adjustment makes lifetime Earned differ from
-                    boxes × rate — say so on the row, or the arithmetic looks
-                    broken. In the run view it sits in brought forward instead,
-                    because it was never earned on this run's boxes. */}
-                {Number(i.adjustment) !== 0 && (
-                  <span
-                    className="ml-1 cursor-help text-amber-400"
-                    title={`${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`}
-                  >*</span>
-                )}
-              </TD>
-              )}
-              <TD className="tabular-nums">{formatNumber(runView ? (run.boxes || 0) : i.boxesSettled)}</TD>
-              <TD className={fines > 0 ? 'font-semibold tabular-nums text-rose-400' : 'text-faint'}>
-                {fines > 0 ? `−${formatCurrency(fines)}` : '—'}
-              </TD>
-              {!runView && <TD className="tabular-nums">{formatCurrency(i.paid)}</TD>}
-              <TD className={clsx('tabular-nums', i.available < 0 && 'font-semibold text-rose-400')}>
-                {formatCurrency(i.available)}
-                {/* What the balance was already carrying when this run opened —
-                    a part-taken payout leaves a remainder behind. Shown only
-                    when there is one, so that earned − fines + this always
-                    comes to the figure above it. */}
-                {runView && carried !== 0 && (
-                  <div className="text-[10px] text-faint">
-                    {carried > 0 ? '+' : '−'}{formatCurrency(Math.abs(carried))} brought forward
-                  </div>
-                )}
-                {i.pendingRequests > 0 && (
-                  <div className="text-[10px] text-faint">{formatCurrency(i.pendingRequests)} requested</div>
-                )}
-                {runView && <ToMinimum i={i} sharedMin={sharedMin} />}
-              </TD>
-              {showBonus && (
-                <TD><BonusCell b={bonusFor.get(i.salesRepId)} sharedStart={sharedStart} /></TD>
-              )}
-            </TR>
-          );
-        })}</TBody>
-      </Table>
+    <section className="mt-5">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-1">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Commission by representative</h2>
+          <p className="mt-0.5 text-xs text-muted">{runView ? 'Since each rep was last paid · most earned first' : 'Everything since day one'}</p>
+        </div>
+        <RunSwitch value={view} onChange={setView} />
+      </div>
+      {!rows.length ? (
+        <p className="px-1 py-8 text-center text-sm text-muted">No reps on commission yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {rows.map((i, n) => (
+            <RepCard
+              key={i.salesRepId}
+              i={i}
+              runView={runView}
+              leads={runView && n === 0 && leadEarned > 0}
+              bonus={showBonus ? bonusFor.get(i.salesRepId) : null}
+              sharedMin={sharedMin}
+              sharedStart={sharedStart}
+              onTime={onTimeFor.get(i.salesRepId)}
+            />
+          ))}
+        </div>
+      )}
       {runView && (
-        <p className="border-t border-border px-5 py-3 text-xs text-faint">
-          A run closes the moment a rep is paid, and the next one opens there. Whatever was left over comes forward,
-          so earned − fines + brought forward is always what he can withdraw today.
-          {sharedMin > 0 && <> {formatCurrency(sharedMin)} is the least a rep can take out — a floor, not a target,
-          so anyone who would rather let theirs build simply carries on.</>}
-          {showBonus && (
-            <> The sales bonus counts on a run of its own{sharedStart ? `, from ${formatDate(new Date(sharedStart))}` : ''} —
-            it restarts when a bonus is paid, not when commission is, and never enters what he can withdraw here.</>
-          )}
+        <p
+          className="mt-3 px-1 text-[11px] text-faint"
+          title={'A run closes the moment a rep is paid, and the next one opens there. Whatever was left over comes forward, so earned − fines + brought forward is always what he can withdraw today. The minimum is a floor, not a target. The sales bonus restarts when a bonus is paid, not when commission is, and never enters what he can withdraw.'}
+        >
+          A run closes when a rep is paid
+          {sharedMin > 0 && <> · minimum {formatCurrency(sharedMin)}</>}
+          {showBonus && <> · sales bonus counted{sharedStart ? ` from ${formatDate(new Date(sharedStart))}` : ' per rep'}, paid on its own</>}
         </p>
       )}
-    </Card>
+    </section>
+  );
+}
+
+// Who is carrying fines now — a thin rose bar per rep, against the largest.
+function FinesByRep({ items }) {
+  const rows = items.filter((i) => Number(i.penalties) > 0).sort((a, b) => b.penalties - a.penalties);
+  if (!rows.length) return null;
+  const max = Number(rows[0].penalties) || 1;
+  return (
+    <section className="card mt-5 p-5">
+      <h3 className="text-sm font-semibold text-foreground">Fines by rep</h3>
+      <p className="mt-0.5 text-xs text-muted">Still reducing a balance</p>
+      <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((i) => (
+          <li key={i.salesRepId}>
+            <div className="flex items-baseline justify-between gap-3 text-[13px]">
+              <Link to={`/reps/${i.salesRepId}`} className="truncate text-muted hover:text-foreground hover:underline">{i.name}</Link>
+              <span className="shrink-0 font-semibold tabular-nums text-rose-300">{minusCurrency(i.penalties)}</span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.07]">
+              <div className="h-full rounded-full bg-rose-400/70" style={{ width: `${Math.max(3, (Number(i.penalties) / max) * 100)}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -1455,19 +1835,29 @@ function AdminView() {
   const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
   const { data: summary, isLoading } = useQuery({ queryKey: ['commissions', 'summary'], queryFn: async () => unwrap(await api.get('/commissions/summary')).data });
   const { data: wd } = useQuery({ queryKey: ['commissions', 'withdrawals', 'all'], queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 30 } })) });
+  // The "Paid out" bars need six months of payouts, more than the 30 newest the table lists. Same
+  // endpoint, under the 'commissions' key, so every decision refreshes it with the rest.
+  const { data: wdTrend } = useQuery({
+    queryKey: ['commissions', 'withdrawals', 'all', 'trend'],
+    queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { limit: 200 } })),
+  });
+  // How reliably orders are settled, overall and per rep — the existing staff analytics. Optional: the
+  // page draws without it.
+  const { data: analytics } = useQuery({
+    queryKey: ['settlements', 'analytics'],
+    queryFn: async () => unwrap(await api.get('/settlements/analytics')).data,
+    staleTime: 60_000,
+  });
   // Only the whole-table counts are read here (meta.counts), so one row is enough. FinesHistory asks for
   // its own lists by status under longer keys; invalidating ['penalties'] refreshes both.
   const { data: penaltyData } = useQuery({
     queryKey: ['penalties', 'all'],
     queryFn: async () => unwrap(await api.get('/penalties', { params: { limit: 1 } })),
   });
-  // The sales bonus, for the balances table. Same key BonusSettings uses, so
-  // the two share one cache entry and paying a bonus over on Rates & bonus
-  // already invalidates this.
+  // The sales bonus, for the rep cards. Same key BonusSettings uses, so the two share one cache entry and
+  // paying a bonus over on Rates & bonus already invalidates this.
   const { data: bonusRun } = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
-  // Only fines still charged are worth a badge — counted by the SERVER over
-  // the whole table. Counting the visible page understated it as soon as the
-  // history outgrew one page.
+  // Only fines still charged are worth a badge — counted by the SERVER over the whole table.
   const activeFines = penaltyData?.meta?.counts?.applied
     ?? (penaltyData?.data || []).filter((p) => p.status !== 'WAIVED').length;
   const pendingWithdrawals = (wd?.data || []).filter((w) => w.status === 'PENDING').length;
@@ -1494,73 +1884,102 @@ function AdminView() {
   });
 
   if (isLoading || !summary) return <PageSpinner />;
+  const items = summary.items || [];
+  // The payout bars belong with the balances and the payouts; on Penalties and Rates & bonus the wallet
+  // runs the full width alone, so the tab's own table starts high on the screen.
+  const withTrend = tab === 'balances' || tab === 'payouts';
+  const wallet = (
+    <BusinessWallet
+      totals={summary.totals}
+      items={items}
+      wide={!withTrend}
+      isAdmin={isAdmin}
+      applying={applyPenalties.isPending}
+      onApply={() => applyPenalties.mutate()}
+      onDeduct={() => setDeducting(true)}
+    />
+  );
   return (
     <>
-      {/* This page answers "what do I owe, and how are they doing since I last
-          paid them" — so it leads with the payable and the run in progress. The
-          lifetime totals are still here, as the hint under the figure they
-          explain, rather than as headlines of their own. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        {/* "Total pending" was earned − paid, which still contained fines the
-            reps will never receive — this is the money actually withdrawable. */}
-        <StatCard label="Available to withdraw" value={formatCurrency(summary.totals.available ?? summary.totals.pending)} icon={Clock} tone="amber"
-          hint={summary.totals.requested > 0 ? `+ ${formatCurrency(summary.totals.requested)} requested` : 'after fines & payouts'} />
-        <StatCard label="Boxes this run" value={formatNumber(summary.totals.runBoxes ?? 0)} icon={Boxes} tone="violet"
-          hint={`${formatCurrency(summary.totals.runEarned ?? 0)} earned since each rep's last payout`} />
-        <StatCard label="Paid out" value={formatCurrency(summary.totals.paid)} icon={Wallet} tone="emerald"
-          hint={`of ${formatCurrency(summary.totals.earned)} earned all time`} />
-        <StatCard label="Total penalties" value={formatCurrency(summary.totals.penalties)} icon={AlertTriangle} tone="rose" />
-      </div>
-
-      {isAdmin && (
-      <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <Button variant="secondary" loading={applyPenalties.isPending} onClick={() => applyPenalties.mutate()}>
-          <AlertTriangle className="h-4 w-4" /> Apply daily penalties
-        </Button>
-        <Button variant="secondary" onClick={() => setDeducting(true)}>
-          <Coins className="h-4 w-4" /> Deduct commission
-        </Button>
-      </div>
-      )}
-      {deducting && <DeductModal reps={summary?.items || []} onClose={() => setDeducting(false)} />}
-      {openWd && (
-        <WithdrawalDetail
-          w={openWd}
-          balance={(summary?.items || []).find((r) => r.salesRepId === openWd.salesRepId)?.available ?? null}
-          onClose={() => setOpenWd(null)}
-          refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
-        />
-      )}
-
+      {/* A request waiting for the owner is the one thing here that needs a hand, so it comes first (it only
+          shows while something is waiting). */}
       <PendingWithdrawalsStrip
         items={(wd?.data || []).filter((w) => w.status === 'PENDING')}
         refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
         onOpen={setOpenWd}
       />
 
-      <SectionTabs
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { key: 'balances', label: 'Balances' },
-          { key: 'payouts', label: 'Payouts', count: pendingWithdrawals },
-          { key: 'penalties', label: 'Penalties', count: activeFines },
-          { key: 'rules', label: 'Rates & bonus' },
-        ]}
-      />
+      {/* The top answers "what do I owe, and how much have I paid": the business's wallet beside the
+          payouts month by month. */}
+      {withTrend ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="flex lg:col-span-6 xl:col-span-5 [&>*]:w-full">{wallet}</div>
+          <div className="flex lg:col-span-6 xl:col-span-7 [&>*]:w-full">
+            <PayoutTrend items={wdTrend?.data} loading={!wdTrend} hasMore={wdTrend?.meta?.hasMore} />
+          </div>
+        </div>
+      ) : wallet}
 
-      {tab === 'balances' && <BalancesTable items={summary.items} bonus={bonusRun?.items} />}
+      {deducting && <DeductModal reps={items} onClose={() => setDeducting(false)} />}
+      {openWd && (
+        <WithdrawalDetail
+          w={openWd}
+          balance={items.find((r) => r.salesRepId === openWd.salesRepId)?.available ?? null}
+          onClose={() => setOpenWd(null)}
+          refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
+        />
+      )}
 
-      {tab === 'penalties' && <FinesHistory admin canForgive={isAdmin} />}
+      {/* SectionTabs spreads its words edge to edge (right for the rep's phone); on a wide admin screen
+          they sit together as one control. Overridden here only, so the rep's Wallet is untouched. */}
+      <div className="mt-4 sm:[&>[role=tablist]]:justify-start sm:[&>[role=tablist]]:gap-8">
+        <SectionTabs
+          value={tab}
+          onChange={setTab}
+          tabs={[
+            { key: 'balances', label: 'Balances' },
+            { key: 'payouts', label: 'Payouts', count: pendingWithdrawals },
+            { key: 'penalties', label: 'Penalties', count: activeFines },
+            { key: 'rules', label: 'Rates & bonus' },
+          ]}
+        />
+      </div>
+
+      {tab === 'balances' && (
+        <>
+          <RepBoard items={items} bonus={bonusRun?.items} onTime={analytics?.byRep} />
+          {/* The rep's pies, for the whole business: who earns it, where it comes from, how orders close.
+              md–lg: the long one takes a full row, the two short ones share the next. */}
+          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <EarnedByRep items={items} className="md:col-span-2 xl:col-span-1" />
+            <EarnedByBrand items={items} />
+            <SettlementRecord a={analytics} />
+          </div>
+        </>
+      )}
+
+      {tab === 'penalties' && (
+        <>
+          <FinesByRep items={items} />
+          <FinesHistory admin canForgive={isAdmin} />
+        </>
+      )}
 
       {tab === 'payouts' && (
-      <Card className="mt-4">
-        <CardHeader title="Withdrawal requests" />
+      <Card className="mt-5">
+        <CardHeader
+          title="Withdrawal requests"
+          subtitle={wd?.data?.length
+            ? `${pendingWithdrawals ? `${pendingWithdrawals} waiting · ` : ''}newest first`
+            : undefined}
+        />
         {!wd?.data?.length ? <EmptyState title="No withdrawal requests" /> : (
           <Table>
             {/* On a phone Status and Requested move under the amount and the buttons stack, so a 390 px
                 screen shows the whole row instead of only Rep and Amount. */}
-            <THead><TR><TH>Rep</TH><TH>Amount</TH><TH className="hidden sm:table-cell">Status</TH><TH className="hidden sm:table-cell">Requested</TH><TH /></TR></THead>
+            {/* From sm up the button column takes the spare width, so Amount, Status and Requested sit
+                together instead of spreading across a wide screen. */}
+            <THead><TR><TH>Rep</TH><TH>Amount</TH><TH className="hidden sm:table-cell">Status</TH><TH className="hidden sm:table-cell">Requested</TH><TH className="sm:w-full" /></TR></THead>
             <TBody>{wd.data.map((w) => (
               <TR key={w.id}>
                 <TD className="font-medium">
@@ -1573,7 +1992,12 @@ function AdminView() {
                     <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
                   {/* Where to send it. This is the whole point of the request,
                       and it was only visible by hovering a different column. */}
-                    {w.notes && <div className="mt-0.5 text-[11px] text-amber-300">{w.notes}</div>}
+                    {/* Amber only while the money still has to be sent; settled rows keep the note quiet. */}
+                    {w.notes && (
+                      <div className={clsx('mt-0.5 max-w-[18rem] whitespace-normal text-[11px] sm:w-max', w.status === 'PENDING' || w.status === 'APPROVED' ? 'text-amber-300' : 'text-faint')}>
+                        {w.notes}
+                      </div>
+                    )}
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
                       <Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge>
                       <span className="text-[11px] text-faint">{formatDateTime(w.requestedAt)}</span>
@@ -1587,20 +2011,17 @@ function AdminView() {
                     {/* Busy while a decision is on its way (audit #19): a second tap used to send a second PAY.
                         The server now refuses it too; this keeps the button from inviting it. */}
                     {w.status === 'PENDING' && <>
-                      <Button className="px-2 py-1 text-xs" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>Approve &amp; pay</Button>
+                      <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Approve & pay" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                        {/* "Pay" on a phone so it stays on one line; the screen reader hears it in full. */}
+                        <span className="sm:hidden">Pay</span><span className="hidden sm:inline">Approve &amp; pay</span>
+                      </Button>
                       <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
                     </>}
                     {w.status === 'APPROVED' && (
-                      // One button, because there is only one truth: rep
-                      // commission comes out of the owner's own pocket, for
-                      // both brands. The pair that stood here offered "paid
-                      // from business" as though a wallet could fund it — the
-                      // two called the same endpoint with the same result, and
-                      // the choice only invited the confusion the Commission
-                      // account exists to end.
-                      // On a phone it says "Mark paid" only, so it cannot push the table wider than the screen;
-                      // the payout's own sheet (tap the amount) still says "from my pocket" in full.
-                      <Button className="px-2 py-1 text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                      // One button, because there is only one truth: rep commission comes out of the owner's
+                      // own pocket, for both brands. On a phone it says "Mark paid" only, so it cannot push the
+                      // table wider than the screen; the payout's own sheet still says "from my pocket" in full.
+                      <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
                         Mark paid<span className="hidden sm:inline"> — from my pocket</span>
                       </Button>
                     )}
@@ -1619,7 +2040,6 @@ function AdminView() {
           />
         )}
       </Card>
-
       )}
 
       {tab === 'rules' && (
