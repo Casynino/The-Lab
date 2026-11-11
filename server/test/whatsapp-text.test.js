@@ -22,7 +22,7 @@ test('STOCK REQUEST (one product): an arrow line, then the value', () => {
 
 By: Asha Mwinyi
 
-» Pepa King Size: 20 Boxes
+(a) Pepa King Size: 20 Boxes
 
 Total Value: TSh 760,000`);
 });
@@ -40,10 +40,10 @@ test('STOCK REQUEST with several products: one arrow line each, no numbers, then
 
 By: Nyoya
 
-» OHIS Pepa Ndogo (Brown) – Bila Filter: 2 Boxes
-» OHIS Pepa Ndogo (White) – Bila Filter: 3 Boxes
-» OHIS Pepa Ndogo (Brown) – Na Filter: 2 Boxes
-» OHIS Pepa Kubwa (Brown) – Na Filter: 2 Boxes
+(a) OHIS Pepa Ndogo (Brown) – Bila Filter: 2 Boxes
+(b) OHIS Pepa Ndogo (White) – Bila Filter: 3 Boxes
+(c) OHIS Pepa Ndogo (Brown) – Na Filter: 2 Boxes
+(d) OHIS Pepa Kubwa (Brown) – Na Filter: 2 Boxes
 
 Total Boxes: 9
 Total Value: TSh 318,000`);
@@ -54,15 +54,15 @@ test('STOCK REQUEST: a very long request keeps its totals; products drop from th
   const text = t.owner.stockRequest({ by: 'Nyoya', items: many, total: 420000, when: at });
   assert.ok(text.length <= t.MAX_REPORT_CHARS, `${text.length} characters`);
   assert.match(text, /\+\d+ more, see ZELab\n\nTotal Boxes: 32\nTotal Value: TSh 420,000$/);
-  assert.ok(text.includes('» OHIS Pepa Ndogo (Colour 1) – Bila Filter: 2 Boxes'));
+  assert.ok(text.includes('(a) OHIS Pepa Ndogo (Colour 1) – Bila Filter: 2 Boxes'));
   // a request that fits is untouched: every product shown
   const four = t.owner.stockRequest({ by: 'A', items: many.slice(0, 4), total: 1, when: at });
-  assert.ok(!four.includes('more, see ZELab') && four.includes('» OHIS Pepa Ndogo (Colour 4) – Bila Filter: 2 Boxes'));
+  assert.ok(!four.includes('more, see ZELab') && four.includes('(d) OHIS Pepa Ndogo (Colour 4) – Bila Filter: 2 Boxes'));
 });
 
 test('STOCK REQUEST: no digit ever stands in front of a product (only the arrow does); a carton counts as the boxes it holds', () => {
   const mixed = t.owner.stockRequest({ by: 'A', items: [{ name: 'A', qty: 1 }, { name: 'B', qty: 3, unit: 'Carton', boxes: 30 }], total: 5, when: at });
-  assert.match(mixed, /\n» A: 1 Box\n» B: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
+  assert.match(mixed, /\n\(a\) A: 1 Box\n\(b\) B: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
   assert.ok(!/^\d/m.test(mixed.split('\n\n').slice(2, 3)[0]), 'the list lines do not start with a number');
   const one = t.owner.stockRequest({ by: 'Nyoya', items: [{ name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', qty: 1 }], total: 7500, when: at });
   assert.ok(!one.includes('Total Boxes'), 'one product: the line already says it');

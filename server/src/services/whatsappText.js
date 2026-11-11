@@ -42,6 +42,14 @@ const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const count = (n, word) => `${Math.round(Number(n) || 0)} ${plural(word, Math.round(Number(n) || 0))}`; // 1 Box, 4 Boxes
 const boxes = (n, unit) => count(n, cap(unit || 'Box'));
 
+// 0 -> a, 1 -> b … 25 -> z, 26 -> aa: the marker in front of each product of a stock request.
+const letter = (i) => {
+  let n = i;
+  let out = '';
+  do { out = String.fromCharCode(97 + (n % 26)) + out; n = Math.floor(n / 26) - 1; } while (n >= 0);
+  return out;
+};
+
 // WhatsApp shows *text* in bold. Only the heading of a message is bold.
 const bold = (s) => `*${s}*`;
 
@@ -52,10 +60,10 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  // The products are a list of arrows, one line each: "» Name: 2 Boxes" — no numbers, so nothing
-  // in front of a name can be read as a number of boxes (Nino tried "1-Name: 2 Boxes" and
-  // "Product 1:" first; the arrows are what he chose). Then, for several products, the box count
-  // of the whole request (a carton counts as the boxes it holds: `boxes`), and the value.
+  // The products are lettered, one line each: "(a) Name: 2 Boxes", "(b) Name: 3 Boxes" — letters, not
+  // numbers, so nothing in front of a name can be read as a number of boxes (Nino chose this on 11 Nov 2026
+  // after trying "1-Name", "Product 1:" and arrows). Then, for several products, the box count of the whole
+  // request (a carton counts as the boxes it holds: `boxes`), and the value.
   // The totals are what the owner needs most, so a very long request drops products from the
   // END of the list ("+3 more, see ZELab") and never the totals.
   stockRequest: ({ by, items = [], total, when }) => {
@@ -66,7 +74,7 @@ const owner = {
       : `Total Value: ${money(total)}`;
     const build = ({ shown }) => doc(
       ...head,
-      lines(...items.slice(0, shown).map((i) => `» ${i.name}: ${boxes(i.qty, i.unit)}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
+      lines(...items.slice(0, shown).map((i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.qty, i.unit)}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
       tail,
     );
     const steps = [];
