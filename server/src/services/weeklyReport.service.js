@@ -107,8 +107,15 @@ async function buildWeeklyData(weekKey) {
       where: { occurredAt: { gte: rangeStart, lte: rangeEnd } },
       _sum: { baseQuantity: true },
     }).catch(() => []),
+    // Money actually handed over in the week, on the day it was handed over (audit #81). APPROVED is not
+    // paid, and decidedAt moves when an approved request is later paid, so one withdrawal was counted in
+    // the week it was approved AND again in the week it was paid. Rows paid before paidAt existed fall
+    // back to their decision date.
     prisma.commissionWithdrawal.aggregate({
-      where: { status: { in: ['APPROVED', 'PAID'] }, decidedAt: { gte: rangeStart, lte: rangeEnd } },
+      where: {
+        status: 'PAID',
+        OR: [{ paidAt: { gte: rangeStart, lte: rangeEnd } }, { paidAt: null, decidedAt: { gte: rangeStart, lte: rangeEnd } }],
+      },
       _sum: { amount: true },
     }).catch(() => ({ _sum: { amount: 0 } })),
     require('./commission.service').summaryAllReps().catch(() => ({ items: [] })),

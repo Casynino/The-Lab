@@ -4,13 +4,16 @@ const prisma = require('../config/prisma');
 const inventory = require('./inventory.service');
 const credit = require('./credit.service');
 const { toNumber, round2 } = require('../utils/money');
-const { dayjs, resolveRange } = require('../utils/dates');
+const { dayjs, resolveRange, EAT_OFFSET_H } = require('../utils/dates');
 const { DEFAULT_REGION, repRegions, regionWhere } = require('../constants/regions');
 
 const NON_CANCELLED = { status: { not: 'CANCELLED' } };
 
+// Days, weeks and months on the business's clock (Tanzania), like every range they sit in (audit #82).
+// dayjs(date) read the server's own clock — UTC on Vercel — so a sale at 01:30 EAT on the 1st was
+// charted on the last day of the month before.
 function bucketKey(date, granularity) {
-  const d = dayjs(date);
+  const d = dayjs.utc(date).add(EAT_OFFSET_H, 'hour');
   switch (granularity) {
     case 'month':
       return d.format('YYYY-MM');

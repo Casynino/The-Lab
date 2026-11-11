@@ -18,6 +18,7 @@ import ReportsPage from '@/pages/Reports';
 import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
+import { eatISODate } from '@/lib/tz';
 import { DonutChart, BarChartCard, TrendChart } from '@/components/charts';
 import {
   PageHeader, Card, CardHeader, CardBody, StatCard, PageSpinner, EmptyState, Badge, Button,
@@ -330,7 +331,7 @@ function MoneyModal({ mode, accounts: all, categories, onClose }) {
   const [form, setForm] = useState({
     accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '',
     amount: '', category: isExpense ? (categories[0]?.name || '') : '', description: '',
-    occurredAt: new Date().toISOString().slice(0, 10), notes: '', newCategory: '', brandId: '',
+    occurredAt: eatISODate(), notes: '', newCategory: '', brandId: '',
   });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const save = useMutation({
@@ -400,7 +401,7 @@ function OwnerMoneyModal({ mode, accounts: all, onClose }) {
     amount: '',
     accountId: accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '',
     brandId: '',
-    occurredAt: new Date().toISOString().slice(0, 10),
+    occurredAt: eatISODate(),
     description: isIn ? 'Commission paid from my own pocket' : '',
     notes: '',
   });
@@ -1415,7 +1416,7 @@ function EditTxnModal({ txn, accounts, brands, onClose }) {
   const [accountId, setAccountId] = useState(txn.accountId || '');
   const [brandId, setBrandId] = useState(txn.brandId || '');
   const [amount, setAmount] = useState(String(txn.amount ?? ''));
-  const [occurredAt, setOccurredAt] = useState(txn.occurredAt ? String(txn.occurredAt).slice(0, 10) : '');
+  const [occurredAt, setOccurredAt] = useState(txn.occurredAt ? eatISODate(txn.occurredAt) : '');
   const [description, setDescription] = useState(txn.description || '');
   const [reason, setReason] = useState('');
 
@@ -1858,7 +1859,7 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
   // Money that moved weeks ago belongs in the week it moved. Without this the
   // payment landed on the day it was typed, which put a September purchase's
   // cash into October and left both months wrong.
-  const [occurredAt, setOccurredAt] = useState(new Date().toISOString().slice(0, 10));
+  const [occurredAt, setOccurredAt] = useState(eatISODate());
   const [notes, setNotes] = useState('');
   const pay = useMutation({
     mutationFn: () => api.post('/finance/supplier-payments', {
@@ -1886,7 +1887,7 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
             </Select>
           </Field>
           <Field label="Date paid" hint="The day the money actually left">
-            <Input type="date" value={occurredAt} max={new Date().toISOString().slice(0, 10)}
+            <Input type="date" value={occurredAt} max={eatISODate()}
               onChange={(e) => setOccurredAt(e.target.value)} />
           </Field>
         </div>
@@ -1901,7 +1902,7 @@ function PayBalanceModal({ supplier, outstanding, accounts: all, onClose, onDone
   const accounts = wallets(all);
   const [accountId, setAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
   const [amount, setAmount] = useState(String(outstanding || ''));
-  const [occurredAt, setOccurredAt] = useState(new Date().toISOString().slice(0, 10));
+  const [occurredAt, setOccurredAt] = useState(eatISODate());
   const [notes, setNotes] = useState('');
   const pay = useMutation({
     mutationFn: () => api.post(`/finance/suppliers/${supplier.id}/pay`, {
@@ -1943,7 +1944,7 @@ function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
   const [lines, setLines] = useState([{ productId: '', quantity: '', unitCost: '' }]);
   const [shippingCost, setShippingCost] = useState('');
   const [otherCost, setOtherCost] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(eatISODate());
   const [notes, setNotes] = useState('');
   // Stock bought with the cash in the drawer used to be recorded as a debt and
   // nothing else, and the money then left the books on whatever day somebody

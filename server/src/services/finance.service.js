@@ -16,7 +16,7 @@ const inventory = require('./inventory.service');
 const commission = require('./commission.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2 } = require('../utils/money');
-const { dayjs, resolveRange } = require('../utils/dates');
+const { dayjs, resolveRange, EAT_OFFSET_H } = require('../utils/dates');
 
 // ── Money that never touches a business account ─────────────────────────────
 // The owner pays every rep in physical cash out of his own hand: "no business
@@ -437,25 +437,33 @@ async function backfillFromHistory() {
 
 // --- Transactions ----------------------------------------------------------
 
-// A date-only value ("2026-07-05") parses to midnight and would sort BEFORE
-// same-day transactions (and before the finance epoch on go-live day), silently
-// excluding it from balances. Anchor date-only inputs to the current clock time.
+// A date-only value ("2026-07-05") is a day in TANZANIA (audit #62). It was read as a UTC day plus the
+// UTC time of day, so a "today" picked between 00:00 and 03:00 EAT landed on tomorrow, and the form's
+// own UTC default offered yesterday. These turn a day + a time of day on the business's clock into the
+// real instant, and back.
+const DAY_MS = 86_400_000;
+const EAT_MS = EAT_OFFSET_H * 3_600_000;
+const eatTimeOfDay = (d) => (((new Date(d).getTime() + EAT_MS) % DAY_MS) + DAY_MS) % DAY_MS;
+const eatDateOf = (d) => new Date(new Date(d).getTime() + EAT_MS).toISOString().slice(0, 10);
+const eatDayAt = (day, timeOfDay) => new Date(Date.parse(`${day}T00:00:00Z`) - EAT_MS + timeOfDay);
+
+// A date-only value parsed to midnight would sort BEFORE same-day transactions
+// (and before the finance epoch on go-live day), silently excluding it from
+// balances. So it is anchored to the current time of day — Tanzania's — on
+// the day picked: picking today means now.
 function resolveOccurredAt(v) {
   if (!v) return new Date();
   const s = String(v);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const now = new Date();
-    const d = new Date(`${s}T00:00:00Z`);
-    d.setUTCHours(now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds());
-    return d;
-  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return eatDayAt(s, eatTimeOfDay(Date.now()));
   return new Date(v);
 }
 
 // `client` lets a caller record the money INSIDE its own transaction — a stock
 // purchase paid in cash at the counter is one event, and a purchase that saved
 // while its payment did not is the bug this prevents.
-async function recordTransaction(data, actor, client = prisma) {
+// `checkBrand` is for the hand-typed entries, where a person picks the account
+// and the brand separately (#79).
+async function recordTransaction(data, actor, client = prisma, { checkBrand = false } = {}) {
   const amount = round2(toNumber(data.amount));
   if (!(amount > 0)) throw ApiError.badRequest('Amount must be greater than zero');
   // Said plainly: without it Prisma answered "Invalid database query".
@@ -467,6 +475,12 @@ async function recordTransaction(data, actor, client = prisma) {
   // figure under "recorded" that was never commission.
   if (account.type === COMMISSION_TYPE && data.type !== 'COMMISSION_PAYMENT') {
     throw ApiError.badRequest('The Commission account only holds the record of rep commission. Choose the account the money actually moved through.');
+  }
+  // A brand-reserved account only holds its own brand's money — the rule a
+  // correction already obeys (updateTransaction). A new entry skipped it, so
+  // M-Pesa could be handed a Civlily expense that could then never be corrected.
+  if (checkBrand && account.brandId && data.brandId && data.brandId !== account.brandId) {
+    throw ApiError.badRequest(`${account.name} is reserved for another brand's payments`);
   }
   const txnNumber = await nextDocNumber(client.financeTransaction, 'txnNumber', 'FTX');
   return client.financeTransaction.create({
@@ -496,22 +510,27 @@ async function recordTransaction(data, actor, client = prisma) {
 // and pushed its brand net TSh 3.3M below the truth. The category the user
 // picks still shows on the row; only the P&L treatment changes.
 const isStockPurchaseCategory = (c) => /stock\s*purchase/i.test(String(c || ''));
+// A hand-typed entry is never tied to a sale, an order, a supplier or a payout
+// (#79): those links decide where a row counts, and only the server makes them.
+const handTyped = ({ refType, refId, ...data }) => data; // eslint-disable-line no-unused-vars
+const HAND_TYPED = { checkBrand: true };
+
 // The owner's own money. A contribution is his personal cash entering the
 // business (he pays rep commissions this way); a drawing is profit he takes
 // out. Neither is trade: excluded from revenue, profit, and money in/out.
 const recordOwnerMoney = ({ direction, ...data }, actor) => recordTransaction({
-  ...data,
+  ...handTyped(data),
   direction,
   type: direction === 'IN' ? 'OWNER_CONTRIBUTION' : 'OWNER_DRAWING',
   category: direction === 'IN' ? 'Owner contribution' : 'Owner drawing',
-}, actor);
+}, actor, prisma, HAND_TYPED);
 
 const recordExpense = (data, actor) => recordTransaction({
-  ...data,
+  ...handTyped(data),
   direction: 'OUT',
   type: isStockPurchaseCategory(data.category) ? 'STOCK_PURCHASE' : 'EXPENSE',
-}, actor);
-const recordIncome = (data, actor) => recordTransaction({ ...data, direction: 'IN', type: 'INCOME' }, actor);
+}, actor, prisma, HAND_TYPED);
+const recordIncome = (data, actor) => recordTransaction({ ...handTyped(data), direction: 'IN', type: 'INCOME' }, actor, prisma, HAND_TYPED);
 
 // Automatic money-in for a completed cash sale (settlement or direct warehouse).
 // `accountId` = the payment account the money actually went to (rep's choice on
@@ -744,15 +763,13 @@ async function updateTransaction(id, data) {
   }
   // The edit form sends only a DAY. Saving the same day used to restamp the row with the time of the
   // edit (#77); a different day keeps the row's own time of day. A full timestamp is taken as given.
+  // Both the day and the time of day are Tanzania's (#62): compared on the UTC day, a row from 00:00 to
+  // 03:00 EAT read as the day before, and moving it to the day it shows pushed it a day further.
   if (data.occurredAt !== undefined && data.occurredAt !== null && data.occurredAt !== '') {
     const s = String(data.occurredAt);
     if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
       const prev = new Date(existing.occurredAt);
-      if (prev.toISOString().slice(0, 10) !== s) {
-        const d = new Date(`${s}T00:00:00Z`);
-        d.setUTCHours(prev.getUTCHours(), prev.getUTCMinutes(), prev.getUTCSeconds(), prev.getUTCMilliseconds());
-        patch.occurredAt = d;
-      }
+      if (eatDateOf(prev) !== s) patch.occurredAt = eatDayAt(s, eatTimeOfDay(prev));
     } else {
       patch.occurredAt = new Date(s);
     }

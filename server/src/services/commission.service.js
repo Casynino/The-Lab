@@ -528,14 +528,18 @@ async function computeForRep(salesRepId) {
 }
 
 async function summaryAllReps() {
+  // Every rep is read, not only the active ones (audit #71): switching a rep off does not settle what the
+  // business owes them, yet their balance and any request still waiting dropped out of these totals and
+  // out of Finance's "owed to reps" the moment the account was deactivated. The list stays the working
+  // one: active reps, plus a deactivated rep only while money is still in play for them.
   const reps = await prisma.salesRepresentative.findMany({
-    where: { isActive: true },
     include: { user: { select: { name: true } } },
   });
   const items = [];
   for (const rep of reps) {
     const c = await computeForRep(rep.id);
-    items.push({ salesRepId: rep.id, name: rep.user?.name, code: rep.code, ...c });
+    const row = { salesRepId: rep.id, name: rep.user?.name, code: rep.code, ...c, isActive: rep.isActive !== false };
+    if (row.isActive || row.available > 0 || (row.pendingRequests || 0) > 0) items.push(row);
   }
   items.sort((a, b) => b.earned - a.earned);
   return {
@@ -844,12 +848,14 @@ async function adjustEarned({ salesRepId, amount, note }, actor) {
   if (!Number.isFinite(amt) || amt === 0) throw ApiError.badRequest('Enter an amount to add or take off');
   const rep = await prisma.salesRepresentative.findUnique({ where: { id: salesRepId } });
   if (!rep) throw ApiError.notFound('Sales rep not found');
-  const next = round2(toNumber(rep.commissionAdjustment) + amt);
+  // Added by the database, not read-then-written (audit #120): two corrections saved at the same moment
+  // both read the same old figure, and the second write replaced the first instead of adding to it.
+  // The note is only written when one is given, so it cannot put back a note another save just changed.
   return prisma.salesRepresentative.update({
     where: { id: salesRepId },
     data: {
-      commissionAdjustment: next,
-      commissionAdjustmentNote: note ? String(note).trim().slice(0, 500) : rep.commissionAdjustmentNote,
+      commissionAdjustment: { increment: amt },
+      ...(note ? { commissionAdjustmentNote: String(note).trim().slice(0, 500) } : {}),
       commissionAdjustedAt: new Date(),
     },
     select: { id: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true },

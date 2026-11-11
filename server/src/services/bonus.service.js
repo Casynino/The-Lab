@@ -157,8 +157,15 @@ async function payTier({ salesRepId, bonusRuleId }, actor, notes) {
   const p = await progressForRep(salesRepId);
   if (!p.configured) throw ApiError.badRequest('No bonus is configured');
 
-  const tier = p.tiers.find((t) => t.ruleId === bonusRuleId) || p.claimable;
-  if (!tier) throw ApiError.badRequest('That bonus tier does not exist');
+  // The tier asked for, or none (audit #119). A tier switched off since the page loaded used to fall
+  // through to whichever tier the rep could take, so a different bonus — another amount — was paid.
+  // With no tier named, the best one reached is still the one paid.
+  const tier = bonusRuleId ? p.tiers.find((t) => t.ruleId === bonusRuleId) : p.claimable;
+  if (!tier) {
+    throw ApiError.badRequest(bonusRuleId
+      ? 'That bonus tier is not active any more. Refresh to see the tiers in play.'
+      : 'That bonus tier does not exist');
+  }
   if (!tier.reached) {
     throw ApiError.badRequest(
       `This rep is on ${formatCurrency(p.sales)} — ${formatCurrency(tier.remaining)} short of the ${formatCurrency(tier.target)} target.`,
@@ -189,6 +196,19 @@ async function payTier({ salesRepId, bonusRuleId }, actor, notes) {
   } catch (e) {
     if (e.code === 'P2002') throw ApiError.badRequest('This bonus has already been paid for this run');
     throw e;
+  }
+
+  // One bonus per run (audit #119). Taking a bonus ends the run, but two DIFFERENT tiers paid at the same
+  // moment do not collide on the unique key, so both used to stand. Once written, this payment looks for
+  // any other one in the same run and, if it finds one, takes itself back. Of two payments racing, at
+  // least one always sees the other, so two can never both stand; at worst both step back and nothing
+  // was paid, and the admin pays again.
+  const others = await prisma.bonusAward.count({
+    where: { salesRepId, cycleStart: p.cycleStart, status: 'PAID', id: { not: award.id } },
+  });
+  if (others > 0) {
+    await prisma.bonusAward.delete({ where: { id: award.id } });
+    throw ApiError.conflict('Another bonus for this run was being paid at the same moment. Refresh to see what was paid before paying again.');
   }
 
   notification.notifyUser(rep.user?.id, {
