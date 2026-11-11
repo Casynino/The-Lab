@@ -15,7 +15,8 @@
 export function sessionRefused(error) {
   const res = error?.response;
   if (!res) return false;
-  return (res.status === 401 || res.status === 403) && !!res.data?.error;
+  // The app's own error body is { success: false, error: { message } } (server errorHandler).
+  return (res.status === 401 || res.status === 403) && res.data?.success === false && !!res.data?.error?.message;
 }
 
 /** How long to wait before asking again: 2 s, then double, never more than 30 s. */

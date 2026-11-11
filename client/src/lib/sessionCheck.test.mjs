@@ -21,6 +21,9 @@ test('no signal, a server error or the host in the way keeps the session (audit 
   assert.equal(sessionRefused(answered(403, '')), false);
   assert.equal(sessionRefused(answered(401, undefined)), false);
   assert.equal(sessionRefused(answered(429, '')), false);
+  // Something in front of the app answering in JSON of its own is still not the app.
+  assert.equal(sessionRefused(answered(403, { error: 'Forbidden' })), false);
+  assert.equal(sessionRefused(answered(401, { error: { code: 'UNAUTHORIZED' } })), false);
   assert.equal(sessionRefused(undefined), false);
 });
 
