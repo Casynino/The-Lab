@@ -110,14 +110,14 @@ const DIR_FILTERS = [
 ];
 
 const DIR_TONE = {
-  WAREHOUSE_TO_REP: { chip: 'bg-brand-500/15 text-brand-600', icon: UserRound },
+  WAREHOUSE_TO_REP: { chip: 'bg-violet-500/15 text-violet-300', icon: UserRound },
   REP_TO_WAREHOUSE: { chip: 'bg-amber-500/15 text-amber-300', icon: RotateCcw },
   WAREHOUSE_TO_WAREHOUSE: { chip: 'bg-sky-500/15 text-sky-300', icon: Warehouse },
 };
 
 function TintCard({ label, value, sub, icon: Icon, ring, glow, chip, num }) {
   return (
-    <div className={`premium-card premium-card--sm p-4`}>
+    <div className="stat-glass p-4">
       <div className="relative flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-muted">{label}</p>
         <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${chip}`}><Icon className="h-3.5 w-3.5" /></span>
@@ -168,7 +168,7 @@ export default function Transfers() {
             <TintCard label="Boxes moved" value={formatNumber(sum.boxes)} sub={period} icon={Boxes}
               ring="ring-violet-500/25" glow="from-violet-500/[0.14]" chip="bg-violet-500/15 text-violet-300" num="text-violet-300" />
             <TintCard label="Movements" value={formatNumber(sum.movements)} sub="completed transfers" icon={Truck}
-              ring="ring-brand-500/25" glow="from-brand-500/[0.12]" chip="bg-brand-500/15 text-brand-600" num="text-brand-600" />
+              ring="ring-sky-500/25" glow="from-sky-500/[0.12]" chip="bg-sky-500/15 text-sky-300" num="text-sky-300" />
             <TintCard label="Took the most" value={top ? top.name : '—'}
               sub={top ? `${formatNumber(top.boxes)} boxes of the ${formatNumber(sum.boxes)}` : 'nothing dispatched'} icon={UserRound}
               ring="ring-emerald-500/25" glow="from-emerald-500/[0.12]" chip="bg-emerald-500/15 text-emerald-300" num="text-lg text-emerald-300" />
@@ -180,7 +180,7 @@ export default function Transfers() {
 
           {/* Where the boxes actually went — the question a list of movements provokes. */}
           {sum.destinations?.length > 0 && (
-            <div className="mb-4 rounded-2xl bg-surface p-5 ring-1 ring-white/[0.07]">
+            <div className="card mb-4 p-5">
               <p className="text-sm font-semibold text-foreground">Where the boxes went</p>
               <p className="mt-0.5 text-xs text-faint">Share of the {formatNumber(sum.boxes)} boxes dispatched, biggest first.</p>
               <div className="mt-4 space-y-2.5">
@@ -210,10 +210,10 @@ export default function Transfers() {
           <button
             key={f.key || 'all'}
             onClick={() => { setDirection(f.key); setPage(1); }}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition ${
+            className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
               direction === f.key
                 ? 'bg-brand-500/15 text-brand-600 ring-brand-500/30'
-                : 'bg-surface text-muted ring-white/[0.07] hover:text-foreground'}`}
+                : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}
           >
             {f.label}
           </button>
@@ -265,7 +265,7 @@ export default function Transfers() {
                           </Badge>
                         </TD>
                         <TD>{!dead && (
-                          <button className="btn-ghost px-2 py-1 text-rose-400" title="Cancel & return the stock"
+                          <button className="btn-ghost px-2 py-1 text-faint hover:text-rose-400" title="Cancel & return the stock"
                             onClick={() => { if (confirm(`Cancel ${t.transferNumber}? All ${t.boxes} boxes go back to ${from(t)}.`)) cancel.mutate(t.id); }}>
                             <Ban className="h-4 w-4" />
                           </button>

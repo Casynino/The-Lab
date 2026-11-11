@@ -50,7 +50,7 @@ function RepModal({ onClose }) {
 // One colour per rep, fixed by their code so a face keeps its colour wherever
 // the list moves it.
 const HUES = [
-  { edge: 'bg-brand-400', text: 'text-brand-600' },
+  { edge: 'bg-teal-400', text: 'text-teal-300' },
   { edge: 'bg-violet-400', text: 'text-violet-300' },
   { edge: 'bg-sky-400', text: 'text-sky-300' },
   { edge: 'bg-amber-400', text: 'text-amber-300' },
@@ -158,7 +158,7 @@ export default function SalesReps() {
       </PageHeader>
 
       {reps.length > 0 && (
-        <div className="mb-4 overflow-hidden rounded-2xl bg-surface ring-1 ring-white/[0.07]">
+        <div className="glass-list mb-4">
           <div className="grid grid-cols-2 divide-x divide-white/[0.06] sm:grid-cols-4">
             {[
               { label: 'Boxes out with reps', value: formatNumber(t.boxes), sub: `${formatCurrency(t.value)} of stock`, num: 'text-violet-300' },
@@ -195,7 +195,7 @@ export default function SalesReps() {
                   key={r.id}
                   onClick={() => navigate(`/reps/${r.id}`)}
                   style={{ animationDelay: `${i * 35}ms` }}
-                  className="animate-rise group relative overflow-hidden rounded-2xl bg-surface p-4 pl-5 text-left ring-1 ring-white/[0.07] transition duration-200 hover:bg-white/[0.02] hover:ring-white/20"
+                  className="stat-glass animate-rise group p-4 pl-5 text-left transition duration-200 hover:brightness-110 hover:ring-1 hover:ring-white/20"
                 >
                   <span className={`absolute inset-y-0 left-0 w-1 ${hue.edge}`} aria-hidden="true" />
 

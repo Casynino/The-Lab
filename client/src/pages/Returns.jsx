@@ -726,8 +726,9 @@ export default function Returns() {
 
       {summary && (
         <div className={`grid grid-cols-2 gap-3 ${cards.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-          {cards.map((c) => (
-            <div key={c.label} className={`premium-card premium-card--sm p-4`}>
+          {/* An odd last card takes the whole row below xl instead of leaving a hole beside it. */}
+          {cards.map((c, i) => (
+            <div key={c.label} className={`stat-glass p-4 ${i === cards.length - 1 && cards.length % 2 === 1 ? 'col-span-2 xl:col-span-1' : ''}`}>
               <div className="relative flex items-start justify-between gap-2">
                 <p className="text-xs font-medium text-muted">{c.label}</p>
                 <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
@@ -795,7 +796,9 @@ export default function Returns() {
         <div className="mt-4 space-y-8">
           {/* ── Pending — compact approval strip, same as settlements ── */}
           {pending.length > 0 && (
-            <Card className="border-amber-500/30">
+            // The one card that needs action wears the rep's amber "waiting" glass. A plain card's tinted
+            // border is cleared by the admin glass, so this strip looked like the history cards below it.
+            <div className="stat-glass" data-tone="near">
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
                 <Clock className="h-4 w-4 text-amber-500" />
                 <h2 className="text-sm font-bold text-foreground">
@@ -812,7 +815,7 @@ export default function Returns() {
                     onCancel={isRep ? (id) => cancel.mutate(id) : undefined} approve={approve} />
                 ))}
               </div>
-            </Card>
+            </div>
           )}
 
           {/* ── Approved ── */}

@@ -760,11 +760,13 @@ function PendingRequestApprovals({ onReview }) {
 
   return (
     <>
-    <Card className="mb-6 border-sky-500/30">
+    {/* The one card that needs action wears the rep's amber "waiting" glass. A plain card's tinted border
+        is cleared by the admin glass, so this strip looked like every other card. */}
+    <div className="stat-glass mb-6" data-tone="near">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <ClipboardList className="h-4 w-4 text-sky-400" />
+        <ClipboardList className="h-4 w-4 text-amber-400" />
         <h2 className="text-sm font-bold text-foreground">Pending stock requests</h2>
-        <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-bold text-sky-400">{pending.length}</span>
+        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-300">{pending.length}</span>
         <span className="ml-auto hidden text-xs text-faint sm:block">Approve issues the stock and opens the 72h order</span>
       </div>
       <div className="divide-y divide-border">
@@ -796,7 +798,7 @@ function PendingRequestApprovals({ onReview }) {
           );
         })}
       </div>
-    </Card>
+    </div>
 
     {rejecting && (
       <ConfirmStep
@@ -873,7 +875,8 @@ function StaffRequestTable({ onView }) {
           {
             label: 'Worth', value: formatCurrency(sum?.value ?? 0), icon: Wallet,
             sub: `${formatNumber(sum?.issued ?? 0)} order${(sum?.issued ?? 0) === 1 ? '' : 's'} actually issued`,
-            ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600',
+            // Sky, not red: a value, not an alert (Nino, 11 Nov 2026: "not every place needs red").
+            ring: 'ring-sky-500/25', glow: 'from-sky-500/[0.12]', chip: 'bg-sky-500/15 text-sky-300', num: 'text-sky-300',
           },
           {
             label: 'Still owed by reps', value: formatNumber(sum?.stillOpen ?? 0), icon: Timer,
@@ -888,7 +891,7 @@ function StaffRequestTable({ onView }) {
             ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300',
           },
         ].map((c) => (
-          <div key={c.label} className={`premium-card premium-card--sm p-4`}>
+          <div key={c.label} className="stat-glass p-4">
             <div className="relative flex items-start justify-between gap-2">
               <p className="text-xs font-medium text-muted">{c.label}</p>
               <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
@@ -939,7 +942,7 @@ function StaffRequestTable({ onView }) {
                   const given = r.boxesApproved ?? boxCount(r);
                   const shortfall = r.status === 'FULFILLED' && asked > given;
                   return (
-                    <TR key={r.id} className="cursor-pointer" onClick={() => onView(r)}>
+                    <TR key={r.id} className="group cursor-pointer" onClick={() => onView(r)}>
                       <TD className="font-medium">{r.requestNumber}</TD>
                       <TD>{r.salesRep?.user?.name}{requestCities(r).length > 0 && <div className="text-xs text-muted">{requestCities(r).join(' · ')}</div>}</TD>
                       {/* The number this page exists to record. */}
@@ -954,7 +957,10 @@ function StaffRequestTable({ onView }) {
                       <TD>{(() => { const ds = requestDisplayStatus(r); return <Badge className={ds.cls}>{ds.label}</Badge>; })()}</TD>
                       <TD className="text-faint">{formatDateTime(r.requestedAt)}</TD>
                       <TD>
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600">
+                        {/* A quiet link on every row, not a red one: red is kept for what needs action. A request
+                            still waiting is amber, like the rep's own waiting card. */}
+                        <span className={clsx('inline-flex items-center gap-1 text-xs font-medium transition-colors',
+                          r.status === 'PENDING' ? 'text-amber-300' : 'text-muted group-hover:text-foreground')}>
                           {r.status === 'PENDING' ? 'Review' : 'View'} <Eye className="h-3.5 w-3.5" />
                         </span>
                       </TD>

@@ -148,10 +148,10 @@ function Balances() {
         <div className="max-w-sm flex-1"><SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search product…" /></div>
         <div className="flex flex-wrap gap-1.5">
           <button onClick={() => { setBrand(''); setPage(1); }}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${brand === '' ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>All brands</button>
+            className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${brand === '' ? 'bg-brand-500/15 text-brand-600 ring-brand-500/30' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>All brands</button>
           {brands.map((b) => (
             <button key={b.id} onClick={() => { setBrand(b.name); setPage(1); }}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${brand === b.name ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{b.name}</button>
+              className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${brand === b.name ? 'bg-brand-500/15 text-brand-600 ring-brand-500/30' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{b.name}</button>
           ))}
         </div>
       </div>
@@ -179,14 +179,14 @@ function Balances() {
                 chip: 'bg-amber-500/15 text-amber-400', num: sm.lowCount ? 'text-amber-300' : 'text-muted' },
               { label: 'Out of stock', value: formatNumber(sm.outCount), sub: sm.outCount ? 'nothing left to sell' : 'every line in stock',
                 icon: PackageX, ring: sm.outCount ? 'ring-rose-500/30' : 'ring-white/[0.07]', glow: sm.outCount ? 'from-rose-500/[0.16]' : 'from-white/[0.02]',
-                chip: 'bg-rose-500/15 text-rose-400', num: sm.outCount ? 'text-rose-400' : 'text-muted' },
+                chip: 'bg-rose-500/15 text-rose-400', num: sm.outCount ? 'text-rose-400' : 'text-muted', tone: sm.outCount ? 'late' : undefined },
             ];
 
             return (
               <>
                 <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
                   {cards.map((c) => (
-                    <div key={c.label} className={`premium-card premium-card--sm p-4`}>
+                    <div key={c.label} className="stat-glass p-4" data-tone={c.tone}>
                       <div className="relative flex items-start justify-between gap-2">
                         <p className="text-xs font-medium text-muted">{c.label}</p>
                         <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
@@ -250,7 +250,7 @@ function Balances() {
                                   : <Truck className="h-3.5 w-3.5 shrink-0 text-violet-400" />}
                                 <span className="min-w-0 flex-1 truncate text-sm text-foreground">{h.name}</span>
                                 <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{formatNumber(h.boxes)}</span>
-                                <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-faint">{formatCurrency(h.value)}</span>
+                                <span className="min-w-[6rem] shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-faint">{formatCurrency(h.value)}</span>
                               </div>
                               <div className="mt-1 ml-5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
                                 <div className={`h-full rounded-full ${isStore ? 'bg-brand-500' : 'bg-violet-500'}`}
@@ -289,7 +289,7 @@ function Balances() {
                   type="button"
                   onClick={() => setOpenProduct(r)}
                   title="Open this product — every place it is, and its movement"
-                  className="animate-rise flex h-full cursor-pointer flex-col rounded-2xl border border-white/[0.07] bg-surface p-4 text-left transition duration-200 hover:border-brand-500/40 hover:bg-elevated focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
+                  className="active-card animate-rise flex h-full cursor-pointer flex-col focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
                   style={{ animationDelay: `${i * 30}ms` }}
                 >
                   {/* Brand and code first and small; the name is the heading. */}
@@ -562,9 +562,9 @@ export default function Inventory() {
         <Button onClick={() => setModal('receive')}><PackagePlus className="h-4 w-4" /> Receive stock</Button>
       </PageHeader>
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         {[['balances', 'Stock balances'], ['movements', 'Movement ledger']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === k ? 'bg-brand-600 text-white' : 'bg-surface text-muted hover:bg-elevated'}`}>{label}</button>
+          <button key={k} onClick={() => setTab(k)} className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>
 

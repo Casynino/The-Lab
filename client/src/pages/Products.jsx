@@ -237,13 +237,13 @@ function ProductsCatalogue() {
           { label: 'Worth at selling price', value: formatCurrency(value), icon: Wallet, sub: 'if every box sold',
             ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
           { label: 'Running low', value: formatNumber(lowCount), icon: TrendingDown, sub: lowCount ? 'reorder before they run out' : 'nothing needs reordering',
-            ring: lowCount ? 'ring-rose-500/30' : 'ring-white/[0.07]', glow: lowCount ? 'from-rose-500/[0.14]' : 'from-white/[0.02]',
-            chip: 'bg-rose-500/15 text-rose-300', num: lowCount ? 'text-rose-300' : 'text-foreground' },
+            ring: lowCount ? 'ring-amber-500/30' : 'ring-white/[0.07]', glow: lowCount ? 'from-amber-500/[0.16]' : 'from-white/[0.02]',
+            chip: 'bg-amber-500/15 text-amber-400', num: lowCount ? 'text-amber-300' : 'text-foreground' },
         ];
         return (
           <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
             {cards.map((c) => (
-              <div key={c.label} className={`premium-card premium-card--sm p-4`}>
+              <div key={c.label} className="stat-glass p-4">
                 <div className="relative flex items-start justify-between gap-2">
                   <p className="text-xs font-medium text-muted">{c.label}</p>
                   <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
@@ -287,7 +287,7 @@ function ProductsCatalogue() {
               <TBody>
                 {data.data.map((p) => (
                   <TR key={p.id}>
-                    <TD>
+                    <TD className="min-w-[12rem] whitespace-normal">
                       <div className="font-medium text-foreground">{p.name}</div>
                       <div className="text-xs text-faint">{p.sku}</div>
                     </TD>

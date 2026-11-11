@@ -113,7 +113,8 @@ export default function Notifications() {
                       onClick={() => fresh && markRead.mutate(n.id)}
                       className={clsx(
                         'flex w-full items-start gap-3 px-4 py-4 text-left transition',
-                        fresh ? 'bg-brand-500/[0.07] hover:bg-brand-500/[0.1]' : 'cursor-default',
+                        // Staff pages (`lab-app`) mark a new one with the dot and a quiet white tint, not red; the rep's own view is unchanged.
+                        fresh ? 'bg-brand-500/[0.07] hover:bg-brand-500/[0.1] [.lab-app_&]:bg-white/[0.035] [.lab-app_&]:hover:bg-white/[0.06]' : 'cursor-default',
                       )}
                     >
                       <span

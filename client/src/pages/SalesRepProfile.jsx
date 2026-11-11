@@ -24,7 +24,6 @@ import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
   Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, NumberInput, Textarea,
 } from '@/components/ui';
-import { RED } from '@/lib/brand';
 
 // ── Section wrapper ──────────────────────────────────────────────────────────
 // `fill`: the card takes the height it is given and its body scrolls inside it (the activity feed).
@@ -38,7 +37,7 @@ function Section({ icon: Icon, title, count, children, action, fill = false }) {
           when they cannot sit beside the title. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          {Icon && <Icon className="h-4 w-4 shrink-0 text-brand-500" />}
+          {Icon && <Icon className="h-4 w-4 shrink-0 text-white/45" />}
           <h2 className="whitespace-nowrap text-sm font-bold text-foreground">{title}</h2>
           {count != null && <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[11px] font-semibold text-muted">{count}</span>}
         </div>
@@ -50,11 +49,11 @@ function Section({ icon: Icon, title, count, children, action, fill = false }) {
 }
 
 function Money({ label, value, tone = 'default', sub }) {
-  const tones = { default: 'text-foreground', emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-500', amber: 'text-amber-500' };
+  const tones = { default: 'text-foreground', emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-500', amber: 'text-amber-500', violet: 'text-violet-300' };
   return (
     <div className="rounded-xl border border-border bg-elevated p-3">
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
-      <div className={`mt-0.5 text-lg font-bold tabular-nums ${tones[tone]}`}>{value}</div>
+      <div className={`mt-0.5 text-lg font-bold tabular-nums sm:whitespace-nowrap ${tones[tone]}`}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-faint">{sub}</div>}
     </div>
   );
@@ -218,7 +217,7 @@ function ClosingSpeed({ closings, discipline, onOpen }) {
 
 const ACTIVITY_META = {
   STOCK_REQUEST: { icon: ClipboardList, cls: 'text-slate-400 bg-slate-500/10' },
-  ISSUE: { icon: Package, cls: 'text-brand-600 bg-brand-500/10' },
+  ISSUE: { icon: Package, cls: 'text-amber-300 bg-amber-500/10' },
   SETTLEMENT: { icon: CheckCircle2, cls: 'text-emerald-400 bg-emerald-500/10' },
   RETURN: { icon: Undo2, cls: 'text-sky-400 bg-sky-500/10' },
   COMMISSION: { icon: Coins, cls: 'text-violet-400 bg-violet-500/10' },
@@ -704,14 +703,14 @@ export default function SalesRepProfile() {
 
       {/* ── Identity header ── */}
       <Card className="mb-6">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-          <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-700 text-xl font-bold text-white">
+        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:flex-wrap sm:items-center">
+          <span className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-white/[0.07] text-xl font-bold text-foreground ring-1 ring-inset ring-white/10">
             {initials(rep.name)}
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 sm:min-w-[26rem]">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">{rep.name}</h1>
-              <Badge className="bg-brand-500/15 text-brand-600">{rep.code}</Badge>
+              <Badge className="bg-white/[0.07] text-muted">{rep.code}</Badge>
               {rep.isActive
                 ? <Badge className="bg-emerald-500/15 text-emerald-300">Active</Badge>
                 : <Badge className="bg-rose-500/15 text-rose-300">Suspended</Badge>}
@@ -759,7 +758,7 @@ export default function SalesRepProfile() {
       <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
         {/* What he holds right now, the same boxes as the table below — not the Performance window's
             flow (which is blank for Today / This week, and was -1 for a rep holding 1 box). */}
-        <StatCard label="Stock in hand" value={formatNumber(stock.items.reduce((s, i) => s + (Number(i.baseQuantity) || 0), 0))} icon={Boxes} tone="brand" hint={`${formatCurrency(stock.value)} cost`} />
+        <StatCard label="Stock in hand" value={formatNumber(stock.items.reduce((s, i) => s + (Number(i.baseQuantity) || 0), 0))} icon={Boxes} tone="violet" hint={`${formatCurrency(stock.value)} cost`} />
         <StatCard
           label="Available balance"
           value={formatCurrency(c.available)}
@@ -768,12 +767,12 @@ export default function SalesRepProfile() {
           hint={c.eligible ? 'Eligible to withdraw' : `Min ${formatCurrency(c.threshold)}`}
         />
         <StatCard label="Outstanding (open orders)" value={formatCurrency(outstanding)} icon={Timer} tone="amber" hint={`${settlements.activeCount} active`} />
-        <StatCard label="Penalties" value={formatCurrency(c.penalties)} icon={AlertTriangle} tone={hasPenalties ? 'rose' : 'default'} hint={hasPenalties ? 'Overdue settlements' : 'None'} />
+        <StatCard label="Penalties" value={formatCurrency(c.penalties)} icon={AlertTriangle} tone={hasPenalties ? 'rose' : 'slate'} hint={hasPenalties ? 'Overdue settlements' : 'None'} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         {/* ── Left column (wider) ── */}
-        <div className="space-y-6 lg:col-span-2">
+        <div className="space-y-6 xl:col-span-2">
           {/* Performance */}
           <Section
             icon={TrendingUp}
@@ -787,7 +786,7 @@ export default function SalesRepProfile() {
                     onClick={() => setPeriod(k)}
                     className={clsx(
                       'rounded-md px-2.5 py-1 text-xs font-medium transition',
-                      period === k ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
+                      period === k ? 'bg-white/[0.12] text-foreground' : 'text-muted hover:text-foreground',
                     )}
                   >
                     {label}
@@ -796,8 +795,8 @@ export default function SalesRepProfile() {
               </div>
             }
           >
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-              <Money label="Received" value={formatNumber(perf.received)} tone="brand" sub="boxes" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <Money label="Received" value={formatNumber(perf.received)} tone="violet" sub="boxes" />
               <Money label="Sold" value={formatNumber(perf.sold)} tone="emerald" sub="settled" />
               <Money label="Returned" value={formatNumber(perf.returned)} sub="boxes" />
               {/* Held is a stock, not a flow — it only means anything all-time. */}
@@ -823,12 +822,12 @@ export default function SalesRepProfile() {
               <TrendChart
                 data={data.trend}
                 height={200}
-                series={[{ key: 'revenue', name: 'Revenue', color: RED }]}
+                series={[{ key: 'revenue', name: 'Revenue', color: '#38bdf8' }]}
               />
             </Section>
           )}
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* What to send them more of. */}
             <Section icon={Boxes} title="Top products">
               {!data.topProducts?.length ? (
@@ -846,7 +845,7 @@ export default function SalesRepProfile() {
                           </span>
                         </div>
                         <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                          <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400"
+                          <div className="h-full rounded-full bg-violet-400/80"
                             style={{ width: `${Math.max(4, (t.boxes / top) * 100)}%` }} />
                         </div>
                       </div>
@@ -933,7 +932,7 @@ export default function SalesRepProfile() {
                   const meta = SETTLEMENT_STATUS_META[s.status] || {};
                   return (
                     <button key={s.id} onClick={() => setViewing(s.id)}
-                      className="w-full rounded-xl border border-border bg-elevated p-3 text-left transition hover:border-brand-500/40">
+                      className="w-full rounded-xl border border-border bg-elevated p-3 text-left transition hover:border-white/20">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-semibold text-foreground">{s.settlementNumber}</span>
                         <div className="flex items-center gap-2">
@@ -948,7 +947,7 @@ export default function SalesRepProfile() {
                         <span className="text-sky-400">Returned <b>{formatNumber(s.boxesReturned)}</b></span>
                         <span className={s.boxesRemaining > 0 ? 'font-semibold text-rose-500' : 'text-muted'}>Remaining {formatNumber(s.boxesRemaining)}</span>
                         <span className="ml-auto text-faint">{hoursLabel(s.hoursRemaining)} · bal {formatCurrency(s.balance)}</span>
-                        <ChevronRight className="h-3.5 w-3.5 text-brand-500" />
+                        <ChevronRight className="h-3.5 w-3.5 text-faint" />
                       </div>
                     </button>
                   );
@@ -983,7 +982,7 @@ export default function SalesRepProfile() {
             inside it. So the page ends where the left column ends and neither side leaves empty space
             (Nino, 11 Nov 2026: "the space should go — what needs more room scrolls"). When the left is
             the longer one, the activity feed grows to fill what is left. On a phone it is one column. */}
-        <div className="flex flex-col gap-6 lg:overflow-y-auto lg:pr-1 lg:[contain:size] lg:[scrollbar-width:thin]">
+        <div className="flex flex-col gap-6 xl:overflow-y-auto xl:pr-1 xl:[contain:size] xl:[scrollbar-width:thin]">
           {/* The same two bars the rep sees, so a conversation about their
               progress is had over identical numbers. */}
           <ProgressRows
@@ -1054,7 +1053,7 @@ export default function SalesRepProfile() {
                 ? <span>Window open — can withdraw once, below the minimum, until {formatDateTime(c.emergency.until)}</span>
                 : c.eligible
                   ? <span>Eligible to withdraw — balance ≥ {formatCurrency(c.threshold)}</span>
-                  : <span>Not eligible — needs {formatCurrency(c.threshold)} (has {formatCurrency(c.available)})</span>}
+                  : <span>Not eligible — needs <span className="whitespace-nowrap">{formatCurrency(c.threshold)}</span> (has <span className="whitespace-nowrap">{formatCurrency(c.available)})</span></span>}
             </div>
             {c.emergency?.open && c.emergency.reason && (
               <div className="mt-2 rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-faint">
@@ -1130,12 +1129,12 @@ export default function SalesRepProfile() {
               space; if they need to scroll, scroll inside"). `contain: size` stops the feed's own length from
               making the row taller; it then takes exactly the height left over (at least 260 px). On a phone
               it stays a capped list. */}
-          <div className="flex flex-col lg:min-h-[260px] lg:flex-1 lg:[contain:size]">
+          <div className="flex flex-col xl:min-h-[260px] xl:flex-1 xl:[contain:size]">
           <Section icon={History} title="Activity history" count={activity.length} fill>
             {activity.length === 0 ? (
               <p className="py-2 text-sm text-faint">No recorded activity yet.</p>
             ) : (
-              <ul className="max-h-[520px] space-y-3 overflow-y-auto pr-1 lg:max-h-none lg:overflow-visible">
+              <ul className="max-h-[520px] space-y-3 overflow-y-auto pr-1 xl:max-h-none xl:overflow-visible">
                 {activity.map((e, i) => {
                   const m = ACTIVITY_META[e.type] || ACTIVITY_META.STOCK_REQUEST;
                   const Icon = m.icon;
@@ -1145,7 +1144,10 @@ export default function SalesRepProfile() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm text-foreground">{e.title}</span>
-                          {e.amount != null && <span className="text-sm font-semibold text-emerald-500">{formatCurrency(e.amount)}</span>}
+                          {e.amount != null && (
+                            // money that never moved (a rejected payout, a cancelled order) is struck through, not green
+                            <span className={`text-sm font-semibold ${['REJECTED', 'CANCELLED', 'EXPIRED'].includes(e.status) ? 'text-faint line-through' : 'text-emerald-500'}`}>{formatCurrency(e.amount)}</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-[11px] text-faint">
                           <Clock className="h-3 w-3" />{formatDateTime(e.at)}

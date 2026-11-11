@@ -192,10 +192,11 @@ function SaleDetail({ id, onClose }) {
 
   const cancelled = data?.status === 'CANCELLED';
   return (
+    // xl: at lg the six-column item table pushed "Profit / box" and "Line profit" out of sight.
     <Modal
       open={!!id}
       onClose={onClose}
-      size="lg"
+      size="xl"
       title={data ? `Sale ${data.saleNumber}` : 'Sale'}
       footer={data && isAdmin && !cancelled ? (
         confirming ? (
@@ -366,10 +367,11 @@ export default function Sales() {
             {
               label: 'Revenue taken', value: formatCurrency(sum?.revenue ?? 0), icon: Wallet,
               sub: period ? `${formatNumber(sum.sales)} ${saleWord(sum.sales)} ${period}` : nothing,
-              ring: (sum?.revenue ?? 0) > 0 ? 'ring-brand-500/25' : 'ring-white/[0.08]',
-              glow: (sum?.revenue ?? 0) > 0 ? 'from-brand-500/[0.12]' : 'from-white/[0.03]',
-              chip: (sum?.revenue ?? 0) > 0 ? 'bg-brand-500/15 text-brand-600' : 'bg-white/10 text-muted',
-              num: (sum?.revenue ?? 0) > 0 ? 'text-brand-600' : 'text-foreground',
+              // Sky, not red: takings are good news, not an alert (Nino, 11 Nov 2026: "not every place needs red").
+              ring: (sum?.revenue ?? 0) > 0 ? 'ring-sky-500/25' : 'ring-white/[0.08]',
+              glow: (sum?.revenue ?? 0) > 0 ? 'from-sky-500/[0.12]' : 'from-white/[0.03]',
+              chip: (sum?.revenue ?? 0) > 0 ? 'bg-sky-500/15 text-sky-300' : 'bg-white/10 text-muted',
+              num: (sum?.revenue ?? 0) > 0 ? 'text-sky-300' : 'text-foreground',
             },
             {
               label: 'Profit kept', value: formatCurrency(sum?.profit ?? 0), icon: TrendingUp,
@@ -400,7 +402,7 @@ export default function Sales() {
               num: (sum?.owed ?? 0) > 0 ? 'text-amber-300' : 'text-foreground',
             },
           ].map((c) => (
-            <div key={c.label} className={`premium-card premium-card--sm p-4`}>
+            <div key={c.label} className="stat-glass p-4">
               <div className="relative flex items-start justify-between gap-2">
                 <p className="text-xs font-medium text-muted">{c.label}</p>
                 <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>

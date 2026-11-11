@@ -283,7 +283,7 @@ export default function InvoiceGenerator() {
                   ))}
                   <div className="flex items-center justify-between pt-3">
                     <span className="text-sm font-semibold text-foreground">Grand total</span>
-                    <span className="text-lg font-bold text-brand-600 tabular-nums">{tzs(grandTotal)}</span>
+                    <span className="text-lg font-bold text-foreground tabular-nums">{tzs(grandTotal)}</span>
                   </div>
                 </div>
               )}

@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
 import WalletCard from '@/components/WalletCard';
 import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard } from '@/components/RepCharts';
-import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, PartyPopper, ShieldCheck, Boxes } from 'lucide-react';
+import { Coins, Wallet, Clock, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck, Boxes } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
@@ -321,7 +321,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
   if (!items.length) return null;
 
   return (
-    <Card className="mb-6 border-amber-500/30">
+    <Card className="mb-6 !border-amber-500/30">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Coins className="h-4 w-4 text-amber-400" />
         <h2 className="text-sm font-bold text-foreground">Commission requests</h2>
@@ -1338,7 +1338,7 @@ function BalancesTable({ items, bonus }) {
           const offCommission = i.earnsCommission === false;
           return (
             <TR key={i.salesRepId}>
-              <TD className={clsx('font-medium', leads && 'text-brand-600')}>
+              <TD className={clsx('font-medium', leads && 'text-amber-300')}>
                 {i.name}
                 {runView && (
                   // Every rep's run starts on their own date, so the row has to
@@ -1425,7 +1425,7 @@ function RunSwitch({ value, onChange }) {
           onClick={() => onChange(o.k)}
           className={clsx(
             'rounded-md px-3 py-1.5 text-xs font-semibold transition',
-            value === o.k ? 'bg-brand-500 text-black' : 'text-muted hover:text-foreground',
+            value === o.k ? 'bg-white/[0.12] text-foreground ring-1 ring-inset ring-white/20' : 'text-muted hover:text-foreground',
           )}
         >
           {o.l}
@@ -1500,7 +1500,7 @@ function AdminView() {
         <StatCard label="Total penalties" value={formatCurrency(summary.totals.penalties)} icon={AlertTriangle} tone="rose" />
       </div>
 
-      <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="secondary" loading={applyPenalties.isPending} onClick={() => applyPenalties.mutate()}>
           <AlertTriangle className="h-4 w-4" /> Apply daily penalties
         </Button>
@@ -1557,7 +1557,7 @@ function AdminView() {
                     <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
                   {/* Where to send it. This is the whole point of the request,
                       and it was only visible by hovering a different column. */}
-                    {w.notes && <div className="mt-0.5 text-[11px] text-brand-600">{w.notes}</div>}
+                    {w.notes && <div className="mt-0.5 text-[11px] text-amber-300">{w.notes}</div>}
                   </button>
                 </TD>
                 <TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>

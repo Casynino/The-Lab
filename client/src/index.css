@@ -431,21 +431,28 @@ body:has([data-login-scene]) { background-color: transparent; }
 .premium-card--sm { border-radius: 1.15rem; }
 .premium-card--sm::before { right: -2.5rem; top: -4rem; width: 9rem; height: 9rem; }
 
-/* Every admin page wears the owner profile's finish (Nino, 11 Nov 2026: "they all need the new look, like the
-   Nino side"): each card is the red-lit glass with a soft red light in its top-right corner, the table head is
-   quiet, rows have hairlines. The corner light is a background layer, not a pseudo-element, so nothing inside a
-   card (menus, popovers, sticky headers) is clipped or re-stacked. A card inside a card stays quiet. Reps' pages
-   are not touched (`lab-app` is only set for staff in Layout). */
-.lab-app .card {
-  border-color: transparent;
-  background:
-    radial-gradient(circle 15rem at calc(100% + 2rem) -4rem, rgba(238, 49, 36, 0.22), transparent),
-    linear-gradient(140deg, #2c0e0c 0%, #170a0a 52%, #0e0e10 100%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 14px 32px -16px rgba(0, 0, 0, 0.9);
-}
-.lab-app .card .card {
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+/* Every admin page wears the rep side's finish (Nino, 11 Nov 2026: "the app should not be all red — take
+   the mix of the rep side, it is very nice"): each card is the same soft dark glass as the rep's active
+   cards and lists — a white-alpha gradient with a hairline, no red light. Colour lives on the numbers, the
+   chips and the one card that needs action, never on every surface. A card inside a card stays quiet.
+   Reps' pages are not touched (`lab-app` is only set for staff in Layout). */
+/* In the components layer and behind :where(), so these weigh no more than `.card` itself: a Tailwind
+   utility passed to a card (an amber outline on a "waiting" strip, its own background) still wins. */
+@layer components {
+  :where(.lab-app) .card {
+    border-color: transparent;
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.022));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
+  }
+  :where(.lab-app .card) .card {
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  }
+  :where(.lab-section) .card {
+    border-color: transparent;
+    background: linear-gradient(150deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.022));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
+  }
 }
 .lab-app thead { background: rgba(255, 255, 255, 0.035); }
 .lab-app .th { color: rgba(255, 255, 255, 0.45); }
@@ -453,31 +460,35 @@ body:has([data-login-scene]) { background-color: transparent; }
 .lab-app tbody tr { transition: background-color 150ms; }
 .lab-app tbody tr:hover { background: rgba(255, 255, 255, 0.035); }
 
-/* The owner's pages opened inside his profile (Users, Settings, Activity, Audit log, Daily reports) wear the
-   profile's own finish (Nino, 11 Nov 2026: "make it nice — it should match the colours and the design"):
-   every card is a premium card with the red light in its corner, the table head is quiet, the rows have
-   hairlines. Scoped to `.lab-section`, so the same pages anywhere else are unchanged. */
-.lab-section .card {
+/* A figure card (Revenue, Boxes on hand, Outstanding…): the rep's active-card glass. Its tone is carried by
+   the icon chip and the number; `data-tone` tints the whole card only when it needs action, exactly like
+   the rep's highlighted Settle card. */
+.stat-glass {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  border: 0;
-  border-radius: 1.4rem;
-  background: linear-gradient(140deg, #2c0e0c 0%, #170a0a 52%, #0e0e10 100%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 14px 32px -16px rgba(0, 0, 0, 0.9);
+  border-radius: 1rem;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.025));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
 }
-.lab-section .card::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  right: -3rem;
-  top: -6rem;
-  width: 18rem;
-  height: 18rem;
-  border-radius: 9999px;
-  background: radial-gradient(closest-side, rgba(238, 49, 36, 0.26), transparent);
-  pointer-events: none;
+.stat-glass[data-tone='brand'] {
+  background: linear-gradient(150deg, rgba(238, 49, 36, 0.16), rgba(238, 49, 36, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(238, 49, 36, 0.34), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
 }
+.stat-glass[data-tone='near'] {
+  background: linear-gradient(150deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.32), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
+}
+.stat-glass[data-tone='late'] {
+  background: linear-gradient(150deg, rgba(244, 63, 94, 0.13), rgba(244, 63, 94, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.34), 0 10px 24px -16px rgba(0, 0, 0, 0.9);
+}
+
+/* The owner's pages opened inside his profile (Users, Settings, Activity, Audit log, Daily reports) wear the
+   same soft glass as every admin page (Nino, 11 Nov 2026: "not all red — the mix of the rep side"); the
+   profile's own cards beside them keep the red-lit premium finish as the one accent. The table head is
+   quiet, the rows have hairlines. Scoped to `.lab-section`, so the same pages anywhere else are unchanged. */
+/* (its cards: see the components-layer rule beside `.lab-app` above) */
 .lab-section thead { background: rgba(255, 255, 255, 0.035); }
 .lab-section .th { color: rgba(255, 255, 255, 0.45); }
 .lab-section table, .lab-section tbody, .lab-section tr { border-color: rgba(255, 255, 255, 0.06); }

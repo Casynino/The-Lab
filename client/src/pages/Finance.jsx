@@ -42,6 +42,8 @@ const TXN_TYPE_LABEL = {
   SETTLEMENT: 'Settlement received', WAREHOUSE_SALE: 'Warehouse sale', INCOME: 'Income',
   EXPENSE: 'Expense', STOCK_PURCHASE: 'Stock purchase', COMMISSION_PAYMENT: 'Commission paid',
   TRANSFER: 'Transfer', ADJUSTMENT: 'Adjustment',
+  // the owner's own money, in the words of the Overview buttons ("Put my money in" / "Take profit out")
+  OWNER_CONTRIBUTION: 'Your money in', OWNER_DRAWING: 'Profit taken out',
 };
 
 // One tinted stat card — the ring/glow/chip language the Inventory and
@@ -59,7 +61,7 @@ const TINT = {
 function TintCard({ label, value, icon: Icon, sub, tone = 'brand' }) {
   const t = TINT[tone] || TINT.brand;
   return (
-    <div className={`premium-card premium-card--sm p-4`}>
+    <div className="stat-glass p-4">
       <div className="relative flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-muted">{label}</p>
         {Icon && <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${t.chip}`}><Icon className="h-3.5 w-3.5" /></span>}
@@ -97,26 +99,26 @@ function ShareRows({ rows, total, colours }) {
 
 // One card, several segments — the joined money strip from the admin the
 // owner benchmarks against. Not separate boxes: one container, hairline
-// dividers, each segment washed in its own colour, numbers a size up.
+// dividers, numbers a size up. The rep side's mix (Nino, 11 Nov 2026: "not every place needs red"):
+// the strip is neutral glass and each segment's colour lives on its number, not on a wash behind it.
 const SEG_WASH = {
-  emerald: { bg: 'bg-gradient-to-br from-emerald-500/[0.12] via-emerald-500/[0.04] to-transparent', num: 'text-emerald-400' },
-  rose: { bg: 'bg-gradient-to-br from-rose-500/[0.12] via-rose-500/[0.04] to-transparent', num: 'text-rose-400' },
-  sky: { bg: 'bg-gradient-to-br from-sky-500/[0.12] via-sky-500/[0.04] to-transparent', num: 'text-sky-300' },
-  brand: { bg: 'bg-gradient-to-br from-brand-500/[0.12] via-brand-500/[0.04] to-transparent', num: 'text-brand-600' },
-  amber: { bg: 'bg-gradient-to-br from-amber-500/[0.12] via-amber-500/[0.04] to-transparent', num: 'text-amber-300' },
-  violet: { bg: 'bg-gradient-to-br from-violet-500/[0.12] via-violet-500/[0.04] to-transparent', num: 'text-violet-300' },
-  slate: { bg: 'bg-gradient-to-br from-white/[0.04] to-transparent', num: 'text-foreground' },
+  emerald: { num: 'text-emerald-400' },
+  rose: { num: 'text-rose-400' },
+  sky: { num: 'text-sky-300' },
+  brand: { num: 'text-brand-600' },
+  amber: { num: 'text-amber-300' },
+  violet: { num: 'text-violet-300' },
+  slate: { num: 'text-foreground' },
 };
-// In the premium finish (Nino, 11 Nov 2026: "nice but too big — follow the new design"): the red-lit
-// card, numbers a size smaller, plain-case labels.
+// Nino, 11 Nov 2026: "nice but too big — follow the new design": numbers a size smaller, plain-case labels.
 function SegmentStrip({ segments, size = 'lg' }) {
   const numCls = size === 'lg' ? 'text-xl xl:text-2xl' : 'text-lg';
   return (
-    <div className="premium-card grid grid-cols-2 sm:flex sm:divide-x sm:divide-white/[0.06]">
+    <div className="stat-glass grid grid-cols-2 sm:flex sm:divide-x sm:divide-white/[0.08]">
       {segments.map((seg) => {
         const w = SEG_WASH[seg.tone] || SEG_WASH.slate;
         return (
-          <div key={seg.label} className={`flex-1 px-4 py-3.5 ${w.bg}`}>
+          <div key={seg.label} className="flex-1 px-4 py-3.5">
             <p className="text-[11px] font-medium text-white/55">{seg.label}</p>
             <p className={`mt-1.5 font-bold leading-none tabular-nums ${numCls} ${w.num}`}>{seg.value}</p>
             {seg.sub && <p className="mt-1 text-[11px] text-faint">{seg.sub}</p>}
@@ -503,7 +505,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
 
   const desks = [
     { tab: 'profit', title: 'Profit', line: 'What you make — per brand, and box by box', value: formatCurrency(data.netProfit), tone: data.netProfit >= 0 ? 'text-emerald-300' : 'text-rose-300' },
-    { tab: 'cashflow', title: 'Cash Flow', line: 'Opening to closing, and what moved it', value: formatCurrency(data.cashPosition), tone: 'text-brand-600' },
+    { tab: 'cashflow', title: 'Cash Flow', line: 'Opening to closing, and what moved it', value: formatCurrency(data.cashPosition), tone: 'text-foreground' },
     { tab: 'suppliers', title: 'Suppliers', line: 'Who you buy from and what you owe them', value: formatCurrency(ny.supplierOutstanding || 0), tone: ny.supplierOutstanding > 0 ? 'text-rose-300' : 'text-faint' },
     { tab: 'expenses', title: 'Expenses', line: 'What the business spends, by category', value: formatCurrency(data.expenses), tone: 'text-foreground' },
     { tab: 'commissions', title: 'Commissions', line: 'What the reps have earned and can withdraw', value: formatCurrency(data.outstandingCommission), tone: data.outstandingCommission > 0 ? 'text-amber-300' : 'text-faint' },
@@ -515,7 +517,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
       <div className="flex flex-wrap gap-1.5">
         {PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
-            className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
+            className={`cursor-pointer rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'border border-white/25 bg-white/[0.12] text-foreground' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
 
@@ -554,7 +556,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
               label: 'Cash you hold',
               value: formatCurrency(data.cashSplit.totalCash),
               sub: data.cashSplit.setAside > 0 ? 'across every account' : 'across every account — all of it yours',
-              tone: 'brand',
+              tone: 'slate',
             },
             {
               label: `Total you owe ${supplierLabel}`,
@@ -610,7 +612,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
               const Icon = named[0] ? (ACCOUNT_ICON[data.accounts.find((a) => a.name === named[0].name)?.type] || Wallet) : Wallet;
               const yoursPct = b.cash > 0 ? (b.yours / b.cash) * 100 : 0;
               return (
-                <div key={b.key} className="premium-card p-4 sm:p-5">
+                <div key={b.key} className="stat-glass p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${tint.chip}`}><Icon className="h-4 w-4" /></span>
@@ -687,7 +689,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
               owes him back, not a balance it is holding. */}
           {/* The total, then the two ways it went in. It was one run-on
               sentence, which is a poor way to read three numbers. */}
-          <div className="premium-card premium-card--sm flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5 sm:px-5">
+          <div className="stat-glass flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5 sm:px-5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-inset ring-sky-500/30"><PiggyBank className="h-4 w-4" /></span>
 
             <span className="min-w-[9rem]">
@@ -780,11 +782,10 @@ function Overview({ onNavigate, onOwnerMoney }) {
             {data.brandFinance.map((b) => {
               const keptPct = b.revenue > 0 ? Math.round(((b.revenue - b.cogs) / b.revenue) * 100) : 0;
               return (
-                <div key={b.brandId} className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-surface">
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-500/[0.06] to-transparent" aria-hidden="true" />
+                <div key={b.brandId} className="stat-glass">
                   <div className="relative p-5">
                     <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-brand-500/15 px-3 py-1 text-sm font-bold text-brand-600">{b.name}</span>
+                      <span className="rounded-full bg-white/[0.08] px-3 py-1 text-sm font-bold text-foreground ring-1 ring-inset ring-white/10">{b.name}</span>
                       <span className="text-xs text-faint">{formatNumber(b.boxesSold)} box{b.boxesSold === 1 ? '' : 'es'} sold · {periodLabel}</span>
                     </div>
 
@@ -800,7 +801,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
                       </div>
                       <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.08] pt-2.5">
                         <span className="text-sm font-semibold text-foreground">Earned on these sales</span>
-                        <span className={`text-xl font-bold tabular-nums ${(b.revenue - b.cogs) >= 0 ? 'text-brand-600' : 'text-rose-400'}`}>
+                        <span className={`text-xl font-bold tabular-nums ${(b.revenue - b.cogs) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {formatCurrency(b.revenue - b.cogs)}
                         </span>
                       </div>
@@ -843,7 +844,8 @@ function Overview({ onNavigate, onOwnerMoney }) {
           <CardHeader title="Where the cash sits" subtitle="Each account's share" />
           <CardBody>
             {accountsDonut.length ? (
-              <DonutChart data={accountsDonut} height={230} />
+              // each account in its Accounts-tab colour (ACCOUNT_BAR: emerald, violet, sky, amber)
+              <DonutChart data={accountsDonut} height={230} colors={['#10b981', '#8b5cf6', '#0ea5e9', '#f59e0b']} />
             ) : (
               <div className="flex h-[200px] items-center justify-center text-sm text-faint">No account holds money right now.</div>
             )}
@@ -859,7 +861,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
             Nothing is waiting. Every settlement is decided, no withdrawal is pending, and no account is below zero.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-surface">
+          <div className="glass-list">
             {attention.map((a, i) => (
               <button key={i} type="button" onClick={() => onNavigate?.(a.tab)}
                 className="flex w-full cursor-pointer items-center gap-3 border-b border-white/[0.05] px-5 py-3 text-left transition duration-200 last:border-0 hover:bg-white/[0.04]">
@@ -880,7 +882,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
             <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
               <Money label="Revenue" value={data.revenue} tone="emerald" />
               <Money label="− COGS" value={data.cogs} tone="slate" />
-              <Money label="= Gross profit" value={data.grossProfit} tone="brand" />
+              <Money label="= Gross profit" value={data.grossProfit} tone={data.grossProfit >= 0 ? 'sky' : 'rose'} />
               <Money label="Reps earned" value={data.commissionAccrued ?? 0} tone="amber" />
               <Money label="− Expenses" value={data.expenses} tone="rose" />
               <Money label="= Earned" value={data.netProfit} tone={data.netProfit >= 0 ? 'emerald' : 'rose'} big />
@@ -957,7 +959,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {desks.map((d) => (
             <button key={d.tab} type="button" onClick={() => onNavigate?.(d.tab)}
-              className="cursor-pointer rounded-2xl border border-white/[0.08] bg-surface p-4 text-left transition duration-200 hover:border-white/20 hover:bg-white/[0.03]">
+              className="stat-glass cursor-pointer p-4 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold text-foreground">{d.title}</span>
                 {d.value != null && <span className={`text-sm font-bold tabular-nums ${d.tone}`}>{d.value}</span>}
@@ -972,9 +974,9 @@ function Overview({ onNavigate, onOwnerMoney }) {
 }
 
 function Money({ label, value, tone, big }) {
-  const tones = { emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-600', amber: 'text-amber-500', slate: 'text-muted', default: 'text-foreground' };
+  const tones = { emerald: 'text-emerald-500', rose: 'text-rose-500', brand: 'text-brand-600', amber: 'text-amber-500', sky: 'text-sky-400', slate: 'text-muted', default: 'text-foreground' };
   return (
-    <div className={`rounded-xl border border-border bg-elevated p-3 ${big ? 'ring-1 ring-brand-500/30' : ''}`}>
+    <div className={`rounded-xl border border-border bg-elevated p-3 ${big ? 'ring-1 ring-white/20' : ''}`}>
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
       <div className={`mt-0.5 font-bold tabular-nums ${big ? 'text-xl' : 'text-base'} ${tones[tone] || tones.default}`}>{formatCurrency(value)}</div>
     </div>
@@ -1125,7 +1127,7 @@ function Accounts({ onQuick }) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-faint">Total cash position</div>
-          <div className="text-2xl font-black text-brand-600 tabular-nums">{formatCurrency(total)}</div>
+          <div className="text-2xl font-black text-foreground tabular-nums">{formatCurrency(total)}</div>
           <div className="hidden text-[11px] text-faint sm:block">What your accounts are holding right now.</div>
         </div>
         <div className="tab-row sm:flex sm:gap-2">
@@ -1170,7 +1172,7 @@ function Accounts({ onQuick }) {
               key={a.id}
               type="button"
               onClick={() => setViewing(a)}
-              className={`premium-card premium-card--sm cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400`}
+              className={`stat-glass cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400`}
             >
               <div className="relative flex items-center justify-between">
                 <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-5 w-5" /></span>
@@ -1202,7 +1204,7 @@ function Accounts({ onQuick }) {
             key={a.id}
             type="button"
             onClick={() => setViewing(a)}
-            className="premium-card premium-card--sm cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            className="stat-glass cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <div className="relative flex items-center justify-between">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Coins className="h-5 w-5" /></span>
@@ -1359,7 +1361,7 @@ function Ledger({ expensesOnly }) {
                 <TR key={t.id}>
                   <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                   <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
-                  <TD>{t.brandName ? <Badge className="bg-brand-500/15 text-brand-600">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
+                  <TD>{t.brandName ? <Badge className="bg-white/[0.08] text-foreground">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
                   <TD className="max-w-[220px] truncate text-foreground">{ledgerLabel(t)}</TD>
                   <TD className="text-muted">{t.account?.name}</TD>
                   {isPayoutRow(t) ? (
@@ -1510,7 +1512,7 @@ function ProfitTab() {
     { label: 'Cost of goods', value: formatCurrency(t.cost), icon: Package, sub: 'at cost when each box sold',
       ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', chip: 'bg-white/10 text-muted', num: 'text-foreground' },
     { label: 'Gross profit', value: formatCurrency(t.profit), icon: Wallet, sub: `${t.margin}% margin`,
-      ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
+      ...(t.profit >= 0 ? TINT.sky : TINT.rose) },
     // Reported, never deducted — the owner pays reps himself, in cash.
     { label: 'Reps earned', value: formatCurrency(t.commission), icon: Coins, sub: 'you pay this, not the business',
       ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.12]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
@@ -1528,14 +1530,14 @@ function ProfitTab() {
       <div className="flex flex-wrap items-center gap-1.5">
         {PROFIT_PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'border border-white/25 bg-white/[0.12] text-foreground' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
         {windowLabel && <span className="ml-2 text-xs text-faint">{windowLabel}</span>}
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         {cards.map((c) => (
-          <div key={c.label} className={`premium-card premium-card--sm p-4`}>
+          <div key={c.label} className="stat-glass p-4">
             <div className="relative flex items-start justify-between gap-2">
               <p className="text-xs font-medium text-muted">{c.label}</p>
               <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
@@ -1562,7 +1564,7 @@ function ProfitTab() {
                 <Card key={b.brandId}>
                   <div className="p-5">
                     <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-bold text-brand-600">{b.name}</span>
+                      <span className="rounded-full bg-white/[0.08] px-2.5 py-0.5 text-xs font-bold text-foreground ring-1 ring-inset ring-white/10">{b.name}</span>
                       <span className="text-xs text-faint">{formatNumber(b.boxes)} box{b.boxes === 1 ? '' : 'es'}</span>
                     </div>
                     <p className={`mt-3 text-3xl font-bold leading-none tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -1605,7 +1607,7 @@ function ProfitTab() {
                         </div>
                         <div className="flex items-baseline justify-between border-t border-white/[0.06] pt-1.5">
                           <span className="text-xs font-semibold text-foreground">= Potential profit</span>
-                          <span className={`text-sm font-bold tabular-nums ${stock.stockPotential > 0 ? 'text-brand-600' : 'text-muted'}`}>
+                          <span className={`text-sm font-bold tabular-nums ${stock.stockPotential > 0 ? 'text-sky-300' : 'text-muted'}`}>
                             {formatCurrency(stock.stockPotential)}
                           </span>
                         </div>
@@ -1628,8 +1630,9 @@ function ProfitTab() {
       {/* Every product, one by one — the whole catalogue, not a top list. */}
       <Card>
         <CardHeader title="Every product, one by one" subtitle="What each one brings in and what you keep, best first" />
-        <CardBody>
-          {!data.byProduct.length ? <EmptyState title="No sales in this period" icon={Package} /> : (
+        {/* Edge to edge, like the Overview's product table: inside the card's padding it was a box in a box
+            and lost its last column on a tablet. */}
+        {!data.byProduct.length ? <CardBody><EmptyState title="No sales in this period" icon={Package} /></CardBody> : (
             <Table>
               <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Goods</TH><TH>Earned</TH><TH>Earned / box</TH><TH>Margin</TH></TR></THead>
               <TBody>
@@ -1646,14 +1649,12 @@ function ProfitTab() {
                 ))}
               </TBody>
             </Table>
-          )}
-        </CardBody>
+        )}
       </Card>
 
       <Card>
         <CardHeader title="Profit by sales rep" subtitle="What each rep's settled boxes bring in, after their commission" />
-        <CardBody>
-          {!data.byRep.length ? <EmptyState title="No rep sales in this period" icon={TrendingUp} /> : (
+        {!data.byRep.length ? <CardBody><EmptyState title="No rep sales in this period" icon={TrendingUp} /></CardBody> : (
             <Table>
               <THead><TR><TH>Sales rep</TH><TH>Boxes</TH><TH>Revenue</TH><TH>They earned</TH><TH>Business earned</TH><TH>Margin</TH></TR></THead>
               <TBody>
@@ -1669,8 +1670,7 @@ function ProfitTab() {
                 ))}
               </TBody>
             </Table>
-          )}
-        </CardBody>
+        )}
       </Card>
     </div>
   );
@@ -1698,11 +1698,13 @@ function CashFlowTab() {
       <div className="flex flex-wrap gap-1.5">
         {CF_PERIODS.map(([k, label]) => (
           <button key={k} onClick={() => setPeriod(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'bg-brand-500 text-white' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'border border-white/25 bg-white/[0.12] text-foreground' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
         ))}
       </div>
 
-      <div className={`grid grid-cols-2 gap-3 ${(data.ownerNet ?? 0) !== 0 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
+      {/* Five columns whenever the "Your own money" card below is shown — it also shows for commission paid
+          by hand with no net owner money, which left "Closing balance" alone on a second row. */}
+      <div className={`grid grid-cols-2 gap-3 ${((data.ownerNet ?? 0) !== 0 || (data.owner?.commissionFromPocket ?? 0) !== 0) ? 'lg:grid-cols-3 xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
         <TintCard label="Opening balance" value={formatCurrency(data.openingBalance)} icon={PiggyBank} tone="slate" sub="at period start" />
         <TintCard label="Money in" value={formatCurrency(data.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub="the business collected" />
         <TintCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" sub="the business paid" />
@@ -1723,7 +1725,7 @@ function CashFlowTab() {
               icon={Coins} tone="sky" sub={parts} />
           );
         })()}
-        <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'brand' : 'rose'} sub="what the accounts hold" />
+        <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'slate' : 'rose'} sub="what the accounts hold" />
       </div>
 
       {/* The story in one line: the four figures above, connected. */}
@@ -1746,7 +1748,7 @@ function CashFlowTab() {
               </>
             )}
             <ChevronRight className="h-4 w-4 text-faint" />
-            <span className="text-muted">Closing <b className={data.closingBalance >= 0 ? 'text-brand-600' : 'text-rose-500'}>{formatCurrency(data.closingBalance)}</b></span>
+            <span className="text-muted">Closing <b className={data.closingBalance >= 0 ? 'text-foreground' : 'text-rose-500'}>{formatCurrency(data.closingBalance)}</b></span>
           </div>
         </CardBody>
       </Card>
@@ -1784,7 +1786,7 @@ function CashFlowTab() {
               <span className="rounded-lg bg-emerald-500/15 p-1.5 text-emerald-300"><ArrowDownLeft className="h-3.5 w-3.5" /></span>
             </div>
             {inRows.length ? (
-              <ShareRows rows={inRows} total={inTotal} colours={['bg-emerald-500', 'bg-brand-500', 'bg-sky-500', 'bg-violet-500']} />
+              <ShareRows rows={inRows} total={inTotal} colours={['bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-amber-500']} />
             ) : <p className="mt-4 text-sm text-faint">No money came in during this period.</p>}
           </div>
         </Card>
@@ -2134,7 +2136,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
           <div className="space-y-5">
             {/* Identity */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-              {s.brandName && <Badge className="bg-brand-500/15 text-brand-600">{s.brandName}</Badge>}
+              {s.brandName && <Badge className="bg-white/[0.08] text-foreground">{s.brandName}</Badge>}
               {s.country && <span>{s.country}</span>}
               {s.contactName && <span>{s.contactName}</span>}
               {s.phone && <span>{s.phone}</span>}
@@ -2298,9 +2300,9 @@ function SuppliersTab({ accounts }) {
       {/* The returned card only appears once something has gone back, so a
           business that has never returned stock sees the four cards it always
           saw. */}
-      <div className={anyReturns ? 'grid grid-cols-2 gap-3 xl:grid-cols-5' : 'grid grid-cols-2 gap-3 xl:grid-cols-4'}>
+      <div className={anyReturns ? 'grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5' : 'grid grid-cols-2 gap-3 xl:grid-cols-4'}>
         <TintCard label="Suppliers" value={formatNumber(suppliers.length)} icon={Factory} tone="slate" sub="who you buy from" />
-        <TintCard label="Total purchased" value={formatCurrency(totals.purchased)} icon={Package} tone="brand" sub="all stock ever bought" />
+        <TintCard label="Total purchased" value={formatCurrency(totals.purchased)} icon={Package} tone="slate" sub="all stock ever bought" />
         {anyReturns && (
           <TintCard label="Goods returned" value={formatCurrency(totals.returned)} icon={Undo2} tone="amber"
             sub={`bill is ${formatCurrency(netPurchased)} after them`} />
@@ -2336,7 +2338,7 @@ function SuppliersTab({ accounts }) {
                       </div>
                     )}
                   </TD>
-                  <TD>{s.brandName ? <Badge className="bg-brand-500/15 text-brand-600">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
+                  <TD>{s.brandName ? <Badge className="bg-white/[0.08] text-foreground">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
                   <TD className="text-muted">{s.country}</TD>
                   <TD>{s.poCount}</TD>
                   <TD>{formatCurrency(s.totalPurchased)}</TD>

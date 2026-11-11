@@ -81,6 +81,7 @@ export default function Reorder() {
       sub: `at the selling pace of ${pace}`,
       quiet: !(s.criticalCount > 0),
       ring: 'ring-rose-500/30', glow: 'from-rose-500/[0.14]', chip: 'bg-rose-500/15 text-rose-300', num: 'text-rose-300',
+      tone: s.criticalCount > 0 ? 'late' : undefined,
     },
     {
       label: `Runs out within ${s.highDays} days`, value: formatNumber(s.highCount || 0), icon: Clock,
@@ -115,11 +116,12 @@ export default function Reorder() {
         {cards.map((c) => (
           <div
             key={c.label}
-            className={`premium-card premium-card--sm p-4`}
+            className="stat-glass p-4"
+            data-tone={c.tone}
           >
             <div className="relative flex items-start justify-between gap-2">
               <p className="text-xs font-medium text-muted">{c.label}</p>
-              <span className={`rounded-lg p-1.5 ${c.quiet ? 'bg-white/10 text-muted' : c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+              <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.quiet ? 'bg-white/10 text-muted' : c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
             </div>
             <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.quiet ? 'text-foreground' : c.num}`}>{c.value}</p>
             <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
@@ -190,12 +192,12 @@ export default function Reorder() {
                 const meta = URGENCY[r.urgency] || URGENCY.OK;
                 return (
                   <TR key={r.productId}>
-                    <TD>
+                    <TD className="min-w-[11rem] whitespace-normal">
                       <div className="font-medium text-foreground">{r.name}</div>
                       <div className="text-xs text-faint">{r.brand}</div>
                     </TD>
                     <TD><CoverCell item={r} /></TD>
-                    <TD><span className="text-xs text-muted">{r.reason}</span></TD>
+                    <TD className="min-w-[12rem] whitespace-normal"><span className="text-xs text-muted">{r.reason}</span></TD>
                     <TD>
                       <span className="tabular-nums">{formatNumber(r.onHand)}</span>
                       <span className="text-xs text-faint"> {pluralizeUnit(r.baseUnitName)}</span>

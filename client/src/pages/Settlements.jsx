@@ -127,11 +127,13 @@ function PendingApprovals({ onReview }) {
 
   return (
     <>
-    <Card className="mb-6 border-sky-500/30">
+    {/* The one card that needs action wears the rep's amber "waiting" glass. A plain card's tinted border
+        is cleared by the admin glass, so this strip looked like every other card. */}
+    <div className="stat-glass mb-6" data-tone="near">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-        <ShieldCheck className="h-4 w-4 text-sky-400" />
+        <ShieldCheck className="h-4 w-4 text-amber-400" />
         <h2 className="text-sm font-bold text-foreground">Pending settlement approvals</h2>
-        <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[11px] font-bold text-sky-400">{pending.length}</span>
+        <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-300">{pending.length}</span>
         <span className="ml-auto text-xs text-faint">Verify the money before approving</span>
       </div>
       <div className="divide-y divide-border">
@@ -155,7 +157,7 @@ function PendingApprovals({ onReview }) {
           );
         })}
       </div>
-    </Card>
+    </div>
     {rejectModal}
     </>
   );
@@ -266,9 +268,11 @@ function StaffSettlements({ viewing, setViewing }) {
 
       {summary && (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
-            {cards.map((c) => (
-              <div key={c.label} className={`premium-card premium-card--sm p-4`}>
+          {/* Two across until there is room for all five, and the odd fifth card takes the whole row, so a
+              tablet or phone never shows a hole beside it (three across left 3 + 2 on a tablet). */}
+          <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
+            {cards.map((c, i) => (
+              <div key={c.label} className={clsx('stat-glass p-4', i === cards.length - 1 && cards.length % 2 === 1 && 'col-span-2 xl:col-span-1')}>
                 <div className="relative flex items-start justify-between gap-2">
                   <p className="text-xs font-medium text-muted">{c.label}</p>
                   <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
@@ -314,7 +318,7 @@ function StaffSettlements({ viewing, setViewing }) {
                   const bx = s.boxes || { issued: 0, settled: 0, returned: 0, remaining: 0 };
                   const done = bx.settled + bx.returned;
                   return (
-                    <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
+                    <TR key={s.id} className="group cursor-pointer" onClick={() => setViewing(s.id)}>
                       <TD className="font-medium">{s.settlementNumber}</TD>
                       <TD>{s.salesRep?.user?.name}</TD>
                       {/* What the order is made of, not only what it is worth. */}
@@ -330,7 +334,12 @@ function StaffSettlements({ viewing, setViewing }) {
                       </TD>
                       <TD>{formatCurrency(s.assignedValue)}</TD>
                       <TD className="text-emerald-500">{formatCurrency(s.paid)}</TD>
-                      <TD className={s.balance > 0 ? 'font-semibold text-rose-500' : 'text-faint'}>{formatCurrency(s.balance)}</TD>
+                      {/* Every live order has a balance, so a red one on every row made a red column. It is
+                          coloured like the rep's own order card: rose when late, amber when the deadline is
+                          near, plain otherwise. */}
+                      <TD className={s.balance > 0
+                        ? clsx('font-semibold', s.status === 'OVERDUE' ? 'text-rose-400' : s.approaching ? 'text-amber-300' : 'text-foreground')
+                        : 'text-faint'}>{formatCurrency(s.balance)}</TD>
                       <TD>
                         {s.status === 'SETTLED' ? (
                           // Finalized order — no countdown, no overdue, just when it closed.
@@ -355,7 +364,7 @@ function StaffSettlements({ viewing, setViewing }) {
                       </TD>
                       <TD><Badge className={SETTLEMENT_STATUS_META[s.status]?.cls}>{SETTLEMENT_STATUS_META[s.status]?.label}</Badge></TD>
                       <TD>
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600">
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors group-hover:text-foreground">
                           Open <Eye className="h-3.5 w-3.5" />
                         </span>
                       </TD>

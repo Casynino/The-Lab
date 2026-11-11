@@ -9,7 +9,9 @@ import {
   Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import { TrendChart, BarChartCard } from '@/components/charts';
-import { RED, CORAL } from '@/lib/brand';
+// The rep side's chart colours (components/RepCharts): revenue green, profit sky — red is kept for alerts.
+const GREEN = '#34d399';
+const SKY = '#38bdf8';
 
 const TABS = [
   { key: 'sales', label: 'Sales', path: '/reports/sales', file: 'sales-report' },
@@ -48,7 +50,7 @@ function SalesReport({ data }) {
       <Card className="mt-4">
         <CardHeader title="Revenue & profit trend" />
         <CardBody>
-          {data.series.length ? <TrendChart data={data.series} series={[{ key: 'revenue', name: 'Revenue', color: RED }, { key: 'profit', name: 'Profit', color: CORAL }]} /> : <EmptyState title="No sales in this period" />}
+          {data.series.length ? <TrendChart data={data.series} series={[{ key: 'revenue', name: 'Revenue', color: GREEN }, { key: 'profit', name: 'Profit', color: SKY }]} /> : <EmptyState title="No sales in this period" />}
         </CardBody>
       </Card>
     </>
@@ -113,7 +115,7 @@ export default function Reports({ embedded = false }) {
 
       <div className="mb-4 tab-row">
         {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${tab === t.key ? 'bg-brand-600 text-white' : 'bg-surface text-muted hover:bg-elevated'}`}>{t.label}</button>
+          <button key={t.key} onClick={() => setTab(t.key)} className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${tab === t.key ? 'border border-white/25 bg-white/[0.12] text-foreground' : 'border border-border text-muted hover:bg-elevated'}`}>{t.label}</button>
         ))}
       </div>
 
@@ -124,7 +126,7 @@ export default function Reports({ embedded = false }) {
           {tab === 'products' && (
             <Card>
               <CardHeader title="Top selling products" subtitle="By revenue" />
-              <CardBody>{data.topSelling?.length ? <BarChartCard data={data.topSelling.map((p) => ({ name: p.name.slice(0, 22), value: p.revenue }))} /> : <EmptyState title="No sales" />}</CardBody>
+              <CardBody>{data.topSelling?.length ? <BarChartCard data={data.topSelling.map((p) => ({ name: p.name.slice(0, 22), value: p.revenue }))} color={GREEN} /> : <EmptyState title="No sales" />}</CardBody>
               <Table>
                 <THead><TR><TH>Product</TH><TH>Units</TH><TH>Revenue</TH><TH>Profit</TH><TH>Margin</TH></TR></THead>
                 <TBody>{(data.all || []).map((p) => (
@@ -136,7 +138,7 @@ export default function Reports({ embedded = false }) {
           {tab === 'regional' && (
             <Card>
               <CardHeader title="Regional performance" />
-              <CardBody>{data.items?.length ? <BarChartCard data={data.items.map((r) => ({ name: r.region, value: r.revenue }))} color={RED} /> : <EmptyState title="No regional sales" />}</CardBody>
+              <CardBody>{data.items?.length ? <BarChartCard data={data.items.map((r) => ({ name: r.region, value: r.revenue }))} color={GREEN} /> : <EmptyState title="No regional sales" />}</CardBody>
               <Table>
                 <THead><TR><TH>Region</TH><TH>Orders</TH><TH>Revenue</TH><TH>Profit</TH></TR></THead>
                 <TBody>{(data.items || []).map((r) => (<TR key={r.region}><TD>{r.region}</TD><TD>{r.orders}</TD><TD>{formatCurrency(r.revenue)}</TD><TD>{formatCurrency(r.profit)}</TD></TR>))}</TBody>

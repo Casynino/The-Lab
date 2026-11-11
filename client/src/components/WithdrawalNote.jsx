@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Coins, Clock, ShieldCheck, PartyPopper, ShieldAlert, Sparkles } from 'lucide-react';
+import { Coins, Clock, ShieldCheck, CheckCircle2, ShieldAlert, Target } from 'lucide-react';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import { WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { Badge } from '@/components/ui';
@@ -103,7 +103,7 @@ export function withdrawalState({ commission = {}, latest = null, firstName = ''
   }
   if (latest?.status === 'PAID' && isRecent(latest.paidAt || latest.decidedAt)) {
     return {
-      key: 'paid', tone: 'emerald', icon: PartyPopper,
+      key: 'paid', tone: 'emerald', icon: CheckCircle2,
       title: forOwner ? `Paid to ${they}` : `Paid — well done${who}`,
       value: formatCurrency(latest.amount),
       line: forOwner
@@ -137,7 +137,7 @@ export function withdrawalState({ commission = {}, latest = null, firstName = ''
   }
   if (available < min) {
     return {
-      key: 'below', tone: 'brand', icon: Sparkles,
+      key: 'below', tone: 'brand', icon: Target,
       title: 'Building towards your next withdrawal',
       value: formatCurrency(available),
       line: `${formatCurrency(min - available)} to go before you can request one. Earned on ${earnedOn(commission)}.`,

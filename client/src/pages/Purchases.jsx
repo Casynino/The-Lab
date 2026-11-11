@@ -322,12 +322,11 @@ function PurchaseOrders() {
           between ordering it and it arriving, which is exactly the window
           you need to plan around. */}
       {otw && (
-        <div className={`relative overflow-hidden rounded-2xl bg-surface p-5 ring-1 ${otw.boxes > 0 ? 'ring-sky-500/25' : 'ring-white/[0.07]'}`}>
-          <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${otw.boxes > 0 ? 'from-sky-500/[0.12]' : 'from-white/[0.02]'} to-transparent`} aria-hidden="true" />
+        <div className="stat-glass p-5">
           <div className="relative flex flex-wrap items-center gap-x-8 gap-y-4">
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded-lg bg-sky-500/15 p-1.5 text-sky-300"><Ship className="h-3.5 w-3.5" /></span>
+                <span className="rounded-full bg-sky-500/15 p-1.5 text-sky-300 ring-1 ring-inset ring-white/10"><Ship className="h-3.5 w-3.5" /></span>
                 <p className="text-xs font-medium text-muted">Stock on the way</p>
               </div>
               <p className={`mt-2 text-3xl font-bold leading-none tabular-nums ${otw.boxes > 0 ? 'text-sky-300' : 'text-foreground'}`}>
@@ -473,7 +472,7 @@ export default function Purchases() {
       <PageHeader title="Imports & Purchase Orders" subtitle="Order stock from China, track costs, and receive into the warehouse." />
       <div className="mb-4 flex gap-2">
         {[['orders', 'Purchase orders'], ['suppliers', 'Suppliers']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === k ? 'bg-brand-600 text-white' : 'bg-surface text-muted hover:bg-elevated'}`}>{label}</button>
+          <button key={k} onClick={() => setTab(k)} className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>
       {tab === 'orders' ? <PurchaseOrders /> : <Suppliers />}

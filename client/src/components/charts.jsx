@@ -4,12 +4,9 @@ import {
   CartesianGrid, Tooltip, PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { RED, SERIES } from '@/lib/brand';
+import { RED } from '@/lib/brand';
 
 const AXIS = { fontSize: 11, fill: '#94a3b8' };
-// Hao Labs' red leads; the rest are chosen to stay apart from it and from
-// each other on a near-black page. See lib/brand.js.
-const PALETTE = SERIES;
 
 function MoneyTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -77,7 +74,7 @@ export function BarChartCard({ data, dataKey = 'value', labelKey = 'name', money
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#27272a" horizontal={false} />
         <XAxis type="number" tick={AXIS} tickLine={false} axisLine={false} tickFormatter={(v) => formatNumber(v, { compact: true })} />
-        <YAxis type="category" dataKey={labelKey} tick={AXIS} tickLine={false} axisLine={false} width={130} />
+        <YAxis type="category" dataKey={labelKey} tick={AXIS} tickLine={false} axisLine={false} width={170} />
         <Tooltip
           cursor={false}
           formatter={(v) => (money ? formatCurrency(v) : formatNumber(v))}
@@ -89,13 +86,18 @@ export function BarChartCard({ data, dataKey = 'value', labelKey = 'name', money
   );
 }
 
-export function DonutChart({ data, dataKey = 'value', nameKey = 'name', height = 260 }) {
+// The admin donuts take the rep side's mix — sky, violet, amber, emerald, rose — with red as one colour
+// among many, not the first two (red + salmon made a two-slice donut entirely red). Pass `colors` to tie
+// slices to colours the page already uses (Finance gives each account its Accounts-tab colour).
+const DONUT_MIX = ['#38bdf8', '#a78bfa', '#fbbf24', '#34d399', '#fb7185', RED, '#f472b6', '#facc15'];
+
+export function DonutChart({ data, dataKey = 'value', nameKey = 'name', height = 260, colors = DONUT_MIX }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
         <Pie data={data} dataKey={dataKey} nameKey={nameKey} innerRadius={55} outerRadius={85} paddingAngle={2}>
           {data.map((_, i) => (
-            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+            <Cell key={i} fill={colors[i % colors.length]} />
           ))}
         </Pie>
         <Legend wrapperStyle={{ fontSize: 12 }} />

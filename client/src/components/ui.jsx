@@ -562,11 +562,13 @@ const STAT_TONES = {
   amber: { chip: 'bg-amber-500/15 text-amber-300 ring-amber-500/30', glow: '0 0 14px rgba(245,158,11,.25)' },
   rose: { chip: 'bg-rose-500/15 text-rose-300 ring-rose-500/30', glow: '0 0 14px rgba(244,63,94,.25)' },
   violet: { chip: 'bg-violet-500/15 text-violet-300 ring-violet-500/30', glow: '0 0 14px rgba(139,92,246,.25)' },
+  sky: { chip: 'bg-sky-500/15 text-sky-300 ring-sky-500/30', glow: '0 0 14px rgba(14,165,233,.25)' },
   slate: { chip: 'bg-white/[0.06] text-white/60 ring-white/10', glow: undefined },
 };
 
 export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onClick, compact = false }) {
-  const t = STAT_TONES[tone] || STAT_TONES.brand;
+  // An unknown tone is neutral, never a silent red (a 'sky' or 'default' used to turn into brand red).
+  const t = STAT_TONES[tone] || STAT_TONES.slate;
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -574,7 +576,7 @@ export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onCli
       transition={{ duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }}
       whileHover={onClick ? { y: -4 } : { y: -2 }}
       onClick={onClick}
-      className={clsx('premium-card premium-card--sm', compact ? 'p-3' : 'p-3.5 sm:p-5', onClick && 'cursor-pointer')}
+      className={clsx('stat-glass', compact ? 'p-3' : 'p-3.5 sm:p-5', onClick && 'cursor-pointer')}
     >
       <div className="relative flex items-start justify-between gap-3">
         <span className={clsx('font-medium text-white/60', compact ? 'text-xs' : 'text-sm')}>{label}</span>

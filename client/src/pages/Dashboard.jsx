@@ -206,7 +206,8 @@ function PeriodTabs({ value, onChange, options }) {
           onClick={() => onChange(o.key)}
           className={clsx(
             'rounded-[10px] px-3 py-1.5 text-xs font-semibold transition',
-            value === o.key ? 'bg-brand-500 text-white' : 'text-muted hover:text-foreground',
+            // a period picker, not a primary action: selected is neutral, as on Finance (red stays for the page tabs)
+            value === o.key ? 'bg-white/[0.12] text-foreground ring-1 ring-inset ring-white/15' : 'text-muted hover:text-foreground',
           )}
         >
           {o.label}
@@ -249,7 +250,8 @@ function MonthCard({ label, icon: Icon, tone, value, delta, beforeLabel, goodWhe
         </span>
         <span className="min-w-0 truncate text-[13px] font-medium text-muted">{label}</span>
       </div>
-      <div className="mt-2 break-words text-xl font-bold leading-tight tabular-nums text-foreground sm:text-2xl">{value}</div>
+      {/* One line always: at six to a row (xl) the full-size figure broke as "TSh 3,020,50 / 0". */}
+      <div className="mt-2 whitespace-nowrap text-xl font-bold leading-tight tabular-nums text-foreground sm:text-2xl xl:text-lg 2xl:text-2xl">{value}</div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
         <Delta pct={delta} goodWhenDown={goodWhenDown} />
         <span className="text-[11px] text-faint">{note || `last month ${beforeLabel}`}</span>
@@ -327,7 +329,7 @@ function Analysis({ a, navigate }) {
               <TrendChart data={trend} height={240} series={[
                 { key: 'revenue', name: 'Revenue', color: '#38bdf8' },
                 { key: 'cost', name: 'Cost of boxes', color: '#f43f5e' },
-                { key: 'profit', name: 'What was left', color: RED },
+                { key: 'profit', name: 'What was left', color: '#34d399' },
               ]} />
             ) : (
               <p className="px-3 py-10 text-center text-sm text-muted">Nothing sold in the last twelve months yet.</p>
@@ -728,7 +730,7 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-            <div className="mt-2.5 grid gap-x-5 gap-y-1.5 sm:grid-cols-2">
+            <div className="mt-2.5 grid gap-x-5 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               {heroAccounts.map((a) => {
                 const share = totalFunds > 0 ? Math.round((a.balance / totalFunds) * 100) : 0;
                 return (
@@ -795,17 +797,17 @@ export default function Dashboard() {
           </>
         );
       })()}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard compact label="Revenue" value={formatCurrency(today.revenue)} icon={TrendingUp} tone="emerald" />
-        <StatCard compact label="Gross profit" value={formatCurrency(today.grossProfit)} icon={Wallet} tone="brand" onClick={() => navigate('/finance?tab=profit')} />
-        <StatCard compact label="Expenses" value={formatCurrency(today.expenses)} icon={Receipt} tone="rose" onClick={() => navigate('/finance?tab=expenses')} />
+      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatCard compact label="Revenue" value={formatCurrency(today.revenue)} icon={TrendingUp} tone="sky" />
+        <StatCard compact label="Gross profit" value={formatCurrency(today.grossProfit)} icon={Wallet} tone="emerald" onClick={() => navigate('/finance?tab=profit')} />
+        <StatCard compact label="Expenses" value={formatCurrency(today.expenses)} icon={Receipt} tone="amber" onClick={() => navigate('/finance?tab=expenses')} />
         <StatCard compact label="Net profit" value={formatCurrency(today.netProfit)} icon={Scale} tone={today.netProfit >= 0 ? 'violet' : 'rose'} />
         <StatCard
           compact
           label="Boxes sold"
           value={formatNumber((charts?.daily || []).slice(-1)[0]?.boxes || 0)}
           icon={Boxes}
-          tone="sky"
+          tone="brand"
           hint="settled today"
         />
         <StatCard compact label="Cash flow" value={formatCurrency(today.netCash)} icon={today.netCash >= 0 ? ArrowDownLeft : ArrowUpRight} tone={today.netCash >= 0 ? 'emerald' : 'rose'} hint={`in ${formatCurrency(today.moneyIn)} · out ${formatCurrency(today.moneyOut)}`} onClick={() => navigate('/finance?tab=cashflow')} />
@@ -836,7 +838,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.06] sm:grid-cols-3">
+        <div className="glass-list grid grid-cols-1 divide-y divide-white/[0.06] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {(() => {
             const margin = shown.revenue > 0 ? (shown.grossProfit / shown.revenue) * 100 : null;
             const cells = [
@@ -856,7 +858,7 @@ export default function Dashboard() {
               },
             ];
             return cells.map((c) => (
-              <div key={c.label} className="flex items-baseline justify-between gap-3 bg-surface px-4 py-2.5">
+              <div key={c.label} className="flex items-baseline justify-between gap-3 px-4 py-2.5">
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">{c.label}</p>
                   <p className="truncate text-[11px] text-faint">{c.sub}</p>
@@ -960,7 +962,7 @@ export default function Dashboard() {
           was good. These give the totals a shape: where the money has been
           going, and which region, rep and product carry it. */}
       {charts && (
-        <div className="mb-6 space-y-4">
+        <div className="mb-6 mt-8 space-y-4">
           <div><h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Trend</h2><p className="text-xs text-faint">Where the money has been going, and who is bringing it in.</p></div>
 
           <Card>
@@ -970,7 +972,7 @@ export default function Dashboard() {
                 data={charts.daily}
                 height={240}
                 series={[
-                  { key: 'revenue', name: 'Revenue', color: RED },
+                  { key: 'revenue', name: 'Revenue', color: '#38bdf8' },
                   { key: 'profit', name: 'Gross profit', color: '#34d399' },
                 ]}
               />
@@ -1001,7 +1003,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-2.5">
                           <span className={clsx(
                             'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                            i === 0 ? 'bg-brand-500 text-black' : 'bg-elevated text-muted',
+                            i === 0 ? 'bg-amber-400 text-black' : 'bg-elevated text-muted',
                           )}>
                             {i + 1}
                           </span>
@@ -1009,7 +1011,7 @@ export default function Dashboard() {
                           <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatCurrency(r.value)}</span>
                         </div>
                         <div className="mt-1 ml-7 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-                          <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400"
+                          <div className="h-full rounded-full bg-sky-400/80"
                             style={{ width: `${Math.max(4, (r.value / top) * 100)}%` }} />
                         </div>
                         {r.region && <p className="ml-7 mt-0.5 text-[11px] text-faint">{r.region}</p>}
@@ -1025,7 +1027,7 @@ export default function Dashboard() {
             <Card>
               <CardHeader title="Top products" subtitle="Revenue this month" />
               {charts.topProducts?.length ? (
-                <div className="px-2 pb-2"><BarChartCard data={charts.topProducts} height={230} color="#f59e0b" /></div>
+                <div className="px-2 pb-2"><BarChartCard data={charts.topProducts} height={300} color="#f59e0b" /></div>
               ) : (
                 <p className="px-5 pb-5 text-sm text-faint">Nothing sold this month.</p>
               )}
@@ -1044,7 +1046,7 @@ export default function Dashboard() {
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-2">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Brand performance</h2>
-              <span className="rounded-full bg-brand-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-600">
+              <span className="rounded-full bg-sky-500/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-300">
                 {shown.when}
               </span>
             </div>
@@ -1065,7 +1067,7 @@ export default function Dashboard() {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${t.badge}`}>{b.name}</span>
                     <span className="ml-auto text-[11px] font-medium text-faint">{shown.label}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-3">
                     <Mini label="Revenue" value={formatCurrency(b[`revenue${shown.suffix}`])} sub={`${formatNumber(b[`boxesSold${shown.suffix}`])} boxes sold`} />
                     <Mini label="Gross profit" value={formatCurrency(b[`grossProfit${shown.suffix}`])} sub={`${b[`margin${shown.suffix}`]}% margin`} />
                     <Mini label="Inventory value" value={formatCurrency(b.inventoryValue)} />

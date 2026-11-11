@@ -17,7 +17,7 @@ const TONE = {
   DAILY: 'bg-amber-500/15 text-amber-300',
   WEEKLY: 'bg-emerald-500/15 text-emerald-300',
   MONTHLY: 'bg-violet-500/15 text-violet-300',
-  YEARLY: 'bg-brand-500/20 text-brand-300',
+  YEARLY: 'bg-sky-500/15 text-sky-300',
 };
 const NAME = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly', YEARLY: 'Yearly' };
 
@@ -67,7 +67,7 @@ export default function ReportsArchive() {
   return (
     <section>
       <div className="mb-4">
-        <h2 className="text-xl font-bold tracking-tight text-foreground">Business reports</h2>
+        <h2 className="text-lg font-bold text-foreground sm:text-2xl">Business reports</h2>
         <p className="mt-1 text-sm text-muted">Every report sent to your WhatsApp, kept exactly as it was sent.</p>
       </div>
 
@@ -76,7 +76,7 @@ export default function ReportsArchive() {
         {KINDS.map(([k, label]) => (
           <button key={k || 'all'} type="button" onClick={() => setType(k)} aria-pressed={type === k}
             className={`rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 transition ${type === k
-              ? 'bg-brand-500 text-white ring-brand-500'
+              ? 'bg-white/[0.12] text-foreground ring-white/20'
               : 'text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
             {label}
           </button>
@@ -85,7 +85,7 @@ export default function ReportsArchive() {
           <option value="">All years</option>
           {years.map((y) => <option key={y} value={y}>{y}</option>)}
         </Select>
-        <Input placeholder="Search (W45, 2026-10, 2026-11-10)" value={search} onChange={(e) => setSearch(e.target.value)} className="w-56" aria-label="Search reports" />
+        <Input placeholder="Search (W45, 2026-10, 2026-11-10)" value={search} onChange={(e) => setSearch(e.target.value)} className="w-72 max-w-full" aria-label="Search reports" />
       </div>
 
       {isLoading ? (
@@ -122,7 +122,7 @@ export default function ReportsArchive() {
                           )}
                         </div>
                         <a href={r.link} target="_blank" rel="noreferrer" aria-label={`Open ${period(r)}`}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-brand-500/90 px-3 py-1 text-xs font-semibold text-white transition hover:bg-brand-500">
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/[0.07] px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-inset ring-white/15 transition hover:bg-white/[0.12]">
                           <ExternalLink className="h-3.5 w-3.5" /> Open
                         </a>
                         <button type="button" onClick={() => download(r)} aria-label={`Download ${period(r)}`} title="Download"

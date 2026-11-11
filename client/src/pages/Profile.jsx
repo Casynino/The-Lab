@@ -357,7 +357,8 @@ function WaitingCard({ icon: Icon, label, value, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="premium-card premium-card--sm p-4 text-left transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+      data-tone={waiting ? 'brand' : undefined}
+      className="stat-glass p-4 text-left transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
     >
       <span
         className={`flex h-8 w-8 items-center justify-center rounded-full ring-1 ring-inset ${waiting ? 'bg-brand-500/15 text-brand-500 ring-brand-500/30' : 'bg-white/[0.06] text-white/40 ring-white/10'}`}
@@ -416,7 +417,7 @@ function BrandsThisMonth({ brands }) {
       <SectionTitle>Your brands this month</SectionTitle>
       <div className="grid gap-3 sm:grid-cols-2">
         {brands.map((b) => (
-          <div key={b.brandId} className="premium-card premium-card--sm p-4">
+          <div key={b.brandId} className="stat-glass p-4">
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${BRAND_DOT[String(b.name).toUpperCase()] || 'bg-white/50'}`} aria-hidden="true" />
               <p className="text-sm font-semibold text-white">{b.name}</p>
