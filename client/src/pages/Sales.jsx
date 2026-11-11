@@ -455,30 +455,74 @@ function SalesList() {
           ))}
         </div>
 
-        {/* Said in a sentence, because four numbers still need a story. */}
+        {/* The four numbers as one sum, written out — not a card (Nino, 11 Nov 2026: "make it nice and well
+            explained, more clear"): what came in, minus what the stock cost, is what the business kept. */}
         {sum && (sum.sales > 0 || sum.cancelled > 0) && (
-          <p className="text-xs leading-relaxed text-muted">
+          <div className="border-l-2 border-white/[0.12] pl-4">
             {sum.sales > 0 ? (
               <>
-                <b className="text-foreground">{formatNumber(sum.sales)}</b> {saleWord(sum.sales)} {period} brought in{' '}
-                <b className="text-foreground">{formatCurrency(sum.revenue)}</b> for{' '}
-                <b className="text-foreground">{formatNumber(sum.boxes)}</b> box{sum.boxes === 1 ? '' : 'es'}. The stock in them cost{' '}
-                <b className="text-foreground">{formatCurrency(sum.cost)}</b>, so the business kept{' '}
-                <b className={sum.profit > 0 ? 'text-emerald-400' : sum.profit < 0 ? 'text-rose-400' : 'text-foreground'}>{formatCurrency(sum.profit)}</b>
-                {' '}— {formatPercent(sum.margin)} of what it took.
+                <p className="text-[12.5px] text-muted">
+                  <b className="font-semibold text-foreground">{formatNumber(sum.sales)}</b> {saleWord(sum.sales)}
+                  {' · '}<b className="font-semibold text-foreground">{formatNumber(sum.boxes)}</b> box{sum.boxes === 1 ? '' : 'es'}
+                  {period ? ` · ${period}` : ''}
+                </p>
+                {/* Phone: the sum as three lined-up lines, so a sign never lands alone at the start of a line. */}
+                <dl className="mt-2 space-y-1 text-[13px] sm:hidden">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-muted">Brought in</dt>
+                    <dd className="whitespace-nowrap font-bold tabular-nums text-sky-300">{formatCurrency(sum.revenue)}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <dt className="text-muted"><span className="mr-1 text-white/40">−</span>The stock cost</dt>
+                    <dd className="whitespace-nowrap font-bold tabular-nums text-foreground">{formatCurrency(sum.cost)}</dd>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.08] pt-1">
+                    <dt className="text-muted"><span className="mr-1 text-white/40">=</span>The business kept <span className="text-[11px]">· {formatPercent(sum.margin)}</span></dt>
+                    <dd className={`whitespace-nowrap text-[15px] font-bold tabular-nums ${sum.profit > 0 ? 'text-emerald-300' : sum.profit < 0 ? 'text-rose-300' : 'text-foreground'}`}>{formatCurrency(sum.profit)}</dd>
+                  </div>
+                </dl>
+                <div className="mt-2 hidden flex-wrap items-end gap-x-6 gap-y-2 sm:flex">
+                  <div>
+                    <p className="text-[11px] text-muted">Brought in</p>
+                    <p className="whitespace-nowrap text-lg font-bold leading-tight tabular-nums text-sky-300">{formatCurrency(sum.revenue)}</p>
+                  </div>
+                  <span className="pb-0.5 text-lg font-light text-white/30" aria-label="minus">−</span>
+                  <div>
+                    <p className="text-[11px] text-muted">The stock cost</p>
+                    <p className="whitespace-nowrap text-lg font-bold leading-tight tabular-nums text-foreground">{formatCurrency(sum.cost)}</p>
+                  </div>
+                  <span className="pb-0.5 text-lg font-light text-white/30" aria-label="equals">=</span>
+                  <div>
+                    <p className="text-[11px] text-muted">The business kept</p>
+                    <p className={`whitespace-nowrap text-lg font-bold leading-tight tabular-nums ${sum.profit > 0 ? 'text-emerald-300' : sum.profit < 0 ? 'text-rose-300' : 'text-foreground'}`}>
+                      {formatCurrency(sum.profit)}
+                      <span className="ml-2 text-xs font-medium text-muted">{formatPercent(sum.margin)} of what it took</span>
+                    </p>
+                  </div>
+                </div>
               </>
             ) : (
-              <>Nothing was earned {period || 'yet'}.</>
+              <p className="text-[12.5px] text-muted">Nothing was earned {period || 'yet'}.</p>
             )}
-            {sum.owed > 0 && (
-              <> <b className="text-amber-400">{formatCurrency(sum.owed)}</b> of that is still to be collected, on{' '}
-                <b className="text-foreground">{formatNumber(sum.unpaid)}</b> {saleWord(sum.unpaid)}.</>
+            {(sum.owed > 0 || sum.cancelled > 0) && (
+              <div className="mt-2 space-y-0.5 text-[12px] text-muted">
+                {sum.owed > 0 && (
+                  <p>
+                    <span className="mr-1.5 inline-block h-1.5 w-1.5 -translate-y-px rounded-full bg-amber-400 align-middle" />
+                    <b className="font-semibold text-amber-300">{formatCurrency(sum.owed)}</b> of it is still to be collected, on{' '}
+                    <b className="font-semibold text-foreground">{formatNumber(sum.unpaid)}</b> {saleWord(sum.unpaid)}.
+                  </p>
+                )}
+                {sum.cancelled > 0 && (
+                  <p>
+                    <span className="mr-1.5 inline-block h-1.5 w-1.5 -translate-y-px rounded-full bg-white/30 align-middle" />
+                    <b className="font-semibold text-foreground">{formatNumber(sum.cancelled)}</b> cancelled {saleWord(sum.cancelled)}{' '}
+                    {sum.cancelled === 1 ? 'is' : 'are'} greyed out in the list — the boxes went back, and none of this money is theirs.
+                  </p>
+                )}
+              </div>
             )}
-            {sum.cancelled > 0 && (
-              <> <b className="text-foreground">{formatNumber(sum.cancelled)}</b> cancelled {saleWord(sum.cancelled)}{' '}
-                {sum.cancelled === 1 ? 'is' : 'are'} listed below, greyed out — the boxes went back and none of the money above is theirs.</>
-            )}
-          </p>
+          </div>
         )}
 
         <Card>

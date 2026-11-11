@@ -135,8 +135,8 @@ const owner = {
     bold('COMMISSION READY'),
     `Rep: ${rep}`,
     lines(
+      // No "Earned" line (Nino, 11 Nov 2026): the all-time total read as money the rep has today.
       `Available: ${money(available)}`,
-      `Earned: ${money(earned)}`,
       Number(penalties) > 0 && `Penalties: ${money(penalties)}`,
       `Minimum Withdrawal: ${money(minimum)}`,
     ),

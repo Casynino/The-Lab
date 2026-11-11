@@ -1,5 +1,5 @@
 import { LIVE } from '@/lib/polling';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
@@ -178,15 +178,29 @@ function ReturnModal({ onClose }) {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState({});
 
+  // Rep → ZELab picked by staff works like the rep's own screen (Nino, 11 Nov 2026: "when I pick a rep it should
+  // show what he has, and I just return it from the active orders"): the list is what THAT rep still holds on his
+  // open orders, each capped at what he holds. The warehouse is the primary one unless changed.
+  const scoped = isRep || (type === 'SALES_RETURN' && !!salesRepId);
+  useEffect(() => { setCart({}); }, [type, salesRepId]); // another rep's boxes are not this rep's
+  useEffect(() => {
+    if (type === 'SALES_RETURN' && !warehouseId) {
+      const home = warehouses.find((w) => w.isPrimary && w.isActive !== false) || (warehouses.length === 1 ? warehouses[0] : null);
+      if (home) setWarehouseId(home.id);
+    }
+  }, [type, warehouses, warehouseId]);
+
   // A rep can only give back boxes still on his open orders. Read them as the order's own Return screen
   // does — what is left, less boxes locked in a pending return or waiting in a settlement — added up over
   // every open order. The server matches the boxes to the orders oldest-first and checks again.
   const { data: openOrders = [], isLoading: loadingOrders, isError: ordersFailed } = useQuery({
-    queryKey: ['settlements', 'return-availability'],
-    enabled: isRep,
+    queryKey: ['settlements', 'return-availability', isRep ? 'me' : salesRepId],
+    enabled: scoped,
     staleTime: 0, // read fresh each time the box opens
     queryFn: async () => {
-      const rows = unwrap(await api.get('/settlements', { params: { open: true, limit: 100 } })).data || [];
+      // The server scopes a rep to his own orders; staff ask for the chosen rep's.
+      const params = isRep ? { open: true, limit: 100 } : { open: true, limit: 100, salesRepId };
+      const rows = unwrap(await api.get('/settlements', { params })).data || [];
       return Promise.all(rows.map(async (s) => unwrap(await api.get(`/settlements/${s.id}`)).data));
     },
   });
@@ -207,7 +221,7 @@ function ReturnModal({ onClose }) {
     }
     return { available: avail, fines: [...rates].sort((a, b) => a - b) };
   }, [openOrders]);
-  const maxFor = (id) => (isRep ? available.get(id) || 0 : Infinity);
+  const maxFor = (id) => (scoped ? available.get(id) || 0 : Infinity);
 
   function setQty(productId, qty) {
     const capped = Math.min(qty, maxFor(productId));
@@ -221,10 +235,10 @@ function ReturnModal({ onClose }) {
 
   const filtered = useMemo(() => {
     // Reps see only what they hold on an open order; staff pick from the whole catalogue.
-    const pool = isRep ? products.filter((p) => (available.get(p.id) || 0) > 0) : products;
+    const pool = scoped ? products.filter((p) => (available.get(p.id) || 0) > 0) : products;
     const q = search.trim().toLowerCase();
     return q ? pool.filter((p) => p.name.toLowerCase().includes(q)) : pool;
-  }, [products, search, isRep, available]);
+  }, [products, search, scoped, available]);
 
   const fineText = fines.length === 0
     ? 'a delay fine'
@@ -343,14 +357,17 @@ function ReturnModal({ onClose }) {
 
         {/* Product list */}
         <div className="-mx-1 max-h-56 divide-y divide-border overflow-y-auto">
-          {isRep && loadingOrders && <p className="py-4 text-center text-sm text-muted">Loading your open orders…</p>}
-          {isRep && !loadingOrders && ordersFailed && (
-            <p className="py-4 text-center text-sm text-rose-400">Could not load your open orders. Close and try again.</p>
+          {!isRep && type === 'SALES_RETURN' && !salesRepId && (
+            <p className="py-4 text-center text-sm text-muted">Pick the rep — his boxes on open orders show here.</p>
           )}
-          {isRep && !loadingOrders && !ordersFailed && available.size === 0 && (
-            <p className="py-4 text-center text-sm text-muted">No boxes left to return on your open orders.</p>
+          {scoped && loadingOrders && <p className="py-4 text-center text-sm text-muted">Loading {isRep ? 'your' : 'his'} open orders…</p>}
+          {scoped && !loadingOrders && ordersFailed && (
+            <p className="py-4 text-center text-sm text-rose-400">Could not load {isRep ? 'your' : 'his'} open orders. Close and try again.</p>
           )}
-          {filtered.map((product) => {
+          {scoped && !loadingOrders && !ordersFailed && available.size === 0 && (
+            <p className="py-4 text-center text-sm text-muted">No boxes left to return on {isRep ? 'your' : 'his'} open orders.</p>
+          )}
+          {(isRep || type !== 'SALES_RETURN' || salesRepId) && filtered.map((product) => {
             const qty = cart[product.id] || 0;
             const inCart = qty > 0;
             const max = maxFor(product.id);
@@ -359,10 +376,10 @@ function ReturnModal({ onClose }) {
                 {/* The name has the line to itself and stays on it; the stepper sits under it. */}
                 <div title={product.name} className={`truncate text-sm font-medium ${inCart ? 'text-foreground' : 'text-muted'}`}>{product.name}</div>
                 <div className="mt-1.5 flex items-center justify-end gap-1.5">
-                  {isRep && <span className="mr-auto text-xs text-faint">{formatNumber(max)} available</span>}
+                  {scoped && <span className="mr-auto text-xs text-faint">{formatNumber(max)} {isRep ? 'available' : 'on his open orders'}</span>}
                   <button onClick={() => dec(product.id)} disabled={qty === 0}
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-lg font-bold text-muted transition hover:text-foreground disabled:opacity-30">−</button>
-                  <input type="number" min="0" max={isRep ? max : undefined} value={qty === 0 ? '' : qty}
+                  <input type="number" min="0" max={scoped ? max : undefined} value={qty === 0 ? '' : qty}
                     onChange={(e) => { const v = parseInt(e.target.value, 10); setQty(product.id, isNaN(v) || v < 0 ? 0 : v); }}
                     placeholder="0"
                     className="h-8 w-14 rounded-lg border border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />

@@ -761,7 +761,8 @@ function RepView() {
         canWithdraw={canWithdraw}
         pct={pct}
         stats={[
-          { label: 'Earned', value: formatCurrency(c.earned) },
+          // "all time", so nobody reads it as money in hand today (Nino, 11 Nov 2026).
+          { label: 'Earned all time', value: formatCurrency(c.earned) },
           { label: 'Paid out', value: formatCurrency(c.paid) },
           hasPenalties
             ? { label: 'Fines', value: formatCurrency(c.penalties), tone: 'rose' }
