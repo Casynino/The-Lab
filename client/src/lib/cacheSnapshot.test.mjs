@@ -81,12 +81,19 @@ test('keys and sign-ins are never written to the device', () => {
     { k: ['sales-rep-profile', 'r1', 'all'], d: { rep: { id: 'r1', whatsappApiKey: 'REP-KEY-456' } }, t: NOW },
     // a rep record nested in a list (activity, penalties): the field goes, the row stays
     { k: ['penalties', 'all'], d: { data: [{ id: 'p1', salesRep: { id: 'r1', code: 'REP-001', whatsappApiKey: 'REP-KEY-789' } }] }, t: NOW },
+    // the audit log copies a saved setting's value (the owner's key) into newValues: never kept
+    { k: ['audit-logs', { page: 1, search: '' }], d: { data: [{ entityId: 'whatsapp.apikey', newValues: { value: 'OWNER-KEY-AUDIT' } }] }, t: NOW },
+    // every WhatsApp message row names its rep's key: never kept
+    { k: ['whatsapp-history'], d: [{ id: 'w1', toPhone: '255700000000', toApiKey: 'REP-KEY-OUTBOX' }], t: NOW },
+    // a key field under any other name ending in ApiKey goes too
+    { k: ['activity'], d: [{ id: 'a1', extra: { toApiKey: 'REP-KEY-NESTED', api_key: 'K-SNAKE' } }], t: NOW - 1 },
   ];
   const text = stored({ entries: secretEntries, user: { ...OWNER, accessToken: 'tok' } });
-  for (const secret of ['OWNER-KEY-123', 'REP-KEY-456', 'REP-KEY-789', 'whatsappApiKey', 'accessToken']) {
+  for (const secret of ['OWNER-KEY-123', 'REP-KEY-456', 'REP-KEY-789', 'OWNER-KEY-AUDIT', 'REP-KEY-OUTBOX', 'REP-KEY-NESTED', 'K-SNAKE', 'whatsappApiKey', 'toApiKey', 'accessToken']) {
     assert.ok(!text.includes(secret), secret);
   }
   const back = readSnapshot(text, { build: BUILD, token: tokenFor(OWNER.id, 'ADMIN'), now: NOW });
-  assert.deepEqual(back.entries.map((e) => e.k[0]), ['penalties']);
+  assert.deepEqual(back.entries.map((e) => e.k[0]), ['penalties', 'activity']);
   assert.deepEqual(back.entries[0].d.data[0].salesRep, { id: 'r1', code: 'REP-001' });
+  assert.deepEqual(back.entries[1].d, [{ id: 'a1', extra: {} }]);
 });

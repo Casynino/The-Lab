@@ -38,8 +38,13 @@ export const ONE_MAX_CHARS = 400_000;
 // there, so it cannot simply be blanked): those answers are asked again
 // instead. Anywhere else a key or a sign-in can ride along inside an answer
 // (a rep record nested in a list), the field itself is left out.
-const NEVER_KEEP = new Set(['settings', 'sales-rep-profile']);
-const SECRET_FIELD = /^(whatsappApiKey|apiKey|apikey|passwordHash|password|accessToken|refreshToken)$/;
+//
+// Also never: the audit log (each row copies a record's old and new values, so
+// saving the owner's CallMeBot key leaves it there as a plain `value`) and the
+// WhatsApp history (each message row names its rep's key, `toApiKey`).
+const NEVER_KEEP = new Set(['settings', 'sales-rep-profile', 'audit-logs', 'whatsapp-history']);
+// Any field named like a key (whatsappApiKey, apiKey, toApiKey …) or a sign-in.
+const SECRET_FIELD = /api_?key$|^(passwordHash|password|accessToken|refreshToken)$/i;
 const noSecrets = (k, v) => (SECRET_FIELD.test(k) ? undefined : v);
 
 /** The claims inside a stored sign-in (a JWT), or null. Read only to choose; the server still decides. */
