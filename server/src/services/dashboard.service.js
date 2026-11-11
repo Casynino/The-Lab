@@ -192,13 +192,15 @@ async function overview() {
 
 // Per-brand split (OHIS vs CIVILLY): stock on hand + this month's/today's sales.
 // Everything is grouped by the product's brand, so no brand is ever mixed.
-async function brandBreakdown() {
+// `valuationPromise` (optional): the command center passes the stock valuation it is already reading, so
+// one dashboard load values the stock once instead of three times. Read-only either way.
+async function brandBreakdown(valuationPromise = null) {
   const month = await epochRange('month');
   const today = await epochRange('today');
   const [brands, products, val, monthItems, todayItems] = await Promise.all([
     prisma.brand.findMany({ where: { isActive: true }, select: { id: true, name: true } }),
     prisma.product.findMany({ select: { id: true, brandId: true, purchasePrice: true } }),
-    inventory.valuation(prisma),
+    valuationPromise || inventory.valuation(prisma),
     prisma.saleItem.groupBy({ by: ['productId'], where: { sale: { status: { not: 'CANCELLED' }, soldAt: { gte: month.start, lte: month.end } } }, _sum: { lineTotal: true, baseQuantity: true } }),
     prisma.saleItem.groupBy({ by: ['productId'], where: { sale: { status: { not: 'CANCELLED' }, soldAt: { gte: today.start, lte: today.end } } }, _sum: { lineTotal: true } }),
   ]);
@@ -596,20 +598,27 @@ async function command() {
     topProductsByRevenue(monthR).catch(() => []),
   ]).then(([daily, byRegion, byRep, topProducts]) => ({ daily, byRegion, byRep, topProducts }));
 
+  // Three heavy reads this page needs that finance.overview('today') and brandBreakdown() also make.
+  // Each is started once here and handed to them, instead of being worked out two or three times over
+  // in the same request. Same functions, same arguments, read-only; nothing is kept after the request.
+  const valP = inventory.valuation(prisma);
+  const commAllP = commission.summaryAllReps();
+  const supplierRowsP = finance.supplierSummaries();
+
   const [fin, profMonth, periods, bd, stl, low, val, repsRows, repBal, commAll, supplierRows, products, pendCounts, pendingWithdrawals, salesTodayRows, salesMonthRows, activeStl, retTodayAgg, retSubmittedToday, retSubmittedTodayBoxes] = await Promise.all([
-    finance.overview('today'),
+    finance.overview('today', { valuation: valP, commSummary: commAllP, supplierSummaries: supplierRowsP }),
     reports.profitOverview('month'),
     // Today, this week and this month in one read, so every brand card can be
     // switched between them without another trip.
     reports.profitByPeriods(['today', 'week', 'month']).catch(() => null),
-    brandBreakdown(),
+    brandBreakdown(valP),
     settlement.summary(),
     reorderSvc.lowStock(),
-    inventory.valuation(prisma),
+    valP,
     prisma.salesRepresentative.findMany({ where: { isActive: true }, include: { user: { select: { name: true } } } }),
     inventory.repBalances(prisma),
-    commission.summaryAllReps(),
-    finance.supplierSummaries(),
+    commAllP,
+    supplierRowsP,
     prisma.product.findMany({ where: { isActive: true }, select: { id: true, brandId: true } }),
     prisma.$transaction([
       prisma.stockRequest.count({ where: { status: 'PENDING' } }),
