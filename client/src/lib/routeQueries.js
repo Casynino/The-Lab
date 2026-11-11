@@ -54,7 +54,7 @@ export function routeQueries(pathname, search, role) {
       if (rep) return [['commissionsInsights'], ['commissionsMine'], ['withdrawalsMine'], ['bonusMe']];
       // A rep card names its rep (?rep=id, never opened as an address): what his side sheet asks for.
       const card = params.get('rep');
-      if (card) return [['repProfile', { id: card, period: 'all' }], ['repSheetWithdrawals', card], ['repFines', card]];
+      if (card) return [['repSheetProfile', card], ['repSheetWithdrawals', card], ['repFines', card]];
       return [...COMMISSIONS_STAFF];
     }
     case '/daily-reports':
@@ -95,6 +95,7 @@ export function routeQueries(pathname, search, role) {
         expenses: [['brandsAll'], ['financeTransactions', { ...ledger, expensesOnly: true }]],
         ledger: [['brandsAll'], ['financeTransactions', ledger]],
         commissions: [...COMMISSIONS_STAFF],
+        archive: [['reportArchive']],
       };
       return root.concat(inside[tab] || []);
     }

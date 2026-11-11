@@ -758,9 +758,12 @@ export default function Layout() {
     };
     const ahead = (url) => prefetchRoute(qc, url.pathname, url.search, role);
     // A mouse passing over the menu on its way somewhere is not a choice; resting on a link is.
+    // A grid of heavy reads (Commissions' rep cards, a whole rep each) opts out of the hover with
+    // data-prefetch-hover="off" and reads ahead only on a press, touch or the keyboard.
     const onOver = (e) => {
       if (e.pointerType && e.pointerType !== 'mouse') return;
       window.clearTimeout(rest);
+      if (e.target instanceof Element && e.target.closest('[data-prefetch-hover="off"]')) return;
       const url = linkOf(e);
       if (url) rest = window.setTimeout(() => ahead(url), 60);
     };

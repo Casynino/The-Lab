@@ -1752,7 +1752,7 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
 
   if (phone) {
     return (
-      <button type="button" onClick={onOpen} aria-haspopup="dialog" data-prefetch={sheetAhead(i)} className={clsx('flex w-full items-center gap-3 px-3.5 py-2 text-left transition active:bg-white/[0.05]', focus)}>
+      <button type="button" onClick={onOpen} aria-haspopup="dialog" data-prefetch={sheetAhead(i)} data-prefetch-hover="off" className={clsx('flex w-full items-center gap-3 px-3.5 py-2 text-left transition active:bg-white/[0.05]', focus)}>
         <Avatar name={i.name} className="h-8 w-8 text-[13px]" />
         <span className="min-w-0 flex-1">
           <span className="flex items-center justify-between gap-3">
@@ -1777,6 +1777,7 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
       onClick={onOpen}
       aria-haspopup="dialog"
       data-prefetch={sheetAhead(i)}
+      data-prefetch-hover="off"
       className={clsx('stat-glass group flex h-full w-full flex-col px-3.5 py-3 text-left transition hover:brightness-[1.15] active:scale-[0.99]', focus)}
     >
       <span className="flex w-full items-center gap-2.5">
@@ -1966,7 +1967,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
 
   // Staff and the owner may both read these (the profile is staff-only, payouts and fines are open to any
   // signed-in user and scoped by the server). Same key as the rep's profile page, so opening it is instant.
-  // The card's data-prefetch starts all three on a hover or touch (lib/routeQueries.js).
+  // The card's data-prefetch starts all three on a press or touch, not a hover (lib/routeQueries.js).
   const profileQ = useQuery({
     ...pageQueries.repProfile({ id, period: 'all' }),
     staleTime: 60_000,

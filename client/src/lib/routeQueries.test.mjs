@@ -18,8 +18,8 @@ test('each person is sent ahead to what their own page asks for', () => {
 });
 
 test('a rep card on Commissions reads ahead its own side sheet, for staff only', () => {
-  assert.deepEqual(routeQueries('/commissions', '?rep=cm9', 'ADMIN'), [['repProfile', { id: 'cm9', period: 'all' }], ['repSheetWithdrawals', 'cm9'], ['repFines', 'cm9']]);
-  assert.deepEqual(names(routeQueries('/commissions', '?rep=cm9', 'WAREHOUSE_STAFF')), ['repProfile', 'repSheetWithdrawals', 'repFines']);
+  assert.deepEqual(routeQueries('/commissions', '?rep=cm9', 'ADMIN'), [['repSheetProfile', 'cm9'], ['repSheetWithdrawals', 'cm9'], ['repFines', 'cm9']]);
+  assert.deepEqual(names(routeQueries('/commissions', '?rep=cm9', 'WAREHOUSE_STAFF')), ['repSheetProfile', 'repSheetWithdrawals', 'repFines']);
   // A rep asking for someone else's sheet is sent to his own wallet's answers, never another rep's.
   assert.deepEqual(names(routeQueries('/commissions', '?rep=cm9', 'SALES_REP')), ['commissionsInsights', 'commissionsMine', 'withdrawalsMine', 'bonusMe']);
 });
@@ -46,7 +46,7 @@ test('the address decides the tab and the chip, as the page does', () => {
   // Expenses and the ledger are two different lists (the expenses one is genuine expenses only).
   assert.equal(routeQueries('/finance', '?tab=expenses', 'ADMIN')[3][1].expensesOnly, true);
   assert.equal(routeQueries('/finance', '?tab=ledger', 'ADMIN')[3][1].expensesOnly, undefined);
-  assert.deepEqual(names(routeQueries('/finance', '?tab=archive', 'ADMIN')), ['financeAccounts', 'financeCategories']);
+  assert.deepEqual(names(routeQueries('/finance', '?tab=archive', 'ADMIN')), ['financeAccounts', 'financeCategories', 'reportArchive']);
   assert.deepEqual(routeQueries('/sales', '?tab=invoice', 'ADMIN'), []);
   assert.deepEqual(routeQueries('/inventory', '?tab=purchases', 'ADMIN'), []);
   assert.deepEqual(routeQueries('/products', '?tab=label', 'ADMIN'), []);

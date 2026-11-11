@@ -4,8 +4,8 @@
   Each page reads with these builders, and the app reads ahead with the same
   ones (on a link's touch or hover, and once after Home has drawn — see
   lib/routeQueries.js), so the key a page asks for and the key read ahead can
-  never drift apart. Each builder returns { queryKey, queryFn } only; the page
-  adds its own polling and options.
+  never drift apart. Each builder returns { queryKey, queryFn } (plus retry
+  for the side sheet's own reads); the page adds its own polling and options.
 */
 import api, { unwrap } from '@/lib/api';
 import { routeQueries, shellQueries, warmPaths } from '@/lib/routeQueries';
@@ -115,12 +115,26 @@ export const pageQueries = {
   }),
   repWithdrawals: (id) => ({ queryKey: ['commissions', 'withdrawals', 'rep', id], queryFn: listOf('/commissions/withdrawals', { salesRepId: id, limit: 6 }) }),
   // The rep's view on Commissions (a side sheet) lists every payout, so it keeps its own key, never
-  // the profile page's latest 6 above; and the fines still charged.
-  repSheetWithdrawals: (id) => ({ queryKey: ['commissions', 'withdrawals', 'rep', id, 'sheet'], queryFn: listOf('/commissions/withdrawals', { salesRepId: id, limit: 200 }) }),
-  repFines: (id) => ({ queryKey: ['penalties', 'rep', id, 'APPLIED'], queryFn: listOf('/penalties', { salesRepId: id, status: 'APPLIED', limit: 50 }) }),
+  // the profile page's latest 6 above; and the fines still charged. The sheet shows a failure at once
+  // (no retry), so a read-ahead started by pressing a card does not retry either. The profile is the
+  // profile page's own answer (same key), read the sheet's way.
+  repSheetProfile: (id) => ({ ...pageQueries.repProfile({ id, period: 'all' }), retry: false }),
+  repSheetWithdrawals: (id) => ({ queryKey: ['commissions', 'withdrawals', 'rep', id, 'sheet'], queryFn: listOf('/commissions/withdrawals', { salesRepId: id, limit: 200 }), retry: false }),
+  repFines: (id) => ({ queryKey: ['penalties', 'rep', id, 'APPLIED'], queryFn: listOf('/penalties', { salesRepId: id, status: 'APPLIED', limit: 50 }), retry: false }),
   customers: ({ page, search }) => ({ queryKey: ['customers', { page, search }], queryFn: listOf('/customers', { page, limit: 15, search }) }),
   notifications: ({ page }) => ({ queryKey: ['notifications', { page }], queryFn: listOf('/notifications', { page, limit: 20 }) }),
   dailyReports: ({ page }) => ({ queryKey: ['daily-reports', { page }], queryFn: listOf('/daily-reports', { page, limit: 20 }) }),
+  // The saved report PDFs (Finance's Statements tab, the owner's profile), by kind, year and search.
+  reportArchive: ({ type = '', year = '', search = '' } = {}) => ({
+    queryKey: ['report-archive', type, year, search],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (type) params.set('type', type);
+      if (year) params.set('year', year);
+      if (search) params.set('search', search);
+      return unwrap(await api.get(`/finance/report-archive?${params}`)).data;
+    },
+  }),
 };
 
 /**
