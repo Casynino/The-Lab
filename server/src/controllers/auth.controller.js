@@ -14,7 +14,9 @@ async function recordRefusedLogin(req, res, email, err) {
   await auditService.record(req, {
     action: 'LOGIN_FAILED',
     entityType: 'User',
-    newValues: { email: String(email).toLowerCase().trim(), reason: err.message },
+    // A real email is at most 254 characters; the sign-in form accepts a far longer one (the body may be 2 MB),
+    // so only that much is kept and a stranger cannot fill the log with each refused try.
+    newValues: { email: String(email).toLowerCase().trim().slice(0, 254), reason: err.message },
   });
 }
 

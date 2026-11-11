@@ -139,6 +139,15 @@ test('#102 a rep refused by the phone-only rule does not use up the login tries;
   assert.ok(!JSON.stringify(audits).includes('typo'), 'not even a wrong one');
 });
 
+test('#102 a refused sign-in keeps at most 254 characters of the email typed', async () => {
+  audits.length = 0;
+  const long = `${'a'.repeat(5000)}@zelab.test`;
+  await withApp(async (login) => assert.equal((await login(long, 'wrong', COMPUTER)).status, 401));
+  const refused = audits.filter((a) => a.action === 'LOGIN_FAILED');
+  assert.equal(refused.length, 1);
+  assert.equal(refused[0].newValues.email, long.slice(0, 254));
+});
+
 test('#102 wrong passwords still count: the 21st try in 15 minutes is refused as before', async () => {
   audits.length = 0;
   await withApp(async (login) => {
