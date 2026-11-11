@@ -84,6 +84,13 @@ function RecentMessages() {
     queryFn: async () => unwrap(await api.get('/settings/whatsapp/history?limit=25')).data,
     refetchInterval: SLOW,
   });
+  // The newest failed message, asked for on its own: on a busy day it is no longer among the 25 above,
+  // and the button must still show while it can be resent.
+  const { data: lastFailed } = useQuery({
+    queryKey: ['whatsapp-history', 'failed'],
+    queryFn: async () => unwrap(await api.get('/settings/whatsapp/history?status=FAILED&limit=1')).data,
+    refetchInterval: SLOW,
+  });
   // Failed messages go back in the queue (the server only resends the last 48 hours; older news is
   // not sent). Two go out at once, the rest over the next few minutes.
   const retry = useMutation({
@@ -97,7 +104,8 @@ function RecentMessages() {
   });
   const rows = history || [];
   const shown = all ? rows : rows.slice(0, 8);
-  const canRetry = rows.some((r) => r.status === 'FAILED' && dayjs().diff(dayjs(r.createdAt), 'hour', true) < 48);
+  const canRetry = [...rows, ...(lastFailed || [])]
+    .some((r) => r.status === 'FAILED' && dayjs().diff(dayjs(r.createdAt), 'hour', true) < 48);
   return (
     <Card>
       <CardHeader

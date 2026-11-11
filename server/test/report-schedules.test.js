@@ -86,6 +86,26 @@ test('Retry failed puts back only the last 48 hours, the window flush() still se
   assert.equal(r.requeued, 3);
 });
 
+test('Retry failed is offered even when newer messages pushed the failure off the recent list', async () => {
+  const asked = [];
+  stub('../src/config/prisma', { whatsAppNotification: { findMany: async (args) => { asked.push(args); return []; } } });
+  stub('../src/services/audit.service', {});
+  fresh('../src/services/whatsappNotify.service');
+  const ctrl = fresh('../src/controllers/settings.controller');
+  const call = (query) => new Promise((resolve, reject) => {
+    ctrl.whatsappHistory({ query }, { status: () => ({ json: resolve }) }, reject);
+  });
+  await call({ limit: '25' });
+  await call({ status: 'FAILED', limit: '1' });
+  await call({ status: 'SENT', limit: '1' }); // only FAILED is a filter; anything else is the plain list
+  assert.equal(asked[0].where, undefined);
+  assert.equal(asked[0].take, 25);
+  assert.deepEqual(asked[1].where, { status: 'FAILED' });
+  assert.equal(asked[1].take, 1);
+  assert.deepEqual(asked[1].orderBy, { createdAt: 'desc' }); // the newest failure
+  assert.equal(asked[2].where, undefined);
+});
+
 // ── missed reports, sent late by the morning sweep ───────────────────────────
 function loadWeeklyReal() {
   stub('../src/config/prisma', {});

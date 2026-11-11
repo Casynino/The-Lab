@@ -733,8 +733,12 @@ async function retryFailed({ hours = FLUSH_WINDOW_HOURS } = {}) {
   return { requeued: count, ...flushed };
 }
 
-async function history(limit = 30) {
+// `failedOnly`: the newest FAILED rows, whatever came after them. The Settings
+// "Retry failed" button needs to know about a failure even when a busy day has
+// pushed it off the short list of recent messages.
+async function history(limit = 30, { failedOnly = false } = {}) {
   return prisma.whatsAppNotification.findMany({
+    ...(failedOnly ? { where: { status: 'FAILED' } } : {}),
     orderBy: { createdAt: 'desc' },
     take: Math.min(Number(limit) || 30, 100),
   });
