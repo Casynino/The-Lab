@@ -60,7 +60,7 @@ function PasswordField({ label, value, onChange, autoComplete, show, onToggle, e
             : 'input h-10 text-[14px] [&]:pr-10'}
         />
         {onToggle && (
-          <button type="button" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+          <button type="button" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         )}
@@ -389,9 +389,9 @@ function RepsThisMonth({ reps, onOpen }) {
             <span className="w-5 shrink-0 text-[12px] tabular-nums text-white/35">{i + 1}</span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
-              <p className="mt-0.5 truncate text-xs text-muted">
-                {r.code} · {formatNumber(r.boxesHeld)} {r.boxesHeld === 1 ? 'box' : 'boxes'} · {formatNumber(r.activeOrders)} open
-                {r.overdueOrders > 0 && <span className="text-rose-300"> · {formatNumber(r.overdueOrders)} overdue</span>}
+              <p className="mt-0.5 text-xs text-muted">
+                {r.code} · <span className="whitespace-nowrap">{formatNumber(r.boxesHeld)} {r.boxesHeld === 1 ? 'box' : 'boxes'}</span> · <span className="whitespace-nowrap">{formatNumber(r.activeOrders)} open</span>
+                {r.overdueOrders > 0 && <span className="whitespace-nowrap text-rose-300"> · {formatNumber(r.overdueOrders)} overdue</span>}
               </p>
             </div>
             <span className="shrink-0 text-sm font-semibold tabular-nums text-white">{formatCurrency(r.salesMonth)}</span>
@@ -410,13 +410,13 @@ function BrandsThisMonth({ brands }) {
   return (
     <section>
       <SectionTitle>Your brands this month</SectionTitle>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {brands.map((b) => (
           <div key={b.brandId} className="stat-glass p-4">
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${BRAND_DOT[String(b.name).toUpperCase()] || 'bg-white/50'}`} aria-hidden="true" />
-              <p className="text-sm font-semibold text-white">{b.name}</p>
-              {b.marginMonth != null && <span className="ml-auto text-[11px] tabular-nums text-white/50">{Math.round(b.marginMonth)}% margin</span>}
+              <p className="min-w-0 truncate text-sm font-semibold text-white">{b.name}</p>
+              {b.marginMonth != null && <span className="ml-auto shrink-0 whitespace-nowrap text-[11px] tabular-nums text-white/50">{Math.round(b.marginMonth)}% margin</span>}
             </div>
             <p className="mt-3 text-[22px] font-bold leading-tight tabular-nums text-white">{formatCurrency(b.revenueMonth)}</p>
             <p className="mt-0.5 text-[11px] text-white/45">{formatNumber(b.boxesSoldMonth)} {b.boxesSoldMonth === 1 ? 'box' : 'boxes'} sold</p>
@@ -585,7 +585,7 @@ function AdminProfile({ user, sub }) {
           cmdError ? <p className="px-1 text-sm text-muted">The business figures are not available right now.</p> : <PageSpinner />
         ) : (
           <>
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <BusinessCard cmd={cmd} />
               <BusinessDoingCard a={analysis} />
             </div>
@@ -601,7 +601,7 @@ function AdminProfile({ user, sub }) {
             </section>
 
             {/* Wide screens: the reps beside the brands and the accounts; narrower ones: one under the other. */}
-            <div className="grid items-start gap-8 2xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 items-start gap-8 2xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
               <RepsThisMonth reps={cmd.reps} onOpen={(id) => navigate(`/reps/${id}`)} />
               <div className="space-y-8">
                 <BrandsThisMonth brands={cmd.brands} />

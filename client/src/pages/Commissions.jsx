@@ -347,10 +347,10 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
                 {w.notes && <div className="mt-0.5 font-mono text-xs text-amber-300">{w.notes}</div>}
                 <div className="mt-0.5 text-xs text-faint">{formatDateTime(w.requestedAt)}</div>
               </button>
-              <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:justify-end">
-                <Button variant="ghost" className="text-rose-400" disabled={busy}
+              <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:gap-3">
+                <Button variant="ghost" className="text-rose-400 max-sm:min-h-11 max-sm:flex-1" disabled={busy}
                   onClick={() => setRejecting(w)}>Reject</Button>
-                <Button loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
+                <Button className="max-sm:min-h-11 max-sm:flex-1" loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
                   <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
                 </Button>
               </div>
@@ -561,7 +561,7 @@ function FinesHistory({ admin, canForgive = admin }) {
             {!waived && canForgive && (
               <button
                 onClick={() => setForgiving(p)}
-                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
+                className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 sm:min-h-0 sm:px-2.5"
               >
                 <HeartHandshake className="h-3.5 w-3.5" /> Forgive
               </button>
@@ -938,7 +938,7 @@ function SectionTabs({ value, onChange, tabs }) {
             onClick={() => onChange(t.key)}
             className={clsx(
               // 44px tall to hit on a phone, though only the words and the line show.
-              'relative -mb-px flex min-h-[44px] shrink-0 items-center whitespace-nowrap text-[13px] font-medium transition-colors sm:text-sm',
+              'relative -mb-px flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center whitespace-nowrap text-[13px] font-medium transition-colors sm:text-sm',
               on
                 ? 'text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-brand-500'
                 : 'text-muted hover:text-foreground',
@@ -1289,7 +1289,7 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
         <path d="M-10 218 C 120 140, 250 108, 380 156" fill="none" stroke="rgba(255,255,255,.04)" strokeWidth="1" />
       </svg>
       <div className={clsx(wide && 'lg:w-[22rem] lg:shrink-0')}>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
             <p className="text-xs font-medium text-white/60">Available to withdraw</p>
             {/* "Total pending" was earned − paid, which still contained fines the reps will never receive — this
@@ -1302,7 +1302,7 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
             </p>
           </div>
           {overdrawn.length > 0 && (
-            <dl className="shrink-0 pt-0.5 text-right">
+            <dl className="ml-auto shrink-0 pt-0.5 text-right">
               <Fig
                 label="Overdrawn"
                 value={minusCurrency(overdrawnSum)}
@@ -1687,9 +1687,10 @@ function MinNote({ i, request = true }) {
     : <span className="whitespace-nowrap text-[11px] text-muted" title={`To the ${formatCurrency(min)} minimum`}>{formatCurrency(min - avail)} to go</span>;
 }
 
-// The facts line of a card: boxes, fines, then the bonus (this run) or what he earned (all time). It is
-// one line high on every card: a fact that does not fit drops whole to a hidden second line, so a figure
-// is never cut and every card in a row stays the same height. Boxes and fines come first, so they stay.
+// The facts line of a card: boxes, fines, then the bonus (this run) or what he earned (all time). A fact
+// that does not fit moves whole to a second line; none is ever hidden. It used to be one line high with the
+// rest cut off, and on a phone that line was 35-105 px wide, so "−TSh 120,000 fines" and the bonus % were
+// silently gone (audit, 12 Nov 2026). Cards in a row still end level: the grid stretches them.
 function repFacts(i, runView, bonus) {
   const run = i.run || {};
   const fines = runView ? (Number(run.penalties) || 0) : (Number(i.penalties) || 0);
@@ -1723,7 +1724,7 @@ const Avatar = ({ name, className }) => (
 const sheetAhead = (i) => `/commissions?rep=${encodeURIComponent(i.salesRepId)}`;
 
 function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) {
-  const { avail, min, show, ready, pct } = minState(i);
+  const { offCommission, avail, min, show, ready, pct } = minState(i);
   const ownMin = show && usualMin != null && min !== usualMin;
   const requested = Number(i.pendingRequests) || 0;
   const facts = repFacts(i, runView, bonus);
@@ -1745,10 +1746,11 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
     </span>
   );
   const factLine = (
-    <span className="flex h-[15px] min-w-0 flex-1 flex-wrap gap-x-3 overflow-hidden text-[11px] leading-[15px] text-muted">
+    <span className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-0.5 text-[11px] leading-[15px] text-muted">
       {facts.map((f) => <span key={f.key} className="whitespace-nowrap">{f}</span>)}
     </span>
   );
+  const hasOnTime = Boolean(onTime && onTime.decided > 0);
   const minTag = ownMin && <span className="shrink-0 whitespace-nowrap text-[10px] leading-none tabular-nums text-faint">min {formatCurrency(min)}</span>;
   const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white/50';
 
@@ -1761,12 +1763,16 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
             {name}
             {amount('text-[17px]')}
           </span>
-          <span className="mt-1 flex h-5 items-center gap-2.5">
-            <OnTimeChip onTime={onTime} />
-            {factLine}
-            <MinNote i={i} />
-          </span>
-          {(bar || minTag) && <span className="mt-1 flex h-2 items-center gap-2">{bar}{minTag}</span>}
+          {/* The facts get the row's whole width (they shared it with the chip and the note, and lost);
+              the on-time chip, the note and the bar follow on their own line. */}
+          <span className="mt-1 flex">{factLine}</span>
+          {(hasOnTime || requested > 0 || offCommission || show || minTag) && (
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <OnTimeChip onTime={onTime} />
+              <MinNote i={i} />
+              {bar}{minTag}
+            </span>
+          )}
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-faint" aria-hidden="true" />
       </button>
@@ -2014,7 +2020,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
           <p className="mt-0.5 truncate text-xs text-faint">{[i.code, runSince(i)].filter(Boolean).join(' · ')}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <OnTimeChip onTime={onTime} />
-            <Link to={`/reps/${id}`} className="inline-flex items-center gap-1 text-xs font-medium text-muted transition hover:text-foreground">
+            <Link to={`/reps/${id}`} className="-my-3 inline-flex min-h-11 items-center gap-1 text-xs font-medium text-muted transition hover:text-foreground sm:my-0 sm:min-h-0">
               Open full profile <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -2203,7 +2209,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
                           <button
                             type="button"
                             onClick={() => onForgive({ ...p, salesRep: p.salesRep || { user: { name: i.name } } })}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
+                            className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 sm:min-h-0 sm:px-2.5"
                           >
                             <HeartHandshake className="h-3.5 w-3.5" /> Forgive
                           </button>
@@ -2434,7 +2440,8 @@ function FinesByRep({ items }) {
     <section className="card mt-5 p-5">
       <h3 className="text-sm font-semibold text-foreground">Fines by rep</h3>
       <p className="mt-0.5 text-xs text-muted">Still reducing a balance</p>
-      <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+      {/* Columns as the reps need them: two reps fill the card instead of leaving its last third empty. */}
+      <ul className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(16rem,1fr))] gap-x-8 gap-y-3">
         {rows.map((i) => (
           <li key={i.salesRepId}>
             <div className="flex items-baseline justify-between gap-3 text-[13px]">
@@ -2706,7 +2713,7 @@ function AdminView() {
                                   <span className={clsx('shrink-0 rounded-full px-1.5 text-[10px] font-medium leading-4', meta?.cls)}>{meta?.label}</span>
                                 </span>
                                 {/* Where to send it — amber only while the money still has to be sent. */}
-                                <span className={clsx('block truncate text-[11px] leading-4', open ? 'text-amber-300' : 'text-faint')} title={w.notes || undefined}>
+                                <span className={clsx('block break-words text-[11px] leading-4 sm:truncate', open ? 'text-amber-300' : 'text-faint')} title={w.notes || undefined}>
                                   {w.notes || formatDateTime(w.requestedAt)}
                                 </span>
                               </span>
@@ -2716,19 +2723,21 @@ function AdminView() {
                               </span>
                             </button>
                             {open && (
-                              <div className="flex w-full shrink-0 justify-end gap-1 sm:w-auto">
+                              // On a phone the buttons share the row's width, 44 px tall and 12 px apart: Pay records
+                              // the payout at once, so a thumb must not reach it on its way to Reject.
+                              <div className="flex w-full shrink-0 justify-end gap-3 sm:w-auto sm:gap-1">
                                 {/* Busy while a decision is on its way (audit #19): a second tap used to send a second PAY.
                                     The server now refuses it too; this keeps the button from inviting it. */}
                                 {w.status === 'PENDING' && <>
-                                  <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Approve & pay" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                                  <Button className="min-h-11 flex-1 whitespace-nowrap px-3 py-1 text-[13px] sm:min-h-0 sm:flex-none sm:px-2 sm:text-xs" aria-label="Approve & pay" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
                                     <span className="sm:hidden">Pay</span><span className="hidden sm:inline">Approve &amp; pay</span>
                                   </Button>
-                                  <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
+                                  <Button variant="ghost" className="min-h-11 flex-1 px-3 py-1 text-[13px] text-rose-400 ring-1 ring-inset ring-rose-400/25 sm:min-h-0 sm:flex-none sm:px-2 sm:text-xs sm:ring-0" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
                                 </>}
                                 {w.status === 'APPROVED' && (
                                   // One button, because there is only one truth: rep commission comes out of the owner's
                                   // own pocket, for both brands. The payout's own sheet says "from my pocket" in full.
-                                  <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                                  <Button className="min-h-11 flex-1 whitespace-nowrap px-3 py-1 text-[13px] sm:min-h-0 sm:flex-none sm:px-2 sm:text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
                                     Mark paid<span className="hidden sm:inline"> — from my pocket</span>
                                   </Button>
                                 )}
