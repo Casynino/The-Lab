@@ -64,7 +64,7 @@ export default function WalletCard({
             onClick={toggle}
             aria-pressed={hidden}
             aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
-            className="-m-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white active:scale-95"
+            className="-m-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white active:scale-95"
           >
             {hidden ? <EyeOff className="h-[15px] w-[15px]" /> : <Eye className="h-[15px] w-[15px]" />}
           </button>

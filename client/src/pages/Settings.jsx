@@ -304,7 +304,7 @@ function SettingRow({ setting }) {
             />
             {info.secret && (
               <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide' : 'Show'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+                className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
                 {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             )}

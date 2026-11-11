@@ -390,7 +390,7 @@ function Analysis({ a, navigate }) {
               <h2 className="text-base font-semibold text-foreground">Boxes still out with reps</h2>
               <p className="mt-0.5 text-xs text-muted">From the day they were issued</p>
             </div>
-            <button onClick={() => navigate('/settlements')} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-600 hover:text-brand-600">
+            <button onClick={() => navigate('/settlements')} className="tap-phone shrink-0 cursor-pointer text-xs font-semibold text-brand-600 hover:text-brand-600">
               Open orders →
             </button>
           </div>
@@ -831,7 +831,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <PeriodTabs value={period} onChange={setPeriod} options={Object.values(periods).filter((o) => o.available)} />
             <button type="button" onClick={() => navigate('/finance')}
-              className="shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
+              className="tap-phone shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
               Open Finance →
             </button>
           </div>
