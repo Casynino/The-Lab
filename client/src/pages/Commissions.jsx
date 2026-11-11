@@ -14,7 +14,7 @@ import SideSheet from '@/components/SideSheet';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents, initials } from '@/lib/format';
 import { PayoutHistory, earnedOn } from '@/components/WithdrawalNote';
 import {
   PageHeader, Card, CardHeader, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
@@ -1278,7 +1278,7 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
   const overdrawnSum = overdrawn.reduce((sum, i) => sum + Number(i.available), 0);
   const fines = Number(totals.penalties) || 0;
   return (
-    <section className={clsx('stat-glass flex flex-col p-5', wide && 'lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-8')}>
+    <section className={clsx('stat-glass flex flex-col', wide ? 'p-4 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-8 lg:px-5 lg:py-3.5' : 'p-5')}>
       {/* Two hair-thin arcs, as on the rep's wallet card: decoration only, behind everything. */}
       <svg aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 h-full w-full" viewBox="0 0 360 220" preserveAspectRatio="none">
         <path d="M-10 190 C 100 110, 240 70, 380 120" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="1" />
@@ -1290,10 +1290,10 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
             <p className="text-xs font-medium text-white/60">Available to withdraw</p>
             {/* "Total pending" was earned − paid, which still contained fines the reps will never receive — this
                 is the money actually withdrawable. */}
-            <p className="mt-2 whitespace-nowrap text-[28px] font-bold leading-none tabular-nums text-foreground sm:text-[32px]">
+            <p className={clsx('whitespace-nowrap font-bold leading-none tabular-nums text-foreground', wide ? 'mt-1.5 text-[26px]' : 'mt-2 text-[28px] sm:text-[32px]')}>
               {formatCurrency(totals.available ?? totals.pending)}
             </p>
-            <p className={clsx('mt-1.5 text-[11px]', totals.requested > 0 ? 'font-medium text-amber-300' : 'text-muted')}>
+            <p className={clsx('mt-1 text-[11px]', totals.requested > 0 ? 'font-medium text-amber-300' : 'text-muted')}>
               {totals.requested > 0 ? `+ ${formatCurrency(totals.requested)} requested` : 'after fines & payouts'}
             </p>
           </div>
@@ -1310,7 +1310,7 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
           )}
         </div>
 
-        <div className="mt-5">
+        <div className={wide ? 'mt-3' : 'mt-5'}>
           <div className="flex items-baseline justify-between gap-3 text-[11px]">
             <span className="text-muted">Paid out of earned</span>
             <span className="font-semibold tabular-nums text-emerald-300">{Math.round(paidPct)}%</span>
@@ -1336,10 +1336,10 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
       {isAdmin && (
         <div className={clsx('mt-auto pt-5', wide && 'lg:mt-0 lg:basis-full xl:basis-52 xl:shrink-0 xl:pt-0')}>
           <div className={clsx('grid grid-cols-2 gap-2 border-t border-white/[0.06] pt-4', wide && 'xl:grid-cols-1 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0')}>
-            <Button variant="secondary" className="justify-center px-2 text-xs" loading={applying} onClick={onApply}>
+            <Button variant="secondary" className={clsx('justify-center px-2 text-xs', wide && 'xl:py-1.5')} loading={applying} onClick={onApply}>
               <AlertTriangle className="hidden h-4 w-4 shrink-0 min-[400px]:block" /> Apply daily penalties
             </Button>
-            <Button variant="secondary" className="justify-center px-2 text-xs" onClick={onDeduct}>
+            <Button variant="secondary" className={clsx('justify-center px-2 text-xs', wide && 'xl:py-1.5')} onClick={onDeduct}>
               <Coins className="hidden h-4 w-4 shrink-0 min-[400px]:block" /> Deduct commission
             </Button>
           </div>
@@ -2468,6 +2468,61 @@ function RunSwitch({ value, onChange }) {
   );
 }
 
+// What each rep has been paid, from the same list the Paid-out chart reads (PAID and APPROVED, as the server
+// counts "paid out"), so the rows add up to the wallet's Paid out figure. Biggest first, with a bar against the top.
+function PaidByRep({ items, hasMore }) {
+  if (!items) return <section className="stat-glass p-4 text-xs text-muted">Loading payouts…</section>;
+  const by = new Map();
+  let rejected = 0;
+  for (const w of items) {
+    if (w.status === 'REJECTED') rejected += 1;
+    if (w.status !== 'PAID' && w.status !== 'APPROVED') continue;
+    const id = w.salesRepId || w.salesRep?.id || w.salesRep?.code;
+    const cur = by.get(id) || { name: w.salesRep?.user?.name || w.salesRep?.code || '—', total: 0, count: 0, last: null };
+    cur.total += Number(w.amount) || 0;
+    cur.count += 1;
+    const at = w.paidAt || w.decidedAt || w.requestedAt;
+    if (!cur.last || new Date(at) > new Date(cur.last)) cur.last = at;
+    by.set(id, cur);
+  }
+  const rows = [...by.values()].sort((a, b) => b.total - a.total);
+  const total = rows.reduce((s, r) => s + r.total, 0);
+  const count = rows.reduce((s, r) => s + r.count, 0);
+  const top = rows[0]?.total || 0;
+  return (
+    <section className="stat-glass flex flex-col p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-foreground">Paid by rep</h3>
+          <p className={clsx('mt-0.5 text-[11px]', hasMore ? 'text-amber-300' : 'text-white/50')}>
+            {hasMore ? `Latest ${formatNumber(items.length)} payouts` : 'All time'} · biggest first
+          </p>
+        </div>
+        <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-emerald-300">{formatCurrency(total)}</span>
+      </div>
+      {!rows.length ? <p className="my-auto py-8 text-center text-xs text-muted">Nothing paid yet.</p> : (
+        <ul className="mt-3 space-y-3">
+          {rows.map((r) => (
+            <li key={r.name}>
+              <div className="flex items-baseline justify-between gap-3 text-[13px]">
+                <span className="min-w-0 truncate text-foreground">{r.name}</span>
+                <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums text-foreground">{formatCurrency(r.total)}</span>
+              </div>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.07]">
+                <div className="h-full rounded-full bg-emerald-400/80" style={{ width: `${top ? Math.max(2, (r.total / top) * 100) : 0}%` }} />
+              </div>
+              <p className="mt-1 text-[10.5px] text-faint">{formatNumber(r.count)} payout{r.count === 1 ? '' : 's'} · last {formatDate(r.last)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-auto border-t border-white/[0.06] pt-2.5 text-[11px] text-white/50">
+        {formatNumber(count)} paid{rejected ? ` · ${formatNumber(rejected)} rejected` : ''}
+      </p>
+    </section>
+  );
+}
+
 function AdminView() {
   const qc = useQueryClient();
   // Shown to staff too. Fines, deductions, rates and bonuses are the owner's (the server refuses staff), so
@@ -2529,14 +2584,15 @@ function AdminView() {
 
   if (isLoading || !summary) return <PageSpinner />;
   const items = summary.items || [];
-  // The payout bars belong with the balances and the payouts; on Penalties and Rates & bonus the wallet
-  // runs the full width alone, so the tab's own table starts high on the screen.
-  const withTrend = tab === 'balances' || tab === 'payouts';
+  // Owner, 11 Nov 2026: "the cards here are big … the rep list should be up; the charts can be down a bit —
+  // we will have many reps". The business wallet is one slim strip on every tab, and the Paid-out chart sits
+  // under the reps (and under the payouts) instead of beside the wallet, so the list starts high on the screen.
+  const trend = <PayoutTrend items={wdTrend?.data} loading={!wdTrend} hasMore={wdTrend?.meta?.hasMore} />;
   const wallet = (
     <BusinessWallet
       totals={summary.totals}
       items={items}
-      wide={!withTrend}
+      wide
       isAdmin={isAdmin}
       applying={applyPenalties.isPending}
       onApply={() => applyPenalties.mutate()}
@@ -2553,16 +2609,8 @@ function AdminView() {
         onOpen={setOpenWd}
       />
 
-      {/* The top answers "what do I owe, and how much have I paid": the business's wallet beside the
-          payouts month by month. */}
-      {withTrend ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <div className="flex lg:col-span-6 xl:col-span-5 [&>*]:w-full">{wallet}</div>
-          <div className="flex lg:col-span-6 xl:col-span-7 [&>*]:w-full">
-            <PayoutTrend items={wdTrend?.data} loading={!wdTrend} hasMore={wdTrend?.meta?.hasMore} />
-          </div>
-        </div>
-      ) : wallet}
+      {/* The top answers "what do I owe, and how much have I paid" in one slim strip. */}
+      {wallet}
 
       {deducting && <DeductModal reps={items} onClose={() => setDeducting(false)} />}
       {openWd && (
@@ -2599,6 +2647,7 @@ function AdminView() {
             <EarnedByBrand items={items} />
             <SettlementRecord a={analytics} />
           </div>
+          <div className="mt-4">{trend}</div>
         </>
       )}
 
@@ -2610,80 +2659,105 @@ function AdminView() {
       )}
 
       {tab === 'payouts' && (
-      <Card className="mt-5">
-        <CardHeader
-          title="Withdrawal requests"
-          subtitle={wd?.data?.length
-            ? `${pendingWithdrawals ? `${pendingWithdrawals} waiting · ` : ''}newest first`
-            : undefined}
-        />
-        {!wd?.data?.length ? <EmptyState title="No withdrawal requests" /> : (
-          <Table>
-            {/* On a phone Status and Requested move under the amount and the buttons stack, so a 390 px
-                screen shows the whole row instead of only Rep and Amount. */}
-            {/* From sm up the button column takes the spare width, so Amount, Status and Requested sit
-                together instead of spreading across a wide screen. */}
-            <THead><TR><TH>Rep</TH><TH>Amount</TH><TH className="hidden sm:table-cell">Status</TH><TH className="hidden sm:table-cell">Requested</TH><TH className="sm:w-full" /></TR></THead>
-            <TBody>{wd.data.map((w) => (
-              <TR key={w.id}>
-                <TD className="font-medium">
-                  <button type="button" onClick={() => setOpenWd(w)} className="text-left hover:text-brand-600">
-                    {w.salesRep?.user?.name}
-                  </button>
-                </TD>
-                <TD className="whitespace-normal sm:whitespace-nowrap">
-                  <button type="button" onClick={() => setOpenWd(w)} className="text-left">
-                    <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
-                  {/* Where to send it. This is the whole point of the request,
-                      and it was only visible by hovering a different column. */}
-                    {/* Amber only while the money still has to be sent; settled rows keep the note quiet. */}
-                    {w.notes && (
-                      <div className={clsx('mt-0.5 max-w-[18rem] whitespace-normal text-[11px] sm:w-max', w.status === 'PENDING' || w.status === 'APPROVED' ? 'text-amber-300' : 'text-faint')}>
-                        {w.notes}
-                      </div>
+        // Owner, 11 Nov 2026: the table "feels big and not nice". Rows are now one tight line each (waiting ones
+        // first, in their own group), and the spare width holds what was paid to each rep.
+        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <section className="stat-glass flex flex-col xl:col-span-2">
+            <div className="flex items-baseline justify-between gap-3 px-4 pb-2 pt-4">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-foreground">Withdrawal requests</h3>
+                {wd?.data?.length ? (
+                  <p className="mt-0.5 text-[11px] text-white/50">
+                    {/* The waiting count is on the group's own label below (pending and approved alike). */}
+                    newest first{wd.data.length >= 30 ? ' · latest 30' : ''}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            {!wd?.data?.length ? <EmptyState title="No withdrawal requests" /> : (
+              <>
+                {[
+                  { key: 'waiting', label: 'Waiting for you', rows: wd.data.filter((w) => w.status === 'PENDING' || w.status === 'APPROVED') },
+                  { key: 'done', label: 'History', rows: wd.data.filter((w) => w.status !== 'PENDING' && w.status !== 'APPROVED') },
+                ].filter((g) => g.rows.length).map((g, gi, groups) => (
+                  <div key={g.key}>
+                    {/* A group label only when there are two groups — with nothing waiting it is just the list. */}
+                    {groups.length > 1 && (
+                      <p className={clsx('px-4 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-wider', g.key === 'waiting' ? 'text-amber-300/90' : 'text-white/40')}>
+                        {g.label} · {formatNumber(g.rows.length)}
+                      </p>
                     )}
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
-                      <Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge>
-                      <span className="text-[11px] text-faint">{formatDateTime(w.requestedAt)}</span>
-                    </div>
-                  </button>
-                </TD>
-                <TD className="hidden sm:table-cell"><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>
-                <TD className="hidden text-faint sm:table-cell">{formatDateTime(w.requestedAt)}</TD>
-                <TD className="whitespace-normal sm:whitespace-nowrap">
-                  <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
-                    {/* Busy while a decision is on its way (audit #19): a second tap used to send a second PAY.
-                        The server now refuses it too; this keeps the button from inviting it. */}
-                    {w.status === 'PENDING' && <>
-                      <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Approve & pay" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
-                        {/* "Pay" on a phone so it stays on one line; the screen reader hears it in full. */}
-                        <span className="sm:hidden">Pay</span><span className="hidden sm:inline">Approve &amp; pay</span>
-                      </Button>
-                      <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
-                    </>}
-                    {w.status === 'APPROVED' && (
-                      // One button, because there is only one truth: rep commission comes out of the owner's
-                      // own pocket, for both brands. On a phone it says "Mark paid" only, so it cannot push the
-                      // table wider than the screen; the payout's own sheet still says "from my pocket" in full.
-                      <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
-                        Mark paid<span className="hidden sm:inline"> — from my pocket</span>
-                      </Button>
-                    )}
+                    <ul>
+                      {g.rows.map((w) => {
+                        const meta = WITHDRAWAL_STATUS_META[w.status];
+                        const open = w.status === 'PENDING' || w.status === 'APPROVED';
+                        const name = w.salesRep?.user?.name || w.salesRep?.code || '—';
+                        return (
+                          <li key={w.id} className={clsx('flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-white/[0.05] px-4 py-2', open && 'bg-amber-400/[0.035]')}>
+                            <button type="button" onClick={() => setOpenWd(w)}
+                              className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded-lg">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-[11px] font-semibold text-white/70 ring-1 ring-inset ring-white/10" aria-hidden="true">
+                                {initials(name) || '?'}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <span className="truncate text-[13px] font-medium text-foreground">{name}</span>
+                                  <span className={clsx('shrink-0 rounded-full px-1.5 text-[10px] font-medium leading-4', meta?.cls)}>{meta?.label}</span>
+                                </span>
+                                {/* Where to send it — amber only while the money still has to be sent. */}
+                                <span className={clsx('block truncate text-[11px] leading-4', open ? 'text-amber-300' : 'text-faint')} title={w.notes || undefined}>
+                                  {w.notes || formatDateTime(w.requestedAt)}
+                                </span>
+                              </span>
+                              <span className="shrink-0 text-right">
+                                <span className="block whitespace-nowrap text-[13.5px] font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</span>
+                                {w.notes && <span className="block whitespace-nowrap text-[10.5px] leading-4 text-faint">{formatDateTime(w.requestedAt)}</span>}
+                              </span>
+                            </button>
+                            {open && (
+                              <div className="flex w-full shrink-0 justify-end gap-1 sm:w-auto">
+                                {/* Busy while a decision is on its way (audit #19): a second tap used to send a second PAY.
+                                    The server now refuses it too; this keeps the button from inviting it. */}
+                                {w.status === 'PENDING' && <>
+                                  <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Approve & pay" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                                    <span className="sm:hidden">Pay</span><span className="hidden sm:inline">Approve &amp; pay</span>
+                                  </Button>
+                                  <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
+                                </>}
+                                {w.status === 'APPROVED' && (
+                                  // One button, because there is only one truth: rep commission comes out of the owner's
+                                  // own pocket, for both brands. The payout's own sheet says "from my pocket" in full.
+                                  <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                                    Mark paid<span className="hidden sm:inline"> — from my pocket</span>
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
-                </TD>
-              </TR>
-            ))}</TBody>
-          </Table>
-        )}
-        {rejectingWd && (
-          <RejectWithdrawalModal
-            w={rejectingWd}
-            busy={decide.isPending}
-            onClose={() => setRejectingWd(null)}
-            onConfirm={() => decide.mutate({ id: rejectingWd.id, action: 'REJECT' }, { onSettled: () => setRejectingWd(null) })}
-          />
-        )}
-      </Card>
+                ))}
+              </>
+            )}
+          </section>
+
+          {/* The spare width: what each rep was paid, and the payouts month by month under it. */}
+          <div className="flex flex-col gap-4 xl:self-start">
+            <PaidByRep items={wdTrend?.data} hasMore={wdTrend?.meta?.hasMore} />
+            {trend}
+          </div>
+
+          {rejectingWd && (
+            <RejectWithdrawalModal
+              w={rejectingWd}
+              busy={decide.isPending}
+              onClose={() => setRejectingWd(null)}
+              onConfirm={() => decide.mutate({ id: rejectingWd.id, action: 'REJECT' }, { onSettled: () => setRejectingWd(null) })}
+            />
+          )}
+        </div>
       )}
 
       {tab === 'rules' && (
