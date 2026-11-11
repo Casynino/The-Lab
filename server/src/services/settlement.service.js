@@ -302,13 +302,27 @@ async function boxesForOrders(rows) {
 async function list(filters, pagination) {
   const where = {};
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
+  // An order can be STORED as OVERDUE (the sweep writes it) or still say OPEN/PARTIAL with its deadline
+  // gone by. Both are overdue, and both are still open — the filters used to see only the second kind,
+  // so the Overdue tab was empty or partial and a late order fell out of the open list (audit #59).
   if (filters.status === 'OVERDUE') {
-    where.status = { in: ['OPEN', 'PARTIAL'] };
-    where.deadlineAt = { lt: new Date() };
+    where.OR = [
+      { status: 'OVERDUE' },
+      { status: { in: ['OPEN', 'PARTIAL'] }, deadlineAt: { lt: new Date() } },
+    ];
+  } else if (filters.status === 'OPEN' || filters.status === 'PARTIAL') {
+    // Same rule as the tab counts (effectiveStatus): past its deadline an order counts as Overdue, so
+    // it is listed there and not under Open/Partial as well.
+    where.status = filters.status;
+    where.deadlineAt = { gte: new Date() };
   } else if (filters.status) {
     where.status = filters.status;
   }
-  if (filters.open === true) where.status = { in: ['OPEN', 'PARTIAL'] };
+  if (filters.open === true) {
+    delete where.deadlineAt;
+    delete where.OR;
+    where.status = { in: ['OPEN', 'PARTIAL', 'OVERDUE'] };
+  }
 
   // Active orders (still owed — settledAt is null) always sit above completed
   // ones (NULLS FIRST is independent of sort direction). Within the active
