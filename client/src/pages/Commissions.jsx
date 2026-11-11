@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
@@ -9,7 +9,8 @@ import clsx from 'clsx';
 import BonusProgress from '@/components/BonusProgress';
 import WalletCard from '@/components/WalletCard';
 import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard, Ring } from '@/components/RepCharts';
-import { Coins, Crown, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck } from 'lucide-react';
+import { Coins, Crown, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck, Search, X, ChevronRight, ArrowUpDown } from 'lucide-react';
+import SideSheet from '@/components/SideSheet';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
@@ -1440,7 +1441,7 @@ function ShareCard({ title, said, rows, center, centerUnit, twoCol = false }) {
           style={twoCol ? { gridTemplateRows: `repeat(${Math.ceil(rows.length / 2)}, auto)` } : undefined}
         >
           {rows.map((r) => (
-            <li key={r.label} className="flex items-center gap-2 text-[13px]">
+            <li key={r.label} className="flex items-center gap-2 text-[13px]" title={r.title}>
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: r.color }} aria-hidden="true" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-muted">{r.label}</span>
@@ -1467,6 +1468,12 @@ function EarnedByRep({ items, className }) {
   if (!rows.length) return null;
   const total = rows.reduce((sum, r) => sum + r.earned, 0);
   const shares = sharePercents(rows.map((r) => r.earned), total);
+  // With many reps the legend would run the length of the page: past seven, the first six keep their own
+  // line and the rest share one (each of them by name on hover, and on his own card).
+  const cut = rows.length > 7 ? 6 : rows.length;
+  const rest = rows.slice(cut);
+  const restSum = rest.reduce((sum, r) => sum + r.earned, 0);
+  const restShare = shares.slice(cut).reduce((sum, p) => sum + p, 0);
   return (
     <div className={className}>
       <ShareCard
@@ -1474,10 +1481,16 @@ function EarnedByRep({ items, className }) {
         said={`${rows[0].name} has earned ${shares[0]}% of it, all time.`}
         center={compactNumber(total)}
         centerUnit="TSh"
-        twoCol={rows.length > 3}
-        rows={rows.map((r, n) => ({
-          label: r.name, sub: `${shares[n]}%`, value: r.earned, shown: formatCurrency(r.earned), color: PIE[n % PIE.length],
-        }))}
+        twoCol={cut + (rest.length ? 1 : 0) > 3}
+        rows={[
+          ...rows.slice(0, cut).map((r, n) => ({
+            label: r.name, sub: `${shares[n]}%`, value: r.earned, shown: formatCurrency(r.earned), color: PIE[n % PIE.length],
+          })),
+          ...(rest.length ? [{
+            label: `${formatNumber(rest.length)} others`, sub: `${restShare}%`, value: restSum, shown: formatCurrency(restSum), color: '#52525b',
+            title: rest.map((r, n) => `${r.name} ${formatCurrency(r.earned)} (${shares[cut + n]}%)`).join('\n'),
+          }] : []),
+        ]}
       />
     </div>
   );
@@ -1558,9 +1571,9 @@ function BonusBar({ b, sharedStart }) {
   const ownStart = sharedStart == null && b.cycleStart;
   return (
     <div className="mt-3 border-t border-white/[0.06] pt-3">
-      <div className="flex items-baseline justify-between gap-3 text-[11px]">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-[11px]">
         <span className="shrink-0 text-muted">Sold toward bonus</span>
-        <span className="min-w-0 truncate text-right">
+        <span className="whitespace-nowrap text-right">
           <span className="text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(b.sales)}</span>
           {top > 0 && <span className="tabular-nums text-faint"> of {formatCurrency(top)}</span>}
         </span>
@@ -1582,7 +1595,7 @@ function BonusBar({ b, sharedStart }) {
         {won && <span className="font-semibold text-emerald-300">{formatCurrency(won.bonusAmount)} earned</span>}
         {next && (
           <span className="text-muted">
-            <span className="font-semibold tabular-nums text-sky-300">{next.progress}%</span> · {formatCurrency(next.remaining)} more → {formatCurrency(next.bonusAmount)}
+            <span className="font-semibold tabular-nums text-sky-300">{next.progress}%</span> to the next bonus · {formatCurrency(next.remaining)} more → {formatCurrency(next.bonusAmount)}
           </span>
         )}
         {!next && !won && <span className="text-muted">no target set</span>}
@@ -1592,182 +1605,813 @@ function BonusBar({ b, sharedStart }) {
   );
 }
 
-// One card per rep: who, what he can take out today and how far that is from his withdrawal minimum,
-// the run in progress (or his lifetime), the sales bonus, and how reliably he settles.
-//
-// The minimum is a FLOOR, not a target — nobody is made to withdraw when they reach it — so past the line
-// the bar simply says he can withdraw. It is quoted from the rep's OWN minimum (a setting that can differ
-// per rep): when everyone is on the same one it is named once, under the cards.
-function RepCard({ i, runView, leads, bonus, sharedMin, sharedStart, onTime }) {
-  const run = i.run || {};
-  const offCommission = i.earnsCommission === false;
-  const avail = Number(i.available) || 0;
-  const carried = runView ? wholeShillings(run.broughtForward) : 0;
-  const fines = runView ? (run.penalties || 0) : (Number(i.penalties) || 0);
-  const min = Number(i.minWithdrawal) || 0;
-  const showMin = !offCommission && min > 0;
-  const ready = showMin && avail >= min;
-  const minPct = showMin ? clampPct((Math.max(0, avail) / min) * 100) : 0;
+// ── The reps: a small card each, and the rep's own view behind it ───────────────────────────────────────
+// Nino, 11 Nov 2026: "we might have many reps, so these cards need to be nice, well made and SMALL — and we
+// should be able to OPEN them and see the good views and the performance." Each card keeps only what is
+// scanned — who, the on-time chip, what he can take out, how far that is from his minimum, one short line of
+// facts — and the whole card opens the rep's view: his wallet, this run and all time, the sales bonus, how he
+// performs, how he settles, his payouts and his fines.
+
+const onTimeTone = (rate) => (rate >= 80 ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25'
+  : rate >= 50 ? 'bg-amber-500/10 text-amber-300 ring-amber-500/25'
+    : 'bg-rose-500/10 text-rose-300 ring-rose-500/25');
+
+// The on-time share from the settlement analytics, coloured in three steps. Nothing until an order has closed.
+function OnTimeChip({ onTime }) {
   const rate = onTime && onTime.decided > 0 ? Math.round(onTime.onTimeRate) : null;
-  // Every rep's run starts on their own date, so the card says which date it is measuring from.
-  const since = [
-    offCommission && 'not on commission',
-    !offCommission && !run.since && 'never withdrawn',
-    run.since && `since ${formatDate(run.since)}`,
-  ].filter(Boolean).join(' · ');
+  if (rate == null) return null;
   return (
-    <article className="stat-glass flex flex-col p-3.5 sm:p-4">
-      <header className="flex items-start gap-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06] text-sm font-semibold text-white/80 ring-1 ring-inset ring-white/10 sm:h-9 sm:w-9" aria-hidden="true">
-          {String(i.name || '?').trim().charAt(0).toUpperCase()}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Link to={`/reps/${i.salesRepId}`} className={clsx('truncate text-[15px] font-semibold hover:underline', leads ? 'text-amber-300' : 'text-foreground')}>
-              {i.name}
-            </Link>
-            {leads && <Crown className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-label="Most earned this run" />}
-          </div>
-          <p className="mt-0.5 truncate text-[11px] text-faint">{runView ? since : (i.code || '')}</p>
-        </div>
-        {rate != null && (
-          <span
-            title={`${formatNumber(onTime.decided)} closed orders`}
-            className={clsx(
-              'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ring-1 ring-inset',
-              rate >= 80 ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-500/25'
-                : rate >= 50 ? 'bg-amber-500/10 text-amber-300 ring-amber-500/25'
-                  : 'bg-rose-500/10 text-rose-300 ring-rose-500/25',
-            )}
-          >
-            {rate}% on time
-          </span>
-        )}
-      </header>
-
-      <div className="mt-3 flex items-end justify-between gap-3 sm:mt-4">
-        <div className="min-w-0">
-          <p className="text-[11px] text-muted">Available</p>
-          <p className={clsx('mt-1 whitespace-nowrap text-[22px] font-bold leading-none tabular-nums', avail < 0 ? 'text-rose-300' : 'text-foreground')}>
-            {signedCurrency(avail)}
-          </p>
-        </div>
-        <div className="min-w-0 text-right text-[11px] leading-snug">
-          {/* What the balance was already carrying when this run opened, so that earned − fines + this
-              always comes to the figure beside it. */}
-          {carried !== 0 && <p className="text-faint">{carried > 0 ? '+' : '−'}{formatCurrency(Math.abs(carried))} brought forward</p>}
-          {i.pendingRequests > 0 && <p className="font-medium text-amber-300">{formatCurrency(i.pendingRequests)} requested</p>}
-        </div>
-      </div>
-
-      {showMin && (
-        <div className="mt-3">
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-            <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-out', ready ? 'bg-emerald-400' : 'bg-emerald-400/50')} style={{ width: `${minPct}%` }} />
-          </div>
-          <p className="mt-1.5 text-[11px]">
-            {ready
-              ? <span className="font-semibold text-emerald-300">can withdraw</span>
-              : <span className="text-muted">{formatCurrency(min - avail)} to the {sharedMin ? 'minimum' : `${formatCurrency(min)} minimum`}</span>}
-          </p>
-        </div>
-      )}
-
-      <dl className={clsx('mt-3 grid gap-3 border-t border-white/[0.06] pt-3 sm:mt-4', runView ? 'grid-cols-3' : 'grid-cols-2')}>
-        {runView ? (
-          <>
-            <Fig label="Boxes this run" value={formatNumber(run.boxes || 0)} />
-            <Fig label="Fines" value={fines > 0 ? minusCurrency(fines) : '—'} tone={fines > 0 ? 'text-rose-300' : 'text-faint'} />
-            <Fig label="Last paid" value={run.lastPayout ? formatCurrency(run.lastPayout.amount) : '—'} tone={run.lastPayout ? undefined : 'text-faint'} />
-          </>
-        ) : (
-          <>
-            <Fig
-              label="Earned"
-              // An agreed one-off adjustment makes lifetime Earned differ from boxes × rate — say so, or the
-              // arithmetic looks broken.
-              value={<>{formatCurrency(i.earned)}{Number(i.adjustment) !== 0 && <span className="ml-0.5 cursor-help text-amber-400">*</span>}</>}
-              title={Number(i.adjustment) !== 0
-                ? `${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`
-                : undefined}
-            />
-            <Fig label="Boxes settled" value={formatNumber(i.boxesSettled)} />
-            <Fig label="Penalties" value={fines > 0 ? minusCurrency(fines) : '—'} tone={fines > 0 ? 'text-rose-300' : 'text-faint'} />
-            <Fig label="Paid" value={formatCurrency(i.paid)} tone={Number(i.paid) > 0 ? 'text-emerald-300' : undefined} />
-          </>
-        )}
-      </dl>
-
-      {runView && bonus && <BonusBar b={bonus} sharedStart={sharedStart} />}
-    </article>
+    <span
+      title={`${formatNumber(onTime.decided)} closed orders`}
+      className={clsx('shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ring-1 ring-inset', onTimeTone(rate))}
+    >
+      {rate}% on time
+    </span>
   );
 }
 
-// The reps, one card each. It opens on the RUN IN PROGRESS — boxes settled and money owed since that rep
-// was last paid — because the question here is "since I paid him, how is he doing, and what do I owe him
-// now". All time is the other half of the switch: total boxes, total earned, everything ever paid out.
-function RepBoard({ items, bonus, onTime }) {
+const initialOf = (name) => String(name || '?').trim().charAt(0).toUpperCase();
+
+// Where a rep stands against his OWN withdrawal minimum (a setting that can differ per rep). The minimum is a
+// floor, not a target: past it the line simply says he can withdraw. One helper, so the card and the rep's
+// view can never say two different things.
+function minState(i) {
+  const offCommission = i.earnsCommission === false;
+  const avail = Number(i.available) || 0;
+  const min = Number(i.minWithdrawal) || 0;
+  const show = !offCommission && min > 0;
+  return {
+    offCommission, avail, min, show,
+    ready: show && avail >= min,
+    pct: show ? clampPct((Math.max(0, avail) / min) * 100) : 0,
+  };
+}
+
+// Every rep's run starts on their own date.
+const runSince = (i) => {
+  const run = i.run || {};
+  if (i.earnsCommission === false) return 'not on commission';
+  return run.since ? `since ${formatDate(run.since)}` : 'never withdrawn';
+};
+
+// An agreed one-off adjustment makes lifetime Earned differ from boxes × rate — the star and its title say so.
+const adjustmentTitle = (i) => (Number(i.adjustment) !== 0
+  ? `${formatCurrency(i.grossEarned)} earned ${Number(i.adjustment) < 0 ? '−' : '+'} ${formatCurrency(Math.abs(i.adjustment))} adjustment${i.adjustmentNote ? ` — ${i.adjustmentNote}` : ''}`
+  : undefined);
+const EarnedValue = ({ i }) => (
+  <>{formatCurrency(i.earned)}{Number(i.adjustment) !== 0 && <span className="ml-0.5 cursor-help text-amber-400">*</span>}</>
+);
+
+// A withdrawal he asked for that waits on the owner — the urgent item, in amber with a dot.
+const RequestedNote = ({ amount }) => (
+  <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] font-medium leading-none text-amber-300" title="Waiting to be approved or rejected">
+    <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+    {formatCurrency(amount)} requested
+  </span>
+);
+
+// The note beside the amount, the same words on the card, the phone row and the rep's view: where he stands
+// against his minimum — after a waiting request, when `request` is on (the phone row has room for one note).
+function MinNote({ i, request = true }) {
+  const { offCommission, avail, min, show, ready } = minState(i);
+  const requested = Number(i.pendingRequests) || 0;
+  if (request && requested > 0) return <RequestedNote amount={requested} />;
+  if (offCommission) return <span className="whitespace-nowrap text-[11px] text-faint">not on commission</span>;
+  if (!show) return null;
+  return ready
+    ? <span className="whitespace-nowrap text-[11px] font-semibold text-emerald-300">can withdraw</span>
+    : <span className="whitespace-nowrap text-[11px] text-muted" title={`To the ${formatCurrency(min)} minimum`}>{formatCurrency(min - avail)} to go</span>;
+}
+
+// The facts line of a card: boxes, fines, then the bonus (this run) or what he earned (all time). It is
+// one line high on every card: a fact that does not fit drops whole to a hidden second line, so a figure
+// is never cut and every card in a row stays the same height. Boxes and fines come first, so they stay.
+function repFacts(i, runView, bonus) {
+  const run = i.run || {};
+  const fines = runView ? (Number(run.penalties) || 0) : (Number(i.penalties) || 0);
+  const facts = [
+    <span key="boxes"><b className="font-semibold text-foreground">{formatNumber(runView ? run.boxes || 0 : i.boxesSettled)}</b> boxes</span>,
+  ];
+  if (fines > 0) facts.push(<span key="fines" className="text-rose-300">{minusCurrency(fines)} fines</span>);
+  if (!runView) facts.push(<span key="earned" title={adjustmentTitle(i)}><EarnedValue i={i} /> earned</span>);
+  else if (bonus?.claimable) {
+    facts.push(<span key="bonus" className="font-medium text-emerald-300">{formatCurrency(bonus.claimable.bonusAmount)} bonus earned</span>);
+  } else if (bonus?.next && (bonus.next.progress > 0 || Number(bonus.sales) > 0)) {
+    facts.push(
+      <span key="bonus" title={`${formatCurrency(bonus.next.remaining)} more sales → ${formatCurrency(bonus.next.bonusAmount)} bonus`}>
+        <b className="font-semibold text-sky-300">{bonus.next.progress}%</b> to next bonus
+      </span>,
+    );
+  }
+  return facts;
+}
+
+const Avatar = ({ name, className }) => (
+  <span className={clsx('flex shrink-0 items-center justify-center rounded-full bg-white/[0.06] font-semibold text-white/80 ring-1 ring-inset ring-white/10', className)} aria-hidden="true">
+    {initialOf(name)}
+  </span>
+);
+
+// The small card (a row in one list on a phone). The whole of it is one button that opens the rep's view;
+// the switch above decides whether the facts tell this run or all time. Money never wraps or gets cut.
+function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) {
+  const { avail, min, show, ready, pct } = minState(i);
+  const ownMin = show && usualMin != null && min !== usualMin;
+  const requested = Number(i.pendingRequests) || 0;
+  const facts = repFacts(i, runView, bonus);
+  const bar = show ? (
+    <span className="block h-1 min-w-[48px] flex-1 overflow-hidden rounded-full bg-white/[0.07]" aria-hidden="true">
+      <span className={clsx('block h-full rounded-full transition-[width] duration-700 ease-out', ready ? 'bg-emerald-400' : 'bg-emerald-400/50')} style={{ width: `${pct}%` }} />
+    </span>
+  ) : null;
+  const name = (
+    <span className="flex min-w-0 items-center gap-1">
+      <span className={clsx('truncate text-[14px] font-semibold', leads ? 'text-amber-300' : 'text-foreground')}>{i.name}</span>
+      {leads && <Crown className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-label="Most earned this run" />}
+      {!runView && i.code && <span className="ml-1 shrink-0 text-[11px] text-faint">{i.code}</span>}
+    </span>
+  );
+  const amount = (size) => (
+    <span className={clsx('whitespace-nowrap font-bold leading-none tabular-nums', size, avail < 0 ? 'text-rose-300' : 'text-foreground')}>
+      {signedCurrency(avail)}
+    </span>
+  );
+  const factLine = (
+    <span className="flex h-[15px] min-w-0 flex-1 flex-wrap gap-x-3 overflow-hidden text-[11px] leading-[15px] text-muted">
+      {facts.map((f) => <span key={f.key} className="whitespace-nowrap">{f}</span>)}
+    </span>
+  );
+  const minTag = ownMin && <span className="shrink-0 whitespace-nowrap text-[10px] leading-none tabular-nums text-faint">min {formatCurrency(min)}</span>;
+  const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white/50';
+
+  if (phone) {
+    return (
+      <button type="button" onClick={onOpen} aria-haspopup="dialog" className={clsx('flex w-full items-center gap-3 px-3.5 py-2 text-left transition active:bg-white/[0.05]', focus)}>
+        <Avatar name={i.name} className="h-8 w-8 text-[13px]" />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center justify-between gap-3">
+            {name}
+            {amount('text-[17px]')}
+          </span>
+          <span className="mt-1 flex h-5 items-center gap-2.5">
+            <OnTimeChip onTime={onTime} />
+            {factLine}
+            <MinNote i={i} />
+          </span>
+          {(bar || minTag) && <span className="mt-1 flex h-2 items-center gap-2">{bar}{minTag}</span>}
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-faint" aria-hidden="true" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-haspopup="dialog"
+      className={clsx('stat-glass group flex h-full w-full flex-col px-3.5 py-3 text-left transition hover:brightness-[1.15] active:scale-[0.99]', focus)}
+    >
+      <span className="flex w-full items-center gap-2.5">
+        <Avatar name={i.name} className="h-7 w-7 text-[12px]" />
+        <span className="flex min-w-0 flex-1">{name}</span>
+        <OnTimeChip onTime={onTime} />
+      </span>
+      <span className="mt-2.5 flex w-full flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        {amount('text-[20px] tracking-tight')}
+        <MinNote i={i} request={false} />
+      </span>
+      {/* Pushed to the bottom, so the bars and the facts of every card in a row sit on one line. */}
+      <span className="mt-auto block w-full pt-2.5">
+        {(bar || minTag || requested > 0) && (
+          <span className="mb-1.5 flex h-3 items-center gap-2">{bar}{requested > 0 ? <RequestedNote amount={requested} /> : minTag}</span>
+        )}
+        <span className="flex items-center gap-2">
+          {factLine}
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint transition group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden="true" />
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// A payout or a fine waiting on the owner is read and decided in the windows the page already has; the rep's
+// view only lists them and opens those.
+const fineKind = (p) => (p.kind === 'ADJUSTMENT' ? 'Deduction' : p.kind === 'EXPIRY_FINE' ? 'Return delay fine' : 'Late settlement fine');
+const hoursText = (h) => (h == null ? '—' : h < 10 ? `${(Math.round(h * 10) / 10).toFixed(1)} h` : `${formatNumber(Math.round(h))} h`);
+
+function DayTip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-xs shadow-md">
+      <div className="mb-0.5 font-semibold text-foreground">{formatDate(row.date)}</div>
+      <div className="text-muted">{formatNumber(row.boxes)} boxes settled</div>
+      <div className="text-faint">{formatCurrency(row.revenue)} sales</div>
+    </div>
+  );
+}
+
+// How the rep performs — from his profile (the same figures as /reps/:id, all time), and his last 30 days.
+function RepPerformance({ p }) {
+  const perf = p.performance || {};
+  const days = p.trend || [];
+  const boxes30 = days.reduce((s, d) => s + (Number(d.boxes) || 0), 0);
+  const sales30 = days.reduce((s, d) => s + (Number(d.revenue) || 0), 0);
+  const active30 = days.filter((d) => Number(d.boxes) > 0).length;
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-foreground">Performance</h3>
+      <p className="mt-0.5 text-xs text-muted">All time, from the rep's orders</p>
+      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+        <Fig label="Sales settled" value={formatCurrency(perf.revenue)} />
+        <Fig label="Boxes received" value={formatNumber(perf.received)} />
+        <Fig label="Sold of received" value={`${formatNumber(perf.conversion)}%`} tone="text-emerald-300" title={`${formatNumber(perf.sold)} of ${formatNumber(perf.received)} boxes settled`} />
+        <Fig label="Returned" value={formatNumber(perf.returned)} />
+        <Fig label="Holding now" value={perf.net == null ? '—' : `${formatNumber(perf.net)} boxes`} />
+        {p.discipline && <Fig label="Orders" value={formatNumber(p.discipline.totalOrders)} />}
+      </dl>
+      <div className="mt-5 border-t border-white/[0.06] pt-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <p className="text-xs font-medium text-muted">Last 30 days</p>
+          <p className="text-[11px] text-faint">
+            <span className="font-semibold tabular-nums text-foreground">{formatNumber(boxes30)}</span> boxes ·{' '}
+            <span className="whitespace-nowrap">{formatCurrency(sales30)} sales</span> · settled on {formatNumber(active30)} day{active30 === 1 ? '' : 's'}
+          </p>
+        </div>
+        {boxes30 > 0 ? (
+          <div className="mt-3 h-[130px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={days} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="date" tick={AXIS} tickLine={false} axisLine={false} minTickGap={18} tickFormatter={(d) => String(Number(String(d).slice(8, 10)))} />
+                <YAxis tick={AXIS} tickLine={false} axisLine={false} allowDecimals={false} tickCount={3} width={30} />
+                <Tooltip content={<DayTip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                <Bar dataKey="boxes" fill="#38bdf8" fillOpacity={0.7} radius={[4, 4, 0, 0]} maxBarSize={14} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="py-6 text-center text-xs text-muted">No boxes settled in the last 30 days.</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// His settlement record — the page's ring, for one rep, graded on the server (the profile's discipline).
+function RepSettlement({ d }) {
+  if (!d || !(d.settledOrders + d.open > 0)) return null;
+  const late = Math.max(0, d.settledOrders - d.onTimeOrders);
+  const overdue = d.overdue || 0;
+  const open = Math.max(0, (d.open || 0) - overdue);
+  const rows = [
+    { label: 'Settled on time', value: d.onTimeOrders, color: '#34d399' },
+    { label: 'Settled late', value: late, color: '#fbbf24' },
+    { label: 'Still open', value: open, color: '#38bdf8' },
+    { label: 'Overdue', value: overdue, color: '#fb7185', tone: overdue > 0 ? 'text-rose-300' : undefined },
+  ].filter((r) => r.value > 0).map((r) => ({ ...r, shown: formatNumber(r.value) }));
+  return (
+    <ShareCard
+      title="Settlement record"
+      said={d.settledOrders ? `${formatNumber(d.onTimeOrders)} of ${formatNumber(d.settledOrders)} closed orders settled on time.` : 'No order closed yet.'}
+      center={d.onTimeRate != null ? `${Math.round(d.onTimeRate)}%` : formatNumber(d.open)}
+      centerUnit={d.onTimeRate != null ? 'on time' : 'open'}
+      rows={rows}
+    />
+  );
+}
+
+// The orders he closed last, each with the hours it took against its window (72 h, or 168 h with the
+// extension), as the server graded them.
+function RepClosings({ d, closings }) {
+  if (!closings?.length) return null;
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-foreground">Last closed orders</h3>
+      {d && <p className="mt-0.5 text-xs text-muted">Extra time on {formatNumber(d.extended)} · fined on {formatNumber(d.finedOrders)}, all time</p>}
+      <ul className="mt-2 divide-y divide-white/[0.06]">
+        {closings.map((o) => (
+          <li key={o.id} className="flex items-center justify-between gap-3 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-medium text-foreground">{o.settlementNumber}</p>
+              <p className="mt-0.5 text-[11px] text-faint">
+                {formatDate(o.settledAt)} · <span className="whitespace-nowrap">{hoursText(o.hoursTaken)} of {formatNumber(o.windowHours)} h</span>
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(o.value)}</p>
+              {o.onTime != null && (
+                <p className={clsx('mt-0.5 text-[11px] font-medium', o.onTime ? 'text-emerald-300' : 'text-amber-300')}>
+                  {o.onTime ? 'on time' : 'late'}
+                </p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// What he moves most, by boxes, all time — a thin bar per product against the first.
+function RepBestSellers({ rows }) {
+  if (!rows?.length) return null;
+  const top = Math.max(1, Number(rows[0].boxes) || 0);
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-foreground">Best sellers</h3>
+      <p className="mt-0.5 text-xs text-muted">All time, by boxes settled</p>
+      <ul className="mt-3 space-y-3">
+        {rows.map((r) => (
+          <li key={r.productId}>
+            <p className="truncate text-[13px] text-muted" title={r.name}>{r.name}</p>
+            <div className="mt-1 flex items-center gap-3">
+              <div className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
+                <div className="h-full rounded-full bg-white/35" style={{ width: `${Math.max(3, ((Number(r.boxes) || 0) / top) * 100)}%` }} />
+              </div>
+              <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-faint">
+                <b className="text-[12px] font-semibold text-foreground">{formatNumber(r.boxes)}</b> boxes · {formatCurrency(r.revenue)}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// The rep's own view, opened from his card: his wallet, this run, all time, the sales bonus, how he performs
+// and settles, his payouts and his fines. Everything the old big card showed is here with the same figure,
+// plus what the existing staff endpoints already know about him. The figures at the top come from the
+// Commissions summary the page already holds; the rest is asked for when the view opens, and a part that
+// cannot be loaded is left out rather than shown as an error.
+function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal, onForgive }) {
+  const titleId = useId();
+  const [tab, setTab] = useState('overview');
+  const id = i.salesRepId;
+  const run = i.run || {};
+  const { avail, min, show, ready, pct } = minState(i);
+  const carried = wholeShillings(run.broughtForward);
+  const requested = Number(i.pendingRequests) || 0;
+  const fines = Number(i.penalties) || 0;
+  const runFines = Number(run.penalties) || 0;
+
+  // Staff and the owner may both read these (the profile is staff-only, payouts and fines are open to any
+  // signed-in user and scoped by the server). Same key as the rep's profile page, so opening it is instant.
+  const profileQ = useQuery({
+    queryKey: ['sales-rep-profile', id, 'all'],
+    queryFn: async () => unwrap(await api.get(`/sales-reps/${id}/profile`, { params: {} })).data,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const wdQ = useQuery({
+    // A key of its own: the profile page keeps its latest 6 under ['commissions', 'withdrawals', 'rep', id].
+    // It still starts with 'commissions', so every refresh of the page refreshes it too.
+    queryKey: ['commissions', 'withdrawals', 'rep', id, 'sheet'],
+    queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { salesRepId: id, limit: 200 } })),
+    retry: false,
+  });
+  const finesQ = useQuery({
+    queryKey: ['penalties', 'rep', id, 'APPLIED'],
+    queryFn: async () => unwrap(await api.get('/penalties', { params: { salesRepId: id, status: 'APPLIED', limit: 50 } })),
+    retry: false,
+  });
+  const profile = profileQ.data;
+  const withdrawals = wdQ.data?.data || [];
+  const waiting = withdrawals.filter((w) => w.status === 'PENDING').length;
+  const fineRows = finesQ.data?.data || [];
+  const fineCounts = finesQ.data?.meta?.counts;
+  // The two rings show only when they have something to draw (the same tests the rings make themselves).
+  const hasBrands = (i.earnedByBrand || []).some((b) => Number(b.amount) > 0);
+  const disc = profile?.discipline;
+  const hasRecord = !!disc && disc.settledOrders + disc.open > 0;
+
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    ...(wdQ.isError ? [] : [{ key: 'payouts', label: 'Payouts', count: waiting }]),
+    ...(finesQ.isError ? [] : [{ key: 'fines', label: 'Fines', count: fineCounts?.applied }]),
+  ];
+  const current = tabs.some((t) => t.key === tab) ? tab : 'overview';
+
+  return (
+    <SideSheet onClose={onClose} labelledBy={titleId}>
+      <header className="flex shrink-0 items-start gap-3 border-b border-white/[0.07] px-4 py-3.5 sm:px-6 sm:py-4">
+        <Avatar name={i.name} className="mt-0.5 h-10 w-10 text-base" />
+        <div className="min-w-0 flex-1">
+          <h2 id={titleId} className="flex min-w-0 items-center gap-1.5 text-[17px] font-semibold leading-tight">
+            <span className={clsx('truncate', leads ? 'text-amber-300' : 'text-foreground')}>{i.name}</span>
+            {leads && <Crown className="h-4 w-4 shrink-0 text-amber-300" aria-label="Most earned this run" />}
+          </h2>
+          <p className="mt-0.5 truncate text-xs text-faint">{[i.code, runSince(i)].filter(Boolean).join(' · ')}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <OnTimeChip onTime={onTime} />
+            <Link to={`/reps/${id}`} className="inline-flex items-center gap-1 text-xs font-medium text-muted transition hover:text-foreground">
+              Open full profile <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close" className="-mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-faint transition hover:bg-elevated hover:text-foreground">
+          <X className="h-5 w-5" />
+        </button>
+      </header>
+
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-10 pt-4 sm:px-6">
+        {/* His wallet: what he can take out today and how far that is from his minimum, then his lifetime. */}
+        <section className="stat-glass p-5">
+          <svg aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 h-full w-full" viewBox="0 0 360 220" preserveAspectRatio="none">
+            <path d="M-10 190 C 100 110, 240 70, 380 120" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="1" />
+          </svg>
+          <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-white/60">Available to withdraw</p>
+              <p className={clsx('mt-2 whitespace-nowrap text-[28px] font-bold leading-none tabular-nums sm:text-[30px]', avail < 0 ? 'text-rose-300' : 'text-foreground')}>
+                {signedCurrency(avail)}
+              </p>
+            </div>
+            {/* The same note as on his card, beside the amount; the minimum it is measured against above it. */}
+            <div className="ml-auto flex flex-col items-end gap-1 pb-0.5 text-right">
+              {show && (
+                <p className="whitespace-nowrap text-[11px] text-muted">
+                  Minimum <span className="font-semibold tabular-nums text-foreground">{formatCurrency(min)}</span>
+                </p>
+              )}
+              {show ? (ready
+                ? <p className="whitespace-nowrap text-[11px] font-semibold text-emerald-300">can withdraw</p>
+                : <p className="whitespace-nowrap text-[11px] text-muted" title={`To the ${formatCurrency(min)} minimum`}>{formatCurrency(min - avail)} to go</p>)
+                : <MinNote i={i} request={false} />}
+              {requested > 0 && <RequestedNote amount={requested} />}
+            </div>
+          </div>
+          {show && (
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+              <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-out', ready ? 'bg-emerald-400' : 'bg-emerald-400/50')} style={{ width: `${pct}%` }} />
+            </div>
+          )}
+          {avail < 0 && (
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-rose-300">
+              <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full bg-current" />
+              {fines > 0 && avail + fines >= 0 ? 'Below zero from overdue fines' : 'Below zero — new commission pays it off first'}
+            </p>
+          )}
+          {i.emergency?.open && (
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-300">
+              <span aria-hidden="true" className="h-1 w-1 shrink-0 rounded-full bg-current" />
+              Withdrawal window open until {formatDateTime(i.emergency.until)}
+            </p>
+          )}
+          <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.06] pt-4 sm:grid-cols-4">
+            <Fig label="Earned · all time" value={<EarnedValue i={i} />} title={adjustmentTitle(i)} />
+            <Fig label="Paid out" value={formatCurrency(i.paid)} tone={Number(i.paid) > 0 ? 'text-emerald-300' : 'text-faint'} />
+            <Fig label="Fines · all time" value={fines > 0 ? minusCurrency(fines) : '—'} tone={fines > 0 ? 'text-rose-300' : 'text-faint'} />
+            <Fig label="Boxes settled" value={formatNumber(i.boxesSettled)} />
+          </dl>
+        </section>
+
+        <div className="mt-2 [&>[role=tablist]]:justify-start [&>[role=tablist]]:gap-6 sm:[&>[role=tablist]]:gap-8">
+          <SectionTabs value={current} onChange={setTab} tabs={tabs} />
+        </div>
+
+        {current === 'overview' && (
+          // Open sections on the sheet, a hairline between them, like the rep's own Wallet: the wallet above is
+          // the one card; only the two rings keep theirs, side by side.
+          <div className="divide-y divide-white/[0.06] [&>*]:py-6 [&>*:last-child]:pb-0">
+            {profile && <RepPerformance p={profile} />}
+            {profileQ.isLoading && <p className="text-center text-xs text-muted">Loading performance…</p>}
+            {/* The run in progress: since he was last paid. Earned − fines + brought forward = available. */}
+            <section>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                <h3 className="text-sm font-semibold text-foreground">This run</h3>
+                <p className="text-[11px] text-faint">{runSince(i)}</p>
+              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
+                <Fig label="Earned" value={formatCurrency(run.earned || 0)} />
+                <Fig label="Boxes this run" value={formatNumber(run.boxes || 0)} />
+                <Fig label="Fines" value={runFines > 0 ? minusCurrency(runFines) : '—'} tone={runFines > 0 ? 'text-rose-300' : 'text-faint'} />
+                <Fig
+                  label="Brought forward"
+                  value={carried !== 0 ? `${carried > 0 ? '+' : '−'}${formatCurrency(Math.abs(carried))}` : '—'}
+                  tone={carried < 0 ? 'text-rose-300' : carried === 0 ? 'text-faint' : undefined}
+                  title="What the balance carried when this run opened"
+                />
+                <Fig
+                  label="Last paid"
+                  value={run.lastPayout ? formatCurrency(run.lastPayout.amount) : '—'}
+                  tone={run.lastPayout ? undefined : 'text-faint'}
+                  sub={run.lastPayout ? formatDate(run.lastPayout.at) : undefined}
+                />
+              </dl>
+              {bonus && <BonusBar b={bonus} sharedStart={null} />}
+            </section>
+            {(hasBrands || hasRecord) && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <EarnedByBrand items={[i]} />
+                {hasRecord && <RepSettlement d={profile.discipline} />}
+              </div>
+            )}
+            {profile && (profile.settlements?.closings?.length > 0 || profile.topProducts?.length > 0) && (
+              <div className="grid grid-cols-1 gap-x-10 gap-y-8 md:grid-cols-2">
+                <RepClosings d={profile.discipline} closings={profile.settlements?.closings} />
+                <RepBestSellers rows={profile.topProducts} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {current === 'payouts' && (
+          <div className="mt-5 space-y-4">
+            <PayoutTrend items={withdrawals} loading={!wdQ.data} hasMore={wdQ.data?.meta?.hasMore} />
+            {wdQ.data && (
+              withdrawals.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted">No withdrawal requests yet.</p>
+              ) : (
+                <section className="glass-list">
+                  <div className="flex items-baseline justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
+                    <h3 className="text-sm font-semibold text-foreground">Withdrawal requests</h3>
+                    <span className="text-[11px] text-faint">{waiting ? `${waiting} waiting · ` : ''}newest first</span>
+                  </div>
+                  <ul className="divide-y divide-white/[0.06]">
+                    {withdrawals.map((w) => {
+                      const meta = WITHDRAWAL_STATUS_META[w.status] || {};
+                      const live = w.status === 'PENDING' || w.status === 'APPROVED';
+                      return (
+                        <li key={w.id}>
+                          <button type="button" onClick={() => onOpenWithdrawal(w)} className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition hover:bg-white/[0.035]">
+                            <span className="min-w-0">
+                              <span className="block text-[13px] text-muted">Asked {formatDateTime(w.requestedAt)}</span>
+                              {w.notes && <span className={clsx('mt-0.5 block break-words text-[11px]', live ? 'text-amber-300' : 'text-faint')}>{w.notes}</span>}
+                              {w.paidAt && <span className="mt-0.5 block text-[11px] text-emerald-400/80">Paid {formatDateTime(w.paidAt)}</span>}
+                              {w.status === 'PENDING' && <span className="mt-1 block text-[11px] font-medium text-amber-300">Open to approve or reject</span>}
+                            </span>
+                            <span className="flex shrink-0 flex-col items-end gap-1">
+                              <span className="whitespace-nowrap text-[14px] font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</span>
+                              <Badge className={meta.cls}>{meta.label || w.status}</Badge>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )
+            )}
+          </div>
+        )}
+
+        {current === 'fines' && (
+          <div className="mt-5 space-y-4">
+            {!finesQ.data ? (
+              <p className="py-6 text-center text-xs text-muted">Loading fines…</p>
+            ) : !fineRows.length ? (
+              <div className="py-10 text-center">
+                <ShieldCheck className="mx-auto h-6 w-6 text-emerald-400/80" aria-hidden="true" />
+                <p className="mt-3 text-sm font-medium text-foreground">No fines</p>
+                <p className="mt-1 text-xs text-muted">
+                  Nothing is reducing this balance{fineCounts?.waived ? ` · ${formatNumber(fineCounts.waived)} forgiven earlier` : ''}.
+                </p>
+              </div>
+            ) : (
+              <section className="glass-list">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 border-b border-white/[0.06] px-4 py-3">
+                  <h3 className="text-sm font-semibold text-foreground">Fines still charged</h3>
+                  <span className="text-[11px] text-faint">
+                    <span className="font-semibold tabular-nums text-rose-300">{minusCurrency(fines)}</span>
+                    {' '}from {formatNumber(fineCounts?.applied ?? fineRows.length)} fine{(fineCounts?.applied ?? fineRows.length) === 1 ? '' : 's'}
+                    {fineCounts?.waived ? ` · ${formatNumber(fineCounts.waived)} forgiven` : ''}
+                  </span>
+                </div>
+                <ul className="divide-y divide-white/[0.06]">
+                  {fineRows.map((p) => (
+                    <li key={p.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-[13px] text-foreground">{fineKind(p)}</p>
+                        <p className="mt-0.5 text-[11px] text-faint" title={p.notes || undefined}>
+                          {p.settlement?.settlementNumber ? `${p.settlement.settlementNumber} · ` : ''}{formatDateTime(p.appliedAt)}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <span className="whitespace-nowrap text-[14px] font-semibold tabular-nums text-rose-300">{minusCurrency(p.amount)}</span>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => onForgive({ ...p, salesRep: p.salesRep || { user: { name: i.name } } })}
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
+                          >
+                            <HeartHandshake className="h-3.5 w-3.5" /> Forgive
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {finesQ.data?.meta?.totalPages > 1 && (
+                  <p className="border-t border-white/[0.06] px-4 py-3 text-[11px] text-faint">The latest 50 — the Penalties tab lists them all.</p>
+                )}
+              </section>
+            )}
+          </div>
+        )}
+      </div>
+    </SideSheet>
+  );
+}
+
+// Below 640 px the reps are rows in one list instead of cards (twice as many fit on a screen).
+const PHONE_QUERY = '(max-width: 639.98px)';
+function usePhone() {
+  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(PHONE_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.(PHONE_QUERY);
+    if (!mq) return undefined;
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener?.('change', on);
+    return () => mq.removeEventListener?.('change', on);
+  }, []);
+  return phone;
+}
+
+const SORTS = [
+  { k: 'earned', l: 'Most earned' },
+  { k: 'available', l: 'Most available' },
+  { k: 'fines', l: 'Most fines' },
+  { k: 'name', l: 'Name' },
+];
+
+// The reps, one small card each. It opens on the RUN IN PROGRESS — boxes settled and money owed since that
+// rep was last paid — because the question here is "since I paid him, how is he doing, and what do I owe him
+// now". All time is the other half of the switch. With many reps a search and a sort appear.
+function RepBoard({ items, bonus, onTime, isAdmin }) {
+  const qc = useQueryClient();
   const [view, setView] = useState('run');
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('earned');
+  const [openId, setOpenId] = useState(null);
+  const [openWd, setOpenWd] = useState(null); // a payout opened from the rep's view
+  const [forgiving, setForgiving] = useState(null); // a fine opened from the rep's view
   const runView = view === 'run';
+  const phone = usePhone();
+  const many = items.length > 8;
+  const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''));
 
-  // The leader of the round comes first, ranked on money earned this run (brands pay different rates, so
-  // boxes would crown whoever carries the dearer stock; `available` carries money from before the run).
-  // Copied before sorting: `items` is react-query's cached array, shared with the deduct dialog.
-  const rows = runView
-    ? [...items].sort((a, b) => (
-      (b.run?.earned || 0) - (a.run?.earned || 0)
-        || (b.run?.boxes || 0) - (a.run?.boxes || 0)
-        || String(a.name || '').localeCompare(String(b.name || ''))
-    ))
-    : items;
+  // The leader of the round is ranked on money earned this run (brands pay different rates, so boxes would
+  // crown whoever carries the dearer stock; `available` carries money from before the run). Copied before
+  // sorting: `items` is react-query's cached array, shared with the deduct dialog.
+  const ranked = [...items].sort((a, b) => (
+    (b.run?.earned || 0) - (a.run?.earned || 0)
+      || (b.run?.boxes || 0) - (a.run?.boxes || 0)
+      || byName(a, b)
+  ));
   // Nobody is crowned in a table of zeros, and All time has no leader — it is a ledger.
-  const leadEarned = runView ? (rows[0]?.run?.earned || 0) : 0;
+  const leaderId = (ranked[0]?.run?.earned || 0) > 0 ? ranked[0].salesRepId : null;
 
-  // The bonus keeps a run of its own; only reps on a configured bonus get the bar.
+  let rows;
+  if (sort === 'available') rows = [...items].sort((a, b) => (Number(b.available) || 0) - (Number(a.available) || 0) || byName(a, b));
+  else if (sort === 'fines') {
+    const f = (i) => (runView ? Number(i.run?.penalties) || 0 : Number(i.penalties) || 0);
+    rows = [...items].sort((a, b) => f(b) - f(a) || byName(a, b));
+  } else if (sort === 'name') rows = [...items].sort(byName);
+  // "Most earned" means what the switch shows: earned this run, or earned all time.
+  else rows = runView ? ranked : [...items].sort((a, b) => (Number(b.earned) || 0) - (Number(a.earned) || 0) || byName(a, b));
+  const q = query.trim().toLowerCase();
+  if (q) rows = rows.filter((i) => `${i.name || ''} ${i.code || ''}`.toLowerCase().includes(q));
+
+  // The bonus keeps a run of its own; only reps on a configured bonus get it.
   const bonusFor = new Map((bonus || []).filter((b) => b.configured).map((b) => [b.salesRepId, b]));
   const showBonus = runView && bonusFor.size > 0;
   const starts = [...bonusFor.values()].map((b) => new Date(b.cycleStart).getTime());
   const sharedStart = starts.length && starts.every((t) => t === starts[0]) ? starts[0] : null;
+  // The minimum most reps are on is named once, under the cards (in both views); a card on a different one
+  // names its own beside its bar.
   const mins = items.filter((i) => i.earnsCommission !== false).map((i) => Number(i.minWithdrawal) || 0);
   const sharedMin = mins.length && mins.every((m) => m === mins[0]) ? mins[0] : null;
+  const tally = new Map();
+  for (const m of mins) tally.set(m, (tally.get(m) || 0) + 1);
+  const usualMin = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
   const onTimeFor = new Map((onTime || []).map((r) => [r.salesRepId, r]));
+  const open = openId ? items.find((i) => i.salesRepId === openId) : null;
+  // The rep's view also fills the profile page's cache ('sales-rep-profile'), so a payout decided or a fine
+  // forgiven from it refreshes that too — "Open full profile" is the next click.
+  const refresh = () => ['commissions', 'dashboard', 'sales-rep-profile'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  const sortLabel = SORTS.find((s) => s.k === sort)?.l;
+  const subtitle = [
+    many && `${formatNumber(items.length)} reps`,
+    runView ? 'since last paid' : 'all time',
+    sort === 'name' ? 'by name' : `${sortLabel.toLowerCase()} first`,
+  ].filter(Boolean).join(' · ');
+  const footer = [
+    runView && 'a run closes when a rep is paid',
+    sharedMin > 0 ? `minimum ${formatCurrency(sharedMin)}` : usualMin > 0 ? `minimum ${formatCurrency(usualMin)} unless the card names another` : null,
+    showBonus && `sales bonus counted ${sharedStart ? `from ${formatDate(new Date(sharedStart))}` : 'per rep'}, paid on its own`,
+  ].filter(Boolean).join(' · ');
+  const upper = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+
+  const search = many && (
+    <label className={clsx('relative', phone ? 'min-w-0 flex-1' : 'w-48')}>
+      <span className="sr-only">Find a rep</span>
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" aria-hidden="true" />
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Find a rep"
+        className="h-9 w-full rounded-lg border border-border bg-elevated pl-8 pr-2 text-xs text-foreground placeholder:text-faint focus:border-white/25 focus:outline-none sm:h-8"
+      />
+    </label>
+  );
+  // The sort looks like the switch beside it (same height, 12 px words); the real select lies on top of it,
+  // invisible, so the phone's own picker opens and the page never zooms.
+  const sorter = many && (
+    <label className="relative flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-elevated px-2.5 text-xs font-semibold text-muted transition focus-within:border-white/25 hover:text-foreground sm:h-8">
+      <ArrowUpDown className="h-3.5 w-3.5" aria-hidden="true" />
+      {!phone && <span aria-hidden="true">{sortLabel}</span>}
+      <select
+        aria-label="Sort the reps"
+        value={sort}
+        onChange={(e) => setSort(e.target.value)}
+        className="absolute inset-0 h-full w-full cursor-pointer appearance-none text-base opacity-0"
+      >
+        {SORTS.map((s) => <option key={s.k} value={s.k}>{s.l}</option>)}
+      </select>
+    </label>
+  );
+  const switcher = <RunSwitch value={view} onChange={setView} />;
+  const tile = (i) => (
+    <RepTile
+      key={i.salesRepId}
+      i={i}
+      phone={phone}
+      runView={runView}
+      leads={runView && i.salesRepId === leaderId}
+      bonus={showBonus ? bonusFor.get(i.salesRepId) : null}
+      usualMin={usualMin}
+      onTime={onTimeFor.get(i.salesRepId)}
+      onOpen={() => setOpenId(i.salesRepId)}
+    />
+  );
 
   return (
     <section className="mt-5">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-1">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">Commission by representative</h2>
-          <p className="mt-0.5 text-xs text-muted">{runView ? 'Since each rep was last paid · most earned first' : 'Everything since day one'}</p>
+      <div className="mb-3 px-1">
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+          <div className="min-w-0 flex-1 sm:min-w-[15rem]">
+            <h2 className="text-sm font-semibold text-foreground">Commission by representative</h2>
+            {phone && !many ? (
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <p className="min-w-0 text-xs text-muted">{upper(subtitle)}</p>
+                {switcher}
+              </div>
+            ) : (
+              <p className="mt-0.5 text-xs text-muted">{upper(subtitle)}</p>
+            )}
+          </div>
+          {!phone && <div className="flex flex-wrap items-center gap-2">{search}{sorter}{switcher}</div>}
         </div>
-        <RunSwitch value={view} onChange={setView} />
+        {/* A phone with many reps: the search, the sort and the switch on one row under the title. */}
+        {phone && many && <div className="mt-2.5 flex items-center gap-2">{search}{sorter}{switcher}</div>}
       </div>
-      {!rows.length ? (
+      {!items.length ? (
         <p className="px-1 py-8 text-center text-sm text-muted">No reps on commission yet.</p>
+      ) : !rows.length ? (
+        <p className="px-1 py-8 text-center text-sm text-muted">No rep matches “{query.trim()}”.</p>
+      ) : phone ? (
+        <div className="glass-list divide-y divide-white/[0.06]">{rows.map(tile)}</div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {rows.map((i, n) => (
-            <RepCard
-              key={i.salesRepId}
-              i={i}
-              runView={runView}
-              leads={runView && n === 0 && leadEarned > 0}
-              bonus={showBonus ? bonusFor.get(i.salesRepId) : null}
-              sharedMin={sharedMin}
-              sharedStart={sharedStart}
-              onTime={onTimeFor.get(i.salesRepId)}
-            />
-          ))}
-        </div>
+        // A card is never narrower than ~285 px, so the biggest amount and its note share one line.
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1360px]:grid-cols-4 min-[1700px]:grid-cols-5">{rows.map(tile)}</div>
       )}
-      {runView && (
+      {footer && (
         <p
           className="mt-3 px-1 text-[11px] text-faint"
           title={'A run closes the moment a rep is paid, and the next one opens there. Whatever was left over comes forward, so earned − fines + brought forward is always what he can withdraw today. The minimum is a floor, not a target. The sales bonus restarts when a bonus is paid, not when commission is, and never enters what he can withdraw.'}
         >
-          A run closes when a rep is paid
-          {sharedMin > 0 && <> · minimum {formatCurrency(sharedMin)}</>}
-          {showBonus && <> · sales bonus counted{sharedStart ? ` from ${formatDate(new Date(sharedStart))}` : ' per rep'}, paid on its own</>}
+          {upper(footer)}
         </p>
+      )}
+
+      {/* The rep's view, then any window opened from inside it — after it, so it sits on top. */}
+      {open && (
+        <RepSheet
+          i={open}
+          bonus={bonusFor.get(open.salesRepId) || null}
+          onTime={onTimeFor.get(open.salesRepId)}
+          leads={open.salesRepId === leaderId}
+          isAdmin={isAdmin}
+          onClose={() => setOpenId(null)}
+          onOpenWithdrawal={setOpenWd}
+          onForgive={setForgiving}
+        />
+      )}
+      {openWd && (
+        <WithdrawalDetail
+          w={openWd}
+          balance={items.find((r) => r.salesRepId === openWd.salesRepId)?.available ?? null}
+          onClose={() => setOpenWd(null)}
+          refresh={refresh}
+        />
+      )}
+      {forgiving && (
+        <ForgiveModal penalty={forgiving} onClose={() => { setForgiving(null); qc.invalidateQueries({ queryKey: ['sales-rep-profile'] }); }} />
       )}
     </section>
   );
@@ -1947,7 +2591,7 @@ function AdminView() {
 
       {tab === 'balances' && (
         <>
-          <RepBoard items={items} bonus={bonusRun?.items} onTime={analytics?.byRep} />
+          <RepBoard items={items} bonus={bonusRun?.items} onTime={analytics?.byRep} isAdmin={isAdmin} />
           {/* The rep's pies, for the whole business: who earns it, where it comes from, how orders close.
               md–lg: the long one takes a full row, the two short ones share the next. */}
           <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
