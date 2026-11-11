@@ -72,3 +72,21 @@ test('newest answers first, an oversized one skipped, within the budget', () => 
   // the newest ones are the ones kept
   assert.deepEqual(back.entries.map((e) => e.k[1]), [...Array(back.entries.length).keys()]);
 });
+
+test('keys and sign-ins are never written to the device', () => {
+  const secretEntries = [
+    // the owner's settings carry the CallMeBot key as a value: the whole answer stays off the device
+    { k: ['settings'], d: [{ key: 'whatsapp.apikey', value: 'OWNER-KEY-123' }], t: NOW },
+    // a rep's profile carries the rep's key, and its edit form reads it from there: asked again instead
+    { k: ['sales-rep-profile', 'r1', 'all'], d: { rep: { id: 'r1', whatsappApiKey: 'REP-KEY-456' } }, t: NOW },
+    // a rep record nested in a list (activity, penalties): the field goes, the row stays
+    { k: ['penalties', 'all'], d: { data: [{ id: 'p1', salesRep: { id: 'r1', code: 'REP-001', whatsappApiKey: 'REP-KEY-789' } }] }, t: NOW },
+  ];
+  const text = stored({ entries: secretEntries, user: { ...OWNER, accessToken: 'tok' } });
+  for (const secret of ['OWNER-KEY-123', 'REP-KEY-456', 'REP-KEY-789', 'whatsappApiKey', 'accessToken']) {
+    assert.ok(!text.includes(secret), secret);
+  }
+  const back = readSnapshot(text, { build: BUILD, token: tokenFor(OWNER.id, 'ADMIN'), now: NOW });
+  assert.deepEqual(back.entries.map((e) => e.k[0]), ['penalties']);
+  assert.deepEqual(back.entries[0].d.data[0].salesRep, { id: 'r1', code: 'REP-001' });
+});

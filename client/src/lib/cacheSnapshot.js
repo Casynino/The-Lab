@@ -33,6 +33,15 @@ export const BUDGET_CHARS = 1_500_000;
 // One answer bigger than this (a long list of returns) is simply asked again.
 export const ONE_MAX_CHARS = 400_000;
 
+// Never written to the device. Settings hold the owner's CallMeBot key and a
+// rep's profile holds the rep's (SalesRepProfile's edit form reads it from
+// there, so it cannot simply be blanked): those answers are asked again
+// instead. Anywhere else a key or a sign-in can ride along inside an answer
+// (a rep record nested in a list), the field itself is left out.
+const NEVER_KEEP = new Set(['settings', 'sales-rep-profile']);
+const SECRET_FIELD = /^(whatsappApiKey|apiKey|apikey|passwordHash|password|accessToken|refreshToken)$/;
+const noSecrets = (k, v) => (SECRET_FIELD.test(k) ? undefined : v);
+
 /** The claims inside a stored sign-in (a JWT), or null. Read only to choose; the server still decides. */
 export function tokenClaims(token) {
   try {
@@ -60,13 +69,14 @@ export function tokenClaims(token) {
 export function serializeSnapshot({ build, token, user, entries, now, budget = BUDGET_CHARS }) {
   const claims = tokenClaims(token);
   if (!build || !claims || !user || String(user.id) !== claims.sub) return null;
-  const head = JSON.stringify({ f: FORMAT, b: build, u: claims.sub, at: now, user });
+  const head = JSON.stringify({ f: FORMAT, b: build, u: claims.sub, at: now, user }, noSecrets);
   let used = head.length;
   const parts = [];
   const newest = [...(entries || [])].sort((a, z) => (z.t || 0) - (a.t || 0));
   for (const e of newest) {
+    if (!Array.isArray(e.k) || NEVER_KEEP.has(e.k[0])) continue;
     let text;
-    try { text = JSON.stringify({ k: e.k, d: e.d, t: e.t }); } catch { continue; }
+    try { text = JSON.stringify({ k: e.k, d: e.d, t: e.t }, noSecrets); } catch { continue; }
     if (!text || text.length > ONE_MAX_CHARS || used + text.length + 1 > budget) continue;
     used += text.length + 1;
     parts.push(text);
