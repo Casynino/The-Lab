@@ -461,6 +461,12 @@ function BoxCard({ product, pic, path, pictureCount, onOpen }) {
   );
 }
 
+// Edits not saved yet. They lived only in the form's state, so opening another page and coming back
+// threw them away without a word. Kept here, in memory, until Save; on the way back they are put back
+// (with "Not saved yet") as long as the saved label underneath has not changed since. A reload or a
+// closed tab asks first.
+let unsavedDraft = null; // { base: JSON of the saved label it was edited from, form }
+
 export default function ProductLabel() {
   const qc = useQueryClient();
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
@@ -474,7 +480,11 @@ export default function ProductLabel() {
   const [openBox, setOpenBox] = useState(null);
   const [removing, setRemoving] = useState(null);
 
-  useEffect(() => { if (saved?.content && !form) setForm(saved.content); }, [saved, form]);
+  useEffect(() => {
+    if (!saved?.content || form) return;
+    const draft = unsavedDraft;
+    setForm(draft && draft.base === JSON.stringify(saved.content) ? draft.form : saved.content);
+  }, [saved, form]);
 
   const save = useMutation({
     mutationFn: (body) => api.put('/product-page', body),
@@ -511,6 +521,15 @@ export default function ProductLabel() {
     () => Boolean(form && saved?.content && JSON.stringify(form) !== JSON.stringify(saved.content)),
     [form, saved],
   );
+
+  useEffect(() => {
+    if (!form || !saved?.content) return undefined;
+    unsavedDraft = dirty ? { base: JSON.stringify(saved.content), form } : null;
+    if (!dirty) return undefined;
+    const ask = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', ask);
+    return () => window.removeEventListener('beforeunload', ask);
+  }, [form, saved, dirty]);
 
   // The server refuses to hand over defaults when it cannot read the saved
   // label, so that a Save can never overwrite it. Say so, rather than spin.
