@@ -184,14 +184,16 @@ function CartOrderSheet({ onClose, existing }) {
 
   return (
     <Modal open onClose={onClose} title={editing ? `Edit order ${existing.requestNumber}` : 'New stock request'} size="lg" footer={footerContent}>
-      {/* The city, for a rep with two or more: one tap in the same pill bar the buttons use. Until one is
-          picked the Request button stays off, and once there is something in the order the word asks. */}
+      {/* The city, for a rep with two or more: plain words, no box round them (Nino, 11 Nov 2026: "no funny
+          shapes around the city") — the picked one white with a red line under it, like the wallet's tabs.
+          They wrap onto more lines for a rep with many cities. Until one is picked the Request button stays
+          off, and once there is something in the order the word above asks. */}
       {multiCity && (
-        <div className="mb-4">
-          <p className={clsx('mb-1.5 px-1 text-xs', !city && cartCount > 0 ? 'font-medium text-brand-600' : 'text-muted')}>
+        <div className="mb-4 px-1">
+          <p className={clsx('text-xs', !city && cartCount > 0 ? 'font-medium text-brand-600' : 'text-muted')}>
             {!city && cartCount > 0 ? 'Pick the city' : 'City'}
           </p>
-          <div role="radiogroup" aria-label="City" className="flex flex-wrap items-center gap-1 rounded-[22px] bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
+          <div role="radiogroup" aria-label="City" className="flex flex-wrap gap-x-5">
             {cities.map((c) => (
               <button
                 key={c}
@@ -200,11 +202,12 @@ function CartOrderSheet({ onClose, existing }) {
                 aria-checked={city === c}
                 onClick={() => setCity(c)}
                 className={clsx(
-                  'h-9 min-w-[30%] flex-1 truncate rounded-full px-3 text-[13px] transition active:scale-[0.97]',
-                  city === c ? 'bg-brand-500 font-semibold text-white' : 'font-medium text-muted hover:text-foreground',
+                  'relative py-2.5 text-[15px] transition',
+                  city === c ? 'font-semibold text-foreground' : 'font-medium text-muted hover:text-foreground',
                 )}
               >
                 {shortRegion(c)}
+                <span aria-hidden="true" className={clsx('absolute inset-x-0 bottom-1 h-[2px] rounded-full bg-brand-500 transition-opacity', city === c ? 'opacity-100' : 'opacity-0')} />
               </button>
             ))}
           </div>

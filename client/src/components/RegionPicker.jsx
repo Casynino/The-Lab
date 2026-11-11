@@ -11,7 +11,8 @@ import { TZ_REGIONS } from '@/lib/regions';
  * only from the list of Tanzania's 31, never typed: one typed differently would
  * split a market into two rows of the report.
  */
-export default function RegionPicker({ value = [], onChange, max = 5, id }) {
+// No limit below the 31 (Nino, 11 Nov 2026: "a rep can have more than 5 cities").
+export default function RegionPicker({ value = [], onChange, max = TZ_REGIONS.length, id }) {
   const left = TZ_REGIONS.filter((r) => !value.includes(r));
 
   return (
@@ -41,7 +42,7 @@ export default function RegionPicker({ value = [], onChange, max = 5, id }) {
           {left.map((r) => <option key={r} value={r}>{r}</option>)}
         </Select>
       ) : (
-        <p className="text-xs text-faint">That is the most a rep can have ({max}).</p>
+        <p className="text-xs text-faint">Every region is picked.</p>
       )}
     </div>
   );

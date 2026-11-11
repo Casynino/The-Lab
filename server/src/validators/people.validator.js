@@ -19,11 +19,12 @@ const tzRegion = z
     message: 'Choose one of the 31 regions of Tanzania',
   });
 
-// A rep can work several regions (owner, 10 Nov 2026: "even two"). Each must be
-// one of the official regions, repeats are dropped, the first is the main one.
+// A rep can work several regions (owner, 10 Nov 2026: "even two"; 11 Nov: "a rep can have more than 5
+// cities" — so any number of the 31). Each must be one of the official regions, repeats are dropped, the
+// first is the main one.
 const tzRegionList = z
   .array(z.string().trim().max(120))
-  .max(5, 'A rep can have at most 5 regions')
+  .max(31, 'There are only 31 regions')
   .optional()
   .superRefine((list, ctx) => {
     for (const v of list || []) {
