@@ -60,25 +60,24 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
               left: 'calc(env(safe-area-inset-left, 0px) + 16px)',
             }}
-            /* Nino, 11 Nov 2026: "these toasts are not nice — make them premium". A small dark glass
-               capsule at the top centre: 13px words, a small icon, a soft deep shadow, the page blurred
-               behind it. The words are kept short where they are set. */
+            /* Nino, 11 Nov 2026: "these toasts are not nice — make them premium", then "no need for that
+               shape — make them visible and well designed". A clear, solid card at the top centre: no pill,
+               no glass, no outline — a deep surface that stands off any page by its shadow, 14px words,
+               a small icon. The words are kept short where they are set. */
             toastOptions={{
               duration: 3000,
               className: 'zl-toast',
               style: {
-                fontSize: '13px',
+                fontSize: '14px',
                 fontWeight: 500,
                 lineHeight: 1.35,
-                padding: '7px 14px 7px 10px',
-                maxWidth: 'min(92vw, 360px)',
-                borderRadius: '18px',
-                background: 'rgba(24, 24, 27, 0.86)',
-                color: '#f4f4f5',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                boxShadow: '0 14px 34px -14px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.06)',
-                backdropFilter: 'blur(16px) saturate(150%)',
-                WebkitBackdropFilter: 'blur(16px) saturate(150%)',
+                padding: '10px 16px 10px 12px',
+                maxWidth: 'min(92vw, 380px)',
+                borderRadius: '14px',
+                background: '#1f1f23',
+                color: '#ffffff',
+                border: 'none',
+                boxShadow: '0 18px 40px -12px rgba(0,0,0,0.9), 0 2px 6px rgba(0,0,0,0.5)',
               },
               success: { iconTheme: { primary: '#34d399', secondary: '#18181b' } },
               error: { iconTheme: { primary: '#fb7185', secondary: '#18181b' } },
