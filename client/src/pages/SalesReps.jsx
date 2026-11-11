@@ -162,7 +162,7 @@ const clampPct = (n) => Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));
 function BonusTrack({ b, active }) {
   if (!b) {
     return (
-      <p className="mt-2.5 border-t border-white/[0.06] pt-2.5 text-[11px] leading-4 text-faint">
+      <p className="mt-2 text-[10.5px] leading-4 text-faint">
         {active ? 'Sales bonus figures not ready yet' : 'Sales bonus not counted while inactive'}
       </p>
     );
@@ -173,57 +173,46 @@ function BonusTrack({ b, active }) {
   const won = b.claimable;
   const next = b.next;
   const none = !(Number(b.sales) > 0);
-  const barLabel = `Sold ${formatCurrency(b.sales)}${top > 0 ? ` of ${formatCurrency(top)}, the top bonus tier` : ' toward the sales bonus'}`;
+  // Every figure is on hover; the card itself keeps one line: the bar and where the rep is on it.
+  const detail = [
+    `Sold ${formatCurrency(b.sales)}${top > 0 ? ` of ${formatCurrency(top)} (top tier)` : ''}`,
+    won ? `${formatCurrency(won.bonusAmount)} earned` : null,
+    next ? `${next.progress}% · ${formatCurrency(next.remaining)} more → ${formatCurrency(next.bonusAmount)}` : 'every tier reached',
+  ].filter(Boolean).join(' · ');
   return (
-    <div className="mt-2.5 border-t border-white/[0.06] pt-2.5">
-      <div className="flex items-baseline justify-between gap-x-2 text-[11px] leading-4">
-        <span className="text-muted">Sales bonus</span>
-        <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(b.sales)}</span>
-      </div>
-      <div className="relative mt-1.5" role="img" aria-label={barLabel} title={barLabel}>
-        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+    <div className="mt-2 flex items-center gap-2" title={detail} aria-label={`Sales bonus: ${detail}`} role="img">
+      <span className="shrink-0 text-[10.5px] text-faint">Bonus</span>
+      <div className="relative min-w-0 flex-1">
+        <div className="h-1 overflow-hidden rounded-full bg-white/[0.07]">
           <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-out', won ? 'bg-emerald-400' : 'bg-sky-400/80')} style={{ width: `${pct}%` }} />
         </div>
         {top > 0 && tiers.map((t) => {
           const isNext = next && t.ruleId === next.ruleId;
           return (
-            <span
-              key={t.ruleId}
-              title={`Sell ${formatCurrency(t.target)} → ${formatCurrency(t.bonusAmount)}`}
-              className={clsx(
-                'absolute top-1/2 w-[2px] -translate-y-1/2 rounded-full',
-                t.reached ? 'h-2.5 bg-emerald-200' : isNext ? 'h-3 bg-sky-300' : 'h-2.5 bg-white/35',
-              )}
-              style={{ left: `calc(${Math.min(100, ((Number(t.target) || 0) / top) * 100)}% - 1px)` }}
-            />
+            <span key={t.ruleId}
+              className={clsx('absolute top-1/2 w-[2px] -translate-y-1/2 rounded-full', t.reached ? 'h-2 bg-emerald-200' : isNext ? 'h-2.5 bg-sky-300' : 'h-2 bg-white/35')}
+              style={{ left: `calc(${Math.min(100, ((Number(t.target) || 0) / top) * 100)}% - 1px)` }} />
           );
         })}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] leading-4">
-        {won && <span className="whitespace-nowrap font-semibold text-emerald-300">{formatCurrency(won.bonusAmount)} earned</span>}
-        {next && none ? (
-          <span className="text-muted">
-            <span className="whitespace-nowrap">No sales yet</span>
-            {' · '}<span className="whitespace-nowrap tabular-nums">{formatCurrency(next.target)}</span>
-            {' → '}<span className="whitespace-nowrap font-medium tabular-nums text-foreground/85">{formatCurrency(next.bonusAmount)}</span>
-          </span>
-        ) : next ? (
-          <span className="text-muted" title={`${next.progress}% of the way to the ${formatCurrency(next.target)} tier`}>
-            <span className="font-semibold tabular-nums text-sky-300">{next.progress}%</span>
-            {' · '}<span className="whitespace-nowrap tabular-nums">{formatCurrency(next.remaining)} more</span>
-            {' → '}<span className="whitespace-nowrap font-medium tabular-nums text-foreground/85">{formatCurrency(next.bonusAmount)}</span>
-          </span>
-        ) : (
-          <span className="text-emerald-300/80">every tier reached</span>
-        )}
-      </div>
+      <span className="shrink-0 whitespace-nowrap text-[10.5px] tabular-nums">
+        {won && <span className="font-semibold text-emerald-300">{formatCurrency(won.bonusAmount, { compact: true })} won · </span>}
+        {next ? (
+          none ? <span className="text-faint">no sales yet</span> : (
+            <>
+              <span className="font-semibold text-sky-300">{next.progress}%</span>
+              <span className="text-faint"> · {formatCurrency(next.remaining, { compact: true })} to go</span>
+            </>
+          )
+        ) : <span className="text-emerald-300/80">all tiers</span>}
+      </span>
     </div>
   );
 }
 
-// A card is a glance, not a report: who, where they stand, how they grade,
-// what they are carrying, what they are owed, and how far the bonus is. The
-// rest is a click away on their own page.
+// A card is a glance, not a report: who, where they stand, how they grade, what they are carrying, what they
+// are owed and how far the bonus is — in four short lines, so forty reps still fit on a screen or two. The rest
+// is a click away on their own page.
 function RepCard({ r, st, g, b, showBonus, i, onOpen }) {
   const regions = repRegions(r);
   const owed = owedOf(r);
@@ -237,67 +226,52 @@ function RepCard({ r, st, g, b, showBonus, i, onOpen }) {
       data-tone={st.key === 'late' ? 'late' : undefined}
       style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
       className={clsx(
-        'stat-glass animate-rise flex flex-col p-3 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 sm:p-3.5',
+        'stat-glass animate-rise flex flex-col px-3 py-2.5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
         st.key === 'off' && 'opacity-75',
       )}
     >
-      {/* Who they are, where they stand, and how they grade. A long name is
-          never cut: the chip drops under it, and the name itself may wrap. */}
-      <div className="flex w-full items-start gap-2.5">
-        <span className={clsx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset', hueFor(r.code))} aria-hidden="true">
+      {/* Who, where they stand, and how they grade. */}
+      <div className="flex w-full items-center gap-2.5">
+        <span className={clsx('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ring-1 ring-inset', hueFor(r.code))} aria-hidden="true">
           {initials(name) || '?'}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <p className="line-clamp-2 min-w-0 break-words text-[15px] font-semibold leading-5 text-foreground" title={name}>{name}</p>
-            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 text-[10px] font-medium leading-4 ring-1 ${st.cls}`}>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <p className="truncate text-[13.5px] font-semibold leading-5 text-foreground" title={name}>{name}</p>
+            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 text-[9.5px] font-medium leading-4 ring-1 ${st.cls}`}>
               {st.key === 'late'
                 ? <AlertTriangle className="h-2.5 w-2.5" />
                 : <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />}
               {st.label}
             </span>
           </div>
-          <p className="mt-1 break-words text-[11px] leading-4 text-faint">
+          <p className="truncate text-[10.5px] leading-4 text-faint" title={`${r.code}${regions.length ? ` · ${regions.join(', ')}` : ''}`}>
             {r.code}{regions.length ? ` · ${regions.join(', ')}` : ''}
             {/* A rep switched off while still holding stock sits under Late or Running; say so here. */}
-            {!r.isActive && st.key !== 'off' && <span className="whitespace-nowrap text-white/60"> · not active</span>}
+            {!r.isActive && st.key !== 'off' && <span className="text-white/60"> · not active</span>}
           </p>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 text-right" title={g.known ? `On time ${g.pct}% ${g.sub}` : g.sub}>
           {g.known ? (
             <>
-              <div className={`h-5 text-[22px] font-bold leading-5 tabular-nums ${g.text}`}>
-                {g.pct}<span className="text-sm font-semibold">%</span>
-              </div>
-              <div className="mt-1 whitespace-nowrap text-[11px] leading-4 text-faint">{g.sub}</div>
+              <div className={`text-[17px] font-bold leading-5 tabular-nums ${g.text}`}>{g.pct}<span className="text-[11px] font-semibold">%</span></div>
+              <div className="whitespace-nowrap text-[10px] leading-4 text-faint">{g.sub}</div>
             </>
-          ) : (
-            // No rate yet: a quiet note on the name's line, not a big dash that reads like a button.
-            <div className="flex h-5 items-center">
-              <span className="whitespace-nowrap rounded-full px-1.5 text-[10px] leading-4 text-faint ring-1 ring-white/[0.08]">{g.sub}</span>
-            </div>
-          )}
+          ) : <span className="whitespace-nowrap text-[10px] leading-4 text-faint">{g.sub}</span>}
         </div>
       </div>
 
-      {/* What they are holding, and what they are owed — peers, not a figure and a whisper.
-          mt-auto: in a row of cards the figures line up even when one name takes two lines. */}
+      {/* What they are holding and what they are owed, on one line. mt-auto keeps a row of cards level. */}
       <div className="mt-auto w-full">
-        <div className="mt-2.5 flex w-full border-t border-white/[0.06] pt-2.5">
-          <div className="min-w-0 flex-1 pr-3">
-            <div className={`whitespace-nowrap text-base font-bold leading-5 tabular-nums ${r.heldUnits > 0 ? 'text-foreground' : 'text-muted'}`}>
-              {formatNumber(r.heldUnits || 0)} <span className="text-xs font-normal text-faint">boxes</span>
-            </div>
-            <div className={clsx('mt-0.5 truncate text-[11px] leading-4', st.key === 'late' ? 'text-rose-300/90' : 'text-faint')}>{st.detail}</div>
+        <div className="mt-2 flex w-full items-baseline justify-between gap-3 border-t border-white/[0.06] pt-2">
+          <div className="min-w-0 truncate text-[11px] leading-4" title={`${formatNumber(r.heldUnits || 0)} boxes · ${st.detail}`}>
+            <span className={`text-[14px] font-bold tabular-nums ${r.heldUnits > 0 ? 'text-foreground' : 'text-muted'}`}>{formatNumber(r.heldUnits || 0)}</span>
+            <span className="text-faint"> boxes · </span>
+            <span className={st.key === 'late' ? 'text-rose-300/90' : 'text-faint'}>{st.detail}</span>
           </div>
-          {/* Half the card, and wider only when an amount needs it — money is never cut. */}
-          <div className="w-1/2 min-w-max shrink-0 border-l border-white/[0.06] pl-3">
-            <div className={`whitespace-nowrap text-base font-bold leading-5 tabular-nums ${r.commissionOwed > 0 ? 'text-amber-300' : 'text-muted'}`}>
-              {formatCurrency(owed)}
-            </div>
-            <div className="mt-0.5 whitespace-nowrap text-[11px] leading-4 text-faint">
-              {r.commissionOwed > 0 ? 'commission owed' : 'nothing owed'}
-            </div>
+          <div className="shrink-0 whitespace-nowrap text-right leading-4" title={r.commissionOwed > 0 ? 'Commission owed' : 'Nothing owed'}>
+            <span className={`text-[14px] font-bold tabular-nums ${r.commissionOwed > 0 ? 'text-amber-300' : 'text-muted'}`}>{formatCurrency(owed)}</span>
+            <span className="text-[10.5px] text-faint"> owed</span>
           </div>
         </div>
 
@@ -516,7 +490,7 @@ export default function SalesReps() {
           ) : (
             // One on a phone, two on a tablet, three on a small laptop, four at 1440, five on a big
             // screen. Names wrap and amounts widen their half rather than being cut.
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 min-[1400px]:grid-cols-4 min-[1800px]:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3 min-[1400px]:grid-cols-4 min-[1800px]:grid-cols-5">
               {shown.map((x, i) => (
                 <RepCard key={x.r.id} r={x.r} st={x.st} g={x.g} b={x.b} showBonus={showBonus} i={i} onOpen={() => navigate(`/reps/${x.r.id}`)} />
               ))}
