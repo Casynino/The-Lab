@@ -282,7 +282,8 @@ export function PayoutsCard({ items }) {
         <BarChart data={months} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
           <XAxis dataKey="label" tick={AXIS} tickLine={false} axisLine={false} />
-          <YAxis tick={AXIS} tickLine={false} axisLine={false} tickFormatter={compact} width={46} />
+          {/* interval 0 keeps every tick: at 130px tall the default dropped one label and its gridline. */}
+          <YAxis tick={AXIS} tickLine={false} axisLine={false} tickFormatter={compact} width={46} interval={0} />
           <Tooltip content={<MoneyTip unit="paid out" />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
           <Bar dataKey="amount" fill={GREEN} fillOpacity={0.75} radius={[6, 6, 0, 0]} maxBarSize={34} />
         </BarChart>
