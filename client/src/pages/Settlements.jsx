@@ -119,8 +119,11 @@ function PendingApprovals({ onReview }) {
   // Reject asks first, with an optional reason the rep is told — the same box as on the order itself.
   // It used to reject on one tap, with no reason (audit, 11 Nov 2026).
   const [rejecting, setRejecting] = useState(null);
+  // Kept on screen even if the list empties under it (decided elsewhere), so it can be closed, and never
+  // pops up again later for a submission that is already gone.
+  const rejectModal = rejecting && <RejectSubmissionModal submission={rejecting} onClose={() => setRejecting(null)} onDone={refresh} />;
 
-  if (!pending.length) return null;
+  if (!pending.length) return rejectModal || null;
 
   return (
     <>
@@ -153,7 +156,7 @@ function PendingApprovals({ onReview }) {
         })}
       </div>
     </Card>
-    {rejecting && <RejectSubmissionModal submission={rejecting} onClose={() => setRejecting(null)} onDone={refresh} />}
+    {rejectModal}
     </>
   );
 }

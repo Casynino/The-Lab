@@ -179,7 +179,7 @@ function ReturnModal({ onClose }) {
   // A rep can only give back boxes still on his open orders. Read them as the order's own Return screen
   // does — what is left, less boxes locked in a pending return or waiting in a settlement — added up over
   // every open order. The server matches the boxes to the orders oldest-first and checks again.
-  const { data: openOrders = [], isLoading: loadingOrders } = useQuery({
+  const { data: openOrders = [], isLoading: loadingOrders, isError: ordersFailed } = useQuery({
     queryKey: ['settlements', 'return-availability'],
     enabled: isRep,
     staleTime: 0, // read fresh each time the box opens
@@ -341,7 +341,10 @@ function ReturnModal({ onClose }) {
         {/* Product list */}
         <div className="-mx-1 max-h-56 divide-y divide-border overflow-y-auto">
           {isRep && loadingOrders && <p className="py-4 text-center text-sm text-muted">Loading your open orders…</p>}
-          {isRep && !loadingOrders && available.size === 0 && (
+          {isRep && !loadingOrders && ordersFailed && (
+            <p className="py-4 text-center text-sm text-rose-400">Could not load your open orders. Close and try again.</p>
+          )}
+          {isRep && !loadingOrders && !ordersFailed && available.size === 0 && (
             <p className="py-4 text-center text-sm text-muted">No boxes left to return on your open orders.</p>
           )}
           {filtered.map((product) => {
