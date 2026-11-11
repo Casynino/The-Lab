@@ -105,7 +105,7 @@ export default function RepDashboard() {
           hint is short enough to survive the
           one-line clamp on a 390px phone; the settlement one was not, and was
           eating the box count. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid auto-rows-fr grid-cols-2 gap-3 lg:grid-cols-4">
         <DashCard
           icon={ClipboardList}
           label="Request"
