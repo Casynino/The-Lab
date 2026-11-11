@@ -5,10 +5,10 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Wallet, TrendingUp, TrendingDown, Banknote, Landmark, Smartphone, Coins,
-  Plus, Trash2, Pencil, ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Boxes, Receipt, PiggyBank,
+  Wallet, TrendingDown, Banknote, Landmark, Smartphone, Coins,
+  Plus, Trash2, Pencil, ArrowLeftRight, ArrowDownLeft, ArrowUpRight, Boxes, Receipt,
   Factory, Package, Scale, FileBarChart, ChevronRight, ShieldCheck, AlertTriangle, Search as SearchIcon,
-  Undo2, CheckCircle2,
+  Undo2, CheckCircle2, Eye, EyeOff,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useBrands } from '@/lib/hooks';
@@ -17,11 +17,11 @@ import { ROLES } from '@/lib/constants';
 import ReportsPage from '@/pages/Reports';
 import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
-import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { eatISODate, eatDay } from '@/lib/tz';
 import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
-  PageHeader, Card, CardHeader, CardBody, StatCard, PageSpinner, EmptyState, Badge, Button,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
   Modal, Field, Input, NumberInput, Select, Textarea, Table, THead, TBody, TR, TH, TD, Pagination,
 } from '@/components/ui';
 
@@ -71,31 +71,6 @@ function TintCard({ label, value, icon: Icon, sub, tone = 'brand' }) {
       </div>
       <p className={`relative mt-2 text-2xl font-bold tabular-nums ${t.num}`}>{value}</p>
       {sub && <p className="relative mt-0.5 text-[11px] text-faint">{sub}</p>}
-    </div>
-  );
-}
-
-// A named share of a total: label, amount, thin bar. The list pattern from
-// "Who is holding it" / "Who owes what", reused for money by kind.
-function ShareRows({ rows, total, colours }) {
-  return (
-    <div className="mt-4 space-y-2.5">
-      {rows.map((r, i) => {
-        const pct = total > 0 ? (r.value / total) * 100 : 0;
-        return (
-          <div key={r.label}>
-            <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">{r.label}</span>
-              {r.count != null && <span className="shrink-0 text-[11px] tabular-nums text-faint">{formatNumber(r.count)}×</span>}
-              <span className="w-28 shrink-0 text-right text-sm font-bold tabular-nums text-foreground">{formatCurrency(r.value)}</span>
-              <span className="w-10 shrink-0 text-right text-xs tabular-nums text-faint">{Math.round(pct)}%</span>
-            </div>
-            <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-              <div className={`h-full rounded-full ${colours[i % colours.length]}`} style={{ width: `${Math.max(2, pct)}%` }} />
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -460,7 +435,8 @@ const ACCOUNT_HEX = ['#10b981', '#8b5cf6', '#0ea5e9', '#f59e0b']; // ACCOUNT_BAR
 const PERIOD_WORDS = { today: 'today', week: 'this week', month: 'this month', all: 'all time' };
 
 // A small glass panel: a one-line title, a short sub-line, and a pill that opens the tab with the detail.
-function Panel({ title, sub, link, onNavigate, className, children }) {
+// `aside` puts a figure (a total) where the pill would sit.
+function Panel({ title, sub, link, onNavigate, aside, className, children }) {
   return (
     <section className={clsx('stat-glass flex flex-col p-4', className)}>
       <div className="mb-3 flex items-start justify-between gap-3">
@@ -468,6 +444,7 @@ function Panel({ title, sub, link, onNavigate, className, children }) {
           <h3 className="text-sm font-semibold leading-tight text-foreground">{title}</h3>
           {sub && <div className="mt-0.5 text-[11px] text-white/50">{sub}</div>}
         </div>
+        {aside}
         {link && (
           <button type="button" onClick={() => onNavigate?.(link.tab)}
             className="shrink-0 cursor-pointer rounded-full px-2.5 py-1 text-[11px] font-medium text-muted ring-1 ring-inset ring-white/10 transition hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-white/30">
@@ -481,13 +458,14 @@ function Panel({ title, sub, link, onNavigate, className, children }) {
 }
 
 // A small figure tile: label, number, one short caption. Opens its tab when it has one.
-function Tile({ label, value, tone = 'text-foreground', caption, title, onClick }) {
+// `whole` keeps a money figure whole (it wraps the tile wider) instead of ending it with an ellipsis.
+function Tile({ label, value, tone = 'text-foreground', caption, title, onClick, whole }) {
   // A flex column, so a <button> tile does not centre its content and every tile's label sits on one line.
   const cls = 'stat-glass flex min-w-0 flex-col justify-start px-3.5 py-3 text-left';
   const body = (
     <>
       <p className="truncate text-[11px] font-medium text-white/55">{label}</p>
-      <p className={`mt-1 truncate text-base font-bold leading-tight tabular-nums sm:text-lg ${tone}`}>{value}</p>
+      <p className={`mt-1 ${whole ? 'whitespace-nowrap' : 'truncate'} text-base font-bold leading-tight tabular-nums sm:text-lg ${tone}`}>{value}</p>
       {caption && <div className="mt-1 text-[11px] leading-snug text-white/50">{caption}</div>}
     </>
   );
@@ -499,8 +477,9 @@ function Tile({ label, value, tone = 'text-foreground', caption, title, onClick 
   ) : <div className={cls} title={title}>{body}</div>;
 }
 
-// The header's ring: how much of the cash held is yours once the supplier is covered.
-function Ring({ pct, size = 54, stroke = 5 }) {
+// The header's ring: how much of the cash held is yours once the supplier is covered. `label={false}` drops the
+// % inside it, where the precise figure already sits beside the ring.
+function Ring({ pct, size = 54, stroke = 5, label = true }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const p = Math.max(0, Math.min(100, pct));
@@ -511,18 +490,19 @@ function Ring({ pct, size = 54, stroke = 5 }) {
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#34d399" strokeWidth={stroke} strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c * (1 - p / 100)} />
       </svg>
-      <span className="absolute text-[11px] font-bold tabular-nums text-foreground">{Math.round(p)}%</span>
+      {label && <span className="absolute text-[11px] font-bold tabular-nums text-foreground">{Math.round(p)}%</span>}
     </span>
   );
 }
 
-// One term of the header's sum: a dot, a label, the number, a short caption.
-function Term({ label, sign, value, tone, dot, caption, big }) {
+// One term of the header's sum: a dot, a label, the number, a short caption. `wide`: the sum only runs in one
+// line from xl (five terms need the room), so the sign stays in the label until then; `wide="lg"`: from lg.
+function Term({ label, sign, value, tone, dot, caption, big, wide }) {
   return (
     <div className="min-w-0">
       <p className="flex items-center gap-1.5 text-[11px] font-medium text-white/55">
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
-        {sign && <span className="sm:hidden">{sign}</span>}{label}
+        {sign && <span className={wide === 'lg' ? 'lg:hidden' : wide ? 'xl:hidden' : 'sm:hidden'}>{sign}</span>}{label}
       </p>
       {/* Never shortened with an ellipsis: a money figure is always shown whole. */}
       <p className={`mt-1 whitespace-nowrap font-bold leading-none tabular-nums ${big ? 'text-xl 2xl:text-2xl' : 'text-[15px] sm:text-base 2xl:text-lg'} ${tone}`}>{value}</p>
@@ -530,7 +510,7 @@ function Term({ label, sign, value, tone, dot, caption, big }) {
     </div>
   );
 }
-const Op = ({ children }) => <span className="hidden self-center px-1 pt-3 text-lg font-light text-white/30 sm:block" aria-hidden="true">{children}</span>;
+const Op = ({ children, wide }) => <span className={`hidden self-center px-1 pt-3 text-lg font-light text-white/30 ${wide === 'lg' ? 'lg:block' : wide ? 'xl:block' : 'sm:block'}`} aria-hidden="true">{children}</span>;
 
 function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
@@ -1264,11 +1244,156 @@ function AccountStatementModal({ account, onClose }) {
   );
 }
 
+// Each account is the rep's Wallet card (components/WalletCard) in the account's own colour — Nino, 11 Nov 2026:
+// "I need the same card like the one on the rep, the card that shows the wallet balance". The same deep gradient,
+// the soft light from the corner and two hair-thin arcs, the house mark where a bank card keeps its logo, the eye,
+// the balance big with one word of action beside it, then three small figures. The colour is the account's
+// (its brand's, as on the Overview), never red; a balance below zero turns the figure rose.
+const ACCOUNT_LIGHT = ['#34d399', '#a78bfa', '#38bdf8', '#fbbf24']; // ACCOUNT_DOT as hex: text on a dark card
+// The card's gradient per colour: [from, middle] — it always ends in the app's near-black, as the rep card does.
+const WALLET_TINT = [['#0b2a20', '#0a1712'], ['#211538', '#120d1f'], ['#0b2333', '#09141d'], ['#2c2109', '#171106']];
+const RECORD_TINT = ['#1f1f24', '#141417'];
+const HIDE_KEY = 'zelab:hideAccounts';
+const readHideAccounts = () => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } };
+const saveHideAccounts = (v) => { try { localStorage.setItem(HIDE_KEY, v ? '1' : '0'); } catch { /* private window: fine */ } };
+
+function walletStyle([from, mid]) {
+  return {
+    background: `linear-gradient(140deg, ${from} 0%, ${mid} 52%, #0e0e10 100%)`,
+    boxShadow: '0 14px 32px -16px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07)',
+  };
+}
+const WALLET_FRAME = 'relative isolate flex min-w-0 cursor-pointer flex-col overflow-hidden rounded-[22px] p-4 text-left text-white ring-1 ring-inset ring-white/[0.09] transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30';
+
+// One colour per brand on every Finance tab, by the Overview's rule (its cash buckets): brands ranked by the cash
+// their accounts hold, most first, take emerald, violet, sky, amber in turn; an account wears its brand's colour.
+// `alsoKeys` ranks brands with sales but no cash after those holding cash, as the Overview does.
+function brandRank(accounts, alsoKeys = []) {
+  const cash = new Map();
+  for (const a of wallets(accounts)) { const k = a.brandId || 'general'; cash.set(k, (cash.get(k) || 0) + a.balance); }
+  for (const k of alsoKeys) if (!cash.has(k)) cash.set(k, 0);
+  const ranked = [...cash].sort((x, y) => y[1] - x[1]).filter(([k, c]) => c > 0 || alsoKeys.includes(k)).map(([k]) => k);
+  return new Map(ranked.map((k, i) => [k, i]));
+}
+
+function WalletArcs() {
+  return (
+    <svg aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 h-full w-full" viewBox="0 0 360 180" preserveAspectRatio="none">
+      <path d="M-10 150 C 100 70, 240 40, 380 96" fill="none" stroke="rgba(255,255,255,.07)" strokeWidth="1" />
+      <path d="M-10 178 C 120 100, 250 78, 380 128" fill="none" stroke="rgba(255,255,255,.05)" strokeWidth="1" />
+    </svg>
+  );
+}
+
+// The top line of every wallet card: the label and the eye on the left, the house mark on the right. The eye is a
+// <span role="button"> because the whole card is already a button (a button may not hold another).
+function WalletTop({ label, chip, hidden, onToggleHide }) {
+  const toggle = (e) => { e.stopPropagation(); onToggleHide(); };
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate text-[12px] font-medium tracking-wide text-white/70">{label}</span>
+        {chip}
+        <span role="button" tabIndex={0} onClick={toggle}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); } }}
+          aria-pressed={hidden} aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
+          className="-m-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
+          {hidden ? <EyeOff className="h-[15px] w-[15px]" /> : <Eye className="h-[15px] w-[15px]" />}
+        </span>
+      </div>
+      <img src="/brand/zelab-dark.svg" alt="" aria-hidden="true" className="h-[15px] w-auto shrink-0 opacity-90" />
+    </div>
+  );
+}
+
+const DOTS = '••••••';
+
+function AccountWalletCard({ account, tint, hex, light, sharePct, hidden, onToggleHide, onOpen }) {
+  const negative = account.balance < 0;
+  const mask = (s) => (hidden ? '•••' : s);
+  return (
+    <button type="button" onClick={onOpen} className={WALLET_FRAME} style={walletStyle(tint)}
+      aria-label={`${account.name}: open every movement`}>
+      <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 -z-10 h-56 w-56 rounded-full"
+        style={{ background: `radial-gradient(closest-side, ${negative ? 'rgba(244,63,94,.28)' : `${hex}57`}, transparent)` }} />
+      <WalletArcs />
+      <WalletTop label={account.name} hidden={hidden} onToggleHide={onToggleHide}
+        chip={account.isDefault ? <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-px text-[9.5px] font-semibold text-white/70">Default</span> : null} />
+
+      {/* The balance, and the one action beside it — a word, like the rep card's Withdraw. */}
+      <div className="-mt-0.5 flex flex-wrap items-center justify-between gap-x-3">
+        <p className={`min-w-0 whitespace-nowrap text-[27px] font-bold leading-none tabular-nums ${negative ? 'text-rose-300' : 'text-white'} ${hidden ? 'tracking-[0.18em]' : ''}`}>
+          {hidden ? DOTS : formatCurrency(account.balance)}
+        </p>
+        <span className="flex h-11 shrink-0 items-center gap-1 text-[15px] font-semibold text-white">
+          Movements <ArrowUpRight className="h-[17px] w-[17px]" strokeWidth={2.4} />
+        </span>
+      </div>
+
+      {/* Its share of the cash, as a thin line in its colour; below zero, one rose line says why there is none. */}
+      {negative ? (
+        <p className="text-[11px] font-medium text-rose-300">Below zero — money left that never arrived</p>
+      ) : sharePct != null ? (
+        <div className="flex items-center gap-2.5">
+          <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/[0.09]">
+            <div className="h-full rounded-full" style={{ width: `${Math.max(2, sharePct)}%`, background: light }} />
+          </div>
+          <span className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: light }}>{sharePct}%</span>
+        </div>
+      ) : null}
+
+      {/* The three supporting figures: small, plain, no lines or boxes around them. */}
+      <div className="mt-3.5 flex flex-wrap justify-between gap-x-4 gap-y-2">
+        {[['Money in', account.moneyIn, 'text-emerald-300'], ['Money out', account.moneyOut, 'text-rose-300'], ['Opening', account.openingBalance, 'text-white/85']].map(([label, v, tone]) => (
+          <div key={label} className="min-w-0">
+            <p className="text-[10px] text-white/45">{label}</p>
+            <p className={`mt-px whitespace-nowrap text-[12.5px] font-medium tabular-nums ${tone}`}>{mask(formatCurrency(v))}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Where a bank card prints its holder: the number and whose it is. */}
+      {account.notes && <p className="mt-auto pt-3.5 text-[10.5px] tracking-wide text-white/40">{account.notes}</p>}
+    </button>
+  );
+}
+
+// The Commission account is a record, not a wallet: the same card, quiet grey — no colour light — with what was
+// paid to reps big and one short line saying what it is.
+function RecordWalletCard({ account, hidden, onToggleHide, onOpen }) {
+  return (
+    <button type="button" onClick={onOpen} className={WALLET_FRAME} style={walletStyle(RECORD_TINT)}
+      aria-label={`${account.name}: open every payout`}>
+      <div aria-hidden="true" className="pointer-events-none absolute -right-12 -top-20 -z-10 h-56 w-56 rounded-full"
+        style={{ background: 'radial-gradient(closest-side, rgba(255,255,255,.09), transparent)' }} />
+      <WalletArcs />
+      <WalletTop label={`${account.name} paid`} hidden={hidden} onToggleHide={onToggleHide}
+        chip={<span className="shrink-0 rounded-full bg-white/10 px-1.5 py-px text-[9.5px] font-semibold text-white/70">Record only</span>} />
+      <div className="-mt-0.5 flex flex-wrap items-center justify-between gap-x-3">
+        <p className={`min-w-0 whitespace-nowrap text-[27px] font-bold leading-none tabular-nums text-white/85 ${hidden ? 'tracking-[0.18em]' : ''}`}>
+          {hidden ? DOTS : formatCurrency(account.recorded)}
+        </p>
+        <span className="flex h-11 shrink-0 items-center gap-1 text-[15px] font-semibold text-white/80">
+          Payouts <ArrowUpRight className="h-[17px] w-[17px]" strokeWidth={2.4} />
+        </span>
+      </div>
+      <p className="text-[11px] text-white/50" title="Paid to reps from your own pocket — never from an account, never off your profit.">
+        Paid to reps from your own pocket.
+      </p>
+      <p className="mt-auto pt-3.5 text-[10.5px] tracking-wide text-white/40">No money is held here</p>
+    </button>
+  );
+}
+
 function Accounts({ onQuick }) {
   const [addOpen, setAddOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [correctOpen, setCorrectOpen] = useState(false);
   const [viewing, setViewing] = useState(null); // account whose statement is open
+  // The eye on any wallet card hides every amount on this tab (remembered on this device only).
+  const [hidden, setHidden] = useState(readHideAccounts);
+  const toggleHide = () => setHidden((h) => { saveHideAccounts(!h); return !h; });
+  const mask = (s) => (hidden ? DOTS : s);
   // Transfers and balance corrections are the owner's (the server refuses staff); staff do not see them.
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
   const { data: accounts = [], isLoading } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
@@ -1279,111 +1404,103 @@ function Accounts({ onQuick }) {
   const held = wallets(accounts);
   const records = accounts.filter((a) => a.isCommissionRecord);
   const total = held.reduce((s, a) => s + a.balance, 0);
+  // The donut: every account above zero is a slice of what is held above zero. One at or below zero is not a
+  // slice, but it is listed under the donut so the list adds up to the total cash position.
+  const slices = held.map((a, i) => ({ a, i })).filter(({ a }) => a.balance > 0);
+  const above = slices.reduce((s, { a }) => s + a.balance, 0);
+  const rest = held.map((a, i) => ({ a, i })).filter(({ a }) => a.balance <= 0); // empty or below zero: not a slice
+  // Shares by the largest remainder, so the slices always add up to exactly 100%.
+  const shareOf = new Map(sharePercents(slices.map(({ a }) => a.balance), above).map((p, k) => [slices[k].a.id, p]));
+  const pctOf = (a) => shareOf.get(a.id) ?? 0;
+  // Each account in its brand's colour — the same colour it has on the Overview.
+  const rank = brandRank(accounts);
+  const unranked = held.filter((a) => !rank.has(a.brandId || 'general'));
+  const colourIdx = (a) => (rank.get(a.brandId || 'general') ?? rank.size + unranked.indexOf(a)) % ACCOUNT_HEX.length;
+
   return (
     <div className="space-y-4">
       {/* Stacked on a phone. Side by side, five buttons that will not shrink
           squeezed the heading into a 90 px column and broke the figure over
           three lines — "TSh 2," / "520," / "000" on the owner's screen. */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-faint">Total cash position</div>
-          <div className="text-2xl font-black text-foreground tabular-nums">{formatCurrency(total)}</div>
-          <div className="hidden text-[11px] text-faint sm:block">What your accounts are holding right now.</div>
+          <p className="text-[11px] font-medium text-white/55">Total cash position</p>
+          <p className={`mt-0.5 whitespace-nowrap text-2xl font-bold leading-tight tabular-nums ${total < 0 ? 'text-rose-300' : 'text-foreground'}${hidden ? ' tracking-[0.18em]' : ''}`}>{mask(formatCurrency(total))}</p>
+          <p className="mt-0.5 hidden text-[11px] text-white/50 sm:block">What your accounts are holding right now</p>
         </div>
-        <div className="tab-row sm:flex sm:gap-2">
-          {isAdmin && <Button variant="secondary" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-4 w-4" /> Transfer</Button>}
-          {isAdmin && <Button variant="secondary" onClick={() => setCorrectOpen(true)}><Scale className="h-4 w-4" /> Correct balance</Button>}
-          <Button variant="secondary" onClick={() => onQuick('income')}><ArrowDownLeft className="h-4 w-4" /> Income</Button>
-          <Button variant="secondary" onClick={() => onQuick('expense')}><ArrowUpRight className="h-4 w-4" /> Expense</Button>
-          <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Account</Button>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-3.5 w-3.5" /> Transfer</Button>}
+          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setCorrectOpen(true)}><Scale className="h-3.5 w-3.5" /> Correct balance</Button>}
+          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onQuick('income')}><ArrowDownLeft className="h-3.5 w-3.5" /> Income</Button>
+          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onQuick('expense')}><ArrowUpRight className="h-3.5 w-3.5" /> Expense</Button>
+          <Button className="px-3 py-1.5 text-xs" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" /> Account</Button>
         </div>
       </div>
-      {/* Which pocket holds the money — the Inventory "where every box is"
-          pattern, applied to cash. One bar, one truth. */}
-      {total > 0 && held.length > 1 && (
-        <Card>
-          <div className="p-5">
-            <h3 className="text-sm font-semibold text-foreground">Where the money sits</h3>
-            <p className="mt-0.5 text-xs text-muted">Every account's share of the {formatCurrency(total)}.</p>
-            <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
-              {held.map((a, i) => (
-                <div key={a.id} className={`h-full ${ACCOUNT_BAR[i % ACCOUNT_BAR.length]}`}
-                  style={{ width: `${Math.max(0, (a.balance / total) * 100)}%` }} />
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5">
-              {held.map((a, i) => (
-                <span key={a.id} className="inline-flex items-center gap-1.5 text-xs text-muted">
-                  <span className={`h-2 w-2 rounded-full ${ACCOUNT_DOT[i % ACCOUNT_DOT.length]}`} />
-                  {a.name} <b className="tabular-nums text-foreground">{formatCurrency(a.balance)}</b>
-                </span>
-              ))}
-            </div>
-          </div>
-        </Card>
-      )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {held.map((a, i) => {
-          const Icon = ACCOUNT_ICON[a.type] || Wallet;
-          const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
-          return (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => setViewing(a)}
-              className={`stat-glass cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400`}
-            >
-              <div className="relative flex items-center justify-between">
-                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-5 w-5" /></span>
-                {a.isDefault && <Badge className="bg-brand-500/15 text-brand-600">Default</Badge>}
-              </div>
-              <div className="relative mt-3 text-sm font-semibold text-foreground">{a.name}</div>
-              {a.notes && <div className="relative text-[11px] text-faint">{a.notes}</div>}
-              <div className={`relative mt-1 text-2xl font-bold tabular-nums ${a.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(a.balance)}</div>
-              <div className="relative mt-3 flex justify-between border-t border-white/[0.07] pt-2 text-xs">
-                <span className="text-emerald-400">In {formatCurrency(a.moneyIn)}</span>
-                <span className="text-rose-400">Out {formatCurrency(a.moneyOut)}</span>
-              </div>
-              <div className="relative mt-1 flex items-center justify-between text-[11px] text-faint">
-                <span>Opening {formatCurrency(a.openingBalance)}</span>
-                <span className="inline-flex items-center gap-1 font-medium text-brand-600">
-                  See every movement <ChevronRight className="h-3 w-3" />
-                </span>
-              </div>
-            </button>
-          );
-        })}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        {/* The wallets, two to a row, then the record. */}
+        <div className="grid grid-cols-1 content-start gap-4 sm:grid-cols-2 xl:col-span-2">
+          {held.map((a) => (
+            <AccountWalletCard key={a.id} account={a} tint={WALLET_TINT[colourIdx(a)]}
+              hex={ACCOUNT_HEX[colourIdx(a)]} light={ACCOUNT_LIGHT[colourIdx(a)]}
+              sharePct={a.balance > 0 && above > 0 ? pctOf(a) : null}
+              hidden={hidden} onToggleHide={toggleHide} onOpen={() => setViewing(a)} />
+          ))}
+          {records.map((a) => <RecordWalletCard key={a.id} account={a} hidden={hidden} onToggleHide={toggleHide} onOpen={() => setViewing(a)} />)}
+        </div>
 
-        {/* Not a wallet, so it does not read like one: what it shows is the
-            total you have PAID, and the card says outright that no money sits
-            here. A zero balance printed beside a large total would only invite
-            the question of which figure is real. */}
-        {records.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            onClick={() => setViewing(a)}
-            className="stat-glass cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-          >
-            <div className="relative flex items-center justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Coins className="h-5 w-5" /></span>
-              <Badge className="bg-violet-500/15 text-violet-300">Record only</Badge>
+        {/* Which pocket holds the money: one big donut, each account in its own colour. */}
+        <Panel title="Where the cash sits" sub={round2ui(above) === round2ui(total) ? "Each account's share" : "Each account's share of what is held above zero"}>
+          {slices.length ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-5 sm:flex-row sm:gap-8 xl:flex-col xl:gap-5">
+              <div className="relative w-full max-w-[270px] shrink-0">
+                <DonutChart data={slices.map(({ a }) => ({ name: a.name, value: a.balance }))} height={256} legend={false}
+                  innerRadius={86} outerRadius={122} stroke="none"
+                  colors={slices.map(({ a }) => ACCOUNT_HEX[colourIdx(a)])} />
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="whitespace-nowrap text-[15px] font-bold tabular-nums text-foreground">{mask(formatCurrency(above))}</span>
+                  <span className="mt-0.5 text-[10px] uppercase tracking-wider text-white/50">{round2ui(above) === round2ui(total) ? 'held' : 'above zero'}</span>
+                </div>
+              </div>
+              <ul className="w-full min-w-0 space-y-2 sm:flex-1 xl:flex-none">
+                {slices.map(({ a }) => {
+                  const Icon = ACCOUNT_ICON[a.type] || Wallet;
+                  const hex = ACCOUNT_HEX[colourIdx(a)];
+                  const light = ACCOUNT_LIGHT[colourIdx(a)];
+                  return (
+                    <li key={a.id}>
+                      <button type="button" onClick={() => setViewing(a)}
+                        className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1 text-left text-[13px] transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full" style={{ background: `${hex}26`, color: light }}>
+                          <Icon className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0 flex-1 leading-tight text-muted">{a.name}</span>
+                        <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums text-foreground">{mask(formatCurrency(a.balance))}</span>
+                        <span className="w-9 shrink-0 text-right text-[11px] font-semibold tabular-nums" style={{ color: light }}>{pctOf(a)}%</span>
+                      </button>
+                    </li>
+                  );
+                })}
+                {rest.map(({ a }) => {
+                  const Icon = ACCOUNT_ICON[a.type] || Wallet;
+                  return (
+                    <li key={a.id} className="flex items-center gap-2.5 px-1 py-1 text-[13px]"
+                      title={a.balance < 0 ? `${a.name} is below zero — it is not a slice of the donut, but it is counted in the total cash position.` : undefined}>
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-white/40"><Icon className="h-3.5 w-3.5" /></span>
+                      <span className="min-w-0 flex-1 leading-tight text-white/50">{a.name}</span>
+                      <span className={`shrink-0 whitespace-nowrap font-semibold tabular-nums ${a.balance < 0 ? 'text-rose-300' : 'text-white/60'}`}>{mask(formatCurrency(a.balance))}</span>
+                      <span className="w-9 shrink-0 text-right text-[11px] text-faint">—</span>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-            <div className="relative mt-3 text-sm font-semibold text-foreground">{a.name}</div>
-            <div className="relative mt-1 text-2xl font-bold tabular-nums text-violet-300">{formatCurrency(a.recorded)}</div>
-            <p className="relative mt-1.5 text-xs text-muted">
-              Commission you have paid reps from your own pocket. Kept here so you have the record — it never moves M-Pesa or Airtel Money, and it never comes off your profit.
-            </p>
-            <div className="relative mt-3 flex items-center justify-between border-t border-white/[0.07] pt-2 text-[11px] text-faint">
-              <span>No money is held here</span>
-              <span className="inline-flex items-center gap-1 font-medium text-brand-600">
-                See every payout <ChevronRight className="h-3 w-3" />
-              </span>
-            </div>
-          </button>
-        ))}
+          ) : (
+            <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/50">No account holds money right now.</div>
+          )}
+        </Panel>
       </div>
+
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
       {correctOpen && <CorrectBalanceModal accounts={accounts} onClose={() => setCorrectOpen(false)} />}
@@ -1642,10 +1759,53 @@ function EditTxnModal({ txn, accounts, brands, onClose }) {
   );
 }
 
+// ── Profit and Cash Flow: the Overview's look ───────────────────────────────
+// Nino, 11 Nov 2026: "make them nice too but cooler — keep the well-arranged cards, but the cool style". So the
+// same parts as the Overview: the period as one pill switch, one header strip that is the tab's sum, small
+// figure tiles, a chart, tidy lists and compact tables. Every figure the old tabs showed is still on them.
+
+// The Overview's period switch.
+function PeriodPills({ periods, value, onChange }) {
+  return (
+    <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-white/[0.04] p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Period">
+      {periods.map(([k, label]) => (
+        <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)}
+          className={`shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition sm:px-3.5 sm:text-[13px] ${value === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
+      ))}
+    </div>
+  );
+}
+
+// The left part of a header strip: what the strip is, the period, the window it covers.
+function StripTitle({ eyebrow, title, sub }) {
+  return (
+    <div className="min-w-0">
+      <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45 sm:block">{eyebrow}</p>
+      <p className="text-[15px] font-semibold leading-tight text-foreground sm:mt-1">{title}</p>
+      {sub && <p className="mt-0.5 text-[11px] leading-snug text-white/50">{sub}</p>}
+    </div>
+  );
+}
+
+// One label · figure line in a panel. A money figure is never shortened.
+function Line({ label, children, tone = 'text-foreground', strong, rule }) {
+  return (
+    <div className={clsx('flex items-baseline justify-between gap-3', rule && 'border-t border-white/[0.06] pt-1.5')}>
+      <span className={clsx('shrink-0 text-[12px]', strong ? 'font-semibold text-foreground' : 'text-white/55')}>{label}</span>
+      <span className={clsx('min-w-0 text-right text-[13px] tabular-nums', strong ? 'font-bold' : 'font-semibold', tone)}>{children}</span>
+    </div>
+  );
+}
+
+// A compact table in a panel, edge to edge — the Overview's "Best products" table.
+const TH_CLS = 'w-px whitespace-nowrap px-3 py-2 text-right font-semibold';
+const TD_NUM = 'whitespace-nowrap px-3 py-2 text-right tabular-nums';
+
 // ── Profit tab (absorbed from the old Profit & Margins page) ─────────────────
 const PROFIT_PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['all', 'All time']];
+// A brand wears the colour it has on the Overview (brandRank, from the page's accounts list — no extra query).
 
-function ProfitTab() {
+function ProfitTab({ accounts = [] }) {
   const [period, setPeriod] = useState('all');
   const { data, isLoading } = useQuery({
     queryKey: ['reports', 'profit-overview', period],
@@ -1662,182 +1822,287 @@ function ProfitTab() {
   // Say what window the figures actually cover. With a finance epoch set,
   // "All time" really means "since go-live" — the owner asked "what time?"
   // about a card once already; no figure gets to be vague about its period.
+  // One day ("Today") is already in the title, so its range is not repeated under it.
   const windowLabel = period === 'all'
     ? (data.epochAt ? `since ${formatDate(data.epochAt)} — the day finance went live` : 'all recorded sales')
-    : data.range ? `${formatDate(data.range.start)} → ${formatDate(data.range.end)}` : '';
-
-  const cards = [
-    { label: 'Revenue', value: formatCurrency(t.revenue), icon: TrendingUp, sub: `${formatNumber(t.boxes)} boxes sold`,
-      ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300' },
-    { label: 'Cost of goods', value: formatCurrency(t.cost), icon: Package, sub: 'at cost when each box sold',
-      ring: 'ring-white/[0.08]', glow: 'from-white/[0.03]', chip: 'bg-white/10 text-muted', num: 'text-foreground' },
-    { label: 'Gross profit', value: formatCurrency(t.profit), icon: Wallet, sub: `${t.margin}% margin`,
-      ...(t.profit >= 0 ? TINT.sky : TINT.rose) },
-    // Reported, never deducted — the owner pays reps himself, in cash.
-    { label: 'Reps earned', value: formatCurrency(t.commission), icon: Coins, sub: 'you pay this, not the business',
-      ring: 'ring-amber-500/25', glow: 'from-amber-500/[0.12]', chip: 'bg-amber-500/15 text-amber-300', num: 'text-amber-300' },
-    // NOT "you keep": the owner does not hold this money — most of it has
-    // already gone back to the supplier and into stock. It is what the sales
-    // earned, and saying otherwise is what made him distrust the page.
-    { label: 'Earned on sales', value: `${t.contributionMargin}%`, icon: Scale, sub: `${formatCurrency(t.contribution)} — mostly back in stock, not cash`,
-      ring: 'ring-violet-500/25', glow: 'from-violet-500/[0.14]', chip: 'bg-violet-500/15 text-violet-300', num: 'text-violet-300' },
-  ];
+    : data.range && formatDate(data.range.start) !== formatDate(data.range.end) ? `${formatDate(data.range.start)} → ${formatDate(data.range.end)}` : '';
+  const now = new Date();
+  const periodTitle = {
+    today: eatDay(now, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+    week: 'This week',
+    month: eatDay(now, { month: 'long', year: 'numeric' }),
+    all: 'All time',
+  }[period];
+  const words = PERIOD_WORDS[period];
 
   const perBoxKept = (row) => (row.boxes > 0 ? row.contribution / row.boxes : 0);
+  const rank = brandRank(accounts, data.byBrand.filter((b) => b.revenue > 0).map((b) => b.brandId));
+  const brandHex = (id, i) => ACCOUNT_LIGHT[(rank.get(id) ?? rank.size + i) % ACCOUNT_LIGHT.length];
+  // The donut: each brand's share of what the sales earned. A brand that lost money is not a slice; it is
+  // listed under the ring.
+  const earnedSlices = data.byBrand.map((b, i) => ({ b, i })).filter(({ b }) => b.contribution > 0);
+  const earnedPos = earnedSlices.reduce((s, { b }) => s + b.contribution, 0);
+  const repTop = Math.max(0, ...data.byRep.map((r) => r.contribution));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-1.5">
-        {PROFIT_PERIODS.map(([k, label]) => (
-          <button key={k} onClick={() => setPeriod(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'border border-white/25 bg-white/[0.12] text-foreground' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
-        ))}
-        {windowLabel && <span className="ml-2 text-xs text-faint">{windowLabel}</span>}
-      </div>
+    <div className="space-y-4">
+      <PeriodPills periods={PROFIT_PERIODS} value={period} onChange={setPeriod} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
-        {cards.map((c) => (
-          <div key={c.label} className="stat-glass p-4">
-            <div className="relative flex items-start justify-between gap-2">
-              <p className="text-xs font-medium text-muted">{c.label}</p>
-              <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
-            </div>
-            <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
-            <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>
+      {/* ── Header strip: the period · sales − goods = gross profit · the margin ring ── */}
+      {/* Gross profit IS what the sales earned (the server sends the two as one figure), so it is said once. */}
+      <div className="stat-glass grid grid-cols-1 gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5 2xl:grid-cols-[minmax(0,17rem)_minmax(0,1fr)_auto] 2xl:gap-6">
+        <StripTitle eyebrow="Profit" title={periodTitle} sub={windowLabel} />
+
+        <div className="order-last grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-4 sm:col-span-2 sm:flex sm:items-start sm:justify-between sm:gap-5 2xl:order-none 2xl:col-span-1 2xl:border-l 2xl:border-t-0 2xl:pl-6 2xl:pt-0"
+          title="Gross profit = revenue − cost of goods. Rep commission is reported beside it, never taken off: you pay reps yourself.">
+          <Term label="Revenue" value={formatCurrency(t.revenue)} tone="text-foreground" dot="bg-sky-400"
+            caption={`${formatNumber(t.boxes)} boxes sold`} />
+          <Op>−</Op>
+          <Term label="Cost of goods" sign="− " value={formatCurrency(t.cost)} tone="text-foreground" dot="bg-rose-400"
+            caption="at cost when each box sold" />
+          <Op>=</Op>
+          <Term label="Gross profit" sign="= " big value={formatCurrency(t.profit)} tone={t.profit >= 0 ? 'text-emerald-300' : 'text-rose-300'} dot="bg-emerald-400"
+            caption="mostly back in stock, not cash" />
+        </div>
+
+        <div className="flex items-center gap-3 border-t border-white/[0.07] pt-4 sm:border-t-0 sm:pt-0 2xl:border-l 2xl:pl-6"
+          title="Out of every 100 shillings sold, what stayed in the business after paying for the boxes.">
+          {/* The ring only fills 0–100, so a loss shows a dash, never a "0%" beside a negative figure. */}
+          {t.contributionMargin >= 0 ? <Ring pct={t.contributionMargin} label={false} /> : (
+            <span className="flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-rose-300 ring-[5px] ring-inset ring-rose-400/30" aria-hidden="true">−</span>
+          )}
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-white/55">Earned on sales</p>
+            <p className={`mt-0.5 whitespace-nowrap text-xl font-bold leading-tight tabular-nums ${t.contribution >= 0 ? 'text-foreground' : 'text-rose-300'}`}>{t.contributionMargin}%</p>
+            <p className="mt-0.5 text-[11px] text-white/50">margin on every sale</p>
           </div>
-        ))}
+        </div>
       </div>
 
-      {/* Per brand: the full money path, ending at the number the owner
-          actually means — what is left after the goods AND the rep. */}
+      {/* ── Four small figures: what reps earned, and what the stock on hand could still make ── */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Tile whole label="Reps earned" value={formatCurrency(t.commission)} tone="text-amber-300"
+          caption="you pay this, not the business" title={`Commission on the boxes settled ${words} — reported, never taken off the profit`} />
+        <Tile whole label="Inventory value (cost)" value={formatCurrency(data.inventoryValue.costValue)}
+          caption={`${formatNumber(data.inventoryValue.units)} boxes on hand`} title="Every box on hand, at what it cost" />
+        <Tile whole label="Potential revenue" value={formatCurrency(data.inventoryValue.potentialRevenue)}
+          caption="if all sold at selling price" />
+        <Tile whole label="Potential profit" value={formatCurrency(data.inventoryValue.potentialProfit)} tone="text-sky-300"
+          caption="before commissions" />
+      </div>
+
+      {/* ── What each brand makes · each brand's share ── */}
       {data.byBrand.length > 0 && (
-        <div>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">What each brand makes</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {data.byBrand.map((b) => {
-              const stock = stockByBrand.get(b.brandId);
-              const path = [
-                { label: 'Revenue', v: b.revenue, cls: 'text-foreground' },
-                { label: '− Goods', v: -b.cost, cls: 'text-muted' },
-              ];
-              return (
-                <Card key={b.brandId}>
-                  <div className="p-5">
-                    <div className="flex items-center justify-between">
-                      <span className="rounded-full bg-white/[0.08] px-2.5 py-0.5 text-xs font-bold text-foreground ring-1 ring-inset ring-white/10">{b.name}</span>
-                      <span className="text-xs text-faint">{formatNumber(b.boxes)} box{b.boxes === 1 ? '' : 'es'}</span>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Panel className="lg:col-span-2" title="What each brand makes" sub={`Sales − goods = earned · ${words}`}>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
+              {data.byBrand.map((b, i) => {
+                const stock = stockByBrand.get(b.brandId);
+                const cogsPct = b.revenue > 0 ? Math.min(100, Math.max(0, (b.cost / b.revenue) * 100)) : 0;
+                return (
+                  <div key={b.brandId} className="min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <span className="h-2 w-2 shrink-0 self-center rounded-full" style={{ background: brandHex(b.brandId, i) }} />
+                      <span className="text-[13px] font-semibold text-foreground">{b.name}</span>
+                      <span className="text-[11px] text-faint">{formatNumber(b.boxes)} {b.boxes === 1 ? 'box' : 'boxes'}</span>
+                      <span className={`ml-auto whitespace-nowrap text-lg font-bold leading-none tabular-nums ${b.contribution >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+                        title="earned on sales">{b.contributionMargin}%</span>
                     </div>
-                    <p className={`mt-3 text-3xl font-bold leading-none tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {b.contributionMargin}%
-                    </p>
-                    <p className="mt-1 text-xs text-faint">earned on sales — {formatCurrency(b.contribution)} after the boxes</p>
-                    <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3">
-                      {path.map((r) => (
-                        <div key={r.label} className="flex items-baseline justify-between">
-                          <span className="text-xs text-muted">{r.label}</span>
-                          <span className={`text-sm font-semibold tabular-nums ${r.cls}`}>{formatCurrency(Math.abs(r.v))}</span>
-                        </div>
-                      ))}
-                      <div className="flex items-baseline justify-between border-t border-white/[0.06] pt-1.5">
-                        <span className="text-xs font-semibold text-foreground">= Earned</span>
-                        <span className={`text-sm font-bold tabular-nums ${b.contribution >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {formatCurrency(b.contribution)}
-                        </span>
-                      </div>
+                    <div className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                      <div className="h-full bg-rose-400/45" style={{ width: `${cogsPct}%` }} />
+                      <div className="h-full bg-emerald-400" style={{ width: `${Math.max(0, 100 - cogsPct)}%` }} />
                     </div>
-                    {/* What this brand has made, then what it could still
-                        make. The three figures under the fold were only ever
-                        shown for both brands together, which answered "is
-                        there money on the shelf" but never "whose". Same shape
-                        as the path above it, so the card reads as one story:
-                        money earned, then money waiting. */}
+                    <div className="mt-2.5 space-y-1">
+                      <Line label="Revenue">{formatCurrency(b.revenue)}</Line>
+                      <Line label="− Goods" tone="text-muted">{formatCurrency(b.cost)}</Line>
+                      <Line label="= Earned" strong rule tone={b.contribution >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{formatCurrency(b.contribution)}</Line>
+                    </div>
+                    {/* What this brand has made, then what it could still make — money earned, then money waiting. */}
                     {stock && (
-                      <div className="mt-4 space-y-1.5 border-t border-white/[0.06] pt-3">
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-xs text-muted">Still in stock</span>
-                          <span className="text-xs text-faint">
-                            {formatNumber(stock.stockUnits)} boxes · {formatCurrency(stock.stockValue)} at cost
+                      <div className="mt-3 space-y-1 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-inset ring-white/[0.05]">
+                        <Line label="Still in stock" tone="text-white/60">
+                          <span className="text-[11.5px] font-normal">
+                            <span className="whitespace-nowrap">{formatNumber(stock.stockUnits)} boxes</span>{' · '}
+                            <span className="whitespace-nowrap">{formatCurrency(stock.stockValue)} at cost</span>
                           </span>
-                        </div>
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-xs text-muted">If it all sells</span>
-                          <span className="text-sm font-semibold tabular-nums text-foreground">
-                            {formatCurrency(stock.stockRetail)}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline justify-between border-t border-white/[0.06] pt-1.5">
-                          <span className="text-xs font-semibold text-foreground">= Potential profit</span>
-                          <span className={`text-sm font-bold tabular-nums ${stock.stockPotential > 0 ? 'text-sky-300' : 'text-muted'}`}>
-                            {formatCurrency(stock.stockPotential)}
-                          </span>
-                        </div>
+                        </Line>
+                        <Line label="If it all sells">{formatCurrency(stock.stockRetail)}</Line>
+                        <Line label="= Potential profit" strong rule tone={stock.stockPotential > 0 ? 'text-sky-300' : 'text-muted'}>{formatCurrency(stock.stockPotential)}</Line>
                       </div>
                     )}
                   </div>
-                </Card>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </Panel>
+
+          <Panel title="Share by brand" sub={`Of the gross profit · ${words}`}>
+            {earnedSlices.length ? (
+              <div className="flex flex-1 flex-col justify-center gap-4">
+                <div className="relative mx-auto w-full max-w-[180px]">
+                  <DonutChart data={earnedSlices.map(({ b }) => ({ name: b.name, value: b.contribution }))} height={160} legend={false}
+                    innerRadius={54} outerRadius={76} stroke="none"
+                    colors={earnedSlices.map(({ b, i }) => brandHex(b.brandId, i))} />
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-sm font-bold tabular-nums text-foreground">TSh {formatNumber(earnedPos, { compact: true })}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-white/50">{round2ui(earnedPos) === round2ui(t.profit) ? 'earned' : 'brands above zero'}</span>
+                  </div>
+                </div>
+                <ul className="space-y-2">
+                  {data.byBrand.map((b, i) => {
+                    const slice = b.contribution > 0;
+                    const revPct = t.revenue > 0 ? Math.round((b.revenue / t.revenue) * 100) : 0;
+                    return (
+                      <li key={b.brandId} className="text-[13px]">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: slice ? brandHex(b.brandId, i) : 'rgba(255,255,255,0.2)' }} />
+                          <span className="min-w-0 flex-1 text-muted">{b.name}</span>
+                          <span className={`shrink-0 whitespace-nowrap font-semibold tabular-nums ${b.contribution >= 0 ? 'text-foreground' : 'text-rose-300'}`}>{formatCurrency(b.contribution)}</span>
+                          <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-faint">{slice && earnedPos > 0 ? `${Math.round((b.contribution / earnedPos) * 100)}%` : '—'}</span>
+                        </div>
+                        <p className="ml-4 text-[11px] text-white/45">{revPct}% of the sales · <span className="whitespace-nowrap">reps earned <span className="tabular-nums text-amber-300/90">{formatCurrency(b.commission)}</span></span></p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : (
+              <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/50">Nothing earned in this period.</div>
+            )}
+          </Panel>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Inventory value (cost)" value={formatCurrency(data.inventoryValue.costValue)} icon={Boxes} tone="slate" hint={`${formatNumber(data.inventoryValue.units)} boxes on hand`} />
-        <StatCard label="Potential revenue" value={formatCurrency(data.inventoryValue.potentialRevenue)} icon={TrendingUp} tone="emerald" hint="if all sold at selling price" />
-        <StatCard label="Potential profit" value={formatCurrency(data.inventoryValue.potentialProfit)} icon={Wallet} tone="brand" hint="before commissions" />
-      </div>
-
-      {/* Every product, one by one — the whole catalogue, not a top list. */}
-      <Card>
-        <CardHeader title="Every product, one by one" subtitle="What each one brings in and what you keep, best first" />
-        {/* Edge to edge, like the Overview's product table: inside the card's padding it was a box in a box
-            and lost its last column on a tablet. */}
-        {!data.byProduct.length ? <CardBody><EmptyState title="No sales in this period" icon={Package} /></CardBody> : (
-            <Table>
-              <THead><TR><TH>Product</TH><TH>Boxes</TH><TH>Revenue</TH><TH>Goods</TH><TH>Earned</TH><TH>Earned / box</TH><TH>Margin</TH></TR></THead>
-              <TBody>
+      {/* ── Every product · every rep ── */}
+      {/* The product names need the width: the table runs full width, and the reps sit beside it, from 1400 px. */}
+      <div className="grid grid-cols-1 gap-4 min-[1400px]:grid-cols-3">
+        <Panel className="min-[1400px]:col-span-2" title="Every product, one by one" sub={`Best first · ${words}`}>
+          {!data.byProduct.length ? (
+            <p className="py-6 text-center text-sm text-white/50">No sales in this period.</p>
+          ) : (
+            <>
+              <ul className="-mx-4 -mb-4 divide-y divide-white/[0.05] border-t border-white/[0.06] sm:hidden">
                 {data.byProduct.map((p) => (
-                  <TR key={p.productId}>
-                    <TD className="font-medium text-foreground">{p.name}</TD>
-                    <TD>{formatNumber(p.boxes)}</TD>
-                    <TD>{formatCurrency(p.revenue)}</TD>
-                    <TD className="text-muted">{formatCurrency(p.cost)}</TD>
-                    <TD className={`font-semibold ${p.contribution >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(p.contribution)}</TD>
-                    <TD className="tabular-nums">{formatCurrency(perBoxKept(p))}</TD>
-                    <TD>{p.contributionMargin}%</TD>
-                  </TR>
+                  <li key={p.productId} className="px-4 py-2.5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 text-[13px] font-medium leading-snug text-foreground">{p.name}</span>
+                      <span className={`shrink-0 whitespace-nowrap text-[13px] font-semibold tabular-nums ${p.contribution >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>{formatCurrency(p.contribution)}</span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-relaxed tabular-nums text-white/50">
+                      <span className="whitespace-nowrap">{formatNumber(p.boxes)} {p.boxes === 1 ? 'box' : 'boxes'}</span>{' · '}
+                      <span className="whitespace-nowrap">revenue {formatCurrency(p.revenue)}</span>{' · '}
+                      <span className="whitespace-nowrap">goods {formatCurrency(p.cost)}</span>{' · '}
+                      <span className="whitespace-nowrap">{formatCurrency(perBoxKept(p))} a box</span>{' · '}
+                      <span className="whitespace-nowrap">margin {p.contributionMargin}%</span>
+                    </p>
+                  </li>
                 ))}
-              </TBody>
-            </Table>
-        )}
-      </Card>
+              </ul>
+              <div className="-mx-4 -mb-4 hidden overflow-x-auto sm:block">
+                <table className="w-full min-w-[40rem] text-[13px]">
+                  <thead>
+                    <tr className="border-y border-white/[0.06] bg-white/[0.025] text-[10.5px] font-semibold uppercase tracking-wider text-white/45">
+                      <th className="px-4 py-2 text-left font-semibold">Product</th>
+                      <th className={TH_CLS}>Boxes</th>
+                      <th className={TH_CLS}>Revenue</th>
+                      <th className={TH_CLS}>Goods</th>
+                      <th className={TH_CLS}>Earned</th>
+                      <th className={TH_CLS} title="Earned per box">Per box</th>
+                      <th className={clsx(TH_CLS, 'pr-4')}>Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byProduct.map((p) => (
+                      <tr key={p.productId} className="border-b border-white/[0.05] transition last:border-0 hover:bg-white/[0.035]">
+                        <td className="px-4 py-2 font-medium leading-snug text-foreground">{p.name}</td>
+                        <td className={clsx(TD_NUM, 'text-muted')}>{formatNumber(p.boxes)}</td>
+                        <td className={clsx(TD_NUM, 'text-muted')}>{formatCurrency(p.revenue)}</td>
+                        <td className={clsx(TD_NUM, 'text-white/45')}>{formatCurrency(p.cost)}</td>
+                        <td className={clsx(TD_NUM, 'font-semibold', p.contribution >= 0 ? 'text-emerald-300' : 'text-rose-300')}>{formatCurrency(p.contribution)}</td>
+                        <td className={clsx(TD_NUM, 'text-muted')}>{formatCurrency(perBoxKept(p))}</td>
+                        <td className={clsx(TD_NUM, 'pr-4 text-muted')}>{p.contributionMargin}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Panel>
 
-      <Card>
-        <CardHeader title="Profit by sales rep" subtitle="What each rep's settled boxes bring in, after their commission" />
-        {!data.byRep.length ? <CardBody><EmptyState title="No rep sales in this period" icon={TrendingUp} /></CardBody> : (
-            <Table>
-              <THead><TR><TH>Sales rep</TH><TH>Boxes</TH><TH>Revenue</TH><TH>They earned</TH><TH>Business earned</TH><TH>Margin</TH></TR></THead>
-              <TBody>
-                {data.byRep.map((r) => (
-                  <TR key={r.salesRepId}>
-                    <TD className="font-medium text-foreground">{r.name}</TD>
-                    <TD>{formatNumber(r.boxes)}</TD>
-                    <TD>{formatCurrency(r.revenue)}</TD>
-                    <TD className="text-amber-400">{formatCurrency(r.commission)}</TD>
-                    <TD className={`font-semibold ${r.contribution >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(r.contribution)}</TD>
-                    <TD>{r.contributionMargin}%</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-        )}
-      </Card>
+        <Panel title="Profit by sales rep" sub={`Settled boxes · ${words}`}>
+          {!data.byRep.length ? (
+            <p className="py-6 text-center text-sm text-white/50">No rep sales in this period.</p>
+          ) : (
+            <div className="-mx-1 grid grid-cols-1 gap-x-8 sm:grid-cols-2 lg:grid-cols-3 min-[1400px]:grid-cols-1">
+              {data.byRep.map((r) => (
+                <div key={r.salesRepId} className="border-b border-white/[0.06] px-1 py-2.5 last:border-0 sm:border-0 min-[1400px]:border-b min-[1400px]:last:border-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="min-w-0 truncate text-[13px] font-semibold text-foreground">{r.name}</span>
+                    <span className="shrink-0 text-[11px] text-faint">{formatNumber(r.boxes)} {r.boxes === 1 ? 'box' : 'boxes'}</span>
+                    <span className={`ml-auto shrink-0 whitespace-nowrap text-[13px] font-bold tabular-nums ${r.contribution >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}
+                      title="What the business earned on this rep's boxes">{formatCurrency(r.contribution)}</span>
+                  </div>
+                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
+                    <div className="h-full rounded-full bg-emerald-400/70" style={{ width: `${repTop > 0 ? Math.max(2, (Math.max(0, r.contribution) / repTop) * 100) : 0}%` }} />
+                  </div>
+                  <p className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[11px] text-white/50">
+                    <span className="whitespace-nowrap">sales <span className="tabular-nums text-white/80">{formatCurrency(r.revenue)}</span></span>
+                    <span className="whitespace-nowrap" title="What this rep earned">rep <span className="tabular-nums text-amber-300">{formatCurrency(r.commission)}</span></span>
+                    <span className="whitespace-nowrap">margin <span className="tabular-nums text-white/80">{r.contributionMargin}%</span></span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
     </div>
   );
 }
 
 // ── Cash Flow tab ─────────────────────────────────────────────────────────────
 const CF_PERIODS = [['today', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly'], ['all', 'All time']];
+const IN_HEX = ['#34d399', '#38bdf8', '#a78bfa', '#fbbf24', '#f472b6'];
+const OUT_HEX = ['#fb7185', '#fbbf24', '#a78bfa', '#38bdf8', '#f472b6'];
+// A kind of movement keeps its colour whatever the period and however it ranks (the lists are biggest first);
+// the index colours above are only for a kind not named here (his own money is never in these lists).
+const TYPE_HEX = {
+  SETTLEMENT: '#34d399', WAREHOUSE_SALE: '#38bdf8', INCOME: '#f472b6', ADJUSTMENT: '#a78bfa',
+  EXPENSE: '#fb7185', STOCK_PURCHASE: '#fbbf24', COMMISSION_PAYMENT: '#fb923c', TRANSFER: '#94a3b8',
+};
+// The month table's cells: a little tighter than TH_CLS / TD_NUM on a phone, so four columns of money fit at 390 px.
+const CF_TH = 'w-px whitespace-nowrap px-2 py-2 text-right font-semibold sm:px-3';
+const CF_TD = 'whitespace-nowrap px-2 py-2 text-right tabular-nums sm:px-3';
+
+// What moved the money, by kind: one joined bar of the shares, then a line per kind.
+function KindRows({ rows, total, colours, empty }) {
+  if (!rows.length) return <p className="py-6 text-center text-sm text-white/50">{empty}</p>;
+  return (
+    <>
+      <div className="flex h-2 w-full gap-px overflow-hidden rounded-full bg-white/[0.06]">
+        {rows.map((r, i) => (
+          <div key={r.label} className="h-full first:rounded-l-full last:rounded-r-full" title={`${r.label}: ${formatCurrency(r.value)}`}
+            style={{ width: `${total > 0 ? Math.max(0.5, (r.value / total) * 100) : 0}%`, background: r.hex || colours[i % colours.length] }} />
+        ))}
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {rows.map((r, i) => {
+          const pct = total > 0 ? (r.value / total) * 100 : 0;
+          return (
+            <li key={r.label} className="flex items-center gap-2 text-[13px]">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: r.hex || colours[i % colours.length] }} />
+              <span className="min-w-0 flex-1 text-muted">{r.label}</span>
+              {r.count != null && <span className="shrink-0 text-[10.5px] tabular-nums text-faint">{formatNumber(r.count)}×</span>}
+              <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums text-foreground">{formatCurrency(r.value)}</span>
+              <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-faint">{pct > 0 && pct < 1 ? '<1%' : `${Math.round(pct)}%`}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
 
 function CashFlowTab() {
   const [period, setPeriod] = useState('month');
@@ -1847,123 +2112,164 @@ function CashFlowTab() {
   });
   if (isLoading || !data) return <PageSpinner />;
 
-  const inRows = (data.byType || []).filter((r) => r.direction === 'IN').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count }));
-  const outRows = (data.byType || []).filter((r) => r.direction === 'OUT').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count }));
+  const inRows = (data.byType || []).filter((r) => r.direction === 'IN').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count, hex: TYPE_HEX[r.type] }));
+  const outRows = (data.byType || []).filter((r) => r.direction === 'OUT').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count, hex: TYPE_HEX[r.type] }));
   const inTotal = inRows.reduce((a, r) => a + r.value, 0);
   const outTotal = outRows.reduce((a, r) => a + r.value, 0);
-  const hasSeries = (data.series || []).some((m) => m.moneyIn > 0 || m.moneyOut > 0);
+  const series = data.series || [];
+  const hasSeries = series.some((m) => m.moneyIn > 0 || m.moneyOut > 0);
+  const sixIn = series.reduce((s, m) => s + m.moneyIn, 0);
+  const sixOut = series.reduce((s, m) => s + m.moneyOut, 0);
+  const sixNet = series.reduce((s, m) => s + (m.net ?? (m.moneyIn - m.moneyOut)), 0);
+
+  // The owner's own money moves balances without being trade. Shown on its own so the closing balance still
+  // adds up to the real cash. Same two parts as the Overview, so the two tabs cannot disagree about how much of
+  // his own money is in.
+  const o = data.owner || {};
+  const showOwner = (data.ownerNet ?? 0) !== 0 || (o.commissionFromPocket ?? 0) !== 0;
+  const ownerPutIn = Number(o.putIn || 0) - Number(o.drawn || 0);
+  // The parts add up to the figure above them: put in through an account + paid by hand − taken out.
+  const intoAcc = Number(o.intoAccounts || 0);
+  const byHand = Number(o.commissionFromPocket || 0);
+  const drawn = Number(o.drawn || 0);
+  const ownerParts = byHand > 0 && (intoAcc > 0 || drawn > 0)
+    ? [intoAcc > 0 && `${formatCurrency(intoAcc)} put in`, `${formatCurrency(byHand)} by hand`, drawn > 0 && `${formatCurrency(drawn)} taken out`].filter(Boolean)
+    : byHand > 0
+      ? ['all of it commission paid by hand']
+      : [(data.ownerNet ?? 0) >= 0 ? 'you put in' : 'you took out'];
+
+  const now = new Date();
+  const periodTitle = {
+    today: eatDay(now, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+    week: 'This week',
+    month: eatDay(now, { month: 'long', year: 'numeric' }),
+    year: eatDay(now, { year: 'numeric' }),
+    all: 'All time',
+  }[period];
+  const day = (v) => eatDay(v, { day: 'numeric', month: 'short', year: 'numeric' });
+  // One day ("Daily") is already in the title, so its range is not repeated under it.
+  const periodSub = !data.range ? 'everything recorded so far'
+    : day(data.range.start) === day(data.range.end) ? '' : `${day(data.range.start)} → ${day(data.range.end)}`;
+  const ownerNet = data.ownerNet ?? 0;
+  // Four terms run in one line from lg; the fifth (his own money) needs xl.
+  const sumWide = ownerNet !== 0 ? true : 'lg';
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap gap-1.5">
-        {CF_PERIODS.map(([k, label]) => (
-          <button key={k} onClick={() => setPeriod(k)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${period === k ? 'border border-white/25 bg-white/[0.12] text-foreground' : 'border border-border text-muted hover:bg-elevated'}`}>{label}</button>
-        ))}
-      </div>
+    <div className="space-y-4">
+      <PeriodPills periods={CF_PERIODS} value={period} onChange={setPeriod} />
 
-      {/* Five columns whenever the "Your own money" card below is shown — it also shows for commission paid
-          by hand with no net owner money, which left "Closing balance" alone on a second row. */}
-      <div className={`grid grid-cols-2 gap-3 ${((data.ownerNet ?? 0) !== 0 || (data.owner?.commissionFromPocket ?? 0) !== 0) ? 'lg:grid-cols-3 xl:grid-cols-5' : 'xl:grid-cols-4'}`}>
-        <TintCard label="Opening balance" value={formatCurrency(data.openingBalance)} icon={PiggyBank} tone="slate" sub="at period start" />
-        <TintCard label="Money in" value={formatCurrency(data.moneyIn)} icon={ArrowDownLeft} tone="emerald" sub="the business collected" />
-        <TintCard label="Money out" value={formatCurrency(data.moneyOut)} icon={ArrowUpRight} tone="rose" sub="the business paid" />
-        {/* The owner's own money moves balances without being trade. Shown on
-            its own so the closing balance still adds up to the real cash. */}
-        {((data.ownerNet ?? 0) !== 0 || (data.owner?.commissionFromPocket ?? 0) !== 0) && (() => {
-          // Same two parts as the Overview, so the two tabs cannot disagree
-          // about how much of his own money is in.
-          const o = data.owner || {};
-          const putIn = Number(o.putIn || 0) - Number(o.drawn || 0);
-          const parts = (o.intoAccounts || 0) > 0 && (o.commissionFromPocket || 0) > 0
-            ? `${formatCurrency(o.intoAccounts)} through an account · ${formatCurrency(o.commissionFromPocket)} by hand`
-            : (o.commissionFromPocket || 0) > 0
-              ? 'all of it commission paid by hand'
-              : (data.ownerNet >= 0 ? 'you put in' : 'you took out');
-          return (
-            <TintCard label="Your own money" value={formatCurrency(putIn !== 0 ? putIn : data.ownerNet)}
-              icon={Coins} tone="sky" sub={parts} />
-          );
-        })()}
-        <TintCard label="Closing balance" value={formatCurrency(data.closingBalance)} icon={Wallet} tone={data.closingBalance >= 0 ? 'slate' : 'rose'} sub="what the accounts hold" />
-      </div>
+      {/* ── Header strip: opening + in − out (± yours) = closing, and his own money ── */}
+      {/* The four figures and the line that joined them are one sum now: each figure once. */}
+      <div className="stat-glass grid grid-cols-1 gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5">
+        <StripTitle eyebrow="Cash flow" title={periodTitle} sub={periodSub} />
 
-      {/* The story in one line: the four figures above, connected. */}
-      <Card>
-        <CardBody>
-          <div className="flex flex-wrap items-center justify-center gap-3 py-1 text-sm">
-            <span className="text-muted">Opening <b className="text-foreground">{formatCurrency(data.openingBalance)}</b></span>
-            <ChevronRight className="h-4 w-4 text-faint" />
-            <span className="text-emerald-500">+ {formatCurrency(data.moneyIn)}</span>
-            <ChevronRight className="h-4 w-4 text-faint" />
-            <span className="text-rose-400">− {formatCurrency(data.moneyOut)}</span>
-            {(data.ownerNet ?? 0) !== 0 && (
-              <>
-                <ChevronRight className="h-4 w-4 text-faint" />
-                {/* The card above leads with everything he has put in; this
-                    line can only use the part that moved a balance, or the
-                    closing figure stops reconciling. Named so the difference
-                    reads as deliberate rather than as a mistake. */}
-                <span className="text-sky-300">{data.ownerNet >= 0 ? '+' : '−'} {formatCurrency(Math.abs(data.ownerNet))} yours, through an account</span>
-              </>
-            )}
-            <ChevronRight className="h-4 w-4 text-faint" />
-            <span className="text-muted">Closing <b className={data.closingBalance >= 0 ? 'text-foreground' : 'text-rose-500'}>{formatCurrency(data.closingBalance)}</b></span>
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* Motion, not one frame: six months of in vs out. */}
-      <Card>
-        <CardHeader title="The money, in motion" subtitle="Money in and out, month by month — the last six" />
-        <div className="px-2 pb-3">
-          {hasSeries ? (
-            <TrendChart
-              data={data.series}
-              series={[
-                { key: 'moneyIn', name: 'Money in', color: '#34d399' },
-                { key: 'moneyOut', name: 'Money out', color: '#fb7185' },
-              ]}
-              height={220}
-            />
-          ) : (
-            <div className="flex h-[160px] items-center justify-center text-sm text-faint">
-              The trend fills in as months of activity accumulate.
+        {showOwner ? (
+          <div className="flex items-center gap-3 border-t border-white/[0.07] pt-4 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0"
+            title="Everything of yours that went in, however it went: cash through an account, and commission you handed to reps. Only the first moves a balance.">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-300"><Coins className="h-4 w-4" /></span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium text-white/55">Your own money</p>
+              <p className="mt-0.5 whitespace-nowrap text-lg font-bold leading-tight tabular-nums text-sky-300">{formatCurrency(ownerPutIn !== 0 ? ownerPutIn : data.ownerNet)}</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-white/50">
+                {ownerParts.map((x, i) => <span key={i} className="block whitespace-nowrap">{x}</span>)}
+              </p>
             </div>
+          </div>
+        ) : <div className="hidden sm:block" />}
+
+        <div className={clsx('grid grid-cols-2 gap-x-4 gap-y-3 border-t border-white/[0.07] pt-4 sm:col-span-2',
+          ownerNet !== 0 ? 'sm:grid-cols-3 xl:flex xl:items-start xl:justify-between xl:gap-4' : 'lg:flex lg:items-start lg:justify-between lg:gap-4')}>
+          <Term wide={sumWide} label="Opening balance" value={formatCurrency(data.openingBalance)} tone="text-foreground" dot="bg-white/40" caption="at period start" />
+          <Op wide={sumWide}>+</Op>
+          <Term wide={sumWide} label="Money in" sign="+ " value={formatCurrency(data.moneyIn)} tone="text-emerald-300" dot="bg-emerald-400" caption="the business collected" />
+          <Op wide={sumWide}>−</Op>
+          <Term wide={sumWide} label="Money out" sign="− " value={formatCurrency(data.moneyOut)} tone="text-rose-300" dot="bg-rose-400" caption="the business paid" />
+          {ownerNet !== 0 && (
+            <>
+              <Op wide>{ownerNet >= 0 ? '+' : '−'}</Op>
+              {/* The block above leads with everything he has put in; the sum can only use the part that moved a
+                  balance (put in − taken out, through an account), or the closing figure stops reconciling. */}
+              <Term wide label="Yours, net through an account" sign={ownerNet >= 0 ? '+ ' : '− '} value={formatCurrency(Math.abs(ownerNet))} tone="text-sky-300" dot="bg-sky-400"
+                caption={ownerNet >= 0 ? 'you put in' : 'you took out'} />
+            </>
           )}
+          <Op wide={sumWide}>=</Op>
+          <Term wide={sumWide} big label="Closing balance" sign="= " value={formatCurrency(data.closingBalance)} tone={data.closingBalance >= 0 ? 'text-foreground' : 'text-rose-300'} dot="bg-white/70"
+            caption="what the accounts hold" />
         </div>
-      </Card>
+      </div>
 
-      {/* WHAT moved the money — the cards above only say how much. */}
+      {/* ── Six months: the chart, and the months as numbers ── */}
+      {/* Five columns from xl: the table gets two, so its money always fits (it needs about 360 px). */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+        <Panel className="xl:col-span-3" title="The money, in motion" sub={(
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+              <span>The last six months</span>
+              <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />In</span>
+              <span className="inline-flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-rose-400" />Out</span>
+            </span>
+          )}>
+          {hasSeries ? (
+            <div className="-ml-2 flex-1">
+              <TrendChart data={series} height={250}
+                series={[{ key: 'moneyIn', name: 'Money in', color: '#34d399' }, { key: 'moneyOut', name: 'Money out', color: '#fb7185' }]} />
+            </div>
+          ) : (
+            <div className="flex h-[200px] items-center justify-center text-sm text-white/50">The trend fills in as months of activity add up.</div>
+          )}
+        </Panel>
+
+        <Panel className="xl:col-span-2" title="The six months" sub="In, out and what was left · TSh">
+          {hasSeries ? (
+            <div className="-mx-4 -mb-4 flex flex-1 flex-col overflow-x-auto">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="border-y border-white/[0.06] bg-white/[0.025] text-[10.5px] font-semibold uppercase tracking-wider text-white/45">
+                    <th className="px-3 py-2 text-left font-semibold sm:px-4">Month</th>
+                    <th className={CF_TH}>In</th>
+                    <th className={CF_TH}>Out</th>
+                    <th className={clsx(CF_TH, 'pr-3 sm:pr-4')}>Left</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {series.map((m) => {
+                    const net = m.net ?? (m.moneyIn - m.moneyOut);
+                    return (
+                      <tr key={m.period} className="border-b border-white/[0.05] transition hover:bg-white/[0.035]">
+                        <td className="whitespace-nowrap px-3 py-2 font-medium text-foreground sm:px-4">{m.period}</td>
+                        <td className={clsx(CF_TD, 'text-emerald-300/90')}>{formatNumber(m.moneyIn)}</td>
+                        <td className={clsx(CF_TD, 'text-rose-300/90')}>{formatNumber(m.moneyOut)}</td>
+                        <td className={clsx(CF_TD, 'pr-3 font-semibold sm:pr-4', net < 0 ? 'text-rose-300' : 'text-foreground')}>{formatNumber(net)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="text-[12.5px]" title="The six months together. Your own money put in or taken out is not counted here.">
+                    <td className="whitespace-nowrap px-3 py-2.5 font-semibold text-foreground sm:px-4">Six months</td>
+                    <td className={clsx(CF_TD, 'font-semibold text-emerald-300')}>{formatNumber(sixIn)}</td>
+                    <td className={clsx(CF_TD, 'font-semibold text-rose-300')}>{formatNumber(sixOut)}</td>
+                    <td className={clsx(CF_TD, 'pr-3 font-bold sm:pr-4', sixNet < 0 ? 'text-rose-300' : 'text-foreground')}>{formatNumber(sixNet)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center py-10 text-sm text-white/50">No month has money yet.</div>
+          )}
+        </Panel>
+      </div>
+
+      {/* ── WHAT moved the money — the strip above only says how much ── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <div className="p-5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Where it came from</h3>
-                <p className="mt-0.5 text-xs text-muted">Every shilling in, by kind.</p>
-              </div>
-              <span className="rounded-lg bg-emerald-500/15 p-1.5 text-emerald-300"><ArrowDownLeft className="h-3.5 w-3.5" /></span>
-            </div>
-            {inRows.length ? (
-              <ShareRows rows={inRows} total={inTotal} colours={['bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-amber-500']} />
-            ) : <p className="mt-4 text-sm text-faint">No money came in during this period.</p>}
-          </div>
-        </Card>
-        <Card>
-          <div className="p-5">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-semibold text-foreground">Where it went</h3>
-                <p className="mt-0.5 text-xs text-muted">Every shilling out, by kind.</p>
-              </div>
-              <span className="rounded-lg bg-rose-500/15 p-1.5 text-rose-300"><ArrowUpRight className="h-3.5 w-3.5" /></span>
-            </div>
-            {outRows.length ? (
-              <ShareRows rows={outRows} total={outTotal} colours={['bg-rose-500', 'bg-amber-500', 'bg-violet-500', 'bg-sky-500']} />
-            ) : <p className="mt-4 text-sm text-faint">No money went out during this period.</p>}
-          </div>
-        </Card>
+        <Panel title="Where it came from" sub="Every shilling in, by kind"
+          aside={inRows.length > 0 && <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-emerald-300">{formatCurrency(inTotal)}</span>}>
+          <KindRows rows={inRows} total={inTotal} colours={IN_HEX} empty="No money came in during this period." />
+        </Panel>
+        <Panel title="Where it went" sub="Every shilling out, by kind"
+          aside={outRows.length > 0 && <span className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-rose-300">{formatCurrency(outTotal)}</span>}>
+          <KindRows rows={outRows} total={outTotal} colours={OUT_HEX} empty="No money went out during this period." />
+        </Panel>
       </div>
     </div>
   );
@@ -2564,7 +2870,7 @@ export default function Finance() {
       </div>
 
       {tab === 'overview' && <Overview onNavigate={setTab} onOwnerMoney={setOwnerMoney} />}
-      {tab === 'profit' && <ProfitTab />}
+      {tab === 'profit' && <ProfitTab accounts={accounts} />}
       {tab === 'cashflow' && <CashFlowTab />}
       {tab === 'suppliers' && <SuppliersTab accounts={accounts} />}
       {tab === 'accounts' && <Accounts onQuick={setMoney} />}
