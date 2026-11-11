@@ -168,9 +168,15 @@ function CartOrderSheet({ onClose, existing }) {
   const totalBoxes = cartEntries.reduce((s, e) => s + e.qty, 0);
   const totalAmount = cartEntries.reduce((s, e) => s + e.lineTotal, 0);
 
+  // Every word typed must be somewhere in the name, in any order: "ohis kubwa" finds
+  // "OHIS Pepa Kubwa (Brown) – Bila Filter" (it used to need one unbroken piece of the name).
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? sellable.filter((p) => p.name.toLowerCase().includes(q)) : sellable;
+    const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return sellable;
+    return sellable.filter((p) => {
+      const name = p.name.toLowerCase();
+      return words.every((w) => name.includes(w));
+    });
   }, [sellable, search]);
 
   const create = useMutation({
@@ -182,7 +188,8 @@ function CartOrderSheet({ onClose, existing }) {
           quantity: qty,
           ...(c ? { region: c } : {}),
         })),
-        notes: notes || undefined,
+        // An emptied notes box on an edit clears the note (null); left out, the server kept the old one.
+        notes: notes.trim() || (editing ? null : undefined),
         ...(usedCities.length === 1 ? { region: usedCities[0] } : {}),
       };
       return editing
@@ -410,6 +417,55 @@ function CartOrderSheet({ onClose, existing }) {
   );
 }
 
+// ── Decisions: one at a time, and a second step before the final ones ────────
+
+// isPending only disables a button after React re-renders, so two taps in the same frame both sent a
+// decision (the server refused the second, but it should never have gone). run() lets one through until
+// done() — called when that decision has finished, either way.
+function useOnce() {
+  const busy = useRef(false);
+  return {
+    run: (fn) => { if (busy.current) return; busy.current = true; fn(); },
+    done: () => { busy.current = false; },
+  };
+}
+
+// The step before Reject and Cancel order, which cannot be undone. Reject can carry a reason: it is kept
+// under the rep's own note and sent to him in the app and on WhatsApp.
+function ConfirmStep({ title, message, confirmLabel, backLabel = 'Back', withReason, busy, onConfirm, onClose }) {
+  const [reason, setReason] = useState('');
+  return (
+    <Modal
+      open
+      onClose={busy ? () => {} : onClose}
+      size="sm"
+      title={title}
+      footer={
+        <>
+          <Button variant="secondary" disabled={busy} onClick={onClose}>{backLabel}</Button>
+          <Button variant="danger" loading={busy} onClick={() => onConfirm(reason.trim())}>{confirmLabel}</Button>
+        </>
+      }
+    >
+      <p className="text-sm text-muted">{message}</p>
+      {withReason && (
+        <div className="mt-4">
+          <Field label="Reason (optional)">
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="e.g. not enough stock this week…"
+              className="input resize-none"
+            />
+          </Field>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ── Order detail (admin / staff review + rep view) ────────────────────────────
 
 function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
@@ -420,6 +476,8 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
   const [qtys, setQtys] = useState(() =>
     Object.fromEntries(request.items.map((i) => [i.id, i.quantityApproved ?? i.quantityRequested])),
   );
+  const [confirm, setConfirm] = useState(null); // 'reject' | 'cancel' while the second step is open
+  const once = useOnce();
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['stock-requests'] });
@@ -434,17 +492,21 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
     }),
     onSuccess: () => { toast.success('Approved — stock issued'); invalidate(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: once.done,
   });
   const reject = useMutation({
-    mutationFn: () => api.post(`/stock-requests/${request.id}/reject`, {}),
+    mutationFn: (notes) => api.post(`/stock-requests/${request.id}/reject`, notes ? { notes } : {}),
     onSuccess: () => { toast.success('Order rejected'); invalidate(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: once.done,
   });
   const cancel = useMutation({
     mutationFn: () => api.post(`/stock-requests/${request.id}/cancel`, {}),
     onSuccess: () => { toast.success('Order cancelled'); invalidate(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: once.done,
   });
+  const deciding = approve.isPending || reject.isPending || cancel.isPending;
 
   // While editing: live total from the qty inputs.
   const editingTotal = request.items.reduce(
@@ -461,6 +523,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
     : editable ? editingTotal : Number(request.totalValue || 0);
 
   return (
+    <>
     <Modal
       open
       onClose={onClose}
@@ -469,10 +532,10 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Close</Button>
-          {editable && <Button variant="ghost" className="text-rose-500" loading={reject.isPending} onClick={() => reject.mutate()}>Reject</Button>}
-          {editable && <Button loading={approve.isPending} onClick={() => approve.mutate()}>Approve &amp; issue</Button>}
-          {isRep && pending && <Button variant="ghost" onClick={() => onEdit?.(request)}><Pencil className="h-4 w-4" /> Edit order</Button>}
-          {isRep && pending && <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate()}>Cancel order</Button>}
+          {editable && <Button variant="ghost" className="text-rose-500" disabled={deciding} onClick={() => setConfirm('reject')}>Reject</Button>}
+          {editable && <Button loading={approve.isPending} disabled={deciding} onClick={() => once.run(() => approve.mutate())}>Approve &amp; issue</Button>}
+          {isRep && pending && <Button variant="ghost" disabled={deciding} onClick={() => onEdit?.(request)}><Pencil className="h-4 w-4" /> Edit order</Button>}
+          {isRep && pending && <Button variant="danger" disabled={deciding} onClick={() => setConfirm('cancel')}>Cancel order</Button>}
         </>
       }
     >
@@ -517,10 +580,34 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
           <span className="text-xl font-bold text-foreground">{formatCurrency(displayTotal)}</span>
         </div>
 
-        {request.notes && <div className="text-sm"><span className="text-faint">Notes: </span>{request.notes}</div>}
+        {request.notes && <div className="whitespace-pre-line text-sm"><span className="text-faint">Notes: </span>{request.notes}</div>}
         {editable && <p className="text-xs text-faint">Approving issues the stock to the rep and opens a 72-hour payment order. Set a line to 0 to drop it.</p>}
       </div>
     </Modal>
+
+    {confirm === 'reject' && (
+      <ConfirmStep
+        title={`Reject ${request.requestNumber}?`}
+        message={`${request.salesRep?.user?.name || 'The rep'} is told it was not approved. Nothing is issued.`}
+        confirmLabel="Reject"
+        withReason
+        busy={reject.isPending}
+        onClose={() => setConfirm(null)}
+        onConfirm={(notes) => once.run(() => reject.mutate(notes))}
+      />
+    )}
+    {confirm === 'cancel' && (
+      <ConfirmStep
+        title="Cancel this order?"
+        message={`${request.requestNumber} will be cancelled and nothing will be issued. You can send a new request any time.`}
+        confirmLabel="Cancel order"
+        backLabel="Keep it"
+        busy={cancel.isPending}
+        onClose={() => setConfirm(null)}
+        onConfirm={() => once.run(() => cancel.mutate())}
+      />
+    )}
+    </>
   );
 }
 
@@ -652,20 +739,27 @@ function PendingRequestApprovals({ onReview }) {
   const refresh = () => {
     ['stock-requests', 'settlements', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   };
+  const once = useOnce();
+  const [rejecting, setRejecting] = useState(null); // the request whose Reject step is open
   const approve = useMutation({
     mutationFn: (id) => api.post(`/stock-requests/${id}/approve`, {}),
     onSuccess: () => { toast.success('Approved — stock issued'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: once.done,
   });
   const reject = useMutation({
-    mutationFn: (id) => api.post(`/stock-requests/${id}/reject`, {}),
-    onSuccess: () => { toast.success('Request rejected'); refresh(); },
+    mutationFn: ({ id, notes }) => api.post(`/stock-requests/${id}/reject`, notes ? { notes } : {}),
+    onSuccess: () => { toast.success('Request rejected'); setRejecting(null); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: once.done,
   });
+  // One decision at a time across the strip; the spinner stays on the button that was pressed.
+  const deciding = approve.isPending || reject.isPending;
 
   if (!pending.length) return null;
 
   return (
+    <>
     <Card className="mb-6 border-sky-500/30">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <ClipboardList className="h-4 w-4 text-sky-400" />
@@ -675,7 +769,6 @@ function PendingRequestApprovals({ onReview }) {
       </div>
       <div className="divide-y divide-border">
         {pending.map((r) => {
-          const busy = (approve.isPending && approve.variables === r.id) || (reject.isPending && reject.variables === r.id);
           const boxes = boxCount(r);
           return (
             <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -694,14 +787,29 @@ function PendingRequestApprovals({ onReview }) {
                 </div>
               </button>
               <div className="flex shrink-0 gap-2">
-                <Button variant="ghost" className="text-rose-500" disabled={busy} onClick={() => reject.mutate(r.id)}>Reject</Button>
-                <Button loading={busy} onClick={() => approve.mutate(r.id)}><CheckCircle2 className="h-4 w-4" /> Approve</Button>
+                <Button variant="ghost" className="text-rose-500" disabled={deciding} onClick={() => setRejecting(r)}>Reject</Button>
+                <Button loading={approve.isPending && approve.variables === r.id} disabled={deciding} onClick={() => once.run(() => approve.mutate(r.id))}>
+                  <CheckCircle2 className="h-4 w-4" /> Approve
+                </Button>
               </div>
             </div>
           );
         })}
       </div>
     </Card>
+
+    {rejecting && (
+      <ConfirmStep
+        title={`Reject ${rejecting.requestNumber}?`}
+        message={`${rejecting.salesRep?.user?.name || 'The rep'} is told it was not approved. Nothing is issued.`}
+        confirmLabel="Reject"
+        withReason
+        busy={reject.isPending}
+        onClose={() => setRejecting(null)}
+        onConfirm={(notes) => once.run(() => reject.mutate({ id: rejecting.id, notes }))}
+      />
+    )}
+    </>
   );
 }
 
@@ -712,12 +820,16 @@ function StaffRequestTable({ onView }) {
   const [status, setStatus] = useState('');
   const { data, isLoading } = useQuery({
     queryKey: ['stock-requests', { page, status }],
-    queryFn: async () => unwrap(await api.get('/stock-requests', { params: { page, limit: 15, status: status || undefined } })),
+    // Pending requests live in the approval strip above — the history table
+    // shows decided ones unless the filter explicitly asks for pending. The
+    // server leaves them out before paging (`decided`), so every page is full
+    // and the pager counts the rows it shows.
+    queryFn: async () => unwrap(await api.get('/stock-requests', {
+      params: { page, limit: 15, status: status || undefined, decided: status ? undefined : 'true' },
+    })),
   });
 
-  // Pending requests live in the approval strip above — the history table
-  // shows decided ones unless the filter explicitly asks for pending.
-  const rows = (data?.data || []).filter((r) => status === 'PENDING' || r.status !== 'PENDING');
+  const rows = data?.data || [];
 
   // What this page is really a record of: boxes leaving the warehouse. The
   // table said "2 line(s)", which counts products on a form and tells you
@@ -733,9 +845,13 @@ function StaffRequestTable({ onView }) {
         : `${formatDate(sum.firstAt)} to ${formatDate(sum.lastAt)}`)
     : null;
 
+  // No "Approved" chip: an approval issues the stock at once, so no request ever rests as APPROVED and
+  // that chip was always empty. The rows badged Approved or Settled are FULFILLED ones — "Issued" here.
   const chips = [
     { key: '', label: 'All decided', tone: 'slate' },
-    ...Object.entries(REQUEST_STATUS_META).map(([k, v]) => ({ key: k, label: v.label, tone: k === 'REJECTED' ? 'rose' : k === 'PENDING' ? 'amber' : 'emerald' })),
+    ...Object.entries(REQUEST_STATUS_META)
+      .filter(([k]) => k !== 'APPROVED')
+      .map(([k, v]) => ({ key: k, label: k === 'FULFILLED' ? 'Issued' : v.label, tone: k === 'REJECTED' ? 'rose' : k === 'PENDING' ? 'amber' : 'emerald' })),
   ];
   const TONE = {
     slate: 'bg-white/10 text-foreground ring-white/20',
