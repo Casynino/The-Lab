@@ -100,7 +100,7 @@ function Mini({ label, value, sub }) {
   return (
     <div className="min-w-0 rounded-xl bg-black/20 p-3">
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
-      <div className="mt-0.5 break-words text-sm font-bold leading-snug tabular-nums text-foreground lg:text-base">{value}</div>
+      <div className="mt-0.5 break-words text-sm font-bold leading-snug tabular-nums text-foreground lg:text-base xl:text-sm 2xl:text-base">{value}</div>
       {sub && <div className="text-[11px] text-faint">{sub}</div>}
     </div>
   );
@@ -1065,7 +1065,7 @@ export default function Dashboard() {
                     <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${t.badge}`}>{b.name}</span>
                     <span className="ml-auto text-[11px] font-medium text-faint">{shown.label}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
+                  <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-3">
                     <Mini label="Revenue" value={formatCurrency(b[`revenue${shown.suffix}`])} sub={`${formatNumber(b[`boxesSold${shown.suffix}`])} boxes sold`} />
                     <Mini label="Gross profit" value={formatCurrency(b[`grossProfit${shown.suffix}`])} sub={`${b[`margin${shown.suffix}`]}% margin`} />
                     <Mini label="Inventory value" value={formatCurrency(b.inventoryValue)} />

@@ -250,7 +250,7 @@ function Balances() {
                                   : <Truck className="h-3.5 w-3.5 shrink-0 text-violet-400" />}
                                 <span className="min-w-0 flex-1 truncate text-sm text-foreground">{h.name}</span>
                                 <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{formatNumber(h.boxes)}</span>
-                                <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-faint">{formatCurrency(h.value)}</span>
+                                <span className="min-w-[6.5rem] shrink-0 whitespace-nowrap text-right text-[11px] tabular-nums text-faint">{formatCurrency(h.value)}</span>
                               </div>
                               <div className="mt-1 ml-5 h-1 overflow-hidden rounded-full bg-white/[0.06]">
                                 <div className={`h-full rounded-full ${isStore ? 'bg-brand-500' : 'bg-violet-500'}`}
