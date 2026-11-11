@@ -1059,6 +1059,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {brands.map((b) => {
               const t = BRAND_TONE[b.name?.toUpperCase()] || { ring: 'border-border', bg: 'bg-surface', badge: 'bg-elevated text-muted', dot: 'bg-border' };
+              // The top product of the window on show, not the month's under every tab (audit admin-ops-1).
+              const top = b[`topProduct${shown.suffix}`] ?? (shown.suffix === 'Month' ? b.topProduct : null);
               return (
                 <button key={b.brandId} onClick={() => navigate('/finance?tab=profit')} className={`w-full rounded-2xl border ${t.ring} ${t.bg} p-4 text-left transition hover:bg-elevated`}>
                   <div className="mb-3 flex items-center gap-2">
@@ -1072,7 +1074,7 @@ export default function Dashboard() {
                     <Mini label="Inventory value" value={formatCurrency(b.inventoryValue)} />
                     <Mini label="In warehouse" value={`${formatNumber(b.warehouseBoxes)} boxes`} />
                     <Mini label="With reps" value={`${formatNumber(b.repBoxes)} boxes`} />
-                    <Mini label="Top product" value={b.topProduct ? b.topProduct.name.replace(/civlily|ohis/i, '').trim().slice(0, 18) : '—'} sub={b.topProduct ? formatCurrency(b.topProduct.revenue) : 'no sales yet'} />
+                    <Mini label="Top product" value={top ? top.name.replace(/civlily|ohis/i, '').trim().slice(0, 18) : '—'} sub={top ? formatCurrency(top.revenue) : 'no sales yet'} />
                   </div>
                 </button>
               );

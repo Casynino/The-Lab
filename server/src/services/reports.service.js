@@ -394,11 +394,11 @@ async function profitByPeriods(periods = ['today', 'week', 'month']) {
         sale: { select: { soldAt: true, discount: true, subtotal: true } },
       },
     }),
-    prisma.product.findMany({ select: { id: true, purchasePrice: true, brand: { select: { id: true, name: true } } } }),
+    prisma.product.findMany({ select: { id: true, name: true, purchasePrice: true, brand: { select: { id: true, name: true } } } }),
   ]);
   const pMap = new Map(products.map((p) => [p.id, p]));
 
-  const blank = () => ({ revenue: 0, cost: 0, boxes: 0, byBrand: new Map() });
+  const blank = () => ({ revenue: 0, cost: 0, boxes: 0, byBrand: new Map(), byProduct: new Map() });
   const buckets = new Map(periods.map((period) => [period, blank()]));
   for (const it of items) {
     const p = pMap.get(it.productId);
@@ -414,6 +414,10 @@ async function profitByPeriods(periods = ['today', 'week', 'month']) {
       const row = b.byBrand.get(bId) || { brandId: bId, name: p.brand?.name || '—', revenue: 0, cost: 0, boxes: 0 };
       row.revenue += revenue; row.cost += cost; row.boxes += boxes;
       b.byBrand.set(bId, row);
+      // Per product too, so a brand's top product can be named for THIS window (audit admin-ops-1).
+      const pr = b.byProduct.get(it.productId) || { productId: it.productId, name: p.name, brandId: p.brand?.id || null, revenue: 0, boxes: 0 };
+      pr.revenue += revenue; pr.boxes += boxes;
+      b.byProduct.set(it.productId, pr);
     }
   }
   const shape = (o) => {
@@ -428,6 +432,9 @@ async function profitByPeriods(periods = ['today', 'week', 'month']) {
       ...shape(b),
       range: { start: ranges[period].start, end: ranges[period].end },
       byBrand: [...b.byBrand.values()].map((r) => ({ brandId: r.brandId, name: r.name, ...shape(r) })),
+      byProduct: [...b.byProduct.values()]
+        .map((r) => ({ productId: r.productId, name: r.name, brandId: r.brandId, revenue: round2(r.revenue), boxes: r.boxes }))
+        .sort((a, b2) => b2.revenue - a.revenue),
     };
   }
   return out;
