@@ -60,6 +60,12 @@ export function routeQueries(pathname, search, role) {
   }
 
   if (!staff) return [];
+  const repPage = /^\/reps\/([^/]+)$/.exec(pathname);
+  if (repPage) {
+    let id;
+    try { id = decodeURIComponent(repPage[1]); } catch { return []; }
+    return [['repProfile', { id, period: 'all' }], ['repWithdrawals', id]];
+  }
   switch (pathname) {
     case '/sales':
       return tab === 'invoice' ? [] : [['sales', { page: 1, type: '', status: '' }]];

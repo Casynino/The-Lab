@@ -200,6 +200,7 @@ export default function SalesReps() {
                 <button
                   key={r.id}
                   onClick={() => navigate(`/reps/${r.id}`)}
+                  data-prefetch={`/reps/${r.id}`}
                   style={{ animationDelay: `${i * 35}ms` }}
                   className="stat-glass animate-rise group p-4 pl-5 text-left transition duration-200 hover:brightness-110 hover:ring-1 hover:ring-white/20"
                 >

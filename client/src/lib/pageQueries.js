@@ -100,6 +100,11 @@ export const pageQueries = {
 
   // People and records.
   salesReps: ({ page }) => ({ queryKey: ['sales-reps', { page }], queryFn: listOf('/sales-reps', { page, limit: 100 }) }),
+  repProfile: ({ id, period }) => ({
+    queryKey: ['sales-rep-profile', id, period],
+    queryFn: async () => unwrap(await api.get(`/sales-reps/${id}/profile`, { params: period === 'all' ? {} : { period } })).data,
+  }),
+  repWithdrawals: (id) => ({ queryKey: ['commissions', 'withdrawals', 'rep', id], queryFn: listOf('/commissions/withdrawals', { salesRepId: id, limit: 6 }) }),
   customers: ({ page, search }) => ({ queryKey: ['customers', { page, search }], queryFn: listOf('/customers', { page, limit: 15, search }) }),
   notifications: ({ page }) => ({ queryKey: ['notifications', { page }], queryFn: listOf('/notifications', { page, limit: 20 }) }),
   dailyReports: ({ page }) => ({ queryKey: ['daily-reports', { page }], queryFn: listOf('/daily-reports', { page, limit: 20 }) }),

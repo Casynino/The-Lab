@@ -39,6 +39,9 @@ test('the address decides the tab and the chip, as the page does', () => {
   assert.deepEqual(routeQueries('/sales', '?tab=invoice', 'ADMIN'), []);
   assert.deepEqual(routeQueries('/inventory', '?tab=purchases', 'ADMIN'), []);
   assert.deepEqual(routeQueries('/products', '?tab=label', 'ADMIN'), []);
+  assert.deepEqual(routeQueries('/reps/cm123', '', 'ADMIN'), [['repProfile', { id: 'cm123', period: 'all' }], ['repWithdrawals', 'cm123']]);
+  assert.deepEqual(routeQueries('/reps/cm123', '', 'SALES_REP'), []);
+  assert.deepEqual(routeQueries('/reps/%E0%A4%A', '', 'ADMIN'), []);
   // the owner's daily reports live in his profile
   assert.deepEqual(routeQueries('/daily-reports', '', 'ADMIN'), []);
 });
