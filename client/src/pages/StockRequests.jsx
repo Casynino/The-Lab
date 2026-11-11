@@ -19,6 +19,7 @@ import {
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
 import CollapsibleList from '@/components/CollapsibleList';
+import { repRegions, shortRegion } from '@/lib/repRegions';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,12 @@ function CartOrderSheet({ onClose, existing }) {
   const [search, setSearch] = useState('');
   const [notes, setNotes] = useState(existing?.notes || '');
   const qc = useQueryClient();
+  // A rep who works two or more cities picks the city this stock is for, from his own cities, every time
+  // (Nino, 11 Nov 2026). One city: nothing to pick, and the sheet is exactly as it was.
+  const { user } = useAuth();
+  const cities = repRegions(user?.salesRep);
+  const multiCity = cities.length > 1;
+  const [city, setCity] = useState(() => (existing?.region && cities.includes(existing.region) ? existing.region : ''));
 
   // In-stock set; when editing, keep this order's existing products visible too
   // so they can still be reduced/removed even if now out of stock.
@@ -129,6 +136,7 @@ function CartOrderSheet({ onClose, existing }) {
           quantity: qty,
         })),
         notes: notes || undefined,
+        ...(multiCity ? { region: city } : {}),
       };
       return editing
         ? api.put(`/stock-requests/${existing.id}`, body)
@@ -152,6 +160,7 @@ function CartOrderSheet({ onClose, existing }) {
         <div className="flex items-baseline justify-between gap-3 px-1">
           <span className="text-[13px] text-muted">
             {formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} · {cartCount} product{cartCount !== 1 ? 's' : ''}
+            {multiCity && city ? ` · ${shortRegion(city)}` : ''}
           </span>
           <span className="text-base font-bold tabular-nums text-foreground">{formatCurrency(totalAmount)}</span>
         </div>
@@ -163,7 +172,7 @@ function CartOrderSheet({ onClose, existing }) {
         </button>
         <Button
           className="h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold"
-          disabled={cartCount === 0 || create.isPending}
+          disabled={cartCount === 0 || create.isPending || (multiCity && !city)}
           onClick={() => create.mutate()}
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -175,6 +184,33 @@ function CartOrderSheet({ onClose, existing }) {
 
   return (
     <Modal open onClose={onClose} title={editing ? `Edit order ${existing.requestNumber}` : 'New stock request'} size="lg" footer={footerContent}>
+      {/* The city, for a rep with two or more: one tap in the same pill bar the buttons use. Until one is
+          picked the Request button stays off, and once there is something in the order the word asks. */}
+      {multiCity && (
+        <div className="mb-4">
+          <p className={clsx('mb-1.5 px-1 text-xs', !city && cartCount > 0 ? 'font-medium text-brand-600' : 'text-muted')}>
+            {!city && cartCount > 0 ? 'Pick the city' : 'City'}
+          </p>
+          <div role="radiogroup" aria-label="City" className="flex flex-wrap items-center gap-1 rounded-[22px] bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
+            {cities.map((c) => (
+              <button
+                key={c}
+                type="button"
+                role="radio"
+                aria-checked={city === c}
+                onClick={() => setCity(c)}
+                className={clsx(
+                  'h-9 min-w-[30%] flex-1 truncate rounded-full px-3 text-[13px] transition active:scale-[0.97]',
+                  city === c ? 'bg-brand-500 font-semibold text-white' : 'font-medium text-muted hover:text-foreground',
+                )}
+              >
+                {shortRegion(c)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative mb-4">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -373,6 +409,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div><div className="text-xs text-faint">Rep</div><div className="font-medium">{request.salesRep?.user?.name}</div></div>
+          {request.region && <div><div className="text-xs text-faint">City</div><div className="font-medium">{shortRegion(request.region)}</div></div>}
           <div><div className="text-xs text-faint">Status</div><div className={clsx('font-medium', requestDisplayStatus(request).cls?.split(' ').find((c) => c.startsWith('text-')) || 'text-foreground')}>{requestDisplayStatus(request).label}</div></div>
           <div><div className="text-xs text-faint">Requested</div><div className="font-medium">{formatDateTime(request.requestedAt)}</div></div>
           <div><div className="text-xs text-faint">Lines</div><div className="font-medium">{displayItems.length}</div></div>
@@ -441,6 +478,7 @@ function RepRequestCard({ r, onClick }) {
       </div>
 
       <div className="mt-1.5 text-xs text-faint">
+        {r.region && <span className="font-medium text-muted">{shortRegion(r.region)} · </span>}
         {products} product{products !== 1 ? 's' : ''} · {formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatDateTime(r.requestedAt)}
       </div>
 
@@ -467,7 +505,7 @@ function RepRequestRow({ r, onClick }) {
     >
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold text-foreground">{r.requestNumber}</p>
-        <p className="mt-0.5 text-xs tabular-nums text-muted">{formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}</p>
+        <p className="mt-0.5 text-xs tabular-nums text-muted">{formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}{r.region ? ` · ${shortRegion(r.region)}` : ''}</p>
       </div>
       <div className="shrink-0 text-right">
         <p className={clsx('text-[13px] font-medium', tone)}>{ds.label}</p>
@@ -573,7 +611,7 @@ function PendingRequestApprovals({ onReview }) {
             <div key={r.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
               <button onClick={() => onReview(r)} className="min-w-0 flex-1 text-left" title="Open to review or adjust quantities">
                 <div className="text-sm font-semibold text-foreground">
-                  {r.salesRep?.user?.name} ({r.salesRep?.code}) · {formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}
+                  {r.salesRep?.user?.name} ({r.salesRep?.code}){r.region ? ` · ${shortRegion(r.region)}` : ''} · {formatNumber(boxes)} box{boxes !== 1 ? 'es' : ''} · {formatCurrency(orderDisplayValue(r))}
                 </div>
                 {r.items.map((i) => (
                   <div key={i.id} className="mt-0.5 text-xs text-faint">
@@ -717,7 +755,7 @@ function StaffRequestTable({ onView }) {
                   return (
                     <TR key={r.id} className="cursor-pointer" onClick={() => onView(r)}>
                       <TD className="font-medium">{r.requestNumber}</TD>
-                      <TD>{r.salesRep?.user?.name}</TD>
+                      <TD>{r.salesRep?.user?.name}{r.region && <div className="text-xs text-muted">{shortRegion(r.region)}</div>}</TD>
                       {/* The number this page exists to record. */}
                       <TD>
                         <span className="font-semibold tabular-nums text-foreground">{formatNumber(given)}</span>

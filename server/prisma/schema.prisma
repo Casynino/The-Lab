@@ -1145,6 +1145,10 @@ model StockRequest {
   totalValue Decimal @default(0) @db.Decimal(16, 2)
 
   notes        String?
+  // The city this stock is for, picked by a rep who works two or more cities (Nino, 11 Nov 2026).
+  // Always one of the rep's own regions; empty for a one-city rep (nothing to choose) and for
+  // every request from before this existed.
+  region       String?
   requestedAt  DateTime  @default(now())
   decidedAt    DateTime?
   decidedById  String?

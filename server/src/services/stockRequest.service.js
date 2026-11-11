@@ -7,6 +7,7 @@ const transfers = require('./transfers.service');
 const notification = require('./notification.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2, formatCurrency } = require('../utils/money');
+const { requestRegion } = require('../constants/regions');
 
 const INCLUDE = {
   salesRep: { include: { user: { select: { name: true } } } },
@@ -56,6 +57,11 @@ async function create(salesRepId, payload) {
     throw ApiError.badRequest('A stock request needs at least one item');
   }
 
+  // A rep with two or more cities says which one this stock is for; with one city nothing changes.
+  const rep = await prisma.salesRepresentative.findUnique({ where: { id: salesRepId }, select: { region: true, regions: true } });
+  const city = requestRegion(rep, payload.region);
+  if (city.error) throw ApiError.badRequest(city.error);
+
   const result = await prisma.$transaction(async (tx) => {
     const productIds = [...new Set(payload.items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
@@ -95,6 +101,7 @@ async function create(salesRepId, payload) {
         salesRepId,
         warehouseId: payload.warehouseId || null,
         notes: payload.notes || null,
+        region: city.region,
         status: 'PENDING',
         totalValue: round2(totalValue),
         items: { create: lines },
@@ -246,6 +253,11 @@ async function update(id, payload) {
     throw ApiError.badRequest(`Only pending orders can be edited (this one is ${existing.status})`);
   }
 
+  // An edit may change the city; one that does not mention it keeps the one already chosen.
+  const rep = await prisma.salesRepresentative.findUnique({ where: { id: existing.salesRepId }, select: { region: true, regions: true } });
+  const city = requestRegion(rep, payload.region !== undefined ? payload.region : existing.region);
+  if (city.error) throw ApiError.badRequest(city.error);
+
   const result = await prisma.$transaction(async (tx) => {
     const productIds = [...new Set(payload.items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
@@ -284,6 +296,7 @@ async function update(id, payload) {
       data: {
         warehouseId: payload.warehouseId !== undefined ? payload.warehouseId : existing.warehouseId,
         notes: payload.notes !== undefined ? payload.notes : existing.notes,
+        region: city.region,
         totalValue: round2(totalValue),
         items: { create: lines },
       },

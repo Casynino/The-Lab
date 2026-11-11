@@ -84,6 +84,7 @@ const stockRequestCreate = {
   body: z.object({
     warehouseId: id.optional().nullable(),
     notes: z.string().max(500).optional().nullable(),
+    region: z.string().max(80).optional().nullable(),
     items: z.array(z.object({ productId: id, packagingUnitId: id, quantity: z.number().int().positive() })).min(1),
   }),
 };
@@ -91,6 +92,7 @@ const stockRequestUpdate = {
   body: z.object({
     warehouseId: id.optional().nullable(),
     notes: z.string().max(500).optional().nullable(),
+    region: z.string().max(80).optional().nullable(),
     items: z.array(z.object({ productId: id, packagingUnitId: id, quantity: z.number().int().positive() })).min(1),
   }),
 };

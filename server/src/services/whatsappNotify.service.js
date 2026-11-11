@@ -276,6 +276,7 @@ async function flush({ throttleMs = 60000 } = {}) {
 async function stockRequestSubmitted(req) {
   const text = wt.owner.stockRequest({
     by: req.salesRep?.user?.name || req.salesRep?.code || 'A rep',
+    city: req.region || null,
     items: (req.items || []).map((i) => {
       // How many boxes one unit of the chosen packaging holds (a carton is more than one box).
       const factor = (i.product?.packagings || []).find((k) => k.packagingUnitId === i.packagingUnitId)?.baseQuantity ?? 1;

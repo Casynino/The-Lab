@@ -143,4 +143,17 @@ function mergeRegionRevenue(rows) {
     .sort((a, b) => b.value - a.value);
 }
 
-module.exports = { TZ_REGIONS, canonicalRegion, DEFAULT_REGION, cleanRegions, repRegions, regionWrite, regionWhere, mergeRegionRevenue };
+// The city a stock request is for (Nino, 11 Nov 2026: "when the rep has two cities, every time he requests
+// stock he picks which city — from the cities he is registered to; with one city nothing changes").
+// A rep with two or more regions must name one of THEM; a rep with one region (or none) has nothing to
+// choose, so nothing is stored and whatever was sent is ignored. Returns { region } or { error }.
+function requestRegion(rep, asked) {
+  const mine = repRegions(rep);
+  if (mine.length < 2) return { region: null };
+  const picked = asked ? canonicalRegion(asked) : null;
+  if (!picked) return { error: 'Pick the city this stock is for.' };
+  if (!mine.includes(picked)) return { error: `${picked} is not one of your cities.` };
+  return { region: picked };
+}
+
+module.exports = { TZ_REGIONS, canonicalRegion, DEFAULT_REGION, cleanRegions, repRegions, regionWrite, regionWhere, mergeRegionRevenue, requestRegion };

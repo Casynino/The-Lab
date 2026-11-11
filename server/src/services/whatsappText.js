@@ -66,8 +66,9 @@ const owner = {
   // request (a carton counts as the boxes it holds: `boxes`), and the value.
   // The totals are what the owner needs most, so a very long request drops products from the
   // END of the list ("+3 more, see ZELab") and never the totals.
-  stockRequest: ({ by, items = [], total, when }) => {
-    const head = [lines(bold('STOCK REQUEST'), dateTime(when)), `By: ${by}`];
+  // A rep who works two or more cities names the city the stock is for; it stands under the name.
+  stockRequest: ({ by, city, items = [], total, when }) => {
+    const head = [lines(bold('STOCK REQUEST'), dateTime(when)), city ? lines(`By: ${by}`, `City: ${city}`) : `By: ${by}`];
     const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes ?? i.qty) || 0), 0);
     const tail = items.length > 1
       ? lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`)

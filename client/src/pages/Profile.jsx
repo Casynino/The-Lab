@@ -110,16 +110,13 @@ function ProfileCard({ user, sub, cities = [] }) {
             {user?.isActive === false && <span className={sub ? 'ml-2 text-rose-300' : 'text-rose-300'}>{sub ? '· ' : ''}Inactive</span>}
           </p>
         )}
-        {/* Where the rep works: a pin, then each city on its own soft chip, the main one first — one city
-            or three, they sit on one line and wrap neatly on a narrow phone (Nino, 11 Nov 2026: "a rep can
-            serve more cities, so make it nicer"). */}
+        {/* Where the rep works: a small pin and the cities as plain words, the main one first (Nino, 11 Nov
+            2026: "a rep can serve more cities, so make it nicer" — then "no shapes around the cities"). */}
         {cities.length > 0 && (
-          <ul className="mt-3.5 flex flex-wrap items-center gap-1.5" aria-label={cities.length > 1 ? 'Cities' : 'City'}>
-            <li aria-hidden="true" className="mr-0.5 flex items-center"><MapPin className="h-3.5 w-3.5 text-white/40" /></li>
-            {cities.map((c) => (
-              <li key={c} className="rounded-full bg-white/[0.08] px-2.5 py-1 text-[12px] font-medium leading-none text-white/85 ring-1 ring-inset ring-white/[0.07]">{c}</li>
-            ))}
-          </ul>
+          <p className="mt-2 flex items-start gap-1.5 text-[13px] leading-snug text-white/80">
+            <MapPin className="mt-[2px] h-3.5 w-3.5 shrink-0 text-white/40" aria-hidden="true" />
+            <span>{cities.join(' · ')}</span>
+          </p>
         )}
       </div>
       {rows.length > 0 && (
