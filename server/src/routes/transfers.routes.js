@@ -14,8 +14,8 @@ const warehouseStaff = requireRoles(ROLES.WAREHOUSE_STAFF);
 const cancelBody = { body: z.object({ reason: z.string().max(500).optional() }) };
 
 router.use(authenticate);
-router.get('/', validate(transferQuery), ctrl.list);
-router.get('/:id', validate(idParam), ctrl.get);
+router.get('/', warehouseStaff, validate(transferQuery), ctrl.list);
+router.get('/:id', warehouseStaff, validate(idParam), ctrl.get);
 router.post('/', warehouseStaff, validate(transferCreate), ctrl.create);
 router.post('/:id/cancel', warehouseStaff, validate({ ...idParam, ...cancelBody }), ctrl.cancel);
 

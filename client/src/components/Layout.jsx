@@ -18,7 +18,7 @@ import { NAV, NAV_GROUPS, ROLES } from '@/lib/constants';
 import { repRegions, sayRegions } from '@/lib/repRegions';
 import { tzDateLabel } from '@/lib/tz';
 import { initials, fromNow } from '@/lib/format';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { Modal, Button, Field, Input } from '@/components/ui';
 
 const ICONS = {
@@ -598,13 +598,19 @@ function ChangePasswordModal({ onClose }) {
   const [showNext, setShowNext] = useState(false);
 
   const change = useMutation({
-    mutationFn: () => api.post('/auth/change-password', { currentPassword: current, newPassword: next }),
+    mutationFn: async () => {
+      // The server checks the confirmation too, and answers with fresh tokens: every OTHER device is signed
+      // out by a password change, this one stays in.
+      const res = unwrap(await api.post('/auth/change-password', { currentPassword: current, newPassword: next, confirmPassword: confirm }));
+      if (res?.data?.tokens) tokenStore.set(res.data.tokens.accessToken, res.data.tokens.refreshToken);
+      return res;
+    },
     onSuccess: () => { toast.success('Password updated'); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
 
   const mismatch = next && confirm && next !== confirm;
-  const valid = current.length > 0 && next.length >= 6 && next === confirm;
+  const valid = current.length > 0 && next.length >= 8 && next === confirm;
 
   return (
     <Modal open onClose={onClose} title="Change password"
@@ -624,7 +630,7 @@ function ChangePasswordModal({ onClose }) {
             </button>
           </div>
         </Field>
-        <Field label="New password" required hint="Minimum 6 characters">
+        <Field label="New password" required hint="Minimum 8 characters">
           <div className="relative">
             <Input type={showNext ? 'text' : 'password'} value={next} onChange={(e) => setNext(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
             <button type="button" onClick={() => setShowNext((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">

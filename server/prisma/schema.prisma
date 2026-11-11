@@ -186,6 +186,9 @@ model User {
   phone        String?
   isActive     Boolean   @default(true)
   lastLoginAt  DateTime?
+  // Bumped when a password is changed or reset, the role changes or the account is switched off: every
+  // token carries the value it was issued with, so all older sessions stop working at once.
+  sessionVersion Int     @default(0)
   roleId       String
   role         Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
 

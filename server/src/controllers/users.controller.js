@@ -97,6 +97,24 @@ const update = asyncHandler(async (req, res) => {
   if (req.body.email) data.email = req.body.email.toLowerCase().trim();
   if (req.body.password) data.passwordHash = await bcrypt.hash(req.body.password, env.bcryptSaltRounds);
 
+  // A sales rep's account cannot be given another role while it has a rep profile (that would hand rep
+  // data and admin powers to one login); and moving any account into the SALES_REP role is done by
+  // creating the rep, not here.
+  if (data.roleId && data.roleId !== existing.roleId) {
+    const [rep, newRole] = await Promise.all([
+      prisma.salesRepresentative.findUnique({ where: { userId: existing.id }, select: { id: true } }),
+      prisma.role.findUnique({ where: { id: data.roleId }, select: { name: true } }),
+    ]);
+    if (!newRole) throw ApiError.badRequest('Unknown role');
+    if (rep && newRole.name !== 'SALES_REP') {
+      throw ApiError.badRequest('This account is a sales rep. Remove or switch off the rep first, then change the role.');
+    }
+  }
+  // A new password, a new role or switching the account off signs it out everywhere.
+  if (data.passwordHash || (data.roleId && data.roleId !== existing.roleId) || data.isActive === false) {
+    data.sessionVersion = { increment: 1 };
+  }
+
   // Don't let an admin lock themselves out by self-deactivating.
   if (req.params.id === req.user.id && data.isActive === false) {
     throw ApiError.badRequest('You cannot deactivate your own account');

@@ -24,6 +24,13 @@ const list = asyncHandler(async (req, res) => {
   return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
 });
 
-const get = asyncHandler(async (req, res) => ok(res, await dailyReport.get(req.params.id)));
+const get = asyncHandler(async (req, res) => {
+  const report = await dailyReport.get(req.params.id);
+  // A rep reads only his own (the same answer as a missing one, so ids cannot be probed).
+  if (req.user.role === ROLES.SALES_REP && report.salesRepId !== req.user.salesRepId) {
+    throw ApiError.notFound('Daily report not found');
+  }
+  return ok(res, report);
+});
 
 module.exports = { submit, list, get };

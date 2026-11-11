@@ -10,7 +10,7 @@ const { settingUpsert } = require('../validators/misc.validator');
 const router = express.Router();
 
 router.use(authenticate);
-router.get('/', ctrl.list);
+router.get('/', requireAdmin, ctrl.list); // admin only: holds the WhatsApp API key
 
 // WhatsApp notification centre (two-segment paths — never shadowed by /:key).
 router.get('/whatsapp/types', requireAdmin, ctrl.whatsappTypes);
@@ -18,7 +18,7 @@ router.get('/whatsapp/history', requireAdmin, ctrl.whatsappHistory);
 router.post('/whatsapp/test', requireAdmin, ctrl.whatsappTest);
 router.post('/whatsapp/retry-failed', requireAdmin, ctrl.whatsappRetryFailed);
 
-router.get('/:key', ctrl.get);
+router.get('/:key', requireAdmin, ctrl.get);
 router.put('/:key', requireAdmin, validate(settingUpsert), ctrl.upsert);
 
 module.exports = router;

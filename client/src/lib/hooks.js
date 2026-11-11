@@ -6,7 +6,7 @@ import { sortByCanonical } from '@/lib/productOrder';
 // Fetch a (large) list and return just the array — handy for select options.
 // `opts` is merged into the query (e.g. a `select` transform).
 function listHook(key, url, params = {}, opts = {}) {
-  return function useList(extra = {}) {
+  return function useList(extra = {}, queryOpts = {}) {
     return useQuery({
       queryKey: [key, 'options', { ...params, ...extra }],
       queryFn: async () => {
@@ -15,6 +15,7 @@ function listHook(key, url, params = {}, opts = {}) {
       },
       staleTime: 60_000,
       ...opts,
+      ...queryOpts,
     });
   };
 }

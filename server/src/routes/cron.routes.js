@@ -15,6 +15,10 @@ const router = express.Router();
 
 function guard(req, res, next) {
   const secret = process.env.CRON_SECRET;
+  // In production the jobs never run unprotected: no secret set means no one may call them.
+  if (!secret && process.env.NODE_ENV === 'production') {
+    return res.status(503).json({ success: false, error: { message: 'Cron is not configured (CRON_SECRET missing)' } });
+  }
   if (secret && req.headers.authorization !== `Bearer ${secret}`) {
     return res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
   }

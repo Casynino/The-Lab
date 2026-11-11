@@ -79,7 +79,8 @@ export function AuthProvider({ children }) {
       setUser(u);
       return { ok: true, user: u };
     } catch (err) {
-      return { ok: false, message: apiError(err, 'Login failed') };
+      const details = err?.response?.data?.error?.details;
+      return { ok: false, message: apiError(err, 'Login failed'), reason: details?.reason, hint: details?.hint };
     }
   }, []);
 

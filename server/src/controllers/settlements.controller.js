@@ -1,5 +1,7 @@
 'use strict';
 
+const { forRole } = require('../utils/repView');
+
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { ok, created, paginated } = require('../utils/response');
@@ -36,7 +38,7 @@ const get = asyncHandler(async (req, res) => {
   if (req.user.role === ROLES.SALES_REP && s.salesRepId !== req.user.salesRepId) {
     throw ApiError.forbidden('This order is not yours');
   }
-  return ok(res, s);
+  return ok(res, forRole(req, s));
 });
 
 const settle = asyncHandler(async (req, res) => {

@@ -12,8 +12,9 @@ const warehouseStaff = requireRoles(ROLES.WAREHOUSE_STAFF);
 
 router.use(authenticate);
 
-router.get('/balances', validate(balanceQuery), ctrl.balances);
-router.get('/movements', validate(movementQuery), ctrl.movements);
+// Staff only: warehouse levels, every rep's holdings and costs.
+router.get('/balances', warehouseStaff, validate(balanceQuery), ctrl.balances);
+router.get('/movements', warehouseStaff, validate(movementQuery), ctrl.movements);
 
 router.post('/stock-in', warehouseStaff, validate(stockIn), ctrl.stockIn);
 router.post('/adjustments', warehouseStaff, validate(adjustment), ctrl.adjust);

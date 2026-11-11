@@ -24,10 +24,25 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// The app's own look at the screen, sent with every request: a touch screen whose shorter side is under
+// 600px is a phone. The server combines it with what the browser says about itself (server/src/utils/
+// device.js) to keep sales-rep accounts on phones only. It can only ever narrow, never widen, access.
+function clientForm() {
+  try {
+    if (!window.matchMedia('(pointer: coarse)').matches) return 'desktop';
+    return Math.min(window.screen.width, window.screen.height) < 600 ? 'phone' : 'tablet';
+  } catch {
+    return '';
+  }
+}
+const CLIENT_FORM = clientForm();
+export const RESTRICTED_KEY = 'zl.restricted';
+
 // Attach the bearer token to every request.
 api.interceptors.request.use((config) => {
   const token = tokenStore.get();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (CLIENT_FORM) config.headers['X-Client-Form'] = CLIENT_FORM;
   return config;
 });
 
@@ -38,6 +53,16 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
     const status = error.response?.status;
+
+    // A sales-rep account used on a computer or tablet: the server refuses every request. Sign out here and
+    // show the reason on the sign-in page (the sign-in form shows it itself, so no redirect from there).
+    const details = error.response?.data?.error?.details;
+    if (status === 403 && details?.reason === 'DEVICE_RESTRICTED' && !original?.url?.includes('/auth/login')) {
+      tokenStore.clear();
+      try { sessionStorage.setItem(RESTRICTED_KEY, JSON.stringify({ message: error.response.data.error.message, hint: details.hint })); } catch { /* private window */ }
+      if (!window.location.pathname.startsWith('/login')) window.location.assign('/login');
+      return Promise.reject(error);
+    }
 
     if (status === 401 && !original._retry && tokenStore.getRefresh() && !original.url?.includes('/auth/')) {
       original._retry = true;

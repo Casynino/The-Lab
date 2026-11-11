@@ -5,6 +5,7 @@ const { ok, created, paginated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
 const productsService = require('../services/products.service');
 const audit = require('../services/audit.service');
+const { forRole } = require('../utils/repView');
 
 const list = asyncHandler(async (req, res) => {
   const q = req.validatedQuery || req.query;
@@ -17,12 +18,12 @@ const list = asyncHandler(async (req, res) => {
     { brandId: q.brandId, categoryId: q.categoryId, isActive: q.isActive, search: q.search },
     pagination,
   );
-  return paginated(res, items, { page: pagination.page, limit: pagination.limit, total });
+  return paginated(res, forRole(req, items), { page: pagination.page, limit: pagination.limit, total });
 });
 
 const get = asyncHandler(async (req, res) => {
   const product = await productsService.getProduct(req.params.id);
-  return ok(res, product);
+  return ok(res, forRole(req, product));
 });
 
 const create = asyncHandler(async (req, res) => {

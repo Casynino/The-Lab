@@ -7,7 +7,7 @@ const auditService = require('../services/audit.service');
 
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  const result = await authService.login(email, password);
+  const result = await authService.login(email, password, req.headers);
   await auditService.record(req, {
     action: 'LOGIN',
     entityType: 'User',
@@ -17,7 +17,7 @@ const login = asyncHandler(async (req, res) => {
 });
 
 const refresh = asyncHandler(async (req, res) => {
-  const result = await authService.refresh(req.body.refreshToken);
+  const result = await authService.refresh(req.body.refreshToken, req.headers);
   return ok(res, result);
 });
 

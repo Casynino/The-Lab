@@ -10,6 +10,7 @@ import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
+import { RESTRICTED_KEY } from '@/lib/api';
 import HowItWorksVideo from '@/components/HowItWorksVideo';
 import './login.css';
 
@@ -266,6 +267,12 @@ export default function Login() {
   const location = useLocation();
   const [showPwd, setShowPwd] = useState(false);
   const from = location.state?.from?.pathname || '/';
+  // A sales-rep account used on a computer or tablet (server rule): the reason stays on the page, not in a
+  // toast that disappears — whether it came from this sign-in or from a session that was stopped.
+  const [restricted, setRestricted] = useState(() => {
+    try { const s = sessionStorage.getItem(RESTRICTED_KEY); if (s) { sessionStorage.removeItem(RESTRICTED_KEY); return JSON.parse(s); } } catch { /* private window */ }
+    return null;
+  });
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(schema),
@@ -277,8 +284,11 @@ export default function Login() {
   const onSubmit = async (values) => {
     const res = await login(values.email, values.password);
     if (res.ok) {
+      setRestricted(null);
       offerToSave(values.email, values.password, res.user.name);
       navigate(from, { replace: true });
+    } else if (res.reason === 'DEVICE_RESTRICTED') {
+      setRestricted({ message: res.message, hint: res.hint });
     } else {
       toast.error(res.message);
     }
@@ -309,6 +319,12 @@ export default function Login() {
             We keep Tanzania <span className="md:text-brand-500">stocked.</span>
           </h2>
 
+          {/* The same reason on the page itself when a stopped session sent the rep here. */}
+          {restricted && (
+            <p role="alert" className="ls-up mb-3 max-w-[20rem] text-center text-[12.5px] leading-snug text-rose-300" style={rise(0.4)}>
+              {restricted.message}
+            </p>
+          )}
           <Gate>
             {/* The same frosted glass as the install card (Nino, 10 Nov 2026, on
                 the installed app: the form "looks big and bad, it should match
@@ -316,6 +332,12 @@ export default function Login() {
                 one button. No subtitle, no red asterisks, labels you can tap. */}
             <div className="ls-card w-full rounded-2xl border border-white/[0.09] bg-[#140b0b]/72 px-4 pb-4 pt-3.5 shadow-[0_18px_44px_-22px_rgba(0,0,0,0.75)] backdrop-blur-2xl backdrop-saturate-150">
               <h1 className="ls-field text-[15px] font-medium tracking-tight text-white" style={stagger(0)}>Log in</h1>
+              {restricted && (
+                <div role="alert" className="mt-2.5 text-[12.5px] leading-snug">
+                  <p className="font-medium text-rose-300">{restricted.message}</p>
+                  {restricted.hint && <p className="mt-1 text-white/55">{restricted.hint}</p>}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit(onSubmit)} className="mt-3.5 space-y-3">
                 <div className="ls-field" style={stagger(1)}>

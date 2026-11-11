@@ -9,12 +9,13 @@ const { creditQuery, creditPayment } = require('../validators/sales.validator');
 const { idParam } = require('../validators/common.validator');
 
 const router = express.Router();
-const collectors = requireRoles(ROLES.SALES_REP, ROLES.WAREHOUSE_STAFF);
+// Staff only: business-wide debt; no rep screen reads or records it.
+const collectors = requireRoles(ROLES.WAREHOUSE_STAFF);
 
 router.use(authenticate);
-router.get('/', validate(creditQuery), ctrl.list);
-router.get('/summary', ctrl.summary);
-router.get('/:id', validate(idParam), ctrl.get);
+router.get('/', collectors, validate(creditQuery), ctrl.list);
+router.get('/summary', collectors, ctrl.summary);
+router.get('/:id', collectors, validate(idParam), ctrl.get);
 router.post('/:id/payments', collectors, validate({ ...idParam, ...creditPayment }), ctrl.recordPayment);
 router.post('/refresh-overdue', requireAdmin, ctrl.refreshOverdue);
 

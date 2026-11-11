@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, Loader2, ClipboardList, CheckCircle2, Boxes, Undo2, MapPin } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
 import { RED } from '@/lib/brand';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
@@ -52,7 +52,13 @@ function ChangePasswordForm() {
   const [showNext, setShowNext] = useState(false);
 
   const change = useMutation({
-    mutationFn: () => api.post('/auth/change-password', { currentPassword: current, newPassword: next }),
+    mutationFn: async () => {
+      // The server checks the confirmation too, and answers with fresh tokens: every OTHER device is signed
+      // out by a password change, this one stays in.
+      const res = unwrap(await api.post('/auth/change-password', { currentPassword: current, newPassword: next, confirmPassword: confirm }));
+      if (res?.data?.tokens) tokenStore.set(res.data.tokens.accessToken, res.data.tokens.refreshToken);
+      return res;
+    },
     onSuccess: () => {
       toast.success('Password updated');
       setCurrent(''); setNext(''); setConfirm('');
@@ -61,12 +67,12 @@ function ChangePasswordForm() {
   });
 
   const mismatch = next && confirm && next !== confirm;
-  const valid = current.length > 0 && next.length >= 6 && next === confirm;
+  const valid = current.length > 0 && next.length >= 8 && next === confirm;
 
   return (
     <div className="space-y-3">
       <PasswordField label="Current password" value={current} onChange={setCurrent} autoComplete="current-password" show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} />
-      <PasswordField label="New password · 6 or more characters" value={next} onChange={setNext} autoComplete="new-password" show={showNext} onToggle={() => setShowNext((v) => !v)} />
+      <PasswordField label="New password · 8 or more characters" value={next} onChange={setNext} autoComplete="new-password" show={showNext} onToggle={() => setShowNext((v) => !v)} />
       <PasswordField label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={mismatch ? 'These do not match' : undefined} />
       <Button className="mt-1 h-10 w-full justify-center rounded-full text-[13px] font-semibold" disabled={!valid || change.isPending} onClick={() => change.mutate()}>
         {change.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

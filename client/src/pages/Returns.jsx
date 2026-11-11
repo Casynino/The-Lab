@@ -161,8 +161,9 @@ function ReturnModal({ onClose }) {
   const { user } = useAuth();
   const isRep = user?.role === ROLES.SALES_REP;
   const { data: products = [] } = useProducts();
-  const { data: customers = [] } = useCustomers();
-  const { data: reps = [] } = useSalesReps();
+  // Customers and the rep list are only for staff (the server refuses the rep list to reps).
+  const { data: customers = [] } = useCustomers({}, { enabled: !isRep });
+  const { data: reps = [] } = useSalesReps({}, { enabled: !isRep });
   const { data: warehouses = [] } = useWarehouses();
 
   // Reps only ever return stock TO ZELab; the server auto-matches the boxes

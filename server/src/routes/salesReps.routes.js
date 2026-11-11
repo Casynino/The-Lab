@@ -12,11 +12,13 @@ const { idParam } = require('../validators/common.validator');
 const router = express.Router();
 
 router.use(authenticate);
-router.get('/', validate(namedQuery), ctrl.list);
-router.get('/:id', validate(idParam), ctrl.get);
+const staff = requireRoles(ROLES.WAREHOUSE_STAFF);
+// Staff only: these hold every rep's figures, contacts and WhatsApp key; a rep reads his own via /auth/me.
+router.get('/', staff, validate(namedQuery), ctrl.list);
+router.get('/:id', staff, validate(idParam), ctrl.get);
 router.get('/:id/profile', requireRoles(ROLES.WAREHOUSE_STAFF), validate(idParam), ctrl.getProfile);
-router.get('/:id/stock', validate(idParam), ctrl.getStock);
-router.get('/:id/reconciliation', validate(idParam), ctrl.getReconciliation);
+router.get('/:id/stock', staff, validate(idParam), ctrl.getStock);
+router.get('/:id/reconciliation', staff, validate(idParam), ctrl.getReconciliation);
 router.get('/:id/deletion-check', requireAdmin, validate(idParam), ctrl.deletionPreview); // what deleting this rep would destroy
 router.post('/:id/reset-data', requireAdmin, validate(idParam), ctrl.resetData); // DANGER: wipe a test rep's business activity
 router.post('/:id/add-stock', requireRoles(ROLES.WAREHOUSE_STAFF), validate({ ...idParam, ...salesRepAddStock }), ctrl.addStock);
