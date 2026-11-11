@@ -3,7 +3,8 @@
     #root { position: absolute; inset: 0; font-family: 'Inter', sans-serif; color: #fff; overflow: hidden; }
     #world { position: absolute; inset: 0; z-index: 30; }
     #world-mask { position: absolute; inset: 0; overflow: hidden; clip-path: inset(0px 0px 0px 0px round 0px); }
-    #world-img { position: absolute; left: 0; top: -120px; width: 1080px; height: 2160px; object-fit: cover; }
+    #world-cam { position: absolute; left: 0; top: -120px; width: 1080px; height: 2160px; }
+    #world-vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     #world-shade { position: absolute; inset: 0; background: radial-gradient(120% 55% at 50% 0%, rgba(5,5,7,.72), rgba(5,5,7,0) 70%); }
     #hook-title { position: absolute; left: 110px; top: 236px; z-index: 31; font-weight: 800; font-size: 112px; line-height: 1.02; letter-spacing: -0.03em; }
     #hook-title .row { display: block; }
@@ -37,8 +38,12 @@
     .line .acc { color: #ee3124; font-weight: 700; }
   </style>
   <div id="root" data-composition-id="story" data-width="1080" data-height="1920">
-    <div id="world" class="clip" data-start="0" data-duration="4.6" data-track-index="1">
-      <div id="world-mask"><img id="world-img" src="assets/brand/world.webp" alt="" /><div id="world-shade"></div></div>
+    <div id="world">
+      <div id="world-mask">
+        <!-- the sign-in page's own moving film, continuing exactly where the intro left it -->
+        <div id="world-cam"><video id="world-vid" class="clip" data-start="0" data-duration="4.6" data-media-start="3.5" data-track-index="1" muted playsinline src="assets/brand/world.mp4"></video></div>
+        <div id="world-shade"></div>
+      </div>
     </div>
     <h1 id="hook-title" class="clip" data-start="0" data-duration="3.2" data-track-index="2">
       <span class="row"><span class="hw">From</span> <span class="hw">the</span> <span class="hw">Lab</span></span>
@@ -127,9 +132,8 @@
       const STORY_END = 43.6;
 
       // Hook: the Lab world, a slow push, then it shrinks into the phone's screen
-      ft('#world', { opacity: 0 }, { opacity: 1, duration: 0.5, ease: 'power2.out' }, 0);
-      ft('#world-img', { scale: 1, y: 0 }, { scale: 1.05, y: 0, duration: 3.0, ease: 'none' }, 0);
-      ft('#world-img', { scale: 1.05, y: 0 }, { scale: 0.613, y: 226, duration: 1.2, ease: 'power3.inOut' }, 3.0);
+      ft('#world-cam', { scale: 1, y: 0 }, { scale: 1.05, y: 0, duration: 3.0, ease: 'none' }, 0);
+      ft('#world-cam', { scale: 1.05, y: 0 }, { scale: 0.613, y: 226, duration: 1.2, ease: 'power3.inOut' }, 3.0);
       ft('#world-mask', { clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: 'inset(524px 234px 72px 234px round 72px)', duration: 1.2, ease: 'power3.inOut' }, 3.0);
       ft('#world-shade', { opacity: 1 }, { opacity: 0, duration: 0.8, ease: 'power2.inOut' }, 3.0);
       ft('#phone-body', { opacity: 0 }, { opacity: 1, duration: 0.7, ease: 'power2.out' }, 3.35);
