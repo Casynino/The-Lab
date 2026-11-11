@@ -602,11 +602,14 @@ async function mirrorToRep(userId, data) {
       message: data.message,
       severity: data.severity || 'INFO',
       whatsapp: data.whatsapp || null,
-      // Dedupe on the linked entity so a retried in-app notify never double-texts.
-      // dedupeSalt lets a caller send the same words twice on purpose — an
-      // extension taken again after ZELab cancelled the first one.
+      // Dedupe so a RETRIED notify never double-texts — but only a retry. The key used to be rep +
+      // entity + title alone, so a second, real message under the same title about the same order
+      // (tomorrow's late fine, a new amount) was silently dropped (audit #45, 11 Nov 2026). It now also
+      // carries the Tanzania day and a fingerprint of the words: the same text again today is a retry;
+      // new words, or the same reminder on another day, go out. dedupeSalt still lets a caller send the
+      // same words twice on purpose.
       dedupeKey: data.entityId
-        ? `rep:${rep.id}:${data.entityType || 'x'}:${data.entityId}:${data.title}${data.dedupeSalt ? `:${data.dedupeSalt}` : ''}`
+        ? `rep:${rep.id}:${data.entityType || 'x'}:${data.entityId}:${data.title}:${dateEAT()}:${require('crypto').createHash('sha1').update(String(data.message || '')).digest('hex').slice(0, 12)}${data.dedupeSalt ? `:${data.dedupeSalt}` : ''}`
         : null,
     });
   } catch {
