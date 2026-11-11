@@ -32,7 +32,7 @@ function CustomerModal({ open, onClose, editing, reps, canAssign }) {
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit customer' : 'New customer'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} onClick={handleSubmit((v) => save.mutate(v))}>{isEdit ? 'Save' : 'Add'}</Button></>}>
       <div className="space-y-4">
-        <Field label="Name" required error={errors.name?.message}><Input {...register('name', { required: 'Name is required' })} /></Field>
+        <Field label="Name" required error={errors.name?.message}><Input maxLength={160} {...register('name', { required: 'Name is required' })} /></Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Phone"><Input {...register('phone')} /></Field>
           <Field label="Region">

@@ -72,6 +72,10 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
 
   const save = useMutation({
     mutationFn: async (values) => {
+      // A level left blank went up as 0 and came back only as "Validation failed".
+      if (rows.some((r) => !Number.isInteger(Number(r.baseQuantity)) || Number(r.baseQuantity) < 1)) {
+        throw new Error('Enter how many base units each packaging level holds (e.g. Box = 50), or remove the empty level.');
+      }
       const packagings = rows.map((r) => ({
         packagingUnitId: r.packagingUnitId,
         baseQuantity: Number(r.baseQuantity),
@@ -120,7 +124,7 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
     >
       <div className="space-y-4">
         <Field label="Product name" required error={errors.name?.message}>
-          <Input {...register('name', { required: 'Name is required' })} />
+          <Input maxLength={200} {...register('name', { required: 'Name is required' })} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="SKU" hint={isEdit ? 'SKU cannot be changed' : 'Auto-generated if blank'}>
