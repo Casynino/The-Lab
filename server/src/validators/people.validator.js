@@ -79,10 +79,9 @@ const userQuery = {
 // A phone number written any usual way (0712 345 678, +255 712-345-678, a foreign number), or nothing.
 // Any text at all used to be saved as the phone — "not-a-phone!!" was accepted (audit, 11 Nov 2026).
 const digitsIn = (v) => v.replace(/\D/g, '').length;
-const customerPhone = z.string().trim().max(40).refine(
-  (v) => v === '' || (/^[+\d\s().-]+$/.test(v) && digitsIn(v) >= 9 && digitsIn(v) <= 15),
-  { message: 'Enter a phone number in digits, e.g. 0712 345 678 or +255 712 345 678' },
-);
+const isCustomerPhone = (v) => v === '' || (/^[+\d\s().-]+$/.test(v) && digitsIn(v) >= 9 && digitsIn(v) <= 15);
+const CUSTOMER_PHONE_HINT = 'Enter a phone number in digits, e.g. 0712 345 678 or +255 712 345 678';
+const customerPhone = z.string().trim().max(40).refine(isCustomerPhone, { message: CUSTOMER_PHONE_HINT });
 const customerCreate = {
   body: z.object({
     name: z.string().trim().min(1).max(160),
@@ -94,7 +93,12 @@ const customerCreate = {
     isActive: z.boolean().optional(),
   }),
 };
-const customerUpdate = { body: customerCreate.body.partial() };
+// An edit checks the phone only when it CHANGES (customers.controller compares it with the saved one): a
+// customer saved before the check, with two numbers ("0712.../0754...") or a "-", could not be saved at
+// all, not even for a name change.
+const customerUpdate = {
+  body: customerCreate.body.partial().extend({ phone: z.string().trim().max(40).optional().nullable() }),
+};
 const customerQuery = {
   query: z.object({
     ...paginationFields,
@@ -161,6 +165,8 @@ module.exports = {
   customerCreate,
   customerUpdate,
   customerQuery,
+  isCustomerPhone,
+  CUSTOMER_PHONE_HINT,
   salesRepCreate,
   salesRepUpdate,
   salesRepAddStock,
