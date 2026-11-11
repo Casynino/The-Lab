@@ -290,10 +290,14 @@ async function approveReturn(id, actor) {
       const want = new Map();
       for (const l of ret.items) want.set(l.productId, (want.get(l.productId) || 0) + l.baseQuantity);
       for (const [productId, n] of want) {
-        const outstanding = await settlement.productOutstanding(tx, stl, productId);
-        if (n > outstanding) {
+        // This return was claimed as APPROVED a moment ago, and productOutstanding counts approved returns —
+        // so its own boxes are ALREADY taken off here. What must hold is that the order does not go below
+        // zero. (Comparing n with this figure counted the return twice: any return of more than half of
+        // what was left — e.g. all the unsold boxes — could never be approved. Fixed 11 Nov 2026.)
+        const afterThis = await settlement.productOutstanding(tx, stl, productId);
+        if (afterThis < 0) {
           const name = ret.items.find((l) => l.productId === productId)?.product?.name || 'a product';
-          throw ApiError.conflict(`Only ${Math.max(0, outstanding)} box(es) of ${name} are still on order ${stl.settlementNumber} — this return can no longer be approved as it is.`);
+          throw ApiError.conflict(`Only ${Math.max(0, afterThis + n)} box(es) of ${name} are still on order ${stl.settlementNumber} — this return can no longer be approved as it is.`);
         }
       }
     }

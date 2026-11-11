@@ -137,9 +137,12 @@ async function productOnHand(client) {
 // place, not on a row, because the balance is summed from the ledger and a cache row may not exist.
 // (No-op on a client without raw SQL, e.g. a unit-test stub.)
 async function lockStock(client, productId, loc) {
-  if (typeof client.$queryRaw !== 'function') return;
+  if (typeof client.$executeRaw !== 'function') return;
   const key = `stock:${productId}:${loc.locationType}:${loc.warehouseId || loc.salesRepId}`;
-  await client.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+  // $executeRaw, not $queryRaw: pg_advisory_xact_lock returns `void`, which $queryRaw cannot read back
+  // ("Failed to deserialize column of type 'void'") — that failed every stock movement for a few minutes
+  // on 11 Nov 2026. executeRaw only needs the statement to run.
+  await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
 }
 
 async function assertAvailable(client, { productId, location, requiredBase }) {
