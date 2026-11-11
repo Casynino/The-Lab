@@ -109,7 +109,7 @@ async function refresh(refreshToken, headers = {}) {
   if (!user || !user.isActive) throw ApiError.unauthorized('Account not found or deactivated');
   if ((decoded.sv || 0) !== (user.sessionVersion || 0)) throw ApiError.unauthorized('Your session has ended. Please sign in again.');
   assertRepProfile(user);
-  if (repSuspended(user)) throw ApiError.unauthorized('Your sales-rep account is suspended');
+  if (repSuspended(user)) throw ApiError.unauthorized('Your sales-rep account is suspended. Ask ZELab to reactivate it.');
   assertDeviceAllowed(user.role.name, headers, ApiError);
 
   return { tokens: issueTokens(user) };

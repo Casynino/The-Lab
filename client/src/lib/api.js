@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { queryClient } from '@/lib/queryClient';
 import { CACHE_KEY } from '@/lib/cacheSnapshot';
+import { renewsOn401, accountRefusal } from '@/lib/sessionCheck';
 
 const TOKEN_KEY = 'haostock.accessToken';
 // When this tab last reloaded itself to answer the host's security challenge.
@@ -45,6 +46,14 @@ export function clientForm() {
 }
 export const RESTRICTED_KEY = 'zl.restricted';
 
+// A session refused for a reason about the account (a rep suspended, an account switched off): kept, the
+// same way as the phone-only reason, so the sign-in page says why (audit 11 Nov 2026, auth-device-4).
+export function rememberRefusal(error) {
+  const message = accountRefusal(error);
+  if (!message) return;
+  try { sessionStorage.setItem(RESTRICTED_KEY, JSON.stringify({ message })); } catch { /* private window */ }
+}
+
 // Attach the bearer token to every request.
 api.interceptors.request.use((config) => {
   const token = tokenStore.get();
@@ -73,7 +82,9 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (status === 401 && !original._retry && tokenStore.getRefresh() && !original.url?.includes('/auth/')) {
+    // Every call but signing in and the renewal itself — /auth/me on opening the app included (see
+    // sessionCheck.js renewsOn401).
+    if (status === 401 && !original._retry && tokenStore.getRefresh() && renewsOn401(original.url)) {
       original._retry = true;
       try {
         refreshing =
@@ -92,6 +103,7 @@ api.interceptors.response.use(
         return api(original);
       } catch (e) {
         refreshing = null;
+        rememberRefusal(e);
         tokenStore.clear();
         if (!window.location.pathname.startsWith('/login')) window.location.assign('/login');
         return Promise.reject(e);
