@@ -34,7 +34,7 @@ import { repRegions, shortRegion } from '@/lib/repRegions';
 import CollapsibleList from '@/components/CollapsibleList';
 import WalletCard from '@/components/WalletCard';
 import VerifiedBadge from '@/components/VerifiedBadge';
-import { Ring } from '@/components/RepCharts';
+import { Ring } from '@/components/Ring';
 
 // The profile, built from the same few shapes as the rest of the rep app (Nino, 11 Nov 2026: "it should have
 // shapes, but nice — the wallet should look like the one in the wallet, and the rep should see how he is

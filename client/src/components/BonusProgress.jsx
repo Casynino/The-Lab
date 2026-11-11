@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { Trophy } from 'lucide-react';
 import { formatCurrency } from '@/lib/format';
 import { RED } from '@/lib/brand';
-import { Ring } from '@/components/RepCharts';
+import { Ring } from '@/components/Ring';
 
 // The sales bonuses as small rings, one for each (Nino, 11 Nov 2026: "there are two bonuses, so the pie
 // chart should be nice and small, but show all the percentages"). Each ring has its own percentage in the
