@@ -1863,7 +1863,8 @@ async function overview(period = 'month') {
     // His remaining invoice, which falls due only as shelf stock sells.
     const dueLater = round2(Math.max(0, sup.outstanding - dueNow));
     const paidAhead = round2(Math.max(0, sup.paid - costOfSold));
-    const setAside = round2(Math.min(row.cash, dueNow));
+    // Never below zero: a wallet that is overdrawn has nothing to put aside (it showed "-1 set aside").
+    const setAside = round2(Math.max(0, Math.min(row.cash, dueNow)));
     return {
       key: row.key,
       brandName: row.key === 'general' ? 'General business' : (brandNameById.get(row.key) || 'Brand'),
@@ -1920,6 +1921,11 @@ async function overview(period = 'month') {
     setAside: round2(buckets.reduce((a, b) => a + b.setAside, 0)),
     yours: round2(buckets.reduce((a, b) => a + b.yours, 0)),
     dueLater: round2(buckets.reduce((a, b) => a + b.dueLater, 0)),
+    // The real figures, uncapped (audit 11 Nov 2026). `setAside` is what a wallet CAN put aside, so it
+    // stops at the wallet's cash; "total you owe" was built as setAside + dueLater and lost whatever was
+    // due beyond the cash (10,410,000 shown against a 12,000,000 bill). These two are what is owed.
+    dueNow: round2(buckets.reduce((a, b) => a + b.dueNow, 0)),
+    owedTotal: round2(buckets.reduce((a, b) => a + b.supplierOwedTotal, 0)),
     buckets,
   };
 

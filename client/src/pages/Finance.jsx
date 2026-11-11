@@ -524,7 +524,12 @@ function Overview({ onNavigate, onOwnerMoney }) {
              stacked rows this replaced read as a document, not a dashboard. */}
       {data.cashSplit && (() => {
         const supplierLabel = data.cashSplit.supplierLabel || 'your suppliers';
-        const totalOwed = round2ui((data.cashSplit.setAside || 0) + (data.cashSplit.dueLater || 0));
+        // The whole bill and what is due now, as owed — not capped at what a wallet holds (that made the
+        // total 10,410,000 against a 12,000,000 bill). Older servers without the fields fall back.
+        const totalOwed = data.cashSplit.owedTotal != null
+          ? round2ui(data.cashSplit.owedTotal)
+          : round2ui((data.cashSplit.setAside || 0) + (data.cashSplit.dueLater || 0));
+        const dueNow = data.cashSplit.dueNow != null ? round2ui(data.cashSplit.dueNow) : round2ui(data.cashSplit.setAside || 0);
         const om = data.ownerMoney || {};
         // Only brands he actually put money behind; untagged rows stay out of
         // the sentence rather than being described as a brand.
@@ -559,11 +564,11 @@ function Overview({ onNavigate, onOwnerMoney }) {
             // "TSh 0 — you are 381,000 ahead" directly above a sentence saying
             // none of it is due and you are 381,000 ahead: the same fact, and
             // the same figure, twice. The sentence says it better, in words.
-            ...(data.cashSplit.setAside > 0
+            ...(dueNow > 0
               ? [
                   {
                     label: 'Of that, due today',
-                    value: formatCurrency(data.cashSplit.setAside),
+                    value: formatCurrency(dueNow),
                     sub: 'cost of boxes already sold',
                     tone: 'rose',
                   },
@@ -573,7 +578,15 @@ function Overview({ onNavigate, onOwnerMoney }) {
           ]} />
 
           <p className="text-xs leading-relaxed text-muted">
-            {totalOwed > 0 ? (
+            {totalOwed > 0 && dueNow > 0 ? (
+              // Said only when something IS due — it used to read "none of it is due yet" right beside a
+              // "due today" card.
+              <>
+                You owe {supplierLabel} <b className="text-foreground">{formatCurrency(totalOwed)}</b> in total. Of that,
+                {' '}<b className="text-foreground">{formatCurrency(dueNow)}</b> is due now — the cost of boxes already sold.
+                {' '}The rest falls due as the stock on your shelf sells.
+              </>
+            ) : totalOwed > 0 ? (
               <>
                 You owe {supplierLabel} <b className="text-foreground">{formatCurrency(totalOwed)}</b> in total — but none of it is due yet.
                 {' '}{supplierLabel} is paid the cost of the boxes as they sell, and the boxes you have already sold are covered
