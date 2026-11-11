@@ -2191,7 +2191,7 @@ function CashFlowTab() {
   }[period];
   const day = (v) => eatDay(v, { day: 'numeric', month: 'short', year: 'numeric' });
   // One day ("Daily") is already in the title, so its range is not repeated under it.
-  const periodSub = !data.range ? 'everything recorded so far'
+  const periodSub = !data.range ? (data.epochAt ? `everything since ${day(data.epochAt)}` : 'everything recorded so far')
     : day(data.range.start) === day(data.range.end) ? '' : `${day(data.range.start)} → ${day(data.range.end)}`;
   const ownerNet = data.ownerNet ?? 0;
   // Four terms run in one line from lg; the fifth (his own money) needs xl.

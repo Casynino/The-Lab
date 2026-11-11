@@ -1124,6 +1124,8 @@ async function cashflow(opts = {}) {
   return {
     period: opts.from || opts.to ? 'custom' : opts.period || 'all',
     range: range ? { start: range.start, end: range.end } : null,
+    // With no range the figures start at go-live, not at the first record: say so on screen.
+    epochAt: epoch || null,
     openingBalance,
     ...inPeriod,
     // Contributions in, drawings out, and the net of the two — the part of his
@@ -2154,6 +2156,9 @@ async function overview(period = 'month', shared = {}) {
 
   return {
     period,
+    // The go-live moment the figures count from, so "All time" can say where it starts
+    // (the Profit tab already does). Sales before it are not in these figures.
+    epochAt: epoch || null,
     cashPosition,
     accounts,
     flow,
