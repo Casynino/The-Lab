@@ -1544,7 +1544,9 @@ function AdminView() {
         <CardHeader title="Withdrawal requests" />
         {!wd?.data?.length ? <EmptyState title="No withdrawal requests" /> : (
           <Table>
-            <THead><TR><TH>Rep</TH><TH>Amount</TH><TH>Status</TH><TH>Requested</TH><TH /></TR></THead>
+            {/* On a phone Status and Requested move under the amount and the buttons stack, so a 390 px
+                screen shows the whole row instead of only Rep and Amount. */}
+            <THead><TR><TH>Rep</TH><TH>Amount</TH><TH className="hidden sm:table-cell">Status</TH><TH className="hidden sm:table-cell">Requested</TH><TH /></TR></THead>
             <TBody>{wd.data.map((w) => (
               <TR key={w.id}>
                 <TD className="font-medium">
@@ -1552,18 +1554,22 @@ function AdminView() {
                     {w.salesRep?.user?.name}
                   </button>
                 </TD>
-                <TD>
+                <TD className="whitespace-normal sm:whitespace-nowrap">
                   <button type="button" onClick={() => setOpenWd(w)} className="text-left">
                     <div className="font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</div>
                   {/* Where to send it. This is the whole point of the request,
                       and it was only visible by hovering a different column. */}
                     {w.notes && <div className="mt-0.5 text-[11px] text-brand-600">{w.notes}</div>}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 sm:hidden">
+                      <Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge>
+                      <span className="text-[11px] text-faint">{formatDateTime(w.requestedAt)}</span>
+                    </div>
                   </button>
                 </TD>
-                <TD><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>
-                <TD className="text-faint">{formatDateTime(w.requestedAt)}</TD>
-                <TD>
-                  <div className="flex justify-end gap-1">
+                <TD className="hidden sm:table-cell"><Badge className={WITHDRAWAL_STATUS_META[w.status]?.cls}>{WITHDRAWAL_STATUS_META[w.status]?.label}</Badge></TD>
+                <TD className="hidden text-faint sm:table-cell">{formatDateTime(w.requestedAt)}</TD>
+                <TD className="whitespace-normal sm:whitespace-nowrap">
+                  <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
                     {/* Busy while a decision is on its way (audit #19): a second tap used to send a second PAY.
                         The server now refuses it too; this keeps the button from inviting it. */}
                     {w.status === 'PENDING' && <>
