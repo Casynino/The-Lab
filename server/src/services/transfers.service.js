@@ -235,6 +235,23 @@ async function cancelTransfer(id, actor, reason) {
     if (!transfer) throw ApiError.notFound('Transfer not found');
     if (transfer.status === 'CANCELLED') throw ApiError.badRequest('Transfer already cancelled');
 
+    // A transfer to a rep opened his 72-hour ORDER for those boxes. Cancelling it here took the boxes
+    // back but left the order open — still owing them, still drawing late fines on boxes he no longer
+    // had (audit #0/#10, 11 Nov 2026). Boxes come back from a rep through a Return on that order, which
+    // closes it, stops the clock and keeps the record straight; so that is where this sends you.
+    if (transfer.direction === 'WAREHOUSE_TO_REP') {
+      const order = await tx.settlement.findFirst({ where: { transferId: transfer.id }, select: { settlementNumber: true } });
+      if (order) {
+        throw ApiError.badRequest(
+          `This transfer opened order ${order.settlementNumber}. To take the boxes back, record a Return on that order — it closes the order and stops its fines. Cancelling the transfer would leave the order owing boxes the rep no longer has.`,
+        );
+      }
+    }
+
+    // Claim the cancel before any stock moves: a second click waits, finds it cancelled, and stops.
+    const claimed = await tx.stockTransfer.updateMany({ where: { id, status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED' } });
+    if (claimed.count !== 1) throw ApiError.conflict('This transfer was already cancelled.');
+
     const { from, to } = resolveEndpoints(transfer);
     // Reverse: move from -> back is to -> from.
     for (const item of transfer.items) {
