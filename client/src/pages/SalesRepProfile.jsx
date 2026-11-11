@@ -757,7 +757,9 @@ export default function SalesRepProfile() {
 
       {/* ── Top stats ── */}
       <div className="mb-6 grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <StatCard label="Stock in hand" value={formatNumber(perf.net)} icon={Boxes} tone="brand" hint={`${formatCurrency(stock.value)} cost`} />
+        {/* What he holds right now, the same boxes as the table below — not the Performance window's
+            flow (which is blank for Today / This week, and was -1 for a rep holding 1 box). */}
+        <StatCard label="Stock in hand" value={formatNumber(stock.items.reduce((s, i) => s + (Number(i.baseQuantity) || 0), 0))} icon={Boxes} tone="brand" hint={`${formatCurrency(stock.value)} cost`} />
         <StatCard
           label="Available balance"
           value={formatCurrency(c.available)}
@@ -976,8 +978,12 @@ export default function SalesRepProfile() {
           </Section>
         </div>
 
-        {/* ── Right column ── (a flex column, so the activity feed can take exactly what is left) */}
-        <div className="flex flex-col gap-6">
+        {/* ── Right column ── On a computer it is exactly as tall as the left column, for every rep: its
+            own length never makes the page longer (`contain: size`), and whatever does not fit scrolls
+            inside it. So the page ends where the left column ends and neither side leaves empty space
+            (Nino, 11 Nov 2026: "the space should go — what needs more room scrolls"). When the left is
+            the longer one, the activity feed grows to fill what is left. On a phone it is one column. */}
+        <div className="flex flex-col gap-6 lg:overflow-y-auto lg:pr-1 lg:[contain:size] lg:[scrollbar-width:thin]">
           {/* The same two bars the rep sees, so a conversation about their
               progress is had over identical numbers. */}
           <ProgressRows

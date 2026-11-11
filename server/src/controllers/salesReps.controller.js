@@ -237,7 +237,7 @@ const get = asyncHandler(async (req, res) => {
 async function repPerformance(salesRepId, range) {
   const inRange = (field) => (range ? { [field]: { gte: range.start, lte: range.end } } : {});
 
-  const [recv, ret, soldAgg, revenueAgg] = await Promise.all([
+  const [recv, ret, soldAgg, revenueAgg, ledger] = await Promise.all([
     prisma.stockTransferItem.aggregate({
       where: {
         transfer: {
@@ -251,8 +251,10 @@ async function repPerformance(salesRepId, range) {
       },
       _sum: { baseQuantity: true },
     }),
+    // Boxes the rep sent BACK to the warehouse. A CUSTOMER_RETURN is the opposite — boxes a customer
+    // brought back TO the rep — and counting it here showed a rep with 1 box in hand as holding -1.
     prisma.returnItem.aggregate({
-      where: { return: { is: { salesRepId, status: { in: ['APPROVED', 'COMPLETED'] }, ...inRange('processedAt') } } },
+      where: { return: { is: { salesRepId, type: 'SALES_RETURN', status: { in: ['APPROVED', 'COMPLETED'] }, ...inRange('processedAt') } } },
       _sum: { baseQuantity: true },
     }),
     // Boxes settled in the window. All-time this equals commission.boxesSettled,
@@ -265,6 +267,8 @@ async function repPerformance(salesRepId, range) {
       where: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' }, ...inRange('soldAt') },
       _sum: { total: true },
     }),
+    // What he actually holds: the stock ledger, which also carries customer returns and adjustments.
+    range ? Promise.resolve(null) : prisma.inventoryTransaction.aggregate({ where: { salesRepId }, _sum: { baseQuantity: true } }),
   ]);
 
   const received = recv._sum.baseQuantity || 0;
@@ -285,8 +289,9 @@ async function repPerformance(salesRepId, range) {
     received,
     sold,
     returned,
-    // Held only means anything all-time; over a window it is a flow, not a stock.
-    net: range ? null : received - sold - returned,
+    // Held only means anything all-time; over a window it is a flow, not a stock. It is read from the
+    // stock ledger (received - sold - returned leaves out customer returns and adjustments, audit 11 Nov).
+    net: range ? null : (ledger?._sum?.baseQuantity || 0),
     conversion: received > 0 ? round2((sold / received) * 100) : 0,
     revenue: round2(toNumber(revenueAgg._sum.total)),
     commissionEarned,
