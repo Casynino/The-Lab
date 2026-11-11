@@ -97,16 +97,36 @@ function MoneyTip({ active, payload, label, unit = 'earned' }) {
   );
 }
 
+/** One figure: a small muted label over a bold number. No box, no line round it. */
+function Figure({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] text-muted">{label}</dt>
+      <dd className="mt-0.5 whitespace-nowrap text-[17px] font-bold leading-tight tabular-nums text-foreground">{value}</dd>
+    </div>
+  );
+}
+
 /** Commission earned, month by month. The best month stands out in the house red. */
 export function EarningsCard({ insights }) {
   const { months, totals, best } = insights;
   const bestIdx = best ? months.findIndex((m) => m.label === best.label && m.earned === best.earned) : -1;
   const quiet = totals.earned <= 0;
+  // Nino, 11 Nov 2026: "say My earnings, not Your earnings, and arrange the information under it nicely, not
+  // as one long sentence" — so the title is first person, the sentence is gone, and the three figures it
+  // carried stand in a row above the chart, small label over bold figure, the way the wallet card does it.
   const said = quiet
     ? 'Settle boxes and your earnings will start to show here.'
-    : `${formatCurrency(totals.earned)} from ${formatNumber(totals.boxes)} boxes in ${months.length} months${best ? ` · best month ${best.label}, ${formatCurrency(best.earned)}` : ''}.`;
+    : `Last ${months.length} months`;
   return (
-    <InsightCard title="Your earnings" said={said}>
+    <InsightCard title="My earnings" said={said}>
+      {!quiet && (
+        <dl className="mb-5 flex flex-wrap justify-between gap-x-4 gap-y-3">
+          <Figure label="Earned" value={formatCurrency(totals.earned)} />
+          <Figure label="Boxes" value={formatNumber(totals.boxes)} />
+          {best && <Figure label={`Best month · ${best.label}`} value={formatCurrency(best.earned)} />}
+        </dl>
+      )}
       <ResponsiveContainer width="100%" height={170}>
         <BarChart data={months} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
