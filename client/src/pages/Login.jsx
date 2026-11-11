@@ -10,6 +10,7 @@ import { Loader2, Eye, EyeOff, ArrowRight, ArrowUpRight, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
+import HowItWorksVideo from '@/components/HowItWorksVideo';
 import './login.css';
 
 /**
@@ -211,6 +212,13 @@ function Gate({ children }) {
             Get the full-screen app
           </button>
         )}
+      />
+
+      {/* The rep guide film: every step from log in to getting paid, about 50 seconds. Downloaded only when
+          tapped. Same quiet style as the line above it. */}
+      <HowItWorksVideo
+        style={rise(0.78)}
+        className="ls-up inline-flex h-8 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline"
       />
 
       <div

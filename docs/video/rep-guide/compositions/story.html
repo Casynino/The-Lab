@@ -1,0 +1,186 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; font-family: 'Inter', sans-serif; color: #fff; overflow: hidden; }
+    #world { position: absolute; inset: 0; z-index: 30; }
+    #world-mask { position: absolute; inset: 0; overflow: hidden; clip-path: inset(0px 0px 0px 0px round 0px); }
+    #world-img { position: absolute; left: 0; top: -120px; width: 1080px; height: 2160px; object-fit: cover; }
+    #world-shade { position: absolute; inset: 0; background: radial-gradient(120% 55% at 50% 0%, rgba(5,5,7,.72), rgba(5,5,7,0) 70%); }
+    #hook-title { position: absolute; left: 110px; top: 236px; z-index: 31; font-weight: 800; font-size: 112px; line-height: 1.02; letter-spacing: -0.03em; }
+    #hook-title .row { display: block; }
+    .hw { display: inline-block; }
+    .acc { color: #ee3124; }
+    #stage { position: absolute; inset: 0; perspective: 1700px; perspective-origin: 50% 60%; z-index: 10; }
+    #cam { position: absolute; inset: 0; transform-origin: 540px 1186px; }
+    #phone-body { position: absolute; left: 220px; top: 510px; width: 640px; height: 1352px; border-radius: 86px;
+      background: linear-gradient(145deg, #343740, #1b1d22 42%, #111318); border: 1px solid rgba(255,255,255,.22);
+      box-shadow: 0 60px 120px rgba(0,0,0,.65), 0 18px 38px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.24), inset 0 0 0 1px rgba(0,0,0,.48); }
+    .btn { position: absolute; width: 5px; border-radius: 3px; background: linear-gradient(90deg,#2a2d34,#40444d); }
+    #screen { position: absolute; left: 234px; top: 524px; width: 612px; height: 1324px; border-radius: 72px; overflow: hidden; background: #0a0a0b; }
+    .scr { position: absolute; inset: 0; }
+    .scr img { position: absolute; left: 0; top: 0; width: 612px; height: 1324px; display: block; }
+    #sheen { position: absolute; top: -200px; left: 0; width: 300px; height: 1800px; z-index: 40; mix-blend-mode: screen;
+      background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.10), rgba(255,255,255,0)); transform: translateX(-900px) rotate(18deg); }
+    #dim { position: absolute; inset: 0; background: #050506; opacity: 0; z-index: 41; }
+    .tap { position: absolute; width: 56px; height: 56px; z-index: 60; }
+    .tap .d { position: absolute; inset: 0; border-radius: 50%; background: rgba(255,255,255,.28);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); opacity: 0; }
+    .tap .d::after { content: ''; position: absolute; left: 17px; top: 17px; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,.88); }
+    .lift { position: absolute; z-index: 70; }
+    .lift .c { position: absolute; inset: 0; border-radius: 16px; background-repeat: no-repeat; background-size: 612px 1324px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0); }
+    #chapter { position: absolute; left: 110px; top: 196px; z-index: 50; }
+    #word-win { height: 136px; overflow: hidden; }
+    #word-col { will-change: transform; }
+    #word-col div { height: 136px; font-weight: 800; font-size: 120px; line-height: 136px; letter-spacing: -0.035em; white-space: nowrap; }
+    .line { position: absolute; left: 110px; top: 352px; width: 860px; z-index: 50; font-weight: 500; font-size: 42px; line-height: 1.25; color: rgba(255,255,255,.72); }
+    .line .lw { display: inline-block; }
+    .line .acc { color: #ee3124; font-weight: 700; }
+  </style>
+  <div id="root" data-composition-id="story" data-width="1080" data-height="1920">
+    <div id="world" class="clip" data-start="0" data-duration="4.6" data-track-index="1">
+      <div id="world-mask"><img id="world-img" src="assets/brand/world.webp" alt="" /><div id="world-shade"></div></div>
+    </div>
+    <h1 id="hook-title" class="clip" data-start="0" data-duration="3.2" data-track-index="2">
+      <span class="row"><span class="hw">From</span> <span class="hw">the</span> <span class="hw">Lab</span></span>
+      <span class="row"><span class="hw">to</span> <span class="hw">your</span> <span class="hw acc">wallet</span></span>
+    </h1>
+    <div id="stage" data-layout-allow-overflow>
+      <div id="cam">
+        <div id="phone-body" class="clip" data-start="3.2" data-duration="40.40" data-track-index="3">
+          <span class="btn" style="left:-4px;top:250px;height:86px"></span>
+          <span class="btn" style="left:-4px;top:360px;height:86px"></span>
+          <span class="btn" style="right:-4px;top:300px;height:140px"></span>
+        </div>
+        <div id="screen">
+          <div id="s01" class="clip scr" data-start="4.2" data-duration="1.8" data-track-index="4" style="z-index:1"><img id="s01-i" src="assets/screens/01-login.png" alt="" /></div>
+          <div id="s02" class="clip scr" data-start="5.75" data-duration="1.85" data-track-index="4" style="z-index:2"><img id="s02-i" src="assets/screens/02-login-form.png" alt="" /></div>
+          <div id="s03" class="clip scr" data-start="7.35" data-duration="2.2" data-track-index="4" style="z-index:3"><img id="s03-i" src="assets/screens/03-home.png" alt="" /></div>
+          <div id="s04" class="clip scr" data-start="9.3" data-duration="1.25" data-track-index="4" style="z-index:4"><img id="s04-i" src="assets/screens/04-requests.png" alt="" /></div>
+          <div id="s05" class="clip scr" data-start="10.3" data-duration="3.55" data-track-index="4" style="z-index:5"><img id="s05-i" src="assets/screens/05-request-form.png" alt="" /></div>
+          <div id="s06" class="clip scr" data-start="13.6" data-duration="1.65" data-track-index="4" style="z-index:6"><img id="s06-i" src="assets/screens/06-request-sent.png" alt="" /></div>
+          <div id="s07" class="clip scr" data-start="15.0" data-duration="1.85" data-track-index="4" style="z-index:7"><img id="s07-i" src="assets/screens/07-bell.png" alt="" /></div>
+          <div id="s09" class="clip scr" data-start="16.6" data-duration="2.35" data-track-index="4" style="z-index:8"><img id="s09-i" src="assets/screens/09-settle-list.png" alt="" /></div>
+          <div id="s10" class="clip scr" data-start="18.7" data-duration="1.85" data-track-index="4" style="z-index:9"><img id="s10-i" src="assets/screens/10-order.png" alt="" /></div>
+          <div id="s11" class="clip scr" data-start="20.3" data-duration="4.05" data-track-index="4" style="z-index:10"><img id="s11-i" src="assets/screens/11-settle-form.png" alt="" /></div>
+          <div id="s12" class="clip scr" data-start="24.1" data-duration="1.95" data-track-index="4" style="z-index:11"><img id="s12-i" src="assets/screens/12-settle-done.png" alt="" /></div>
+          <div id="s18" class="clip scr" data-start="25.8" data-duration="2.25" data-track-index="4" style="z-index:12"><img id="s18-i" src="assets/screens/18-order-after.png" alt="" /></div>
+          <div id="s13" class="clip scr" data-start="27.8" data-duration="2.95" data-track-index="4" style="z-index:13"><img id="s13-i" src="assets/screens/13-wallet.png" alt="" /></div>
+          <div id="s14" class="clip scr" data-start="30.5" data-duration="2.25" data-track-index="4" style="z-index:14"><img id="s14-i" src="assets/screens/14-withdraw.png" alt="" /></div>
+          <div id="s15" class="clip scr" data-start="32.5" data-duration="3.15" data-track-index="4" style="z-index:15"><img id="s15-i" src="assets/screens/15-withdraw-done.png" alt="" /></div>
+          <div id="s18b" class="clip scr" data-start="35.4" data-duration="1.05" data-track-index="4" style="z-index:16"><img id="s18b-i" src="assets/screens/18-order-after.png" alt="" /></div>
+          <div id="s16" class="clip scr" data-start="36.2" data-duration="2.65" data-track-index="4" style="z-index:17"><img id="s16-i" src="assets/screens/16-return.png" alt="" /></div>
+          <div id="s10b" class="clip scr" data-start="38.6" data-duration="1.15" data-track-index="4" style="z-index:18"><img id="s10b-i" src="assets/screens/10-order.png" alt="" /></div>
+          <div id="s17" class="clip scr" data-start="39.5" data-duration="4.1" data-track-index="4" style="z-index:19"><img id="s17-i" src="assets/screens/17-more-time.png" alt="" /></div>
+          <div id="sheen"></div>
+          <div id="dim"></div>
+        </div>
+        <div id="t1" class="clip tap" data-start="5.25" data-duration="0.6" data-track-index="5" style="left:512.0px;top:833.4px"><div id="t1-d" class="d"></div></div>
+        <div id="t2" class="clip tap" data-start="6.85" data-duration="0.6" data-track-index="5" style="left:512.0px;top:1125.3px"><div id="t2-d" class="d"></div></div>
+        <div id="t3" class="clip tap" data-start="8.8" data-duration="0.6" data-track-index="5" style="left:364.5px;top:1177.0px"><div id="t3-d" class="d"></div></div>
+        <div id="t4" class="clip tap" data-start="9.8" data-duration="0.6" data-track-index="5" style="left:333.1px;top:659.2px"><div id="t4-d" class="d"></div></div>
+        <div id="t5" class="clip tap" data-start="13.1" data-duration="0.6" data-track-index="5" style="left:573.2px;top:1716.9px"><div id="t5-d" class="d"></div></div>
+        <div id="t6" class="clip tap" data-start="18.2" data-duration="0.6" data-track-index="5" style="left:358.2px;top:718.8px"><div id="t6-d" class="d"></div></div>
+        <div id="t7" class="clip tap" data-start="19.8" data-duration="0.6" data-track-index="5" style="left:662.6px;top:1586.6px"><div id="t7-d" class="d"></div></div>
+        <div id="t8" class="clip tap" data-start="23.6" data-duration="0.6" data-track-index="5" style="left:573.2px;top:1534.8px"><div id="t8-d" class="d"></div></div>
+        <div id="t9" class="clip tap" data-start="30.0" data-duration="0.6" data-track-index="5" style="left:703.4px;top:772.2px"><div id="t9-d" class="d"></div></div>
+        <div id="t10" class="clip tap" data-start="32.0" data-duration="0.6" data-track-index="5" style="left:640.7px;top:1721.6px"><div id="t10-d" class="d"></div></div>
+        <div id="t11" class="clip tap" data-start="35.7" data-duration="0.6" data-track-index="5" style="left:334.7px;top:1716.9px"><div id="t11-d" class="d"></div></div>
+        <div id="t12" class="clip tap" data-start="38.0" data-duration="0.6" data-track-index="5" style="left:573.2px;top:872.6px"><div id="t12-d" class="d"></div></div>
+        <div id="t13" class="clip tap" data-start="39.0" data-duration="0.6" data-track-index="5" style="left:483.8px;top:1586.6px"><div id="t13-d" class="d"></div></div>
+        <div id="l1" class="clip lift" data-start="11.0" data-duration="2.05" data-track-index="6" data-layout-allow-overflow style="left:262.2px;top:1641.3px;width:555.5px;height:150.6px"><div id="l1-c" class="c" style="background-image:url(assets/screens/05-request-form.png);background-position:-28.2px -1117.3px"></div></div>
+        <div id="l2" class="clip lift" data-start="13.85" data-duration="1.05" data-track-index="6" data-layout-allow-overflow style="left:638.9px;top:561.7px;width:163.2px;height:47.1px"><div id="l2-c" class="c" style="background-image:url(assets/screens/06-request-sent.png);background-position:-404.9px -37.7px"></div></div>
+        <div id="l3" class="clip lift" data-start="15.3" data-duration="1.15" data-track-index="6" data-layout-allow-overflow style="left:256.0px;top:696.6px;width:568.1px;height:153.8px"><div id="l3-c" class="c" style="background-image:url(assets/screens/07-bell.png);background-position:-22.0px -172.6px"></div></div>
+        <div id="l4" class="clip lift" data-start="16.95" data-duration="1.25" data-track-index="6" data-layout-allow-overflow style="left:256.0px;top:709.2px;width:568.1px;height:150.6px"><div id="l4-c" class="c" style="background-image:url(assets/screens/09-settle-list.png);background-position:-22.0px -185.2px"></div></div>
+        <div id="l5" class="clip lift" data-start="20.85" data-duration="2.6" data-track-index="6" data-layout-allow-overflow style="left:256.0px;top:997.9px;width:568.1px;height:279.3px"><div id="l5-c" class="c" style="background-image:url(assets/screens/11-settle-form.png);background-position:-22.0px -473.9px"></div></div>
+        <div id="l6" class="clip lift" data-start="24.4" data-duration="1.3" data-track-index="6" data-layout-allow-overflow style="left:296.8px;top:709.2px;width:486.5px;height:376.6px"><div id="l6-c" class="c" style="background-image:url(assets/screens/12-settle-done.png);background-position:-62.8px -185.2px"></div></div>
+        <div id="l7" class="clip lift" data-start="26.15" data-duration="1.55" data-track-index="6" data-layout-allow-overflow style="left:588.6px;top:1258.4px;width:229.1px;height:47.1px"><div id="l7-c" class="c" style="background-image:url(assets/screens/18-order-after.png);background-position:-354.6px -734.4px"></div></div>
+        <div id="l8" class="clip lift" data-start="28.25" data-duration="1.75" data-track-index="6" data-layout-allow-overflow style="left:249.7px;top:740.6px;width:580.6px;height:238.5px"><div id="l8-c" class="c" style="background-image:url(assets/screens/13-wallet.png);background-position:-15.7px -216.6px"></div></div>
+        <div id="l9" class="clip lift" data-start="32.95" data-duration="2.3" data-track-index="6" data-layout-allow-overflow style="left:290.5px;top:674.6px;width:499.0px;height:404.9px"><div id="l9-c" class="c" style="background-image:url(assets/screens/15-withdraw-done.png);background-position:-56.5px -150.6px"></div></div>
+        <div id="l10" class="clip lift" data-start="36.6" data-duration="1.25" data-track-index="6" data-layout-allow-overflow style="left:252.8px;top:659.0px;width:574.3px;height:135.0px"><div id="l10-c" class="c" style="background-image:url(assets/screens/16-return.png);background-position:-18.8px -135.0px"></div></div>
+        <div id="l11" class="clip lift" data-start="39.95" data-duration="2.75" data-track-index="6" data-layout-allow-overflow style="left:256.0px;top:668.4px;width:568.1px;height:119.3px"><div id="l11-c" class="c" style="background-image:url(assets/screens/17-more-time.png);background-position:-22.0px -144.4px"></div></div>
+      </div>
+    </div>
+    <div id="chapter" class="clip" data-start="4.3" data-duration="38.90" data-track-index="7">
+      <div id="word-win" data-layout-allow-overflow><div id="word-col" data-layout-ignore><div>Log in</div><div>Request</div><div>Approved</div><div>Settle</div><div>Wallet</div><div>Withdraw</div><div>Return</div><div>More time</div></div></div>
+    </div>
+    <p id="ln0" class="clip line" data-start="4.55" data-duration="3.95" data-track-index="8"><span class="lw">Use</span> <span class="lw">the</span> <span class="lw">email</span> <span class="lw">and</span> <span class="lw">password</span> <span class="lw">from</span> <span class="lw acc">ZELab</span></p>
+    <p id="ln1" class="clip line" data-start="8.55" data-duration="6.55" data-track-index="8"><span class="lw">Pick</span> <span class="lw">your</span> <span class="lw">boxes,</span> <span class="lw">then</span> <span class="lw">tap</span> <span class="lw acc">Request</span></p>
+    <p id="ln2" class="clip line" data-start="15.15" data-duration="3.15" data-track-index="8"><span class="lw">ZELab</span> <span class="lw">approves.</span> <span class="lw acc">72</span> <span class="lw acc">hours</span> <span class="lw">to</span> <span class="lw">settle</span></p>
+    <p id="ln3" class="clip line" data-start="18.35" data-duration="7.55" data-track-index="8"><span class="lw">Pay</span> <span class="lw">to</span> <span class="lw">M-Pesa</span> <span class="lw">or</span> <span class="lw">Airtel,</span> <span class="lw">then</span> <span class="lw acc">Settle</span></p>
+    <p id="ln4" class="clip line" data-start="25.95" data-duration="4.15" data-track-index="8"><span class="lw">Every</span> <span class="lw">approved</span> <span class="lw">box</span> <span class="lw acc">earns</span> <span class="lw">you</span> <span class="lw">money</span></p>
+    <p id="ln5" class="clip line" data-start="30.15" data-duration="5.35" data-track-index="8"><span class="lw">Reach</span> <span class="lw acc">TSh</span> <span class="lw acc">250,000</span><span class="lw">,</span> <span class="lw">then</span> <span class="lw">withdraw</span></p>
+    <p id="ln6" class="clip line" data-start="35.55" data-duration="3.15" data-track-index="8"><span class="lw">Unsold</span> <span class="lw">boxes</span> <span class="lw">go</span> <span class="lw acc">back</span> <span class="lw">to</span> <span class="lw">ZELab</span></p>
+    <p id="ln7" class="clip line" data-start="38.75" data-duration="4.55" data-track-index="8"><span class="lw">Once</span> <span class="lw">per</span> <span class="lw">order:</span> <span class="lw acc">96</span> <span class="lw acc">more</span> <span class="lw acc">hours</span></p>
+  </div>
+
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      const seen = new Set();
+      // fromTo with immediateRender only on the first tween of each target, so later tweens never paint early
+      const ft = (t, from, to, at) => { const first = !seen.has(t); seen.add(t); tl.fromTo(t, from, { ...to, immediateRender: first }, at); };
+      const SCREENS = [["s01", 4.2], ["s02", 5.75], ["s03", 7.35], ["s04", 9.3], ["s05", 10.3], ["s06", 13.6], ["s07", 15.0], ["s09", 16.6], ["s10", 18.7], ["s11", 20.3], ["s12", 24.1], ["s18", 25.8], ["s13", 27.8], ["s14", 30.5], ["s15", 32.5], ["s18b", 35.4], ["s16", 36.2], ["s10b", 38.6], ["s17", 39.5]];
+      const TAPS = [["t1", 5.45], ["t2", 7.05], ["t3", 9.0], ["t4", 10.0], ["t5", 13.3], ["t6", 18.4], ["t7", 20.0], ["t8", 23.8], ["t9", 30.2], ["t10", 32.2], ["t11", 35.9], ["t12", 38.2], ["t13", 39.2]];
+      const LIFTS = [["l1", 11.0, 13.05, 1.42, -60], ["l2", 13.85, 14.9, 2.3, 40], ["l3", 15.3, 16.45, 1.38, -20], ["l4", 16.95, 18.2, 1.38, 30], ["l5", 20.85, 23.45, 1.3, -40], ["l6", 24.4, 25.7, 1.36, 20], ["l7", 26.15, 27.7, 2.6, -40], ["l8", 28.25, 30.0, 1.3, 40], ["l9", 32.95, 35.25, 1.48, 70], ["l10", 36.6, 37.85, 1.4, 40], ["l11", 39.95, 42.7, 1.42, 30]];
+      const CH = [4.4, 8.4, 15.0, 18.2, 25.8, 30.0, 35.4, 38.6];
+      const TILT = [0, -4, 3, -3, 4, -2, 3, -3];
+      const STORY_END = 43.6;
+
+      // Hook: the Lab world, a slow push, then it shrinks into the phone's screen
+      ft('#world-img', { scale: 1, y: 0 }, { scale: 1.05, y: 0, duration: 3.0, ease: 'none' }, 0);
+      ft('#world-img', { scale: 1.05, y: 0 }, { scale: 0.613, y: 226, duration: 1.2, ease: 'power3.inOut' }, 3.0);
+      ft('#world-mask', { clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: 'inset(524px 234px 72px 234px round 72px)', duration: 1.2, ease: 'power3.inOut' }, 3.0);
+      ft('#world-shade', { opacity: 1 }, { opacity: 0, duration: 0.8, ease: 'power2.inOut' }, 3.0);
+      ft('#phone-body', { opacity: 0 }, { opacity: 1, duration: 0.7, ease: 'power2.out' }, 3.35);
+      ft('#hook-title .hw', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 0.35);
+      ft('#hook-title .hw', { opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(8px)', duration: 0.2, stagger: 0.03, ease: 'power2.in' }, 2.85);
+
+      // Screens: each new screen arrives slightly large and soft, and settles (a match cut on the tap)
+      SCREENS.forEach(([id, at], k) => ft('#' + id + '-i', { opacity: 0, scale: 1.03, filter: 'blur(8px)' },
+        { opacity: 1, scale: 1, filter: 'blur(0px)', duration: k === 0 ? 0.35 : 0.24, ease: 'expo.out' }, at));
+
+      // Taps: a fingertip arrives, presses, lets go
+      TAPS.forEach(([id, t]) => {
+        const d = '#' + id + '-d';
+        ft(d, { opacity: 0, scale: 1.3 }, { opacity: 1, scale: 1, duration: 0.15, ease: 'power2.out' }, t - 0.18);
+        ft(d, { opacity: 1, scale: 1 }, { opacity: 1, scale: 0.78, duration: 0.08, ease: 'power2.in' }, t - 0.03);
+        ft(d, { opacity: 1, scale: 0.78 }, { opacity: 0, scale: 1.08, duration: 0.24, ease: 'power2.out' }, t + 0.07);
+      });
+
+      // Lifts: a part of the screen comes up out of the glass toward the camera, the rest steps back
+      LIFTS.forEach(([id, a, b, s, dy]) => {
+        const c = '#' + id + '-c';
+        ft(c, { scale: 1, y: 0, boxShadow: '0 0px 0px rgba(0,0,0,0), 0 0 0 1px rgba(255,255,255,0)' },
+          { scale: s, y: dy, boxShadow: '0 34px 70px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.16)', duration: 0.45, ease: 'expo.out' }, a);
+        ft(c, { scale: s, y: dy, boxShadow: '0 34px 70px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.16)' },
+          { scale: 1, y: 0, boxShadow: '0 0px 0px rgba(0,0,0,0), 0 0 0 1px rgba(255,255,255,0)', duration: 0.3, ease: 'power3.in' }, b - 0.32);
+        ft('#dim', { opacity: 0 }, { opacity: 0.55, duration: 0.3, ease: 'power2.out' }, a);
+        ft('#dim', { opacity: 0.55 }, { opacity: 0, duration: 0.28, ease: 'power2.in' }, b - 0.3);
+      });
+
+      // Chapters: the word rolls to the next one like a slot, the line under it arrives word by word
+      ft('#word-win', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2, ease: 'power2.out' }, CH[0]);
+      CH.forEach((t, i) => {
+        if (i > 0) {
+          ft('#word-col', { y: -(i - 1) * 136 }, { y: -i * 136, duration: 0.5, ease: 'power3.inOut' }, t);
+          ft('#word-col', { filter: 'blur(0px)' }, { filter: 'blur(6px)', duration: 0.25, ease: 'power2.in' }, t);
+          ft('#word-col', { filter: 'blur(6px)' }, { filter: 'blur(0px)', duration: 0.25, ease: 'power2.out' }, t + 0.25);
+          ft('#sheen', { x: -900 }, { x: 900, duration: 0.8, ease: 'power2.inOut' }, t);
+        }
+        ft('#ln' + i + ' .lw', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, t + 0.2);
+        const end = i + 1 < CH.length ? CH[i + 1] : STORY_END - 0.4;
+        ft('#ln' + i + ' .lw', { opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(6px)', duration: 0.18, stagger: 0.03, ease: 'power2.in' }, end - 0.24);
+        ft('#cam', { rotationY: i ? TILT[i - 1] : 0 }, { rotationY: TILT[i], duration: 0.9, ease: 'power2.inOut' }, t);
+      });
+      ft('#word-win', { opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(8px)', duration: 0.2, ease: 'power2.in' }, STORY_END - 0.62);
+
+      // Payoff: the camera pushes in on "On its way"
+      ft('#cam', { scale: 1, y: 0 }, { scale: 1.06, y: 0, duration: 0.6, ease: 'expo.out' }, 32.55);
+      ft('#cam', { scale: 1.06, y: 0 }, { scale: 1, y: 0, duration: 0.5, ease: 'power2.inOut' }, 35.15);
+      // Exit: the phone sinks away
+      ft('#cam', { scale: 1, y: 0, opacity: 1 }, { scale: 0.92, y: 260, opacity: 0, duration: 0.5, ease: 'power2.in' }, STORY_END - 0.62);
+
+      window.__timelines['story'] = tl;
+    })();
+  </script>
+</template>

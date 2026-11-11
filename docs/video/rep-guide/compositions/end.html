@@ -1,0 +1,30 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; font-family: 'Inter', sans-serif; color: #fff; }
+    #claim { position: absolute; left: 110px; top: 640px; font-weight: 800; font-size: 132px; line-height: 1.04; letter-spacing: -0.035em; }
+    #claim span { display: block; }
+    #claim .acc { color: #ee3124; }
+    #mark { position: absolute; left: 110px; top: 780px; width: 560px; }
+    #mark img { display: block; width: 560px; height: auto; }
+    #site { position: absolute; left: 114px; top: 1040px; font-weight: 500; font-size: 46px; color: rgba(255,255,255,.72); letter-spacing: -0.01em; }
+  </style>
+  <div id="root" data-composition-id="end" data-width="1080" data-height="1920">
+    <h2 id="claim" class="clip" data-start="0.3" data-duration="3.0" data-track-index="1">
+      <span class="cw">Request.</span><span class="cw">Settle.</span><span class="cw acc">Get paid.</span>
+    </h2>
+    <div id="mark" class="clip" data-start="3.4" data-duration="4.60" data-track-index="2"><img id="mark-img" src="assets/brand/zelab.svg" alt="ZELab" /></div>
+    <p id="site" class="clip" data-start="4.0" data-duration="4.00" data-track-index="3">zelab.site</p>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      // the claim arrives word by word from faint to full ink, holds still, then blurs away
+      tl.fromTo('#claim .cw', { opacity: 0.12 }, { opacity: 1, duration: 0.18, stagger: 0.32, ease: 'power2.out' }, 0.35);
+      tl.fromTo('#claim .cw', { opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(8px)', duration: 0.22, stagger: 0.04, ease: 'power2.in', immediateRender: false }, 3.0);
+      // the mark is wiped in from the left, then the address under it
+      tl.fromTo('#mark-img', { clipPath: 'inset(0% 100% 0% 0%)' }, { clipPath: 'inset(0% 0% 0% 0%)', duration: 0.6, ease: 'power3.out' }, 3.45);
+      tl.fromTo('#site', { opacity: 0, filter: 'blur(8px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.2, ease: 'power2.out' }, 4.05);
+      window.__timelines['end'] = tl;
+    })();
+  </script>
+</template>
