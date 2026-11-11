@@ -1,40 +1,41 @@
-import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '@/components/Layout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
-import { PageSpinner } from '@/components/ui';
-
-import Login from '@/pages/Login';
 import ThemeColor from '@/components/ThemeColor';
-import Nino from '@/pages/Nino';
-import Dashboard from '@/pages/Dashboard';
-import RepDashboard from '@/pages/RepDashboard';
-import Products from '@/pages/Products';
-import Inventory from '@/pages/Inventory';
-import Sales from '@/pages/Sales';
-import Customers from '@/pages/Customers';
-import Returns from '@/pages/Returns';
-import SalesReps from '@/pages/SalesReps';
-import SalesRepProfile from '@/pages/SalesRepProfile';
-import Finance from '@/pages/Finance';
-import AuditLogs from '@/pages/AuditLogs';
-import Users from '@/pages/Users';
-import Settings from '@/pages/Settings';
-import Notifications from '@/pages/Notifications';
-import StockRequests from '@/pages/StockRequests';
-import Settlements from '@/pages/Settlements';
-import Commissions from '@/pages/Commissions';
-import DailyReports from '@/pages/DailyReports';
-import Activity from '@/pages/Activity';
-import Profile from '@/pages/Profile';
-import NotFound from '@/pages/NotFound';
+import { lazyPage, WarmPages } from '@/components/LazyPage';
 
-// Lazy-loaded so the PDF library (jspdf) only downloads when a user actually
-// opens the Invoice Generator, keeping the main bundle small.
-const InvoiceGenerator = lazy(() => import('@/pages/InvoiceGenerator'));
-const ProductLabel = lazy(() => import('@/pages/ProductLabel'));
+// Every page is its own file (see lib/pages.js): the first screen downloads the
+// shell and that one page, not the whole app. The files of the pages in a
+// person's menu are fetched in the quiet after the first screen and the moment
+// a link is touched, so a click finds its page already here.
+const Login = lazyPage('Login');
+const Nino = lazyPage('Nino');
+const Dashboard = lazyPage('Dashboard');
+const RepDashboard = lazyPage('RepDashboard');
+const Products = lazyPage('Products');
+const Inventory = lazyPage('Inventory');
+const Sales = lazyPage('Sales');
+const Customers = lazyPage('Customers');
+const Returns = lazyPage('Returns');
+const SalesReps = lazyPage('SalesReps');
+const SalesRepProfile = lazyPage('SalesRepProfile');
+const Finance = lazyPage('Finance');
+const AuditLogs = lazyPage('AuditLogs');
+const Users = lazyPage('Users');
+const Settings = lazyPage('Settings');
+const Notifications = lazyPage('Notifications');
+const StockRequests = lazyPage('StockRequests');
+const Settlements = lazyPage('Settlements');
+const Commissions = lazyPage('Commissions');
+const DailyReports = lazyPage('DailyReports');
+const Activity = lazyPage('Activity');
+const Profile = lazyPage('Profile');
+const NotFound = lazyPage('NotFound');
+// The PDF library (jspdf) and the QR maker come with these two only.
+const InvoiceGenerator = lazyPage('InvoiceGenerator');
+const ProductLabel = lazyPage('ProductLabel');
 
 // Sales reps get a personal dashboard; everyone else gets the management one.
 function DashboardRouter() {
@@ -75,7 +76,7 @@ export default function App() {
           No height at all in a browser tab. See .status-strip in index.css. */}
       <div aria-hidden className="status-strip" />
       <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<><WarmPages /><Login /></>} />
       {/* Public on purpose: it hangs off the sign-in screen, so everyone who
           would ever read it is signed out. It shows nothing of the business. */}
       <Route path="/nino" element={<Nino />} />
@@ -83,6 +84,7 @@ export default function App() {
       <Route
         element={
           <ProtectedRoute>
+            <WarmPages />
             <Layout />
           </ProtectedRoute>
         }
@@ -96,7 +98,7 @@ export default function App() {
         <Route path="/settlements" element={<Settlements />} />
         <Route path="/commissions" element={<CommissionsRouter />} />
         <Route path="/daily-reports" element={<OwnerAt to="/profile?tab=reports"><DailyReports /></OwnerAt>} />
-        <Route path="/invoice-generator" element={<RepOnlyElse to="/sales?tab=invoice"><Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense></RepOnlyElse>} />
+        <Route path="/invoice-generator" element={<RepOnlyElse to="/sales?tab=invoice"><InvoiceGenerator /></RepOnlyElse>} />
         <Route path="/activity" element={<ProtectedRoute roles={W}><OwnerAt to="/profile?tab=activity"><Activity /></OwnerAt></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute roles={W}><Sales /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute roles={W}><Customers /></ProtectedRoute>} />
@@ -113,7 +115,7 @@ export default function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="/audit" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/profile?tab=audit"><AuditLogs /></OwnerAt></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/profile?tab=users"><Users /></OwnerAt></ProtectedRoute>} />
-        <Route path="/label" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/products?tab=label"><Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense></OwnerAt></ProtectedRoute>} />
+        <Route path="/label" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/products?tab=label"><ProductLabel /></OwnerAt></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/profile?tab=settings"><Settings /></OwnerAt></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Route>
