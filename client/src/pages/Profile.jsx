@@ -484,7 +484,9 @@ export default function Profile() {
   const canWithdraw = c ? (c.eligible ?? (c.available >= c.minWithdrawal)) : false;
   const pct = c && c.minWithdrawal > 0 ? Math.max(0, Math.min(100, (Math.max(0, c.available) / c.minWithdrawal) * 100)) : 0;
 
-  if (user?.role === ROLES.ADMIN) return <AdminProfile user={user} sub={sub} />;
+  // The owner is not "Administrator" here — he runs the Lab (Nino, 11 Nov 2026: "he is like the main lab,
+  // call him something cooler"). Only this card; the role keeps its name in Users and permissions.
+  if (user?.role === ROLES.ADMIN) return <AdminProfile user={user} sub="Head of the Lab" />;
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
