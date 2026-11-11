@@ -25,7 +25,7 @@ const ICONS = {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
   ClipboardCheck, UserCog, Repeat, BarChart3, ScrollText, ShieldCheck, Settings,
   Ship, Globe, ClipboardList, Timer, Coins, NotebookPen, Activity, Flag, TrendingUp, Receipt,
-  Wrench, QrCode, Wallet,
+  Wrench, QrCode, Wallet, Bell,
 };
 
 /* The panel is folded to its rail when the system is first opened and stays
@@ -156,11 +156,13 @@ function GlassSidebar({
     const out = [];
     // The owner's pages that moved into his profile (or Products) are still found, under that name.
     const moved = items.filter((i) => i.group === 'inProfile');
-    const groups = [...sections, ...(moved.length ? [{ label: 'Profile', items: moved }] : [])];
+    // Pages kept out of the sidebar on purpose (Notifications has the bell) are still found by name.
+    const searchOnly = items.filter((i) => i.group === 'search');
+    const groups = [...sections, ...(moved.length ? [{ label: 'Profile', items: moved }] : []), ...(searchOnly.length ? [{ label: '', items: searchOnly }] : [])];
     for (const s of groups) {
       for (const item of s.items) {
         const where = s.label === 'Profile' && String(item.to).startsWith('/products') ? 'Products' : s.label;
-        const words = [item.label, where || 'Main'];
+        const words = [item.label, where || 'Main', ...(item.keywords || [])];
         if (!words.some((w) => w.toLowerCase().includes(q))) continue;
         out.push({ item, where: where || null });
       }

@@ -54,11 +54,12 @@ export const NAV = [
   { to: '/reorder', label: 'Reorder', icon: 'Repeat', roles: STAFF, group: 'stock' },
 
   // ── Money ──
-  { to: '/finance', label: 'Finance', icon: 'Wallet', roles: STAFF, group: 'money' },
+  // `keywords`: other words the page search finds a page by (its tabs, what people call it).
+  { to: '/finance', label: 'Finance', icon: 'Wallet', roles: STAFF, group: 'money', keywords: ['profit', 'reports', 'accounts', 'ledger', 'expenses', 'cash flow', 'suppliers', 'statements'] },
   // Everyone who deals with commission gets it in the sidebar. The same page
   // serves a rep their own earnings and an admin the approvals; it is also a
   // tab inside Finance, which is where staff used to be sent instead.
-  { to: '/commissions', label: 'Commissions', icon: 'Coins', repLabel: 'Wallet', repIcon: 'Wallet', roles: STAFF.concat(['SALES_REP']), group: 'money' },
+  { to: '/commissions', label: 'Commissions', icon: 'Coins', repLabel: 'Wallet', repIcon: 'Wallet', roles: STAFF.concat(['SALES_REP']), group: 'money', keywords: ['payout', 'withdraw', 'fines'] },
 
   // ── People ──
   { to: '/reps', label: 'Reps', icon: 'UserCog', roles: STAFF, group: 'people' },
@@ -68,7 +69,7 @@ export const NAV = [
   // `adminAt`: for the OWNER these pages live inside his profile (Nino, 11 Nov 2026: "all these pages
   // should be inside Nino's profile") and the Label inside Products. His sidebar leaves them out; the
   // page search still finds them, at that address. Reps and staff keep the pages where they were.
-  { to: '/daily-reports', label: 'Reports', icon: 'NotebookPen', roles: ALL, group: 'records', adminAt: '/profile?tab=reports' },
+  { to: '/daily-reports', label: 'Reports', icon: 'NotebookPen', roles: ALL, group: 'records', adminAt: '/profile?tab=reports', keywords: ['daily'] },
   { to: '/activity', label: 'Activity', icon: 'Activity', roles: STAFF, group: 'records', adminAt: '/profile?tab=activity' },
   { to: '/audit', label: 'Audit', icon: 'ScrollText', roles: ['ADMIN'], group: 'records', adminAt: '/profile?tab=audit' },
 
@@ -76,6 +77,9 @@ export const NAV = [
   { to: '/users', label: 'Users', icon: 'ShieldCheck', roles: ['ADMIN'], group: 'admin', adminAt: '/profile?tab=users' },
   { to: '/label', label: 'Label', icon: 'QrCode', roles: ['ADMIN'], group: 'admin', adminAt: '/products?tab=label' },
   { to: '/settings', label: 'Settings', icon: 'Settings', roles: ['ADMIN'], group: 'admin', adminAt: '/profile?tab=settings' },
+
+  // ── Found by the page search only (group 'search' is not a sidebar group) ──
+  { to: '/notifications', label: 'Notifications', icon: 'Bell', roles: ALL, group: 'search', keywords: ['alerts'] },
 ];
 
 // Dark ground: tinted fills with a light text, never the light-theme chips —
