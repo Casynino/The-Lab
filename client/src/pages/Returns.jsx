@@ -45,7 +45,8 @@ function RejectModal({ returnId, onClose, onRejected }) {
     mutationFn: () => api.post(`/returns/${returnId}/reject`, { reason: reason || undefined }),
     onSuccess: () => {
       toast.success('Return rejected');
-      qc.invalidateQueries({ queryKey: ['returns'] });
+      // The order's locked boxes and its deadline change too (audit #113).
+      ['returns', 'settlements', 'settlement'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       onRejected?.();
       onClose();
     },
@@ -253,6 +254,7 @@ function ReturnModal({ onClose }) {
         : 'Return sent');
       qc.invalidateQueries({ queryKey: ['returns'] });
       qc.invalidateQueries({ queryKey: ['settlements'] });
+      qc.invalidateQueries({ queryKey: ['settlement'] }); // the order screen's box locks (audit #113)
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),
@@ -611,6 +613,7 @@ export default function Returns() {
   const [open, setOpen] = useState(false);
   const [rejectingId, setRejectingId] = useState(null);
   const [viewingId, setViewingId] = useState(null);
+  const [confirmCancelId, setConfirmCancelId] = useState(null); // the rep's "are you sure?" before a cancel
 
   const { data: summary } = useQuery({
     queryKey: ['returns', 'summary'],
@@ -627,7 +630,7 @@ export default function Returns() {
     mutationFn: (id) => api.post(`/returns/${id}/approve`),
     onSuccess: () => {
       toast.success('Return approved');
-      ['returns', 'settlements', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ['returns', 'settlements', 'settlement', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),
   });
@@ -635,19 +638,40 @@ export default function Returns() {
     mutationFn: (id) => api.post(`/returns/${id}/cancel`),
     onSuccess: () => {
       toast.success('Return cancelled');
-      ['returns', 'settlements', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ['returns', 'settlements', 'settlement', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: () => setConfirmCancelId(null),
   });
 
   const all = data?.data || [];
 
   if (isRep) {
+    const toCancel = all.find((r) => r.id === confirmCancelId);
     return (
       <div>
-        <RepReturnsView all={all} isLoading={isLoading} onNew={() => setOpen(true)} onView={setViewingId} onCancel={(id) => cancel.mutate(id)} cancellingId={cancel.isPending ? cancel.variables : null} />
+        <RepReturnsView all={all} isLoading={isLoading} onNew={() => setOpen(true)} onView={setViewingId} onCancel={setConfirmCancelId} cancellingId={cancel.isPending ? cancel.variables : null} />
         {open && <ReturnModal onClose={() => setOpen(false)} />}
         {viewingId && <ReturnDetailModal returnId={viewingId} canDecide={false} onClose={() => setViewingId(null)} />}
+        {/* One tap used to cancel at once (audit C34): the same second step as cancelling a stock request. */}
+        {confirmCancelId && (
+          <Modal
+            open
+            size="sm"
+            title="Cancel this return?"
+            onClose={cancel.isPending ? () => {} : () => setConfirmCancelId(null)}
+            footer={
+              <>
+                <Button variant="secondary" disabled={cancel.isPending} onClick={() => setConfirmCancelId(null)}>Keep it</Button>
+                <Button variant="danger" loading={cancel.isPending} onClick={() => { if (!cancel.isPending) cancel.mutate(confirmCancelId); }}>Cancel return</Button>
+              </>
+            }
+          >
+            <p className="text-sm text-muted">
+              {toCancel?.returnNumber || 'This return'} will be cancelled and its boxes stay on your order. Settle them or send a new return.
+            </p>
+          </Modal>
+        )}
       </div>
     );
   }

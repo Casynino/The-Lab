@@ -70,6 +70,13 @@ async function createTransferTx(tx, payload, actor) {
       if (productMap.size !== productIds.length) {
         throw ApiError.badRequest('One or more products were not found');
       }
+      // Boxes issued to a rep open an order he settles by selling them, and a switched-off product cannot be
+      // sold — its settlement could never be approved. Stock requests already refuse it (9ab382c); a direct
+      // transfer did not (audit #110, 11 Nov 2026).
+      if (payload.direction === 'WAREHOUSE_TO_REP') {
+        const off = products.find((p) => p.isActive === false);
+        if (off) throw ApiError.badRequest(`${off.name} is switched off, so it can't be issued to a rep. Switch it back on in Products, or remove it from the transfer.`);
+      }
 
       // Resolve base quantities per line.
       const lines = [];

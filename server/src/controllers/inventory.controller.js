@@ -7,7 +7,34 @@ const { ok, created, paginated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
 const inventory = require('../services/inventory.service');
 const audit = require('../services/audit.service');
+const settlementSvc = require('../services/settlement.service');
 const { toNumber, round2 } = require('../utils/money');
+
+// A rep's boxes that an open order still owes come back through a Return on that order, never an
+// adjustment or a damage entry: either took them off the rep while the order went on owing them — and
+// drawing late fines on boxes he no longer had (audit #23 part b, 11 Nov 2026; the transfer half is in
+// transfers.service). Boxes he holds beyond what his open orders owe may still be taken off this way.
+async function refuseOwedRepBoxes(tx, { location, productId, baseQuantity }) {
+  if (location?.type !== inventory.LOCATION.SALES_REP) return;
+  const open = await tx.settlement.findMany({
+    where: { salesRepId: location.salesRepId, status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } },
+  });
+  let owed = 0;
+  const owing = [];
+  for (const stl of open) {
+    const left = await settlementSvc.productOutstanding(tx, stl, productId);
+    if (left > 0) { owed += left; owing.push(stl.settlementNumber); }
+  }
+  if (!owed) return;
+  const held = await inventory.getBalance(tx, { productId, type: inventory.LOCATION.SALES_REP, salesRepId: location.salesRepId });
+  const free = Math.max(0, held - owed);
+  if (baseQuantity > free) {
+    const product = await tx.product.findUnique({ where: { id: productId }, select: { name: true } });
+    throw ApiError.badRequest(
+      `${owed} box(es) of ${product?.name || 'this product'} are still owed on order ${owing.join(', ')}. Bring them back with a Return on that order — it closes the order and stops its fines.${free ? ` Only ${free} box(es) can be taken off this way.` : ''}`,
+    );
+  }
+}
 
 // Receive stock into a warehouse (opening stock / purchase receipt).
 const stockIn = asyncHandler(async (req, res) => {
@@ -69,7 +96,9 @@ const adjust = asyncHandler(async (req, res) => {
       notes: reason,
       occurredAt: occurredAt ? new Date(occurredAt) : undefined,
     };
-    return direction === 'INCREASE' ? inventory.increaseStock(tx, common) : inventory.decreaseStock(tx, common);
+    if (direction === 'INCREASE') return inventory.increaseStock(tx, common);
+    await refuseOwedRepBoxes(tx, { location, productId, baseQuantity });
+    return inventory.decreaseStock(tx, common);
   });
 
   await audit.record(req, { action: 'ADJUSTMENT', entityType: 'Product', entityId: productId, newValues: { direction, quantity, reason } });
@@ -82,6 +111,7 @@ const damage = asyncHandler(async (req, res) => {
   const movement = await prisma.$transaction(async (tx) => {
     const { baseQuantity } = await inventory.convertToBase(tx, productId, packagingUnitId, quantity);
     const product = await tx.product.findUnique({ where: { id: productId }, select: { purchasePrice: true } });
+    await refuseOwedRepBoxes(tx, { location, productId, baseQuantity });
     return inventory.decreaseStock(tx, {
       productId,
       packagingUnitId,

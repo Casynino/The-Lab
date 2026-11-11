@@ -5,7 +5,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRoles, requireAdmin, ROLES } = require('../middleware/authorize');
 const validate = require('../middleware/validate');
 const ctrl = require('../controllers/settlements.controller');
-const { settlementQuery, settlementSettle, settlementSettleBoxes, settlementSettleMany } = require('../validators/phase2.validator');
+const { settlementQuery, settlementSettle, settlementSettleBoxes, settlementSettleMany, settlementExtendDeadline } = require('../validators/phase2.validator');
 const { idParam } = require('../validators/common.validator');
 
 const router = express.Router();
@@ -27,7 +27,7 @@ router.post('/:id/settle-boxes', settlers, validate({ ...idParam, ...settlementS
 // Several products in one go — each its own PENDING submission, all saved together or not at all.
 router.post('/:id/settle-many', settlers, validate({ ...idParam, ...settlementSettleMany }), ctrl.submitSettlements);
 router.post('/:id/settle', staff, validate({ ...idParam, ...settlementSettle }), ctrl.settle);
-router.post('/:id/extend-deadline', staff, validate(idParam), ctrl.extendDeadline);
+router.post('/:id/extend-deadline', staff, validate({ ...idParam, ...settlementExtendDeadline }), ctrl.extendDeadline);
 // Take the last deadline change back — the rep's 96 hours included.
 router.post('/:id/undo-deadline', staff, validate(idParam), ctrl.undoDeadlineChange);
 // The rep activates their own +96h extension (no approval); staff may too.

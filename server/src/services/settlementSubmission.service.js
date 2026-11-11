@@ -38,8 +38,13 @@ async function submitLineTx(tx, settlementId, payload, actor) {
     throw ApiError.forbidden('This order is not yours');
   }
 
-  const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, name: true, sellingPrice: true, brandId: true } });
+  const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, name: true, sellingPrice: true, brandId: true, isActive: true } });
   if (!product) throw ApiError.badRequest('Product not found');
+  // A switched-off product cannot be sold, so its settlement could never be approved: it was accepted and
+  // then sat waiting for good (audit #110). Said now, with the two ways out.
+  if (product.isActive === false) {
+    throw ApiError.badRequest(`${product.name} is switched off, so it can't be settled. Ask ZELab to switch it back on, or return these boxes on the order.`);
+  }
 
   // Where the rep says the money went. Stored on the submission; on approval
   // the income lands in THIS account. A brand settles to ONE account — OHIS
