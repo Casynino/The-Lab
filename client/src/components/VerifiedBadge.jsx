@@ -1,37 +1,23 @@
-import { useId } from 'react';
-
 // The blue "verified" mark that sits after a name on Instagram and X (Nino, 11 Nov 2026: "I want the
-// verification badge like Twitter or Instagram, nice and well made"): a soft scalloped disc with a white tick.
-// Every account in this system is made by ZELab itself — nobody signs up alone — so the mark says "this is
-// a real, active ZELab account". It is drawn here as plain SVG (a centre disc and eight round lobes) so it
-// stays sharp at any size and needs no image file.
-const LOBES = Array.from({ length: 8 }, (_, i) => {
-  const a = (i * Math.PI) / 4;
-  return [12 + 7.3 * Math.cos(a), 12 + 7.3 * Math.sin(a)];
+// verification badge like Twitter or Instagram" — then, "small, and well fitted, like Instagram's"): a flat
+// blue disc with a softly scalloped edge and a white tick, about the height of the name's capital letters,
+// right after the name. No glow, no gradient — Instagram's is flat. Every account in this system is made by
+// ZELab itself (nobody signs up alone), so the mark says "a real, active ZELab account". Plain SVG: a centre
+// disc and twelve small round lobes, so it stays sharp at any size and needs no image file.
+const LOBES = Array.from({ length: 12 }, (_, i) => {
+  const a = (i * Math.PI) / 6;
+  return [(12 + 8.2 * Math.cos(a)).toFixed(2), (12 + 8.2 * Math.sin(a)).toFixed(2)];
 });
 
-export default function VerifiedBadge({ className = 'h-[22px] w-[22px]', title = 'Verified' }) {
-  const id = useId();
+export default function VerifiedBadge({ className = 'h-4 w-4', title = 'Verified' }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      role="img"
-      aria-label={title}
-      className={className}
-      style={{ filter: 'drop-shadow(0 0 6px rgba(29,155,240,0.45))' }}
-    >
+    <svg viewBox="0 0 24 24" role="img" aria-label={title} className={className}>
       <title>{title}</title>
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#3dacf7" />
-          <stop offset="1" stopColor="#1587dc" />
-        </linearGradient>
-      </defs>
-      <g fill={`url(#${id})`}>
-        <circle cx="12" cy="12" r="7.6" />
-        {LOBES.map(([x, y], i) => <circle key={i} cx={x.toFixed(2)} cy={y.toFixed(2)} r="3.9" />)}
+      <g fill="#0095f6">
+        <circle cx="12" cy="12" r="9" />
+        {LOBES.map(([x, y], i) => <circle key={i} cx={x} cy={y} r="2.9" />)}
       </g>
-      <path d="M8.1 12.4l2.7 2.7 5.2-5.5" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7.9 12.3l2.75 2.75 5.45-5.6" fill="none" stroke="#fff" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

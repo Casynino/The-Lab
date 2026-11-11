@@ -100,9 +100,9 @@ function ProfileCard({ user, sub, cities = [] }) {
       {/* Just the name — no initials circle (Nino, 11 Nov 2026: "no need of the MK, the name is ok"). */}
       <div className="min-w-0">
         {/* The blue verified mark after the name (Nino, 11 Nov 2026) — for an active account only. */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-[5px]">
           <h1 className="min-w-0 truncate text-2xl font-bold leading-tight tracking-tight text-white">{user?.name}</h1>
-          {user?.isActive !== false && <VerifiedBadge className="h-[22px] w-[22px] shrink-0" />}
+          {user?.isActive !== false && <VerifiedBadge className="mt-px h-[17px] w-[17px] shrink-0" />}
         </div>
         {(sub || user?.isActive === false) && (
           <p className="mt-1 text-[13px] leading-snug text-white/60">
