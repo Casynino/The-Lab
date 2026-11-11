@@ -127,12 +127,13 @@
       const STORY_END = 43.6;
 
       // Hook: the Lab world, a slow push, then it shrinks into the phone's screen
+      ft('#world', { opacity: 0 }, { opacity: 1, duration: 0.5, ease: 'power2.out' }, 0);
       ft('#world-img', { scale: 1, y: 0 }, { scale: 1.05, y: 0, duration: 3.0, ease: 'none' }, 0);
       ft('#world-img', { scale: 1.05, y: 0 }, { scale: 0.613, y: 226, duration: 1.2, ease: 'power3.inOut' }, 3.0);
       ft('#world-mask', { clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: 'inset(524px 234px 72px 234px round 72px)', duration: 1.2, ease: 'power3.inOut' }, 3.0);
       ft('#world-shade', { opacity: 1 }, { opacity: 0, duration: 0.8, ease: 'power2.inOut' }, 3.0);
       ft('#phone-body', { opacity: 0 }, { opacity: 1, duration: 0.7, ease: 'power2.out' }, 3.35);
-      ft('#hook-title .hw', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 0.35);
+      ft('#hook-title .hw', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.067, ease: 'power2.out' }, 0.55);
       ft('#hook-title .hw', { opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(8px)', duration: 0.2, stagger: 0.03, ease: 'power2.in' }, 2.85);
 
       // Screens: each new screen arrives slightly large and soft, and settles (a match cut on the tap)

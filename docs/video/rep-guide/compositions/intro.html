@@ -1,0 +1,25 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; font-family: 'Inter', sans-serif; color: #fff; }
+    #i-mark { position: absolute; left: 110px; top: 800px; width: 600px; }
+    #i-mark img { display: block; width: 600px; height: auto; }
+    #i-line { position: absolute; left: 114px; top: 1060px; font-weight: 500; font-size: 46px; color: rgba(255,255,255,.72); letter-spacing: -0.01em; }
+    #i-line .iw { display: inline-block; }
+  </style>
+  <div id="root" data-composition-id="intro" data-width="1080" data-height="1920">
+    <div id="i-mark" class="clip" data-start="0" data-duration="2.80" data-track-index="1"><img id="i-mark-img" src="assets/brand/zelab.svg" alt="ZELab" /></div>
+    <p id="i-line" class="clip" data-start="0" data-duration="2.80" data-track-index="2"><span class="iw">We</span> <span class="iw">keep</span> <span class="iw">Tanzania</span> <span class="iw">stocked.</span></p>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      // the mark is wiped in from the left and settles; the brand's own line follows word by word
+      tl.fromTo('#i-mark-img', { clipPath: 'inset(0% 100% 0% 0%)', filter: 'blur(6px)', scale: 0.96 },
+        { clipPath: 'inset(0% 0% 0% 0%)', filter: 'blur(0px)', scale: 1, duration: 0.7, ease: 'power3.out' }, 0.15);
+      tl.fromTo('#i-line .iw', { opacity: 0, filter: 'blur(6px)' }, { opacity: 1, filter: 'blur(0px)', duration: 0.13, stagger: 0.08, ease: 'power2.out' }, 0.8);
+      // out together, softly, while the Lab world comes up behind
+      tl.fromTo(['#i-mark-img', '#i-line'], { opacity: 1, filter: 'blur(0px)' }, { opacity: 0, filter: 'blur(10px)', duration: 0.35, ease: 'power2.in', immediateRender: false }, 2.10);
+      window.__timelines['intro'] = tl;
+    })();
+  </script>
+</template>
