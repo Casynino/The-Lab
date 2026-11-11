@@ -3,7 +3,11 @@
 // What a sales rep must not see in a shared record: ZELab's own costs and margins (Rule: stock levels and
 // purchase costs stay with the owner). Removes these keys at any depth of plain objects and arrays; Prisma
 // Decimals, Dates and other class instances are left untouched.
-const COST_KEYS = new Set(['unitCost', 'costTotal', 'purchasePrice', 'costPrice', 'profit', 'grossProfit', 'stockValue', 'margin']);
+const COST_KEYS = new Set([
+  'unitCost', 'costTotal', 'purchasePrice', 'costPrice', 'profit', 'grossProfit', 'stockValue', 'margin',
+  // Added 11 Nov 2026 (GET /sales summaries carried these): the cost of goods and the margins by any name.
+  'cost', 'landedUnitCost', 'cogs', 'costOfSold', 'inventoryValue', 'grossMargin', 'netProfit',
+]);
 
 function stripCosts(value) {
   if (Array.isArray(value)) return value.map(stripCosts);

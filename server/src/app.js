@@ -74,6 +74,15 @@ app.get('/api/health', (_req, res) =>
   res.json({ success: true, data: { status: 'ok', time: new Date().toISOString() } }),
 );
 
+// A sales rep never receives ZELab's costs or margins, from ANY endpoint (audit 11 Nov 2026: the Requests
+// list sent purchasePrice and GET /sales sent cost and profit). Applied to every JSON answer at send time,
+// once `authenticate` has said who is asking, so a new endpoint cannot leak them by forgetting a helper.
+const { forRole } = require('./utils/repView');
+app.use('/api', (req, res, next) => {
+  const send = res.json.bind(res);
+  res.json = (body) => send(forRole(req, body));
+  next();
+});
 app.use('/api', routes);
 
 app.use(notFound);
