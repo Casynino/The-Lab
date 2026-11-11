@@ -291,16 +291,16 @@ function SettingRow({ setting }) {
   return (
     <div className="py-3">
       <div className="mb-1.5 flex items-baseline justify-between gap-2">
-        <span className="flex min-w-0 items-baseline gap-2">
-          <span className="text-sm font-medium text-foreground">{label}</span>
-          {info.unused && <Badge className="bg-white/[0.07] text-white/60">Not used yet</Badge>}
-        </span>
+        <span className="text-sm font-medium text-foreground">{label}</span>
         {info.unit && <span className="text-[11px] text-faint">{info.unit}</span>}
       </div>
       {info.locked || info.unused ? (
         <div className={`flex items-center gap-2 rounded-lg bg-black/25 px-3 py-2 text-sm ring-1 ring-inset ring-white/10 ${info.unused ? 'text-white/55' : 'text-white/80'}`}>
           {info.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden="true" />}
-          {info.date && dayjs(setting.value).isValid() ? dayjs(setting.value).format('D MMM YYYY, HH:mm') : setting.value}
+          <span className="min-w-0 flex-1 truncate">
+            {info.date && dayjs(setting.value).isValid() ? dayjs(setting.value).format('D MMM YYYY, HH:mm') : setting.value}
+          </span>
+          {info.unused && <span className="shrink-0 whitespace-nowrap text-[11px] text-white/45">Not used yet</span>}
         </div>
       ) : (
         <div className="flex items-center gap-2">
