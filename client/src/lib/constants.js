@@ -65,14 +65,17 @@ export const NAV = [
   { to: '/customers', label: 'Customers', icon: 'Users', roles: STAFF, group: 'people' },
 
   // ── Records — what happened, after the fact ──
-  { to: '/daily-reports', label: 'Reports', icon: 'NotebookPen', roles: ALL, group: 'records' },
-  { to: '/activity', label: 'Activity', icon: 'Activity', roles: STAFF, group: 'records' },
-  { to: '/audit', label: 'Audit', icon: 'ScrollText', roles: ['ADMIN'], group: 'records' },
+  // `adminAt`: for the OWNER these pages live inside his profile (Nino, 11 Nov 2026: "all these pages
+  // should be inside Nino's profile") and the Label inside Products. His sidebar leaves them out; the
+  // page search still finds them, at that address. Reps and staff keep the pages where they were.
+  { to: '/daily-reports', label: 'Reports', icon: 'NotebookPen', roles: ALL, group: 'records', adminAt: '/profile?tab=reports' },
+  { to: '/activity', label: 'Activity', icon: 'Activity', roles: STAFF, group: 'records', adminAt: '/profile?tab=activity' },
+  { to: '/audit', label: 'Audit', icon: 'ScrollText', roles: ['ADMIN'], group: 'records', adminAt: '/profile?tab=audit' },
 
   // ── Administration ──
-  { to: '/users', label: 'Users', icon: 'ShieldCheck', roles: ['ADMIN'], group: 'admin' },
-  { to: '/label', label: 'Label', icon: 'QrCode', roles: ['ADMIN'], group: 'admin' },
-  { to: '/settings', label: 'Settings', icon: 'Settings', roles: ['ADMIN'], group: 'admin' },
+  { to: '/users', label: 'Users', icon: 'ShieldCheck', roles: ['ADMIN'], group: 'admin', adminAt: '/profile?tab=users' },
+  { to: '/label', label: 'Label', icon: 'QrCode', roles: ['ADMIN'], group: 'admin', adminAt: '/products?tab=label' },
+  { to: '/settings', label: 'Settings', icon: 'Settings', roles: ['ADMIN'], group: 'admin', adminAt: '/profile?tab=settings' },
 ];
 
 // Dark ground: tinted fills with a light text, never the light-theme chips —

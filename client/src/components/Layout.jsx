@@ -154,15 +154,19 @@ function GlassSidebar({
     const q = query.trim().toLowerCase();
     if (!q) return null;
     const out = [];
-    for (const s of sections) {
+    // The owner's pages that moved into his profile (or Products) are still found, under that name.
+    const moved = items.filter((i) => i.group === 'inProfile');
+    const groups = [...sections, ...(moved.length ? [{ label: 'Profile', items: moved }] : [])];
+    for (const s of groups) {
       for (const item of s.items) {
-        const words = [item.label, s.label || 'Main'];
+        const where = s.label === 'Profile' && String(item.to).startsWith('/products') ? 'Products' : s.label;
+        const words = [item.label, where || 'Main'];
         if (!words.some((w) => w.toLowerCase().includes(q))) continue;
-        out.push({ item, where: s.label || null });
+        out.push({ item, where: where || null });
       }
     }
     return out;
-  }, [query, sections]);
+  }, [query, sections, items]);
 
   /* The name beside a rail icon, fixed to the window and drawn outside the
      panel: the frosted glass would otherwise trap it and the scrolling list
@@ -660,9 +664,13 @@ export default function Layout() {
 
   // A rep's money page is their wallet — the same page, the owner's word is "Commissions".
   const isRep = user?.role === ROLES.SALES_REP;
+  const isOwner = user?.role === ROLES.ADMIN;
   const items = NAV
     .filter((n) => (n.exact ? n.roles.includes(user?.role) : hasRole(...n.roles)))
-    .map((n) => (isRep && n.repLabel ? { ...n, label: n.repLabel, icon: n.repIcon || n.icon } : n));
+    .map((n) => (isRep && n.repLabel ? { ...n, label: n.repLabel, icon: n.repIcon || n.icon } : n))
+    // The owner's own pages live in his profile now: out of the sidebar groups ('inProfile' is not one),
+    // still in the page search, pointing where they are.
+    .map((n) => (isOwner && n.adminAt ? { ...n, to: n.adminAt, group: 'inProfile' } : n));
 
   /* The banner belongs to the home page, not to the shell. Target Express puts
      it inside each desk's hero (components/app/desk-hero, warehouse-hero, the

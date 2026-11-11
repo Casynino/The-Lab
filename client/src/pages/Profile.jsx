@@ -1,8 +1,18 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Eye, EyeOff, Loader2, ClipboardList, CheckCircle2, Boxes, Undo2, MapPin, HandCoins, ChevronRight } from 'lucide-react';
+import {
+  Eye, EyeOff, Loader2, ClipboardList, CheckCircle2, Boxes, Undo2, MapPin, HandCoins, ChevronRight,
+  LayoutDashboard, ShieldCheck, Settings as SettingsIcon, Activity as ActivityIcon, ScrollText, NotebookPen,
+} from 'lucide-react';
+// The owner's own pages, opened inside his profile (Nino, 11 Nov 2026: "all these pages should be
+// inside Nino's profile — he is the one who runs the company").
+import UsersPage from '@/pages/Users';
+import SettingsPage from '@/pages/Settings';
+import ActivityPage from '@/pages/Activity';
+import AuditLogsPage from '@/pages/AuditLogs';
+import DailyReportsPage from '@/pages/DailyReports';
 import { useAuth } from '@/context/AuthContext';
 import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
@@ -429,16 +439,73 @@ function AccountsCard({ accounts }) {
   );
 }
 
+// ── The Lab: the owner's pages, chosen from his profile ──────────────────────
+// Users, Settings, Activity, Audit and the reps' daily reports used to be sidebar pages of their own;
+// they are his, so they open here, in the right-hand column, from a list under his card. The address
+// keeps the choice (/profile?tab=users), so a link or the back button lands on the same section.
+export const LAB_SECTIONS = [
+  { key: 'overview', label: 'Overview', hint: 'The business today', icon: LayoutDashboard },
+  { key: 'users', label: 'Users', hint: 'Accounts, roles and access', icon: ShieldCheck, Page: UsersPage },
+  { key: 'settings', label: 'Settings', hint: 'WhatsApp alerts and the system', icon: SettingsIcon, Page: SettingsPage },
+  { key: 'activity', label: 'Activity', hint: 'Everything happening, live', icon: ActivityIcon, Page: ActivityPage },
+  { key: 'audit', label: 'Audit log', hint: 'Who did what, and when', icon: ScrollText, Page: AuditLogsPage },
+  { key: 'reports', label: 'Daily reports', hint: "The reps' opening and closing reports", icon: NotebookPen, Page: DailyReportsPage },
+];
+
+function LabNav({ tab, onChange }) {
+  return (
+    <section>
+      <SectionTitle>The Lab</SectionTitle>
+      <nav aria-label="The Lab" className="glass-list divide-y divide-white/[0.06]">
+        {LAB_SECTIONS.map((s) => {
+          const active = s.key === tab;
+          const Icon = s.icon;
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => onChange(s.key)}
+              aria-current={active ? 'page' : undefined}
+              className={`flex w-full items-center gap-3 px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500 ${active ? 'bg-brand-500/[0.12]' : 'hover:bg-white/[0.03]'}`}
+            >
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${active ? 'bg-brand-500/20 text-brand-400 ring-brand-500/40' : 'bg-white/[0.05] text-white/55 ring-white/10'}`}>
+                <Icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={`block text-sm font-medium ${active ? 'text-white' : 'text-foreground'}`}>{s.label}</span>
+                <span className="block truncate text-[11px] text-white/45">{s.hint}</span>
+              </span>
+              <ChevronRight className={`h-4 w-4 shrink-0 ${active ? 'text-brand-400' : 'text-white/25'}`} aria-hidden="true" />
+            </button>
+          );
+        })}
+      </nav>
+    </section>
+  );
+}
+
 function AdminProfile({ user, sub }) {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('tab');
+  const tab = LAB_SECTIONS.some((s) => s.key === asked) ? asked : 'overview';
+  const section = LAB_SECTIONS.find((s) => s.key === tab);
+  const contentRef = useRef(null);
+  const openSection = (key) => {
+    setParams(key === 'overview' ? {} : { tab: key });
+    // On a phone the section opens below the list: bring it into view.
+    if (window.innerWidth < 1024) setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
   const { data: cmd, isError: cmdError } = useQuery({
     queryKey: ['dashboard', 'command'],
     queryFn: async () => unwrap(await api.get('/dashboard/command')).data,
+    enabled: tab === 'overview',
   });
   const { data: analysis } = useQuery({
     queryKey: ['dashboard', 'analysis'],
     queryFn: async () => unwrap(await api.get('/dashboard/analysis')).data,
     retry: 1,
+    enabled: tab === 'overview',
   });
   const at = cmd?.attention || {};
 
@@ -457,13 +524,18 @@ function AdminProfile({ user, sub }) {
   // The whole width of the screen (Nino, 11 Nov 2026: "why the space on the sides — I want the page full").
   return (
     <div className="flex w-full flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start 2xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-      <div className="space-y-6 lg:sticky lg:top-6">
+      {/* Left: who he is, his pages, his password — the column no longer ends in empty space. */}
+      <div className="space-y-6">
         <ProfileCard user={user} sub={sub} />
+        <LabNav tab={tab} onChange={openSection} />
         <div className="hidden lg:block">{password}</div>
       </div>
 
-      <div className="min-w-0 space-y-8">
-        {!cmd ? (
+      <div ref={contentRef} className="min-w-0 scroll-mt-4 space-y-8">
+        {section?.Page ? (
+          // One of his pages, exactly as it was on its own — its title, its tools, its tables.
+          <section.Page />
+        ) : !cmd ? (
           cmdError ? <p className="px-1 text-sm text-muted">The business figures are not available right now.</p> : <PageSpinner />
         ) : (
           <>

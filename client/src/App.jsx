@@ -55,6 +55,13 @@ function CommissionsRouter() {
 
 const W = [ROLES.WAREHOUSE_STAFF]; // ADMIN always allowed by hasRole
 
+// The owner's own pages now open inside his profile (and the Label inside Products). An old link,
+// bookmark or notification still works: for him it goes there; anyone else keeps the page itself.
+function OwnerAt({ to, children }) {
+  const { role } = useAuth();
+  return role === ROLES.ADMIN ? <Navigate to={to} replace /> : children;
+}
+
 export default function App() {
   return (
     <>
@@ -85,9 +92,9 @@ export default function App() {
         <Route path="/stock-requests" element={<StockRequests />} />
         <Route path="/settlements" element={<Settlements />} />
         <Route path="/commissions" element={<CommissionsRouter />} />
-        <Route path="/daily-reports" element={<DailyReports />} />
+        <Route path="/daily-reports" element={<OwnerAt to="/profile?tab=reports"><DailyReports /></OwnerAt>} />
         <Route path="/invoice-generator" element={<Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense>} />
-        <Route path="/activity" element={<ProtectedRoute roles={W}><Activity /></ProtectedRoute>} />
+        <Route path="/activity" element={<ProtectedRoute roles={W}><OwnerAt to="/profile?tab=activity"><Activity /></OwnerAt></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute roles={W}><Sales /></ProtectedRoute>} />
         <Route path="/customers" element={<ProtectedRoute roles={W}><Customers /></ProtectedRoute>} />
         <Route path="/returns" element={<Returns />} />
@@ -101,10 +108,10 @@ export default function App() {
         <Route path="/finance" element={<ProtectedRoute roles={W}><Finance /></ProtectedRoute>} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/audit" element={<ProtectedRoute roles={[ROLES.ADMIN]}><AuditLogs /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute roles={[ROLES.ADMIN]}><Users /></ProtectedRoute>} />
-        <Route path="/label" element={<ProtectedRoute roles={[ROLES.ADMIN]}><Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute roles={[ROLES.ADMIN]}><Settings /></ProtectedRoute>} />
+        <Route path="/audit" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/profile?tab=audit"><AuditLogs /></OwnerAt></ProtectedRoute>} />
+        <Route path="/users" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/profile?tab=users"><Users /></OwnerAt></ProtectedRoute>} />
+        <Route path="/label" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/products?tab=label"><Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense></OwnerAt></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute roles={[ROLES.ADMIN]}><OwnerAt to="/profile?tab=settings"><Settings /></OwnerAt></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Route>
       </Routes>

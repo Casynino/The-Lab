@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/context/AuthContext';
+import { ROLES } from '@/lib/constants';
 import { useForm, Controller } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, Package, X, TrendingDown, Boxes, Wallet } from 'lucide-react';
@@ -160,7 +163,35 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
   );
 }
 
+// The Pepa product label — the page a carton's QR code opens — belongs with the products (Nino, 11 Nov
+// 2026: "the Label should go inside the Products page"). Loaded only when its tab is opened.
+const ProductLabel = lazy(() => import('@/pages/ProductLabel'));
+const PRODUCT_TABS = [['catalogue', 'Products'], ['label', 'Label']];
+
 export default function Products() {
+  const { role } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const isOwner = role === ROLES.ADMIN;
+  const tab = isOwner && params.get('tab') === 'label' ? 'label' : 'catalogue';
+  if (!isOwner) return <ProductsCatalogue />;
+  return (
+    <div>
+      {/* The same pill tabs as Finance. */}
+      <div className="mb-5 flex flex-wrap gap-2">
+        {PRODUCT_TABS.map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setParams(k === 'catalogue' ? {} : { tab: k })}
+            aria-current={tab === k ? 'page' : undefined}
+            className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k
+              ? 'bg-brand-500 text-white ring-brand-500'
+              : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
+        ))}
+      </div>
+      {tab === 'label' ? <Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense> : <ProductsCatalogue />}
+    </div>
+  );
+}
+
+function ProductsCatalogue() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
