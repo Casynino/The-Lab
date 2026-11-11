@@ -235,9 +235,18 @@ async function createReturn(payload, actor) {
         }
         if (leftBase > 0) {
           const name = productMap.get(l.productId)?.name || 'This product';
-          const onOrders = l.baseQuantity - leftBase;
+          const boxes = Math.floor((l.baseQuantity - leftBase) / perUnit);
+          // The rep reads "your open orders"; staff returning boxes for him read his name (audit 11 Nov 2026,
+          // backend-integrity-6: the owner was told "your open orders" about another person's orders).
+          if (actor && actor.salesRepId === salesRepId) {
+            throw ApiError.badRequest(
+              `${name}: only ${boxes} box(es) are still unaccounted on your open orders — you can't return more than that.`,
+            );
+          }
+          const rep = await tx.salesRepresentative.findUnique({ where: { id: salesRepId }, select: { code: true, user: { select: { name: true } } } });
+          const repName = rep?.user?.name || rep?.code || 'This rep';
           throw ApiError.badRequest(
-            `${name}: only ${Math.floor(onOrders / perUnit)} box(es) are still unaccounted on your open orders — you can't return more than that.`,
+            `${name}: ${repName} has only ${boxes} box(es) still unaccounted on his open orders — you can't return more than that.`,
           );
         }
       }

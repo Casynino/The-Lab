@@ -147,3 +147,24 @@ test('the request the order screen sends without a unit passes the input check',
   assert.equal(returnCreate.body.safeParse({ ...body, items: [{ productId: 'p1', packagingUnitId: 'box', quantity: 2 }] }).success, true);
   assert.equal(returnCreate.body.safeParse({ ...body, items: [{ productId: 'p1', quantity: 0 }] }).success, false);
 });
+
+// backend-integrity-6 (audit 11 Nov 2026): returning more boxes than a rep's open orders hold was refused
+// with "your open orders" even when the owner sent it for the rep. The rep still reads "your"; staff read
+// the rep's name.
+test('too many boxes back: the rep reads "your open orders", staff read the rep\'s name', async () => {
+  created.length = 0;
+  stl = { id: 'o1', settlementNumber: 'STL-1', status: 'OPEN', transferId: 't1', salesRepId: 'rep1' };
+  tx.settlement.findMany = async () => [{ id: 'o1', settlementNumber: 'STL-1', transferId: 't1' }];
+  tx.salesRepresentative = { findUnique: async () => ({ code: 'REP-001', user: { name: 'Paul' } }) };
+  const body = { type: 'SALES_RETURN', salesRepId: 'rep1', warehouseId: 'w1', items: [{ productId: 'p1', quantity: 9 }] };
+  await assert.rejects(
+    returns.createReturn(body, { id: 'u1', role: 'SALES_REP', salesRepId: 'rep1' }),
+    (e) => e.statusCode === 400 && /^Pepa: only 5 box\(es\) are still unaccounted on your open orders/.test(e.message),
+  );
+  await assert.rejects(
+    returns.createReturn(body, { id: 'owner', role: 'ADMIN', salesRepId: null }),
+    (e) => e.statusCode === 400 && /^Pepa: Paul has only 5 box\(es\) still unaccounted on his open orders/.test(e.message)
+      && !/your/.test(e.message),
+  );
+  assert.equal(created.length, 0, 'nothing is written either way');
+});
