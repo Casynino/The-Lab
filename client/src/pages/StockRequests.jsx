@@ -432,7 +432,7 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
     mutationFn: () => api.post(`/stock-requests/${request.id}/approve`, {
       approvals: request.items.map((i) => ({ itemId: i.id, quantityApproved: Number(qtys[i.id]) || 0 })),
     }),
-    onSuccess: () => { toast.success('Approved — stock issued & order opened'); invalidate(); onClose(); },
+    onSuccess: () => { toast.success('Approved — stock issued'); invalidate(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
   const reject = useMutation({
@@ -654,7 +654,7 @@ function PendingRequestApprovals({ onReview }) {
   };
   const approve = useMutation({
     mutationFn: (id) => api.post(`/stock-requests/${id}/approve`, {}),
-    onSuccess: () => { toast.success('Approved — stock issued & 72h order opened'); refresh(); },
+    onSuccess: () => { toast.success('Approved — stock issued'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
   });
   const reject = useMutation({

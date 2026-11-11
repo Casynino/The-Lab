@@ -15,6 +15,14 @@
   margin: 0;
 }
 
+/* The app's toast (main.jsx): a smaller icon and a little less room round the words than the library gives. */
+.zl-toast > div:first-child {
+  transform: scale(0.82);
+}
+.zl-toast > div[role='status'] {
+  margin: 1px 4px 1px 6px;
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;

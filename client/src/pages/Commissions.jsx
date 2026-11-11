@@ -965,7 +965,7 @@ function BonusSettings() {
   });
   const pay = useMutation({
     mutationFn: ({ salesRepId, bonusRuleId }) => api.post('/commissions/bonus/pay', { salesRepId, bonusRuleId }),
-    onSuccess: () => { toast.success('Bonus paid — that rep\u2019s count starts again from zero'); refresh(); },
+    onSuccess: () => { toast.success('Bonus paid'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
   });
 

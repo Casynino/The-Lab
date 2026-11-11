@@ -113,7 +113,7 @@ function PendingApprovals({ onReview }) {
   };
   const approve = useMutation({
     mutationFn: (id) => api.post(`/settlements/submissions/${id}/approve`),
-    onSuccess: () => { toast.success('Settlement approved — sale & commission recorded'); refresh(); },
+    onSuccess: () => { toast.success('Settlement approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
   });
   const reject = useMutation({

@@ -81,7 +81,7 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
 
   const approve = useMutation({
     mutationFn: () => api.post(`/returns/${returnId}/approve`),
-    onSuccess: () => { toast.success('Return approved — inventory updated'); invalidate(); onClose(); },
+    onSuccess: () => { toast.success('Return approved'); invalidate(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
 
@@ -209,7 +209,7 @@ function ReturnModal({ onClose }) {
       const related = d?.related || [];
       toast.success(related.length > 1
         ? `Return submitted as ${related.join(' + ')} (matched to your open orders)`
-        : 'Return submitted — awaiting ZELab approval');
+        : 'Return sent');
       qc.invalidateQueries({ queryKey: ['returns'] });
       onClose();
     },
@@ -571,7 +571,7 @@ export default function Returns() {
   const approve = useMutation({
     mutationFn: (id) => api.post(`/returns/${id}/approve`),
     onSuccess: () => {
-      toast.success('Return approved — inventory updated');
+      toast.success('Return approved');
       ['returns', 'settlements', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),
@@ -579,7 +579,7 @@ export default function Returns() {
   const cancel = useMutation({
     mutationFn: (id) => api.post(`/returns/${id}/cancel`),
     onSuccess: () => {
-      toast.success('Return request cancelled — the boxes are back on the order');
+      toast.success('Return cancelled');
       ['returns', 'settlements', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),

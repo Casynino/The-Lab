@@ -437,7 +437,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
         reason: `Return on order ${order.settlementNumber}`,
       });
     },
-    onSuccess: () => { toast.success('Return submitted — awaiting ZELab approval'); onDone(); onClose(); },
+    onSuccess: () => { toast.success('Return sent'); onDone(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
 
@@ -611,7 +611,7 @@ function SelfExtendModal({ order, onClose, onDone }) {
   const [confirmed, setConfirmed] = useState(false);
   const extend = useMutation({
     mutationFn: () => api.post(`/settlements/${order.id}/self-extend`),
-    onSuccess: () => { toast.success('Extension activated — you have 96 more hours'); onDone(); onClose(); },
+    onSuccess: () => { toast.success('96 more hours added'); onDone(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
   const newDeadline = new Date(new Date(order.deadlineAt).getTime() + (order.extensionHours || 96) * 3600000);
@@ -1150,13 +1150,13 @@ export default function OrderDetailModal({ settlementId, onClose }) {
 
   const approveReturn = useMutation({
     mutationFn: (id) => api.post(`/returns/${id}/approve`),
-    onSuccess: () => { toast.success('Return approved — inventory updated'); refresh(); },
+    onSuccess: () => { toast.success('Return approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
   });
 
   const approveSubmission = useMutation({
     mutationFn: (id) => api.post(`/settlements/submissions/${id}/approve`),
-    onSuccess: () => { toast.success('Settlement approved — sale & commission recorded'); refresh(); },
+    onSuccess: () => { toast.success('Settlement approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
   });
 

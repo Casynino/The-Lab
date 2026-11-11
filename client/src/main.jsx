@@ -50,7 +50,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               the app's own surface, border and text tokens, so a toast now
               looks like it belongs to the screen it lands on. */}
           <Toaster
-            position="top-right"
+            position="top-center"
             /* 16px from every edge, as the library does — plus whatever the
                phone keeps for its clock, camera and home bar. Without it a toast
                opened UNDER the status bar of the installed app. */
@@ -60,19 +60,28 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
               left: 'calc(env(safe-area-inset-left, 0px) + 16px)',
             }}
+            /* Nino, 11 Nov 2026: "these toasts are not nice — make them premium". A small dark glass
+               capsule at the top centre: 13px words, a small icon, a soft deep shadow, the page blurred
+               behind it. The words are kept short where they are set. */
             toastOptions={{
-              duration: 3500,
+              duration: 3000,
+              className: 'zl-toast',
               style: {
-                fontSize: '14px',
-                background: '#151517',
+                fontSize: '13px',
+                fontWeight: 500,
+                lineHeight: 1.35,
+                padding: '7px 14px 7px 10px',
+                maxWidth: 'min(92vw, 360px)',
+                borderRadius: '18px',
+                background: 'rgba(24, 24, 27, 0.86)',
                 color: '#f4f4f5',
-                border: '1px solid #2a2a30',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -12px rgba(0,0,0,0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: '0 14px 34px -14px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(16px) saturate(150%)',
+                WebkitBackdropFilter: 'blur(16px) saturate(150%)',
               },
-              // The tick and the cross sit on the dark card now, so their
-              // secondary colour is the card, not white.
-              success: { iconTheme: { primary: '#10b981', secondary: '#151517' } },
-              error: { iconTheme: { primary: '#fb7185', secondary: '#151517' } },
+              success: { iconTheme: { primary: '#34d399', secondary: '#18181b' } },
+              error: { iconTheme: { primary: '#fb7185', secondary: '#18181b' } },
             }}
           />
         </AuthProvider>
