@@ -74,6 +74,21 @@ export const pageQueries = {
   financeCategories: () => ({ queryKey: ['finance', 'categories'], queryFn: dataOf('/finance/categories') }),
   financeOverview: (period) => ({ queryKey: ['finance', 'overview', period], queryFn: dataOf('/finance/overview', { period }) }),
   financeCashflow: (period) => ({ queryKey: ['finance', 'cashflow', period], queryFn: dataOf('/finance/cashflow', { period }) }),
+  profitOverview: (period) => ({ queryKey: ['reports', 'profit-overview', period], queryFn: dataOf('/reports/profit-overview', { period }) }),
+  brandStock: () => ({ queryKey: ['dashboard', 'brands'], queryFn: dataOf('/dashboard/brands') }),
+  financeSuppliers: () => ({ queryKey: ['finance', 'suppliers'], queryFn: dataOf('/finance/suppliers') }),
+  financeTransactions: ({ page, account, type, brand, category, search, expensesOnly }) => {
+    const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined, category: category || undefined, search: search || undefined };
+    // Only genuine expenses. Filtering on direction alone swept in account
+    // transfers, stock purchases and commission payouts, so "Spent in this
+    // view" reported money that was not spent and contradicted the Overview.
+    if (expensesOnly) { params.direction = 'OUT'; params.type = 'EXPENSE'; }
+    else if (type) params.type = type;
+    return {
+      queryKey: ['finance', 'transactions', { page, account, type, brand, category, search, expensesOnly }],
+      queryFn: listOf('/finance/transactions', params),
+    };
+  },
   commissionsInsights: () => ({ queryKey: ['commissions', 'me', 'insights'], queryFn: dataOf('/commissions/me/insights') }),
   commissionsMine: () => ({ queryKey: ['commissions', 'me'], queryFn: dataOf('/commissions/me') }),
   withdrawalsMine: () => ({ queryKey: ['commissions', 'withdrawals', 'mine'], queryFn: listOf('/commissions/withdrawals', { limit: 20 }) }),

@@ -72,7 +72,17 @@ export function routeQueries(pathname, search, role) {
     case '/finance': {
       const root = [['financeAccounts'], ['financeCategories']];
       const overview = !tab || tab === 'overview' || !FINANCE_TABS.includes(tab);
-      return overview ? root.concat([['financeOverview', 'all'], ['financeCashflow', 'all']]) : root;
+      if (overview) return root.concat([['financeOverview', 'all'], ['financeCashflow', 'all']]);
+      const ledger = { page: 1, account: '', type: '', brand: '', category: '', search: '' };
+      const inside = {
+        profit: [['profitOverview', 'all'], ['brandStock']],
+        cashflow: [['financeCashflow', 'month']],
+        suppliers: [['financeSuppliers']],
+        expenses: [['brandsAll'], ['financeTransactions', { ...ledger, expensesOnly: true }]],
+        ledger: [['brandsAll'], ['financeTransactions', ledger]],
+        commissions: [['commissionsSummary'], ['withdrawalsAll'], ['penaltiesCount'], ['bonusSummary']],
+      };
+      return root.concat(inside[tab] || []);
     }
     case '/reps':
       return [['salesReps', { page: 1 }]];

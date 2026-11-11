@@ -1249,15 +1249,9 @@ function Ledger({ expensesOnly }) {
   const [searchDraft, setSearchDraft] = useState(''); // what is being typed
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: brands = [] } = useQuery({ queryKey: ['brands', 'all'], queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data });
-  const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined, category: category || undefined, search: search || undefined };
-  // Only genuine expenses. Filtering on direction alone swept in account
-  // transfers, stock purchases and commission payouts, so "Spent in this
-  // view" reported money that was not spent and contradicted the Overview.
-  if (expensesOnly) { params.direction = 'OUT'; params.type = 'EXPENSE'; }
-  else if (type) params.type = type;
+  // Expenses are genuine expenses only (not every OUT): see pageQueries.financeTransactions.
   const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'transactions', { page, account, type, brand, category, search, expensesOnly }],
-    queryFn: async () => unwrap(await api.get('/finance/transactions', { params })),
+    ...pageQueries.financeTransactions({ page, account, type, brand, category, search, expensesOnly }),
     placeholderData: keepOnPageTurn({ account, type, brand, category, expensesOnly }),
   });
   const del = useMutation({
@@ -1492,14 +1486,8 @@ const PROFIT_PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'Th
 
 function ProfitTab() {
   const [period, setPeriod] = useState('all');
-  const { data, isLoading } = useQuery({
-    queryKey: ['reports', 'profit-overview', period],
-    queryFn: async () => unwrap(await api.get('/reports/profit-overview', { params: { period } })).data,
-  });
-  const { data: brandStockData } = useQuery({
-    queryKey: ['dashboard', 'brands'],
-    queryFn: async () => unwrap(await api.get('/dashboard/brands')).data,
-  });
+  const { data, isLoading } = useQuery(pageQueries.profitOverview(period));
+  const { data: brandStockData } = useQuery(pageQueries.brandStock());
   if (isLoading || !data) return <PageSpinner />;
   const stockByBrand = new Map((brandStockData?.brands || []).map((b) => [b.brandId, b]));
   const t = data.totals;
@@ -1686,10 +1674,7 @@ const CF_PERIODS = [['today', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']
 
 function CashFlowTab() {
   const [period, setPeriod] = useState('month');
-  const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'cashflow', period],
-    queryFn: async () => unwrap(await api.get('/finance/cashflow', { params: { period } })).data,
-  });
+  const { data, isLoading } = useQuery(pageQueries.financeCashflow(period));
   if (isLoading || !data) return <PageSpinner />;
 
   const inRows = (data.byType || []).filter((r) => r.direction === 'IN').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count }));
@@ -2283,10 +2268,7 @@ function ReturnGoodsModal({ supplier, outstanding, onClose, onDone }) {
 function SuppliersTab({ accounts }) {
   const [addOpen, setAddOpen] = useState(false);
   const [viewing, setViewing] = useState(null);
-  const { data: suppliers = [], isLoading } = useQuery({
-    queryKey: ['finance', 'suppliers'],
-    queryFn: async () => unwrap(await api.get('/finance/suppliers')).data,
-  });
+  const { data: suppliers = [], isLoading } = useQuery(pageQueries.financeSuppliers());
   if (isLoading) return <PageSpinner />;
   const totals = suppliers.reduce((s, x) => ({
     purchased: s.purchased + x.totalPurchased,
@@ -2401,7 +2383,7 @@ export default function Finance() {
 
       <div className="mb-6 tab-row">
         {TABS.map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
+          <button key={k} onClick={() => setTab(k)} data-prefetch={k === 'overview' ? '/finance' : `/finance?tab=${k}`}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k
               ? 'bg-brand-500 text-white ring-brand-500'
               : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>

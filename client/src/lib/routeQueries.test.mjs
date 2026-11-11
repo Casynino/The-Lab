@@ -31,7 +31,11 @@ test('the address decides the tab and the chip, as the page does', () => {
   assert.deepEqual(routeQueries('/settlements', '?status=OVERDUE', 'ADMIN')[2], ['settlements', { page: 1, status: 'OVERDUE' }]);
   assert.deepEqual(routeQueries('/settlements', '?status=nonsense', 'ADMIN')[2], ['settlements', { page: 1, status: '' }]);
   assert.deepEqual(names(routeQueries('/finance', '', 'ADMIN')), ['financeAccounts', 'financeCategories', 'financeOverview', 'financeCashflow']);
-  assert.deepEqual(names(routeQueries('/finance', '?tab=ledger', 'ADMIN')), ['financeAccounts', 'financeCategories']);
+  assert.deepEqual(names(routeQueries('/finance', '?tab=ledger', 'ADMIN')), ['financeAccounts', 'financeCategories', 'brandsAll', 'financeTransactions']);
+  // Expenses and the ledger are two different lists (the expenses one is genuine expenses only).
+  assert.equal(routeQueries('/finance', '?tab=expenses', 'ADMIN')[3][1].expensesOnly, true);
+  assert.equal(routeQueries('/finance', '?tab=ledger', 'ADMIN')[3][1].expensesOnly, undefined);
+  assert.deepEqual(names(routeQueries('/finance', '?tab=archive', 'ADMIN')), ['financeAccounts', 'financeCategories']);
   assert.deepEqual(routeQueries('/sales', '?tab=invoice', 'ADMIN'), []);
   assert.deepEqual(routeQueries('/inventory', '?tab=purchases', 'ADMIN'), []);
   assert.deepEqual(routeQueries('/products', '?tab=label', 'ADMIN'), []);

@@ -740,16 +740,17 @@ export default function Layout() {
      it or the keyboard reaches it — by the time the click lands they are usually here — and, once Home
      has drawn, the person's main pages are read ahead quietly, one at a time (lib/routeQueries.js).
      Nothing is asked twice: a fresh answer is kept, and a page that opens meanwhile shares the one on
-     its way. Any link in the app counts, not only the menu. */
+     its way. Any link in the app counts, not only the menu, and so does a tab button that names the
+     page it opens (data-prefetch, e.g. Finance's tabs). */
   const role = user?.role;
   useEffect(() => {
     if (!role) return undefined;
     let rest = 0;
     const linkOf = (e) => {
-      const a = e.target instanceof Element ? e.target.closest('a[href]') : null;
+      const a = e.target instanceof Element ? e.target.closest('a[href], [data-prefetch]') : null;
       if (!a) return null;
       try {
-        const url = new URL(a.href, window.location.href);
+        const url = new URL(a.getAttribute('data-prefetch') || a.href, window.location.href);
         return url.origin === window.location.origin ? url : null;
       } catch {
         return null;
