@@ -173,6 +173,13 @@ async function createSaleTx(tx, payload, actor) {
         ? round2(amountPaid)
         : total
       : round2(amountPaid || 0);
+  // Change goes back to the customer; it is not takings. 3,000 paid on a 2,500 sale was saved as
+  // 3,000 paid and the whole 3,000 booked into the brand's account (audit, 11 Nov 2026).
+  if (paid > total) {
+    throw ApiError.badRequest(
+      `Amount paid (${formatCurrency(paid)}) is more than the sale total (${formatCurrency(total)}). Enter what the sale costs — any change goes back to the customer.`,
+    );
+  }
   const { status, balanceDue } = deriveStatus(total, paid);
 
   const saleNumber = await nextDocNumber(tx.sale, 'saleNumber', 'SALE');

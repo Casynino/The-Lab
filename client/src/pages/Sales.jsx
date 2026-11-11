@@ -56,6 +56,8 @@ function NewSaleModal({ open, onClose }) {
   const total = Math.max(0, subtotal - (Number(discount) || 0));
   // Only a typed-in amount can be short; empty means the full total.
   const shortfall = amountPaid === '' ? 0 : Math.max(0, total - (Number(amountPaid) || 0));
+  // More than the total is change for the customer, not takings — the server refuses it too.
+  const overpaid = amountPaid === '' ? 0 : Math.max(0, (Number(amountPaid) || 0) - total);
 
   const create = useMutation({
     mutationFn: () => {
@@ -88,7 +90,8 @@ function NewSaleModal({ open, onClose }) {
   const canSubmit =
     items.some((l) => l.productId && l.quantity > 0) &&
     (type !== 'CREDIT' || customerId) &&
-    (isRep || source);
+    (isRep || source) &&
+    overpaid === 0;
 
   return (
     <Modal
@@ -140,15 +143,24 @@ function NewSaleModal({ open, onClose }) {
           </div>
         )}
 
+        {overpaid > 0 && (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-400">
+            <span className="font-medium">Amount paid is more than the total.</span>{' '}
+            Enter {formatCurrency(total)} — the {formatCurrency(overpaid)} change goes back to the customer, not into the account.
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Discount"><NumberInput min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} /></Field>
           <Field label="Amount paid" hint="Leave empty for the full amount">
-            <NumberInput min="0" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder={String(total)} />
+            <NumberInput min="0" max={total} value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)} placeholder={String(total)} />
           </Field>
           {!isRep && source.startsWith('w:') && (
             <Field label="Where was it paid?" hint="Which account received the money">
               <Select value={accountOptions.some((a) => a.id === accountId) ? accountId : ''} onChange={(e) => setAccountId(e.target.value)}>
-                <option value="">Cash (default)</option>
+                {/* No account chosen means the brand's own account (the first listed) — there is no cash
+                    till; the business does not hold money in cash. */}
+                <option value="">{accountOptions[0] ? `${accountOptions[0].name} (default)` : 'Brand account (default)'}</option>
                 {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </Select>
             </Field>
