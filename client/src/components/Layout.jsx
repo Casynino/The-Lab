@@ -677,12 +677,14 @@ export default function Layout() {
     // Pages that are a tab of another page for everyone (Transfers and Reorder inside Inventory).
     .map((n) => (n.inside && (!n.insideFor || n.insideFor.includes(user?.role)) ? { ...n, to: n.inside, group: 'inProfile' } : n));
   // Staff read Selling as Sales, Settle, Returns, Requests (Nino, 11 Nov 2026: "Sales should be above Settle";
-  // "Requests should be below Returns"). A rep's menu keeps its own order, Requests first.
+  // "Requests should be below Returns") and Stock as Products, then Inventory ("Inventory below Products").
+  // A rep's menu keeps its own order, Requests first.
   if (!isRep) {
-    const ORDER = ['/sales', '/settlements', '/returns', '/stock-requests'];
-    const slots = items.map((n, i) => (ORDER.includes(n.to) ? i : -1)).filter((i) => i > -1);
-    const picked = slots.map((i) => items[i]).sort((a, b) => ORDER.indexOf(a.to) - ORDER.indexOf(b.to));
-    slots.forEach((i, k) => { items[i] = picked[k]; });
+    for (const ORDER of [['/sales', '/settlements', '/returns', '/stock-requests'], ['/products', '/inventory']]) {
+      const slots = items.map((n, i) => (ORDER.includes(n.to) ? i : -1)).filter((i) => i > -1);
+      const picked = slots.map((i) => items[i]).sort((a, b) => ORDER.indexOf(a.to) - ORDER.indexOf(b.to));
+      slots.forEach((i, k) => { items[i] = picked[k]; });
+    }
   }
 
   /* The banner belongs to the home page, not to the shell. Target Express puts
