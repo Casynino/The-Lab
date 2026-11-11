@@ -114,10 +114,11 @@ test('COMMISSION READY', () => {
 Rep: Asha Mwinyi
 
 Available: TSh 210,000
-Earned: TSh 460,000
 Penalties: TSh 10,000
 Minimum Withdrawal: TSh 100,000`);
   assert.ok(!t.owner.commissionReady({ rep: 'A', available: 1, earned: 1, penalties: 0, minimum: 1 }).includes('Penalties'));
+  // The all-time total is not in the message: it read as money the rep has today.
+  assert.ok(!t.owner.commissionReady({ rep: 'A', available: 1, earned: 999, penalties: 0, minimum: 1 }).includes('Earned'));
 });
 
 test('LOW STOCK', () => {

@@ -91,7 +91,7 @@ export function EarningsCard({ insights }) {
     <InsightCard title="My earnings" said={said}>
       {!quiet && (
         <dl className="mb-5 flex flex-wrap justify-between gap-x-4 gap-y-3">
-          <Figure label="Earned" value={formatCurrency(totals.earned)} />
+          <Figure label={`Earned · ${months.length} months`} value={formatCurrency(totals.earned)} />
           <Figure label="Boxes" value={formatNumber(totals.boxes)} />
           {best && <Figure label={`Best month · ${best.label}`} value={formatCurrency(best.earned)} />}
         </dl>
