@@ -1863,6 +1863,11 @@ async function overview(period = 'month') {
     if (!cashByBrand.has(key)) cashByBrand.set(key, { key, cash: 0, moneyIn: 0, moneyOut: 0, accounts: [] });
   }
 
+  // ALL-TIME cost of sales by brand. What the supplier is owed today is a fact
+  // about the whole bill, so the wallets' "due now" reads it from here, the
+  // same map the balance sheet below uses (supplierDueNowAllTime).
+  const lifetimeByBrand = new Map((lifetime.byBrand || []).map((b) => [b.brandId, b]));
+
   const buckets = [...cashByBrand.values()].map((row) => {
     const sup = supplierByBrand.get(row.key) || { outstanding: 0, paid: 0, name: null };
     const p = profitByBrandId.get(row.key) || { cost: 0, commission: 0, profit: 0, revenue: 0 };
@@ -1870,13 +1875,17 @@ async function overview(period = 'month') {
     const stockSpend = stockSpendByBrand.get(row.key) || 0;
     const costStillToCover = round2(Math.max(0, costOfSold - stockSpend));
     const costPart = round2(Math.min(row.cash, costStillToCover));
-    // What the supplier is owed RIGHT NOW, for THIS period's sales — the card
-    // this bucket feeds sits beside period-scoped figures. The balance sheet
-    // uses the same arithmetic over all-time sales; see supplierDueNowAllTime.
-    const dueNow = supplierDueNow({ outstanding: sup.outstanding, costOfSold, alreadyPaid: sup.paid });
+    // What the supplier is owed RIGHT NOW: the cost of every box ever sold,
+    // less what he has been paid. ALL TIME, like his bill and his payments.
+    // Fed this period's cost it moved with the chip: "Today" said none of a
+    // 12,118,000 bill was due while "All time" said 2,717,500 was, for the
+    // same debt on the same day. The balance sheet's figure is the same sum
+    // (supplierDueNowAllTime). Revenue and the cost/profit mix stay per period.
+    const lifeCost = round2((lifetimeByBrand.get(row.key) || {}).cost || 0);
+    const dueNow = supplierDueNow({ outstanding: sup.outstanding, costOfSold: lifeCost, alreadyPaid: sup.paid });
     // His remaining invoice, which falls due only as shelf stock sells.
     const dueLater = round2(Math.max(0, sup.outstanding - dueNow));
-    const paidAhead = round2(Math.max(0, sup.paid - costOfSold));
+    const paidAhead = round2(Math.max(0, sup.paid - lifeCost));
     // Never below zero: a wallet that is overdrawn has nothing to put aside (it showed "-1 set aside").
     const setAside = round2(Math.max(0, Math.min(row.cash, dueNow)));
     return {
@@ -1957,12 +1966,11 @@ async function overview(period = 'month') {
   );
   // ── The supplier split, ALL TIME ────────────────────────────────────────
   // A balance sheet answers "right now", so what the supplier is owed today
-  // must not move when the reader clicks Today or Week. The buckets above are
-  // period-scoped on purpose — they sit beside period-scoped sales — so the
-  // capital block recomputes the same split from ALL-TIME cost of sales
-  // instead. The identity `dueNow + dueLater === total` held throughout and
-  // hid this: both halves moved together while the bill stayed all-time.
-  const lifetimeByBrand = new Map((lifetime.byBrand || []).map((b) => [b.brandId, b]));
+  // must not move when the reader clicks Today or Week, so it is computed from
+  // ALL-TIME cost of sales — the same map the wallets' "due now" uses above,
+  // so the two always agree. The identity `dueNow + dueLater === total` held
+  // throughout and hid this: both halves moved together while the bill stayed
+  // all-time.
   const supplierDueNowAllTime = supplierDueNowAcross(supplierByBrand, lifetimeByBrand);
 
   const capital = buildCapital({
