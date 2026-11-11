@@ -151,11 +151,18 @@ async function createReturn(payload, actor) {
 
     const lines = [];
     for (const input of items) {
-      const { baseQuantity } = await inventory.convertToBase(tx, input.productId, input.packagingUnitId, input.quantity);
       const product = productMap.get(input.productId);
+      // No unit sent: the product's box (base unit), as a settlement does (audit #67).
+      let { packagingUnitId } = input;
+      if (!packagingUnitId) {
+        const pkg = await tx.productPackaging.findFirst({ where: { productId: input.productId, isBaseUnit: true } });
+        if (!pkg) throw ApiError.badRequest(`${product.name} has no base (Box) packaging configured`);
+        packagingUnitId = pkg.packagingUnitId;
+      }
+      const { baseQuantity } = await inventory.convertToBase(tx, input.productId, packagingUnitId, input.quantity);
       lines.push({
         productId: input.productId,
-        packagingUnitId: input.packagingUnitId,
+        packagingUnitId,
         quantity: input.quantity,
         baseQuantity,
         condition: input.condition || 'GOOD',

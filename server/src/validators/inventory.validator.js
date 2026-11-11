@@ -105,7 +105,9 @@ const returnCreate = {
       .array(
         z.object({
           productId: id,
-          packagingUnitId: id,
+          // Left out, the product's box (base unit) is used: the order screen counts in boxes and cannot
+          // look up a switched-off product's packaging, so its return failed "Validation failed" (audit #67).
+          packagingUnitId: id.optional().nullable(),
           quantity: z.number().int().positive(),
           condition: z.enum(['GOOD', 'DAMAGED']).optional(),
         }),

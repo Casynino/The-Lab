@@ -6,6 +6,8 @@
 //      could not take his own extension. Pinned: it goes back to Open (or Partial), as an admin extension
 //      does; still past its deadline, it stays Overdue.
 // #128: an expiry that charged no fine told the rep a "TSh 0 fine" was applied. Pinned: no fine, no figure.
+// #67: a return from the order screen failed "Validation failed" when the product was switched off (the
+//      screen could not look up its packaging). Pinned: with no unit sent, the product's box is used.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -33,6 +35,20 @@ const tx = {
   },
   settlementPenalty: { create: async ({ data }) => { fines.push(data); return data; } },
 };
+// What a new return reads and writes (#67).
+const created = [];
+Object.assign(tx, {
+  product: { findMany: async () => [{ id: 'p1', name: 'Pepa', isActive: false, sellingPrice: 2500, purchasePrice: 1000 }] },
+  productPackaging: {
+    findFirst: async ({ where }) => (where.isBaseUnit ? { packagingUnitId: 'box' } : null),
+    findUnique: async ({ where }) => (where.productId_packagingUnitId.packagingUnitId === 'box' ? { isActive: true, baseQuantity: 1 } : null),
+  },
+  stockTransfer: { findUnique: async () => ({ items: [{ productId: 'p1', baseQuantity: 5 }] }) },
+  saleItem: { groupBy: async () => [] },
+  returnItem: { groupBy: async () => [] },
+});
+tx.return.findMany = async () => [];
+tx.return.create = async ({ data }) => { created.push(data); return { id: 'r9', ...data, items: data.items.create }; };
 const prismaStub = {
   ...tx,
   return: { ...tx.return, findUnique: async () => ({ ...ret }), findMany: async () => (ret.status === 'PENDING' ? [{ ...ret }] : []) },
@@ -43,7 +59,8 @@ const install = (path, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
 install('../src/config/prisma', prismaStub);
-install('../src/services/settlement.service', { lockOrder: async () => {} });
+install('../src/services/settlement.service', { lockOrder: async () => {}, pendingSubmissionBoxes: async () => new Map() });
+install('../src/services/whatsappNotify.service', { background: () => {}, returnSubmitted: async () => {} });
 install('../src/services/notification.service', {
   notifyUser: async (userId, data) => { notices.push({ userId, ...data }); },
   notifyAdmins: async () => {},
@@ -109,4 +126,24 @@ test('an expiry that charges no fine does not say "TSh 0 fine"', async () => {
   assert.equal(n.title, 'Return RET-1 expired');
   assert.doesNotMatch(n.title + n.message, /TSh 0/);
   assert.match(n.message, /cancelled automatically\. The boxes are back on your order/);
+});
+
+test('a return on an order with no unit sent uses the product\'s box, even for a switched-off product', async () => {
+  created.length = 0;
+  stl = { id: 'o1', settlementNumber: 'STL-1', status: 'OPEN', transferId: 't1', salesRepId: 'rep1' };
+  const out = await returns.createReturn(
+    { type: 'SALES_RETURN', salesRepId: 'rep1', warehouseId: 'w1', settlementId: 'o1', items: [{ productId: 'p1', quantity: 2 }] },
+    { id: 'u1', salesRepId: 'rep1' },
+  );
+  assert.equal(created.length, 1);
+  assert.deepEqual(created[0].items.create.map((i) => [i.packagingUnitId, i.quantity, i.baseQuantity]), [['box', 2, 2]]);
+  assert.equal(out.settlementId, 'o1');
+});
+
+test('the request the order screen sends without a unit passes the input check', () => {
+  const { returnCreate } = require('../src/validators/inventory.validator');
+  const body = { type: 'SALES_RETURN', salesRepId: 'rep1', warehouseId: 'w1', settlementId: 'o1', items: [{ productId: 'p1', quantity: 2 }], reason: 'Return on order STL-1' };
+  assert.equal(returnCreate.body.safeParse(body).success, true);
+  assert.equal(returnCreate.body.safeParse({ ...body, items: [{ productId: 'p1', packagingUnitId: 'box', quantity: 2 }] }).success, true);
+  assert.equal(returnCreate.body.safeParse({ ...body, items: [{ productId: 'p1', quantity: 0 }] }).success, false);
 });
