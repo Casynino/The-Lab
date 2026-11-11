@@ -5,7 +5,7 @@ import { Plus, Ship, PackageCheck, X, Pencil, Trash2, Eye } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
+import { formatCurrency, formatDate, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
@@ -128,7 +128,7 @@ function POModal({ onClose, editing }) {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Ordered date"><Input type="date" value={orderedAt} onChange={(e) => setOrderedAt(e.target.value)} /></Field>
-          <Field label="Expected arrival"><Input type="date" value={expectedArrival} onChange={(e) => setExpectedArrival(e.target.value)} /></Field>
+          <Field label="Expected arrival"><Input type="date" min={orderedAt || undefined} value={expectedArrival} onChange={(e) => setExpectedArrival(e.target.value)} /></Field>
         </div>
         <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
         {(() => {
@@ -259,7 +259,7 @@ function PODetailModal({ po, onClose, onEdit, onDelete, onReceive }) {
                     {i.product?.name}
                     {i.product?.sku && <span className="ml-1.5 text-[11px] text-faint">{i.product.sku}</span>}
                   </TD>
-                  <TD>{formatNumber(i.quantity)} {i.packagingUnit?.name || 'unit'}{i.quantity === 1 ? '' : 's'}</TD>
+                  <TD>{formatNumber(i.quantity)} {i.quantity === 1 ? (i.packagingUnit?.name || 'unit') : pluralizeUnit(i.packagingUnit?.name || 'unit')}</TD>
                   <TD className="font-semibold tabular-nums text-foreground">{formatNumber(i.baseQuantity)}</TD>
                   <TD className="text-right tabular-nums">{formatCurrency(i.unitCost)}</TD>
                   <TD className="text-right font-semibold tabular-nums">{formatCurrency(Number(i.unitCost || 0) * (i.baseQuantity || 0))}</TD>
