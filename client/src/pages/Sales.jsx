@@ -10,6 +10,7 @@ import { useProducts, useCustomers, useWarehouses, useSalesReps } from '@/lib/ho
 import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent } from '@/lib/format';
 import { ROLES, SALE_STATUS_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
+import QuickSale from '@/components/QuickSale';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, NumberInput,
   Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
@@ -350,6 +351,10 @@ export default function Sales() {
 }
 
 function SalesList() {
+  const { user } = useAuth();
+  // Staff record a sale in the quick window (walk-in, Dar es Salaam, every product with  −  qty  +);
+  // the older window below stays for the rep path, unchanged.
+  const isRep = user?.role === ROLES.SALES_REP;
   const [page, setPage] = useState(1);
   const [type, setType] = useState('');
   const [status, setStatus] = useState('');
@@ -584,7 +589,9 @@ function SalesList() {
 
       </div>
 
-      {modalOpen && <NewSaleModal open={modalOpen} onClose={() => setModalOpen(false)} />}
+      {modalOpen && (isRep
+        ? <NewSaleModal open={modalOpen} onClose={() => setModalOpen(false)} />
+        : <QuickSale onClose={() => setModalOpen(false)} />)}
       {detailId && <SaleDetail id={detailId} onClose={() => setDetailId(null)} />}
     </div>
   );
