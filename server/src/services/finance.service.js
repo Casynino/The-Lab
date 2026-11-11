@@ -655,9 +655,10 @@ async function listTransactions(filters, pagination) {
   }
   if (filters.brandId) where.brandId = filters.brandId === 'none' ? null : filters.brandId;
   if (filters.from || filters.to) {
-    where.occurredAt = {};
-    if (filters.from) where.occurredAt.gte = new Date(filters.from);
-    if (filters.to) where.occurredAt.lte = new Date(filters.to);
+    // A day is a Dar es Salaam day (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: filters.from, to: filters.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.occurredAt = bounds;
   }
   if (filters.minAmount != null || filters.maxAmount != null) {
     where.amount = {};

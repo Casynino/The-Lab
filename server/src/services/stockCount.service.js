@@ -5,6 +5,7 @@ const ApiError = require('../utils/ApiError');
 const inventory = require('./inventory.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2 } = require('../utils/money');
+const { eatDayBounds } = require('../utils/dates');
 
 const COUNT_INCLUDE = {
   items: { include: { product: true, packagingUnit: true } },
@@ -148,9 +149,10 @@ async function missingStockReport(filters = {}) {
     baseQuantity: { lt: 0 },
   };
   if (filters.from || filters.to) {
-    where.occurredAt = {};
-    if (filters.from) where.occurredAt.gte = new Date(filters.from);
-    if (filters.to) where.occurredAt.lte = new Date(filters.to);
+    // A bare day is a Dar es Salaam day, not UTC midnight (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: filters.from, to: filters.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.occurredAt = bounds;
   }
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
   if (filters.warehouseId) where.warehouseId = filters.warehouseId;

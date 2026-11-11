@@ -6,7 +6,7 @@ const ApiError = require('../utils/ApiError');
 const inventory = require('./inventory.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { round2, toNumber, formatCurrency } = require('../utils/money');
-const { dayjs } = require('../utils/dates');
+const { dayjs, eatDayBounds } = require('../utils/dates');
 const { DEFAULT_REGION, regionWhere } = require('../constants/regions');
 
 const SALE_INCLUDE = {
@@ -288,9 +288,10 @@ async function listSales(filters, pagination) {
   const regionClause = regionWhere(filters.region);
   if (regionClause) where.AND = [...(where.AND || []), regionClause];
   if (filters.from || filters.to) {
-    where.soldAt = {};
-    if (filters.from) where.soldAt.gte = new Date(filters.from);
-    if (filters.to) where.soldAt.lte = new Date(filters.to);
+    // A day is a Dar es Salaam day (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: filters.from, to: filters.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.soldAt = bounds;
   }
   if (filters.search) {
     where.OR = [

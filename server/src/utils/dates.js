@@ -70,4 +70,23 @@ function eatRange(unit, anchor = eatNow()) {
   return { start: eatToUtc(s).toDate(), end: eatToUtc(e).toDate(), eatStart: s, eatEnd: e };
 }
 
-module.exports = { dayjs, resolveRange, daysBetween, daysOverdue, eatNow, eatToUtc, eatRange, EAT_OFFSET_H };
+// A from/to list filter. A bare day ("2026-11-11") means that whole day in Dar es Salaam: from = 00:00
+// EAT, to = the last moment of that day in EAT. `new Date('2026-11-11')` is UTC midnight = 03:00 EAT, so
+// from=to=one day matched nothing and `to` dropped the whole of its day. A full timestamp is kept exactly
+// as given. Only the sides that were sent are set (no 30-day default). Returns null for an unreadable date.
+const DAY_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+function eatDayBounds({ from, to } = {}) {
+  const out = {};
+  const read = (v, edge) => {
+    const raw = String(v).trim();
+    const d = DAY_ONLY.test(raw)
+      ? eatToUtc(edge === 'start' ? dayjs.utc(raw).startOf('day') : dayjs.utc(raw).endOf('day')).toDate()
+      : new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  if (from) { out.gte = read(from, 'start'); if (!out.gte) return null; }
+  if (to) { out.lte = read(to, 'end'); if (!out.lte) return null; }
+  return out;
+}
+
+module.exports = { dayjs, resolveRange, daysBetween, daysOverdue, eatNow, eatToUtc, eatRange, eatDayBounds, EAT_OFFSET_H };

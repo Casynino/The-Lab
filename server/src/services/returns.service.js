@@ -7,6 +7,7 @@ const settlement = require('./settlement.service');
 const notification = require('./notification.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber } = require('../utils/money');
+const { eatDayBounds } = require('../utils/dates');
 
 const RETURN_INCLUDE = {
   items: { include: { product: { include: { brand: { select: { name: true } } } }, packagingUnit: true } },
@@ -641,9 +642,10 @@ async function listReturns(filters, pagination) {
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
   if (filters.warehouseId) where.warehouseId = filters.warehouseId;
   if (filters.from || filters.to) {
-    where.processedAt = {};
-    if (filters.from) where.processedAt.gte = new Date(filters.from);
-    if (filters.to) where.processedAt.lte = new Date(filters.to);
+    // A bare day is a Dar es Salaam day, not UTC midnight (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: filters.from, to: filters.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.processedAt = bounds;
   }
 
   const [items, total] = await Promise.all([
