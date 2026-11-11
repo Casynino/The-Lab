@@ -264,7 +264,9 @@ export default function Transfers() {
                             {dead ? 'Reversed' : 'Delivered'}
                           </Badge>
                         </TD>
-                        <TD>{!dead && (
+                        {/* A transfer to a rep opened his order; its boxes come back through a Return on that
+                            order (the server refuses to cancel it), so it offers no cancel here. */}
+                        <TD>{!dead && t.direction !== 'WAREHOUSE_TO_REP' && (
                           <button className="btn-ghost px-2 py-1 text-rose-400" title="Cancel & return the stock"
                             onClick={() => { if (confirm(`Cancel ${t.transferNumber}? All ${t.boxes} boxes go back to ${from(t)}.`)) cancel.mutate(t.id); }}>
                             <Ban className="h-4 w-4" />
