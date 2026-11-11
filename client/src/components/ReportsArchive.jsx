@@ -6,7 +6,7 @@ import { FileBarChart, ExternalLink, Download } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
 import { formatCurrency, formatNumber } from '@/lib/format';
-import { Card, EmptyState, Input, Select } from '@/components/ui';
+import { Card, EmptyState, LoadError, Input, Select } from '@/components/ui';
 
 // The business reports the owner receives on WhatsApp — daily, weekly and monthly PDFs — kept here exactly
 // as they were generated and sent (Nino, 11 Nov 2026: "the reports should be saved here too, like Vegas;
@@ -36,7 +36,7 @@ export default function ReportsArchive() {
   const [year, setYear] = useState('');
   const [search, setSearch] = useState('');
   const [shown, setShown] = useState(24);
-  const { data: rows = [], isLoading, isFetching } = useQuery({
+  const { data: rows = [], isLoading, isFetching, isError, refetch } = useQuery({
     // The same builder the Statements tab reads ahead with (lib/routeQueries.js).
     ...pageQueries.reportArchive({ type, year, search }),
     placeholderData: keepPreviousData,
@@ -91,6 +91,9 @@ export default function ReportsArchive() {
             ))}
           </ul>
         </Card>
+      ) : isError && !rows.length ? (
+        // A list that never came back is not "no reports" (audit pwa-brand-load-2).
+        <Card><LoadError what="the reports" onRetry={refetch} /></Card>
       ) : rows.length === 0 ? (
         <Card><EmptyState icon={FileBarChart} title="No reports here yet" message="Reports are kept here automatically the moment they are sent." /></Card>
       ) : (

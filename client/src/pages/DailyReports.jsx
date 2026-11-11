@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
 import { formatCurrency, formatDate } from '@/lib/format';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -61,7 +61,7 @@ export default function DailyReports() {
   const [page, setPage] = useState(1);
   const [modal, setModal] = useState(null); // 'OPENING' | 'CLOSING'
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.dailyReports({ page }),
     placeholderData: keepOnPageTurn(),
   });
@@ -75,7 +75,7 @@ export default function DailyReports() {
         </>}
       </PageHeader>
       <Card>
-        {isLoading ? <PageSpinner /> : !data?.data?.length ? (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the daily reports" onRetry={refetch} /> : !data?.data?.length ? (
           <EmptyState title="No daily reports yet" icon={NotebookPen} />
         ) : (
           <>

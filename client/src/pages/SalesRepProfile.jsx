@@ -22,7 +22,7 @@ import ProgressRows from '@/components/ProgressRows';
 import WithdrawalNote, { PayoutHistory, withdrawalState } from '@/components/WithdrawalNote';
 import { TrendChart } from '@/components/charts';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, StatCard,
   Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, NumberInput, Textarea,
 } from '@/components/ui';
 
@@ -550,7 +550,7 @@ function AddStockModal({ repId, repName, onClose }) {
 // the business is owed and a deleted rep cannot be chased.
 function DeleteRepModal({ rep, onClose, onDone }) {
   const qc = useQueryClient();
-  const { data: check, isLoading } = useQuery({
+  const { data: check, isLoading, isError: checkFailed, refetch: retryCheck } = useQuery({
     queryKey: ['sales-reps', rep.id, 'deletion-check'],
     queryFn: async () => unwrap(await api.get(`/sales-reps/${rep.id}/deletion-check`)).data,
   });
@@ -583,7 +583,7 @@ function DeleteRepModal({ rep, onClose, onDone }) {
           </Button>
         )}
       </>}>
-      {isLoading ? <PageSpinner /> : !check?.canDelete ? (
+      {isLoading ? <PageSpinner /> : checkFailed && !check ? <LoadError what="what deleting would remove" onRetry={retryCheck} /> : !check?.canDelete ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
           <Boxes className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="text-xs">{check?.blockedReason}</span>
@@ -643,7 +643,7 @@ export default function SalesRepProfile() {
   // Which window the performance figures cover. Kept in the query key so
   // switching period refetches rather than showing last period's numbers.
   const [period, setPeriod] = useState('all');
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.repProfile({ id, period }),
     refetchInterval: STEADY,
     keepPreviousData: true,
@@ -651,7 +651,7 @@ export default function SalesRepProfile() {
   // This rep's payouts, so the admin and the rep are looking at one list. Not
   // folded into the profile payload: it is a small, separate question, and it
   // has to invalidate on the Commissions screen's own mutations.
-  const { data: wd } = useQuery({
+  const { data: wd, isError: wdFailed, refetch: retryWd } = useQuery({
     ...pageQueries.repWithdrawals(id),
   });
 
@@ -681,6 +681,8 @@ export default function SalesRepProfile() {
     qc.invalidateQueries({ queryKey: ['commissions'] });
   };
 
+  // A profile that never arrived is not a spinner for ever (audit pwa-brand-load-2).
+  if (isError && !data) return <LoadError what="this rep's profile" onRetry={refetch} />;
   if (isLoading || !data) return <PageSpinner />;
 
   const { rep, stock, commission: c, settlements, performance: perf, activity } = data;
@@ -1082,7 +1084,9 @@ export default function SalesRepProfile() {
             {showPayoutNote && (
               <WithdrawalNote className="mb-3" audience="owner" commission={c} latest={latestPayout} firstName={rep.name?.split(' ')[0] || ''} />
             )}
-            <PayoutHistory items={withdrawals} empty="No withdrawal has been requested yet." />
+            {wdFailed && !wd
+              ? <LoadError what="the payouts" onRetry={retryWd} />
+              : <PayoutHistory items={withdrawals} empty={wd ? 'No withdrawal has been requested yet.' : 'Loading…'} />}
             <p className="mt-3 text-[11px] leading-snug text-faint">
               Paid from your own pocket and kept on the Commission account. It never comes out of a wallet and never
               off your profit — it is money the business owes you back.

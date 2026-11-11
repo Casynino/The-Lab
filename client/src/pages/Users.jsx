@@ -11,7 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { formatDateTime } from '@/lib/format';
 import RegionPicker from '@/components/RegionPicker';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Select,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, Modal, Field, Input, Select,
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -137,7 +137,7 @@ export default function Users() {
   const [modal, setModal] = useState({ open: false, editing: null });
   const debounced = useDebounce(search);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['users', { page, search: debounced }],
     queryFn: async () => unwrap(await api.get('/users', { params: { page, limit: 20, search: debounced } })),
     placeholderData: keepOnPageTurn(),
@@ -166,7 +166,7 @@ export default function Users() {
         <div className="border-b border-border p-4">
           <div className="max-w-sm"><SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search name or email…" /></div>
         </div>
-        {isLoading ? <PageSpinner /> : !data?.data?.length ? <EmptyState title="No users" /> : (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the users" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No users" /> : (
           <>
             <Table>
               <THead><TR><TH>Name</TH><TH>Email</TH><TH>Role</TH><TH>Last login</TH><TH>Status</TH><TH /></TR></THead>

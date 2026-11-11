@@ -886,7 +886,8 @@ function StaffRequestTable({ onView }) {
             sub: 'paid for and closed',
             ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300',
           },
-        ].map((c) => (
+        // A failed load shows dashes, not "0 boxes, nothing owed" (as the Products cards do; audit pwa-brand-load-2).
+        ].map((c) => (isError && !data ? { ...c, value: '—', sub: "couldn't load" } : c)).map((c) => (
           <div key={c.label} className="stat-glass p-4">
             <div className="relative flex items-start justify-between gap-2">
               <p className="text-xs font-medium text-muted">{c.label}</p>
