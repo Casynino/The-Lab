@@ -7,7 +7,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatNumber, formatDateTime, formatDate } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDateTime, formatDate, unitWord } from '@/lib/format';
 import {
   Modal, Button, Field, Input, Select, Badge, PageSpinner,
   Table, THead, TBody, TR, TH, TD,
@@ -216,8 +216,9 @@ const settleAvail = (order, l) => Math.max(0, l.remaining - (pendingBoxesByProdu
 // quiet ones are plain words; the one that does the thing is a filled pill inside the bar and takes
 // the rest of the width. (It replaced rows of separate rounded rectangles, which all looked alike.)
 const BAR_CLS = 'flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]';
-const CANCEL_CLS = 'h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]';
-const PRIMARY_CLS = 'h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold';
+// 44 px tall on a phone (a thumb's target), the slimmer 36 px from sm up.
+const CANCEL_CLS = 'h-11 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97] sm:h-9';
+const PRIMARY_CLS = 'h-11 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold sm:h-9';
 
 // Where to pay, for one brand's share of a settlement. One account is stated, not offered as a
 // dropdown that cannot change; several are a choice; none says so out loud.
@@ -847,7 +848,7 @@ function ExtendDeadlineModal({ order, onClose, onDone }) {
     >
       <div className="space-y-4">
         <p className="text-sm text-muted">
-          Current deadline: <span className="font-medium text-foreground">{new Date(order.deadlineAt).toLocaleString()}</span>
+          Current deadline: <span className="font-medium text-foreground">{formatDateTime(order.deadlineAt)}</span>
           {order.status === 'OVERDUE' && <span className="ml-2 text-xs font-semibold text-rose-500">· Overdue</span>}
         </p>
 
@@ -1231,8 +1232,9 @@ export default function OrderDetailModal({ settlementId, onClose }) {
 
           // ONE pill-shaped bar (the same one the forms use, BAR_CLS): the other actions are plain
           // words inside it, and the one you came for is a filled pill that takes a little more room.
-          // If a screen is too narrow for it all, the bar wraps instead of squeezing.
-          const quiet = 'h-9 min-w-0 flex-1 rounded-full px-3 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97] disabled:opacity-60';
+          // If a screen is too narrow for it all, the bar wraps instead of squeezing: a label never breaks
+          // onto two lines inside its pill ("More time" did at 360 px), it moves the pill to a new line.
+          const quiet = 'h-11 flex-1 whitespace-nowrap rounded-full px-2.5 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97] disabled:opacity-60 min-[380px]:px-3 sm:h-9';
           return (
             <div className="flex w-full flex-wrap items-center gap-1 rounded-[22px] bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
               {rest.map((a) => (
@@ -1242,7 +1244,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               ))}
               {primary && (
                 <button type="button" onClick={primary.onClick} disabled={primary.busy}
-                  className={`h-9 min-w-0 flex-[1.4] rounded-full px-4 text-[13px] font-semibold transition active:scale-[0.97] disabled:opacity-60 ${primary.cls}`}>
+                  className={`h-11 flex-[1.4] whitespace-nowrap rounded-full px-4 text-[13px] font-semibold transition active:scale-[0.97] disabled:opacity-60 sm:h-9 ${primary.cls}`}>
                   {primary.label}
                 </button>
               )}
@@ -1287,7 +1289,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
               )}
 
               <button type="button" onClick={() => setDetailsOpen((v) => !v)} aria-expanded={detailsOpen}
-                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-faint transition hover:text-muted">
+                className="-mb-3.5 -mt-1.5 inline-flex min-h-11 items-center gap-1 text-xs font-medium text-faint transition hover:text-muted sm:mb-0 sm:mt-2 sm:min-h-0">
                 Details
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${detailsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
               </button>
@@ -1399,7 +1401,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                         <div className="text-sm font-medium text-foreground">{p.submissionNumber} · {formatCurrency(p.amount)}</div>
                         <div className="mt-0.5 flex gap-2 text-xs text-faint">
                           <span title={p.productName} className="min-w-0 truncate">{p.productName}</span>
-                          <span className="shrink-0">· {formatNumber(p.boxes)} box(es){p.method ? ` · ${p.method}` : ''}</span>
+                          <span className="shrink-0">· {formatNumber(p.boxes)} {unitWord(p.boxes)}{p.method ? ` · ${p.method}` : ''}</span>
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-2">

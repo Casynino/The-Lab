@@ -9,7 +9,8 @@ import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/hooks';
 import { ROLES } from '@/lib/constants';
-import { formatDate, formatDateTime, formatNumber, formatCurrency } from '@/lib/format';
+import { formatDate, formatDateTime, formatNumber, formatCurrency, unitWord } from '@/lib/format';
+import { timeLeftLabel } from '@/lib/labels';
 import {
   PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, Modal, Field, Select, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
@@ -131,14 +132,14 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
                   key: i.id,
                   name: i.product?.name,
                   detail: [
-                    `${formatNumber(i.quantity)} ${i.packagingUnit?.name || 'box'}(s) × ${formatCurrency(i.unitPrice)}`,
+                    `${formatNumber(i.quantity)} ${unitWord(i.quantity, i.packagingUnit?.name || 'box')} × ${formatCurrency(i.unitPrice)}`,
                     i.condition,
                   ].filter(Boolean).join(' · '),
                   value: formatCurrency(i.quantity * Number(i.unitPrice || 0)),
                 }))}
               />
               <div className="mt-2 flex items-center justify-between rounded-xl bg-elevated px-3 py-2.5 text-sm font-semibold text-foreground">
-                <span>Total · {formatNumber(totalBoxes)} box(es)</span>
+                <span>Total · {formatNumber(totalBoxes)} {unitWord(totalBoxes)}</span>
                 <span className="tabular-nums">{formatCurrency(totalValue)}</span>
               </div>
             </div>
@@ -378,13 +379,13 @@ function ReturnModal({ onClose }) {
                 <div className="mt-1.5 flex items-center justify-end gap-1.5">
                   {scoped && <span className="mr-auto text-xs text-faint">{formatNumber(max)} {isRep ? 'available' : 'on his open orders'}</span>}
                   <button onClick={() => dec(product.id)} disabled={qty === 0}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-lg font-bold text-muted transition hover:text-foreground disabled:opacity-30">−</button>
+                    className="flex h-11 w-11 items-center justify-center rounded-full border sm:h-8 sm:w-8 border-white/[0.12] bg-white/[0.05] text-lg font-bold text-muted transition hover:text-foreground disabled:opacity-30">−</button>
                   <input type="number" min="0" max={scoped ? max : undefined} value={qty === 0 ? '' : qty}
                     onChange={(e) => { const v = parseInt(e.target.value, 10); setQty(product.id, isNaN(v) || v < 0 ? 0 : v); }}
                     placeholder="0"
-                    className="h-8 w-14 rounded-lg border border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                    className="h-11 w-14 rounded-lg border sm:h-8 border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
                   <button onClick={() => inc(product.id)} disabled={qty >= max}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-lg font-bold text-brand-500 transition hover:bg-brand-500/25 disabled:opacity-30">+</button>
+                    className="flex h-11 w-11 items-center justify-center rounded-full border sm:h-8 sm:w-8 border-brand-500/40 bg-brand-500/15 text-lg font-bold text-brand-500 transition hover:bg-brand-500/25 disabled:opacity-30">+</button>
                 </div>
               </div>
             );
@@ -451,15 +452,15 @@ function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve })
         ))}
         <div className="mt-1 text-xs text-faint">
           {r.settlementNumber ? `on ${r.settlementNumber} · ` : ''}{formatDateTime(r.processedAt)}
-          <span className={expiring ? ' font-semibold text-rose-400' : ' text-amber-400'}> · expires in {Math.ceil(hoursLeft)}h</span>
+          <span className={expiring ? ' font-semibold text-rose-400' : ' text-amber-400'}> · {hoursLeft < 1 ? 'expires within the hour' : `expires in ${Math.floor(hoursLeft)}h`}</span>
         </div>
       </button>
-      <div className="flex shrink-0 gap-2">
-        {onCancel && <Button variant="ghost" className="text-rose-500" onClick={() => onCancel(r.id)}>Cancel request</Button>}
+      <div className="flex w-full shrink-0 gap-3 sm:w-auto sm:gap-2">
+        {onCancel && <Button variant="ghost" className="min-h-11 flex-1 text-rose-500 sm:min-h-0 sm:flex-none" onClick={() => onCancel(r.id)}>Cancel request</Button>}
         {canDecide && (
           <>
-            <Button variant="ghost" className="text-rose-500" onClick={() => onReject(r.id)}>Reject</Button>
-            <Button loading={busy} onClick={() => approve.mutate(r.id)}><CheckCircle className="h-4 w-4" /> Approve</Button>
+            <Button variant="ghost" className="min-h-11 flex-1 text-rose-500 sm:min-h-0 sm:flex-none" onClick={() => onReject(r.id)}>Reject</Button>
+            <Button className="min-h-11 flex-1 sm:min-h-0 sm:flex-none" loading={busy} onClick={() => approve.mutate(r.id)}><CheckCircle className="h-4 w-4" /> Approve</Button>
           </>
         )}
       </div>
@@ -563,7 +564,7 @@ function RepReturnsView({ all, isLoading, failed = false, onRetry, onNew, onView
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-sm font-semibold text-foreground">{r.returnNumber}</span>
-                        <span className={clsx('text-[13px] font-semibold', expiring ? 'text-rose-300' : 'text-amber-300')}>{Math.ceil(hoursLeft)}h left</span>
+                        <span className={clsx('text-[13px] font-semibold', expiring ? 'text-rose-300' : 'text-amber-300')}>{timeLeftLabel(hoursLeft)}</span>
                       </div>
                       <p className="mt-2 text-[22px] font-bold leading-none tabular-nums text-amber-300">{formatNumber(boxes)} box{plural(boxes)}</p>
                       {names.length > 0 && (
