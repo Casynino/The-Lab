@@ -206,6 +206,14 @@ test('an admin\'s edit is said as the admin\'s, and the rep is told what his ord
   assert.equal(calls.users.length, 1);
   assert.equal(calls.users[0].userId, 'rep-user');
   assert.match(calls.users[0].message, /Doctor changed your pending request \(REQ-20261111-0001\)\. It is now Civlily Pepa Ndogo \(Brown\): 3 Boxes, worth TSh/);
+  // His WhatsApp has its own template (it used the general wording, which a long list cut short).
+  const wa = calls.users[0].whatsapp;
+  assert.equal(wa.kind, 'STOCK_REQUEST_CHANGED');
+  assert.equal(wa.request, 'REQ-20261111-0001');
+  assert.equal(wa.by, 'Doctor');
+  assert.deepEqual(wa.items, [{ name: 'Civlily Pepa Ndogo (Brown)', quantity: 3, unit: 'Box' }]);
+  assert.equal(typeof wa.total, 'number');
+  assert.match(require('../src/services/whatsappText').repText(wa), /^\*STOCK REQUEST CHANGED\*\n\nRequest: REQ-20261111-0001\nChanged by: Doctor\n\n\(a\) Civlily Pepa Ndogo \(Brown\): 3 Boxes\n\nTotal Value: TSh /);
 });
 
 test('the rep\'s own edit keeps its wording and does not message him', async () => {
