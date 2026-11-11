@@ -5,6 +5,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const { ok } = require('../utils/response');
 const audit = require('../services/audit.service');
 const ApiError = require('../utils/ApiError');
+const { checkSetting } = require('../utils/settingRules');
 
 const list = asyncHandler(async (_req, res) => {
   const settings = await prisma.setting.findMany({ orderBy: [{ group: 'asc' }, { key: 'asc' }] });
@@ -26,10 +27,13 @@ const FROZEN_KEYS = new Map([
 
 // Create or update a setting by key.
 const upsert = asyncHandler(async (req, res) => {
-  const { value, type, group, description } = req.body;
+  const { type, group, description } = req.body;
   if (FROZEN_KEYS.has(req.params.key)) {
     throw ApiError.badRequest(FROZEN_KEYS.get(req.params.key));
   }
+  // The value must fit the setting (a figure where a figure is read, in range) — see utils/settingRules.js.
+  const stored = type ? null : await prisma.setting.findUnique({ where: { key: req.params.key }, select: { type: true } });
+  const value = checkSetting(req.params.key, req.body.value, type || stored?.type, (m) => ApiError.badRequest(m));
   const setting = await prisma.setting.upsert({
     where: { key: req.params.key },
     create: {
