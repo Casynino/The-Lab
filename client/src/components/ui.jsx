@@ -534,13 +534,16 @@ export function PageHeader({ title, subtitle, children }) {
 }
 
 // --- Stat card --------------------------------------------------------------
+// The owner's premium finish (Nino, 11 Nov 2026: "the cards should match the profile now"): every stat
+// card is the red-lit premium card, and its icon sits in a soft round chip tinted by the tone — no more
+// bright gradient squares. Labels, values, hints and clicks are unchanged.
 const STAT_TONES = {
-  brand: { badge: 'from-brand-500 to-brand-400', glow: 'rgba(238,49,36,0.26)', dark: false },
-  emerald: { badge: 'from-emerald-500 to-teal-500', glow: 'rgba(16,185,129,0.18)' },
-  amber: { badge: 'from-amber-500 to-orange-500', glow: 'rgba(245,158,11,0.18)' },
-  rose: { badge: 'from-rose-500 to-pink-500', glow: 'rgba(244,63,94,0.18)' },
-  violet: { badge: 'from-violet-500 to-fuchsia-500', glow: 'rgba(139,92,246,0.18)' },
-  slate: { badge: 'from-slate-500 to-slate-700', glow: 'rgba(148,163,184,0.18)' },
+  brand: { chip: 'bg-brand-500/15 text-brand-400 ring-brand-500/30', glow: '0 0 14px rgba(238,49,36,.3)' },
+  emerald: { chip: 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30', glow: '0 0 14px rgba(16,185,129,.25)' },
+  amber: { chip: 'bg-amber-500/15 text-amber-300 ring-amber-500/30', glow: '0 0 14px rgba(245,158,11,.25)' },
+  rose: { chip: 'bg-rose-500/15 text-rose-300 ring-rose-500/30', glow: '0 0 14px rgba(244,63,94,.25)' },
+  violet: { chip: 'bg-violet-500/15 text-violet-300 ring-violet-500/30', glow: '0 0 14px rgba(139,92,246,.25)' },
+  slate: { chip: 'bg-white/[0.06] text-white/60 ring-white/10', glow: undefined },
 };
 
 export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onClick, compact = false }) {
@@ -552,19 +555,16 @@ export function StatCard({ label, value, icon: Icon, hint, tone = 'brand', onCli
       transition={{ duration: 0.4, ease: [0.2, 0.7, 0.3, 1] }}
       whileHover={onClick ? { y: -4 } : { y: -2 }}
       onClick={onClick}
-      className={clsx('card relative overflow-hidden', compact ? 'p-3' : 'p-3.5 sm:p-5', onClick && 'cursor-pointer')}
+      className={clsx('premium-card premium-card--sm', compact ? 'p-3' : 'p-3.5 sm:p-5', onClick && 'cursor-pointer')}
     >
-      {/* Soft corner glow in the tone colour. */}
-      <div
-        className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full blur-2xl"
-        style={{ background: t.glow }}
-        aria-hidden="true"
-      />
       <div className="relative flex items-start justify-between gap-3">
-        <span className={clsx('font-medium text-muted', compact ? 'text-xs' : 'text-sm')}>{label}</span>
+        <span className={clsx('font-medium text-white/60', compact ? 'text-xs' : 'text-sm')}>{label}</span>
         {Icon && (
-          <span className={clsx('shrink-0 rounded-lg bg-gradient-to-br shadow-md', compact ? 'p-1.5' : 'p-1.5 sm:rounded-xl sm:p-2.5', t.badge, t.dark ? 'text-slate-950' : 'text-white')}>
-            <Icon className={clsx(compact ? 'h-3.5 w-3.5' : 'h-3.5 w-3.5 sm:h-5 sm:w-5')} />
+          <span
+            className={clsx('flex shrink-0 items-center justify-center rounded-full ring-1 ring-inset', compact ? 'h-7 w-7' : 'h-8 w-8 sm:h-10 sm:w-10', t.chip)}
+            style={t.glow ? { boxShadow: t.glow } : undefined}
+          >
+            <Icon className={clsx(compact ? 'h-3.5 w-3.5' : 'h-4 w-4 sm:h-[18px] sm:w-[18px]')} />
           </span>
         )}
       </div>
