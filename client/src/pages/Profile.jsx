@@ -644,11 +644,15 @@ export default function Profile() {
     enabled: isRep,
   });
 
-  const { data: settlements } = useQuery({
+  // The latest five, with the real number of closed orders from the list's total (the count beside
+  // the heading used to be the five rows it fetched, so it never went past 5).
+  const { data: closed } = useQuery({
     queryKey: ['settlements', 'profile', 'closed'],
-    queryFn: async () => unwrap(await api.get('/settlements', { params: { status: 'SETTLED', limit: 5 } })).data,
+    queryFn: async () => unwrap(await api.get('/settlements', { params: { status: 'SETTLED', limit: 5 } })),
     enabled: isRep,
   });
+  const settlements = closed?.data || [];
+  const closedTotal = closed?.meta?.total ?? settlements.length;
 
   const repInfo = user?.salesRep;
   // A rep's line is their number and their cities (Nino, 11 Nov 2026: "no need of Sales Representative, just the
@@ -705,8 +709,8 @@ export default function Profile() {
             )}
           </section>
 
-          {settlements && settlements.length > 0 && (
-            <CollapsibleList title="Closed orders" count={settlements.length}>
+          {settlements.length > 0 && (
+            <CollapsibleList title="Closed orders" count={closedTotal}>
               {settlements.map((s) => (
                 <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-3.5">
                   <div className="min-w-0">
@@ -716,6 +720,13 @@ export default function Profile() {
                   <span className="shrink-0 text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(s.settledValue)}</span>
                 </div>
               ))}
+              {closedTotal > settlements.length && (
+                <button type="button" onClick={() => navigate('/settlements')}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-xs text-muted transition hover:text-foreground">
+                  <span>Latest {settlements.length} of {formatNumber(closedTotal)}</span>
+                  <span className="font-medium">See all</span>
+                </button>
+              )}
             </CollapsibleList>
           )}
         </>
