@@ -85,7 +85,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
 
   return (
     <Modal open onClose={onClose} title="Withdraw from my wallet"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={req.isPending} disabled={!valid} onClick={() => req.mutate()}>Request {valid ? formatCurrency(amt) : 'withdrawal'}</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={req.isPending} disabled={!valid} onClick={() => req.mutate()}>Withdraw{valid ? ` ${formatCurrency(amt)}` : ''}</Button></>}>
       <div className="space-y-4">
         <div className="relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ring-emerald-500/25">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.12] to-transparent" aria-hidden="true" />
@@ -763,9 +763,11 @@ function RepView() {
           // "all time", so nobody reads it as money in hand today (Nino, 11 Nov 2026).
           { label: 'Earned all time', value: formatCurrency(c.earned) },
           { label: 'Paid out', value: formatCurrency(c.paid) },
-          hasPenalties
-            ? { label: 'Fines', value: formatCurrency(c.penalties), tone: 'rose' }
-            : { label: 'Pending', value: formatCurrency(c.pendingRequests) },
+          // A withdrawal waiting to be paid is already off the balance above (the server counts it out of
+          // Available at once), so while one waits the card says where it went: Pending, even for a rep with fines.
+          (Number(c.pendingRequests) || 0) > 0 || !hasPenalties
+            ? { label: 'Pending', value: formatCurrency(c.pendingRequests), tone: (Number(c.pendingRequests) || 0) > 0 ? 'amber' : undefined }
+            : { label: 'Fines', value: formatCurrency(c.penalties), tone: 'rose' },
         ]}
         onWithdraw={() => setOpen(true)}
       />

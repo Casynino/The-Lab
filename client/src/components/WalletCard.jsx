@@ -119,7 +119,7 @@ export default function WalletCard({
         {stats.map((s) => (
           <div key={s.label} className="min-w-0">
             <p className="text-[10px] text-white/40">{s.label}</p>
-            <p className={clsx('mt-px whitespace-nowrap text-[12.5px] font-medium tabular-nums', s.tone === 'rose' ? 'text-rose-300' : 'text-white/85')}>
+            <p className={clsx('mt-px whitespace-nowrap text-[12.5px] font-medium tabular-nums', s.tone === 'rose' ? 'text-rose-300' : s.tone === 'amber' ? 'text-amber-300' : 'text-white/85')}>
               {mask(s.value)}
             </p>
           </div>
