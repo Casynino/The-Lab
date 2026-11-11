@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, UserCog, AlertTriangle } from 'lucide-react';
+import clsx from 'clsx';
+import { Plus, UserCog, AlertTriangle, Search, X, ArrowUpDown } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
-import { formatCurrency, formatNumber, fromNow } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, fromNow, initials } from '@/lib/format';
 import RegionPicker from '@/components/RegionPicker';
 import { repRegions } from '@/lib/repRegions';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, NumberInput, Pagination,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Button, Modal, Field, Select, NumberInput, Pagination,
 } from '@/components/ui';
 
 function RepModal({ onClose }) {
@@ -51,14 +52,15 @@ function RepModal({ onClose }) {
 }
 
 // One colour per rep, fixed by their code so a face keeps its colour wherever
-// the list moves it.
+// the list moves it. It lives on the rep's initials, not on the whole card.
 const HUES = [
-  { edge: 'bg-teal-400', text: 'text-teal-300' },
-  { edge: 'bg-violet-400', text: 'text-violet-300' },
-  { edge: 'bg-sky-400', text: 'text-sky-300' },
-  { edge: 'bg-amber-400', text: 'text-amber-300' },
-  { edge: 'bg-emerald-400', text: 'text-emerald-300' },
-  { edge: 'bg-rose-400', text: 'text-rose-300' },
+  'bg-teal-400/15 text-teal-200 ring-teal-400/30',
+  'bg-violet-400/15 text-violet-200 ring-violet-400/30',
+  'bg-sky-400/15 text-sky-200 ring-sky-400/30',
+  'bg-amber-400/15 text-amber-200 ring-amber-400/30',
+  'bg-emerald-400/15 text-emerald-200 ring-emerald-400/30',
+  // Not rose: red is kept for a late rep, never a rep's own colour.
+  'bg-indigo-400/15 text-indigo-200 ring-indigo-400/30',
 ];
 const hueFor = (code) => HUES[[...String(code || '')].reduce((n, c) => n + c.charCodeAt(0), 0) % HUES.length];
 
@@ -114,6 +116,197 @@ function gradeOf(r) {
   };
 }
 
+const owedOf = (r) => Math.max(0, Number(r.commissionOwed || 0));
+const nameOf = (r) => String(r.user?.name || r.code || '');
+const byName = (a, b) => nameOf(a).localeCompare(nameOf(b));
+
+// The four groups a rep can be in — the same four the card's chip names, so
+// the counts on the chips always add up to All.
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'late', label: 'Late' },
+  { key: 'out', label: 'Running' },
+  { key: 'clear', label: 'Settled' },
+  { key: 'off', label: 'Inactive' },
+];
+const NONE_IN = {
+  late: 'Nobody is late — every order is inside its window.',
+  out: 'No rep has an order running right now.',
+  clear: 'Every rep has stock out at the moment.',
+  off: 'Every rep is active.',
+};
+
+// Bonus progress toward the next tier; a rep past every tier comes first, a rep
+// with no bonus run last.
+const bonusRank = (b) => (!b ? -1 : b.next ? Number(b.next.progress) || 0 : 101);
+
+const SORTS = [
+  // The page's own order since it was built: late first, then whoever is
+  // holding the most of your stock.
+  { key: 'attention', label: 'Late first', cmp: (a, b) => a.st.rank - b.st.rank || Number(b.r.heldUnits || 0) - Number(a.r.heldUnits || 0) || byName(a.r, b.r) },
+  { key: 'boxes', label: 'Most boxes', cmp: (a, b) => Number(b.r.heldUnits || 0) - Number(a.r.heldUnits || 0) || byName(a.r, b.r) },
+  { key: 'owed', label: 'Most owed', cmp: (a, b) => owedOf(b.r) - owedOf(a.r) || byName(a.r, b.r) },
+  // Worst first: the reps to talk to. A rep with nothing closed has no rate and goes last.
+  { key: 'ontime', label: 'Lowest on time', cmp: (a, b) => (a.g.known ? a.g.pct : 101) - (b.g.known ? b.g.pct : 101) || byName(a.r, b.r) },
+  { key: 'bonus', label: 'Closest to bonus', bonus: true, cmp: (a, b) => bonusRank(b.b) - bonusRank(a.b) || Number(b.b?.sales || 0) - Number(a.b?.sales || 0) || byName(a.r, b.r) },
+  { key: 'name', label: 'Name A–Z', cmp: (a, b) => byName(a.r, b.r) },
+];
+
+const clampPct = (n) => Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0));
+
+// The sales bonus as a bar with a notch per tier, drawn against the TOP tier so
+// it only ever rises (the Commissions cards draw it the same way). The caption
+// leads with the server's own % to the NEXT tier, the figure Commissions shows,
+// so the two pages never give two answers — and that tier's notch is drawn in
+// the same sky blue as the %, so the eye knows which notch the % is about.
+function BonusTrack({ b, active }) {
+  if (!b) {
+    return (
+      <p className="mt-2.5 border-t border-white/[0.06] pt-2.5 text-[11px] leading-4 text-faint">
+        {active ? 'Sales bonus figures not ready yet' : 'Sales bonus not counted while inactive'}
+      </p>
+    );
+  }
+  const tiers = b.tiers || [];
+  const top = tiers.reduce((m, t) => Math.max(m, Number(t.target) || 0), 0);
+  const pct = top > 0 ? clampPct((Number(b.sales) / top) * 100) : 0;
+  const won = b.claimable;
+  const next = b.next;
+  const none = !(Number(b.sales) > 0);
+  const barLabel = `Sold ${formatCurrency(b.sales)}${top > 0 ? ` of ${formatCurrency(top)}, the top bonus tier` : ' toward the sales bonus'}`;
+  return (
+    <div className="mt-2.5 border-t border-white/[0.06] pt-2.5">
+      <div className="flex items-baseline justify-between gap-x-2 text-[11px] leading-4">
+        <span className="text-muted">Sales bonus</span>
+        <span className="whitespace-nowrap text-[13px] font-semibold tabular-nums text-foreground">{formatCurrency(b.sales)}</span>
+      </div>
+      <div className="relative mt-1.5" role="img" aria-label={barLabel} title={barLabel}>
+        <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+          <div className={clsx('h-full rounded-full transition-[width] duration-700 ease-out', won ? 'bg-emerald-400' : 'bg-sky-400/80')} style={{ width: `${pct}%` }} />
+        </div>
+        {top > 0 && tiers.map((t) => {
+          const isNext = next && t.ruleId === next.ruleId;
+          return (
+            <span
+              key={t.ruleId}
+              title={`Sell ${formatCurrency(t.target)} → ${formatCurrency(t.bonusAmount)}`}
+              className={clsx(
+                'absolute top-1/2 w-[2px] -translate-y-1/2 rounded-full',
+                t.reached ? 'h-2.5 bg-emerald-200' : isNext ? 'h-3 bg-sky-300' : 'h-2.5 bg-white/35',
+              )}
+              style={{ left: `calc(${Math.min(100, ((Number(t.target) || 0) / top) * 100)}% - 1px)` }}
+            />
+          );
+        })}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-baseline justify-between gap-x-2 text-[11px] leading-4">
+        {won && <span className="whitespace-nowrap font-semibold text-emerald-300">{formatCurrency(won.bonusAmount)} earned</span>}
+        {next && none ? (
+          <span className="text-muted">
+            <span className="whitespace-nowrap">No sales yet</span>
+            {' · '}<span className="whitespace-nowrap tabular-nums">{formatCurrency(next.target)}</span>
+            {' → '}<span className="whitespace-nowrap font-medium tabular-nums text-foreground/85">{formatCurrency(next.bonusAmount)}</span>
+          </span>
+        ) : next ? (
+          <span className="text-muted" title={`${next.progress}% of the way to the ${formatCurrency(next.target)} tier`}>
+            <span className="font-semibold tabular-nums text-sky-300">{next.progress}%</span>
+            {' · '}<span className="whitespace-nowrap tabular-nums">{formatCurrency(next.remaining)} more</span>
+            {' → '}<span className="whitespace-nowrap font-medium tabular-nums text-foreground/85">{formatCurrency(next.bonusAmount)}</span>
+          </span>
+        ) : (
+          <span className="text-emerald-300/80">every tier reached</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// A card is a glance, not a report: who, where they stand, how they grade,
+// what they are carrying, what they are owed, and how far the bonus is. The
+// rest is a click away on their own page.
+function RepCard({ r, st, g, b, showBonus, i, onOpen }) {
+  const regions = repRegions(r);
+  const owed = owedOf(r);
+  const name = r.user?.name || r.code;
+  return (
+    <button
+      type="button"
+      data-rep={r.code}
+      onClick={onOpen}
+      // A late rep is the one card that needs action, so only that card is tinted.
+      data-tone={st.key === 'late' ? 'late' : undefined}
+      style={{ animationDelay: `${Math.min(i, 12) * 30}ms` }}
+      className={clsx(
+        'stat-glass animate-rise flex flex-col p-3 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 sm:p-3.5',
+        st.key === 'off' && 'opacity-75',
+      )}
+    >
+      {/* Who they are, where they stand, and how they grade. A long name is
+          never cut: the chip drops under it, and the name itself may wrap. */}
+      <div className="flex w-full items-start gap-2.5">
+        <span className={clsx('flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset', hueFor(r.code))} aria-hidden="true">
+          {initials(name) || '?'}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <p className="line-clamp-2 min-w-0 break-words text-[15px] font-semibold leading-5 text-foreground" title={name}>{name}</p>
+            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 text-[10px] font-medium leading-4 ring-1 ${st.cls}`}>
+              {st.key === 'late'
+                ? <AlertTriangle className="h-2.5 w-2.5" />
+                : <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />}
+              {st.label}
+            </span>
+          </div>
+          <p className="mt-1 break-words text-[11px] leading-4 text-faint">
+            {r.code}{regions.length ? ` · ${regions.join(', ')}` : ''}
+            {/* A rep switched off while still holding stock sits under Late or Running; say so here. */}
+            {!r.isActive && st.key !== 'off' && <span className="whitespace-nowrap text-white/60"> · not active</span>}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          {g.known ? (
+            <>
+              <div className={`h-5 text-[22px] font-bold leading-5 tabular-nums ${g.text}`}>
+                {g.pct}<span className="text-sm font-semibold">%</span>
+              </div>
+              <div className="mt-1 whitespace-nowrap text-[11px] leading-4 text-faint">{g.sub}</div>
+            </>
+          ) : (
+            // No rate yet: a quiet note on the name's line, not a big dash that reads like a button.
+            <div className="flex h-5 items-center">
+              <span className="whitespace-nowrap rounded-full px-1.5 text-[10px] leading-4 text-faint ring-1 ring-white/[0.08]">{g.sub}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* What they are holding, and what they are owed — peers, not a figure and a whisper.
+          mt-auto: in a row of cards the figures line up even when one name takes two lines. */}
+      <div className="mt-auto w-full">
+        <div className="mt-2.5 flex w-full border-t border-white/[0.06] pt-2.5">
+          <div className="min-w-0 flex-1 pr-3">
+            <div className={`whitespace-nowrap text-base font-bold leading-5 tabular-nums ${r.heldUnits > 0 ? 'text-foreground' : 'text-muted'}`}>
+              {formatNumber(r.heldUnits || 0)} <span className="text-xs font-normal text-faint">boxes</span>
+            </div>
+            <div className={clsx('mt-0.5 truncate text-[11px] leading-4', st.key === 'late' ? 'text-rose-300/90' : 'text-faint')}>{st.detail}</div>
+          </div>
+          {/* Half the card, and wider only when an amount needs it — money is never cut. */}
+          <div className="w-1/2 min-w-max shrink-0 border-l border-white/[0.06] pl-3">
+            <div className={`whitespace-nowrap text-base font-bold leading-5 tabular-nums ${r.commissionOwed > 0 ? 'text-amber-300' : 'text-muted'}`}>
+              {formatCurrency(owed)}
+            </div>
+            <div className="mt-0.5 whitespace-nowrap text-[11px] leading-4 text-faint">
+              {r.commissionOwed > 0 ? 'commission owed' : 'nothing owed'}
+            </div>
+          </div>
+        </div>
+
+        {showBonus && <BonusTrack b={b} active={r.isActive} />}
+      </div>
+    </button>
+  );
+}
+
 export default function SalesReps() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
@@ -121,23 +314,53 @@ export default function SalesReps() {
   // Making someone a rep is the owner's (the server refuses staff, and its account list is owner-only).
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
 
-  const { data, isLoading } = useQuery({
+  // Search, group and order live in the address, so Back from a rep's page
+  // returns to the same list.
+  const [params, setParams] = useSearchParams();
+  const q = params.get('q') || '';
+  const show = FILTERS.some((f) => f.key === params.get('show')) ? params.get('show') : 'all';
+  const setParam = (key, value, fallback) => setParams((p) => {
+    const n = new URLSearchParams(p);
+    if (!value || value === fallback) n.delete(key); else n.set(key, value);
+    return n;
+  }, { replace: true });
+
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['sales-reps', { page }],
     queryFn: async () => unwrap(await api.get('/sales-reps', { params: { page, limit: 100 } })),
   });
 
-  // Late first, then whoever is holding the most of your stock.
-  const reps = [...(data?.data || [])].sort((a, b) => {
-    const sa = standingOf(a); const sb = standingOf(b);
-    return sa.rank - sb.rank
-      || Number(b.heldUnits || 0) - Number(a.heldUnits || 0)
-      || String(a.user?.name || '').localeCompare(String(b.user?.name || ''));
-  });
+  // The sales bonus run, read from the same endpoint and cache key as the
+  // Commissions page. Owner and warehouse staff may read it (the same roles
+  // this page is open to); if it ever fails, the bonus part simply is not drawn.
+  const bonusQ = useQuery({ queryKey: ['bonus-summary'], queryFn: async () => unwrap(await api.get('/commissions/bonus/summary')).data });
+  const bonusFor = new Map((bonusQ.isError ? [] : bonusQ.data?.items || []).filter((b) => b.configured).map((b) => [b.salesRepId, b]));
+  const showBonus = bonusFor.size > 0;
+  const starts = [...bonusFor.values()].map((b) => new Date(b.cycleStart).getTime()).filter(Number.isFinite);
+  const sharedStart = starts.length && starts.every((t) => t === starts[0]) ? starts[0] : null;
+
+  const sortKey = SORTS.some((s) => s.key === params.get('sort') && (!s.bonus || showBonus)) ? params.get('sort') : 'attention';
+  const sort = SORTS.find((s) => s.key === sortKey);
+
+  const rows = (data?.data || []).map((r) => ({ r, st: standingOf(r), g: gradeOf(r), b: bonusFor.get(r.id) || null }));
+  const reps = rows.map((x) => x.r);
+  const counts = rows.reduce((c, x) => ({ ...c, [x.st.key]: (c[x.st.key] || 0) + 1 }), { all: rows.length });
+
+  const needle = q.trim().toLowerCase();
+  const shown = rows
+    .filter((x) => show === 'all' || x.st.key === show)
+    .filter((x) => !needle || [nameOf(x.r), x.r.code, ...repRegions(x.r), x.r.isActive ? '' : 'inactive'].some((v) => String(v || '').toLowerCase().includes(needle)))
+    .sort(sort.cmp);
+  const narrowed = show !== 'all' || !!needle;
+  // The list asks for 100 reps a page; past that, search and the chip counts
+  // only see the page on screen, and the page says so.
+  const partial = data?.meta?.totalPages > 1;
+  const clearAll = () => setParams((p) => { const n = new URLSearchParams(p); n.delete('q'); n.delete('show'); return n; }, { replace: true });
 
   const t = reps.reduce((a, r) => ({
     boxes: a.boxes + Number(r.heldUnits || 0),
     value: a.value + Number(r.heldStockValue || 0),
-    owed: a.owed + Math.max(0, Number(r.commissionOwed || 0)),
+    owed: a.owed + owedOf(r),
     late: a.late + Number(r.overdueOrders || 0),
     lateReps: a.lateReps + (r.overdueOrders > 0 ? 1 : 0),
     settled: a.settled + Number(r.settledOrders || 0),
@@ -155,6 +378,16 @@ export default function SalesReps() {
     if (pct <= 0 && t.onTime > 0) pct = 1;
     return Math.min(100, Math.max(0, pct));
   })();
+  const rateTone = (p) => (p >= 90 ? 'text-emerald-300' : p >= 70 ? 'text-amber-300' : 'text-rose-300');
+
+  const strip = [
+    { label: 'Boxes out with reps', value: formatNumber(t.boxes), sub: `${formatCurrency(t.value)} of stock`, num: 'text-violet-300', dot: 'bg-violet-400' },
+    { label: 'Running late', value: formatNumber(t.late), sub: t.late > 0 ? `${formatNumber(t.lateReps)} rep${t.lateReps === 1 ? '' : 's'} past deadline` : 'everyone inside the window', num: t.late > 0 ? 'text-rose-300' : 'text-foreground', dot: t.late > 0 ? 'bg-rose-400' : 'bg-white/25' },
+    { label: 'Commission owed', value: formatCurrency(t.owed), sub: 'earned, not yet withdrawn', num: t.owed > 0 ? 'text-amber-300' : 'text-foreground', dot: 'bg-amber-400' },
+    { label: 'Settled on time', value: teamRate == null ? '—' : `${teamRate}%`, sub: teamRate == null ? 'no orders closed yet' : `of ${formatNumber(t.settled)} orders closed`, num: teamRate == null ? 'text-foreground' : rateTone(teamRate), dot: 'bg-emerald-400', bar: teamRate },
+  ];
+  // Hairlines between the four: a 2 × 2 block on a phone, one row from sm.
+  const cellLines = ['', 'border-l', 'border-t sm:border-l sm:border-t-0', 'border-l border-t sm:border-t-0'];
 
   return (
     <div>
@@ -164,94 +397,132 @@ export default function SalesReps() {
 
       {reps.length > 0 && (
         <div className="glass-list mb-4">
-          <div className="grid grid-cols-2 divide-x divide-white/[0.06] sm:grid-cols-4">
-            {[
-              { label: 'Boxes out with reps', value: formatNumber(t.boxes), sub: `${formatCurrency(t.value)} of stock`, num: 'text-violet-300' },
-              { label: 'Running late', value: formatNumber(t.late), sub: t.late > 0 ? `${formatNumber(t.lateReps)} rep${t.lateReps === 1 ? '' : 's'} past deadline` : 'everyone inside the window', num: t.late > 0 ? 'text-rose-300' : 'text-foreground' },
-              { label: 'Commission owed', value: formatCurrency(t.owed), sub: 'earned, not yet withdrawn', num: t.owed > 0 ? 'text-amber-300' : 'text-foreground' },
-              { label: 'Settled on time', value: teamRate == null ? '—' : `${teamRate}%`, sub: teamRate == null ? 'no orders closed yet' : `of ${formatNumber(t.settled)} orders closed`, num: teamRate == null ? 'text-foreground' : teamRate >= 90 ? 'text-emerald-300' : teamRate >= 70 ? 'text-amber-300' : 'text-rose-300' },
-            ].map((c) => (
-              <div key={c.label} className="p-4">
-                <p className="text-xs font-medium text-muted">{c.label}</p>
-                <p className={`mt-1.5 text-xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
-                <p className="mt-0.5 text-[11px] text-faint">{c.sub}</p>
+          <dl className="grid grid-cols-2 sm:grid-cols-4">
+            {strip.map((c, n) => (
+              <div key={c.label} data-strip={c.label} className={clsx('min-w-0 border-white/[0.06] px-3.5 py-3 sm:p-4', cellLines[n])}>
+                <dt className="flex items-center gap-1.5 truncate text-[11px] font-medium text-white/55">
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${c.dot}`} aria-hidden="true" />
+                  {c.label}
+                </dt>
+                {/* The on-time bar sits beside its figure, so all four captions share one line. */}
+                <dd className={`mt-1.5 flex items-center gap-2.5 whitespace-nowrap text-lg font-bold leading-none tabular-nums sm:text-xl ${c.num}`}>
+                  {c.value}
+                  {c.bar != null && (
+                    <span className="h-1 w-10 shrink overflow-hidden rounded-full bg-white/[0.07] sm:w-16" aria-hidden="true">
+                      <span className={clsx('block h-full rounded-full', c.bar >= 90 ? 'bg-emerald-400' : c.bar >= 70 ? 'bg-amber-400' : 'bg-rose-400')} style={{ width: `${c.bar}%` }} />
+                    </span>
+                  )}
+                </dd>
+                <dd className="mt-1.5 text-[11px] leading-snug text-white/50">{c.sub}</dd>
               </div>
             ))}
-          </div>
+          </dl>
         </div>
       )}
 
       {isLoading ? (
         <Card><PageSpinner /></Card>
+      ) : isError ? (
+        <Card><LoadError what="the reps" onRetry={refetch} /></Card>
       ) : !reps.length ? (
         <Card><EmptyState title="No sales reps" icon={UserCog} action={isAdmin && <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>} /></Card>
       ) : (
         <>
-          {/* Four things per card and nothing else: who, where they stand,
-              what they are carrying, what they are owed. The rest is a click
-              away on their own page — a card is a glance, not a report. */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {reps.map((r, i) => {
-              const hue = hueFor(r.code);
-              const st = standingOf(r);
-              const g = gradeOf(r);
-              return (
-                <button
-                  key={r.id}
-                  onClick={() => navigate(`/reps/${r.id}`)}
-                  style={{ animationDelay: `${i * 35}ms` }}
-                  className="stat-glass animate-rise group p-4 pl-5 text-left transition duration-200 hover:brightness-110 hover:ring-1 hover:ring-white/20"
-                >
-                  <span className={`absolute inset-y-0 left-0 w-1 ${hue.edge}`} aria-hidden="true" />
-
-                  {/* Who they are, where they stand, and how they grade. */}
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="truncate font-semibold text-foreground">{r.user?.name}</span>
-                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ${st.cls}`}>
-                          {st.key === 'late'
-                            ? <AlertTriangle className="h-2.5 w-2.5" />
-                            : <span className={`h-1.5 w-1.5 rounded-full ${st.dot}`} />}
-                          {st.label}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 truncate text-xs text-faint">{r.code}{repRegions(r).length ? ` · ${repRegions(r).join(', ')}` : ''}</div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      {g.known ? (
-                        <div className={`text-2xl font-bold leading-none tabular-nums ${g.text}`}>
-                          {g.pct}<span className="text-sm font-semibold">%</span>
-                        </div>
-                      ) : (
-                        <div className="text-2xl font-bold leading-none text-muted">—</div>
-                      )}
-                      <div className="mt-1 whitespace-nowrap text-[11px] text-faint">{g.sub}</div>
-                    </div>
-                  </div>
-
-                  {/* What they are holding, and what they are owed — peers, not
-                      a figure and a whisper. */}
-                  <div className="mt-3 grid grid-cols-2 border-t border-white/[0.06] pt-3">
-                    <div className="min-w-0 pr-3">
-                      <div className={`truncate text-base font-bold tabular-nums ${r.heldUnits > 0 ? 'text-foreground' : 'text-muted'}`}>
-                        {formatNumber(r.heldUnits || 0)} <span className="text-xs font-normal text-faint">boxes</span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[11px] text-faint">{st.detail}</div>
-                    </div>
-                    <div className="min-w-0 border-l border-white/[0.06] pl-3">
-                      <div className={`truncate text-base font-bold tabular-nums ${r.commissionOwed > 0 ? 'text-amber-300' : 'text-muted'}`}>
-                        {formatCurrency(Math.max(0, Number(r.commissionOwed || 0)))}
-                      </div>
-                      <div className="mt-0.5 truncate text-[11px] text-faint">
-                        {r.commissionOwed > 0 ? 'commission owed' : 'nothing owed'}
-                      </div>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          {/* Find a rep: the group chips (counts always add up to All), a search, an order. */}
+          <div className="mb-3 flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            {/* Wraps to two lines on a phone rather than hiding a chip off the edge. */}
+            <div role="group" aria-label="Show reps" className="-mx-1 flex flex-wrap gap-1.5 px-1 py-0.5 sm:flex-nowrap sm:overflow-x-auto sm:[scrollbar-width:none]">
+              {FILTERS.filter((f) => f.key !== 'off' || counts.off > 0 || show === 'off').map((f) => {
+                const on = show === f.key;
+                const n = counts[f.key] || 0;
+                return (
+                  <button
+                    key={f.key}
+                    type="button"
+                    data-filter={f.key}
+                    aria-pressed={on}
+                    onClick={() => setParam('show', f.key, 'all')}
+                    className={clsx(
+                      'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30',
+                      on ? 'bg-white/[0.12] text-foreground ring-white/20' : 'text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground',
+                    )}
+                  >
+                    {f.label}
+                    <span className={clsx('tabular-nums', f.key === 'late' && n > 0 ? 'text-rose-300' : n > 0 ? 'text-white/60' : 'text-white/30')}>{formatNumber(n)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setParam('q', e.target.value, '')}
+                  onKeyDown={(e) => { if (e.key === 'Escape' && q) { e.preventDefault(); setParam('q', '', ''); } }}
+                  placeholder="Name, code, region"
+                  aria-label="Search reps by name, code or region"
+                  className={clsx('input h-9 py-0 pl-9 sm:py-0 [&::-webkit-search-cancel-button]:appearance-none', q ? 'pr-9' : 'pr-3')}
+                />
+                {q && (
+                  <button type="button" onClick={() => setParam('q', '', '')} aria-label="Clear search"
+                    className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-faint transition hover:bg-white/[0.08] hover:text-foreground">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="relative w-[9.5rem] shrink-0 sm:w-40">
+                <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" aria-hidden="true" />
+                <Select data-sort value={sortKey} onChange={(e) => setParam('sort', e.target.value, 'attention')} aria-label="Order reps by" title="Order reps by" className="h-9 py-0 pl-8 sm:py-0">
+                  {SORTS.filter((s) => !s.bonus || showBonus).map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </Select>
+              </div>
+            </div>
           </div>
+
+          {/* One quiet line: what is on screen, and where the bonus figures run from. */}
+          {((narrowed && shown.length > 0) || partial || showBonus) && (
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-1 text-[11px] leading-4">
+              {narrowed && shown.length > 0 ? (
+                <p className="text-muted" aria-live="polite">
+                  Showing {formatNumber(shown.length)} of {formatNumber(rows.length)} reps{partial ? ' on this page' : ''}
+                  <button type="button" onClick={clearAll} className="ml-2 font-semibold text-foreground/80 underline-offset-2 hover:underline">Show all</button>
+                </p>
+              ) : partial ? (
+                <p className="text-muted">Search and counts cover this page — {formatNumber(rows.length)} of {formatNumber(data.meta?.total)} reps</p>
+              ) : <span />}
+              {showBonus && (
+                <p className="text-faint">
+                  <span className="whitespace-nowrap">Sales bonus from {sharedStart ? formatDate(new Date(sharedStart)) : 'each rep’s own start'}</span>
+                  {' · '}<span className="whitespace-nowrap">paid on Commissions</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {!shown.length ? (
+            <div className="glass-list px-4 py-10 text-center" aria-live="polite">
+              <p className="text-sm font-semibold text-foreground">
+                {needle ? <>No rep matches “{q.trim()}”</> : NONE_IN[show]}
+              </p>
+              {needle && show !== 'all' && <p className="mt-1 text-xs text-muted">among the {FILTERS.find((f) => f.key === show)?.label.toLowerCase()} reps</p>}
+              {needle && partial && <p className="mt-1 text-xs text-muted">Only this page of {formatNumber(rows.length)} reps was searched — try the next page.</p>}
+              <button type="button" onClick={clearAll}
+                className="mt-4 rounded-full px-3.5 py-1.5 text-xs font-semibold text-foreground ring-1 ring-white/15 transition hover:bg-white/[0.06]">
+                Show all reps
+              </button>
+            </div>
+          ) : (
+            // One on a phone, two on a tablet, three on a small laptop, four at 1440, five on a big
+            // screen. Names wrap and amounts widen their half rather than being cut.
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 min-[1400px]:grid-cols-4 min-[1800px]:grid-cols-5">
+              {shown.map((x, i) => (
+                <RepCard key={x.r.id} r={x.r} st={x.st} g={x.g} b={x.b} showBonus={showBonus} i={i} onOpen={() => navigate(`/reps/${x.r.id}`)} />
+              ))}
+            </div>
+          )}
+
           {data.meta?.totalPages > 1 && (
             <div className="mt-4">
               <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
