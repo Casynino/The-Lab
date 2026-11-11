@@ -27,8 +27,11 @@ const list = asyncHandler(async (req, res) => {
   if (req.user.role === ROLES.SALES_REP) {
     filters.salesRepId = req.user.salesRepId;
     filters.includeWaived = false; // a written-off fine is not the rep's to carry
-  } else if (q.salesRepId) {
-    filters.salesRepId = q.salesRepId;
+  } else {
+    if (q.salesRepId) filters.salesRepId = q.salesRepId;
+    // The owner's table asks for the fines still charged and the forgiven ones separately: one page of
+    // both, newest first, left older applied fines unloaded — and so impossible to forgive.
+    if (q.status === 'APPLIED' || q.status === 'WAIVED') filters.status = q.status;
   }
   if (q.settlementId) filters.settlementId = q.settlementId;
 
