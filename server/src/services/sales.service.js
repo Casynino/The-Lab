@@ -368,6 +368,11 @@ async function cancelSale(id, actor, reason) {
     });
     if (!sale) throw ApiError.notFound('Sale not found');
     if (sale.status === 'CANCELLED') throw ApiError.badRequest('Sale is already cancelled');
+    // Claim the cancel before anything moves (audit #41): two clicks used to both pass the check above
+    // and both put the stock back and both take the sale off its order. The second now waits, finds
+    // it cancelled and stops with nothing written.
+    const claimed = await tx.sale.updateMany({ where: { id, status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED' } });
+    if (claimed.count !== 1) throw ApiError.conflict('This sale was already cancelled.');
 
     const source = resolveSource({ salesRepId: sale.salesRepId, warehouseId: sale.warehouseId });
 
@@ -398,6 +403,10 @@ async function cancelSale(id, actor, reason) {
     // roll back the settled value, un-close the order if needed, and recompute
     // its status. (Lazy require: settlement.service requires this module.)
     if (sale.settlementId) {
+      // eslint-disable-next-line global-require
+      const settlementSvc = require('./settlement.service');
+      // Under the order's row lock, like every other change to an order's settled value.
+      await settlementSvc.lockOrder(tx, sale.settlementId);
       const stl = await tx.settlement.findUnique({ where: { id: sale.settlementId } });
       if (stl) {
         const newSettled = Math.max(0, round2(toNumber(stl.settledValue) - toNumber(sale.total)));
@@ -405,8 +414,6 @@ async function cancelSale(id, actor, reason) {
           where: { id: sale.settlementId },
           data: { settledValue: newSettled, settledAt: null },
         });
-        // eslint-disable-next-line global-require
-        const settlementSvc = require('./settlement.service');
         await settlementSvc.recomputeStatus(tx, sale.settlementId);
       }
     }

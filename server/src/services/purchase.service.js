@@ -180,6 +180,11 @@ async function updatePurchaseOrder(id, payload) {
   const po = await prisma.purchaseOrder.findUnique({ where: { id } });
   if (!po) throw ApiError.notFound('Purchase order not found');
   if (po.status === 'RECEIVED') throw ApiError.badRequest('A received purchase order cannot be edited');
+  // Received is reached only by receiving (audit #40): marking it here left the order "received" with
+  // no stock ever brought in, and Receive then refused it as already received.
+  if (payload.status === 'RECEIVED') {
+    throw ApiError.badRequest('Use Receive to mark it received — that is what brings the stock into the warehouse.');
+  }
 
   // A PO with money already paid against it cannot simply be cancelled:
   // cancelling removes it from "purchased" AND its payments from "paid" at
@@ -291,6 +296,14 @@ async function receivePurchaseOrder(id, actor, { actualArrival, stockAlreadyCoun
     if (po.status === 'RECEIVED') throw ApiError.badRequest('Purchase order already received');
     if (po.status === 'CANCELLED') throw ApiError.badRequest('Cancelled purchase order cannot be received');
     if (po.items.length === 0) throw ApiError.badRequest('Purchase order has no items');
+    // Claim it before any stock moves (audit #41): two clicks on Receive used to both pass the check
+    // above and both bring the stock in. The second one now waits for the first, finds it received,
+    // and stops here with nothing written.
+    const claimed = await tx.purchaseOrder.updateMany({
+      where: { id, status: { notIn: ['RECEIVED', 'CANCELLED'] } },
+      data: { status: 'RECEIVED' },
+    });
+    if (claimed.count !== 1) throw ApiError.conflict('This purchase order was already received.');
 
     let warehouseId = po.warehouseId;
     if (!warehouseId) {
