@@ -89,6 +89,37 @@ async function createTransferTx(tx, payload, actor) {
         });
       }
 
+      // A rep's boxes that an open order still owes come back through a Return on that order, never a
+      // plain transfer: the transfer took them off the rep while the order went on owing them — and
+      // drawing late fines on boxes he no longer had (audit #23, 11 Nov 2026). Boxes he holds beyond
+      // what his open orders owe may still be moved this way.
+      if (payload.direction === 'REP_TO_WAREHOUSE') {
+        // eslint-disable-next-line global-require
+        const settlementSvc = require('./settlement.service');
+        const open = await tx.settlement.findMany({
+          where: { salesRepId: payload.fromRepId, status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } },
+        });
+        const want = new Map();
+        for (const l of lines) want.set(l.productId, (want.get(l.productId) || 0) + l.baseQuantity);
+        for (const [productId, n] of want) {
+          let owed = 0;
+          const owing = [];
+          for (const stl of open) {
+            const left = await settlementSvc.productOutstanding(tx, stl, productId);
+            if (left > 0) { owed += left; owing.push(stl.settlementNumber); }
+          }
+          if (!owed) continue;
+          const held = await inventory.getBalance(tx, { productId, type: inventory.LOCATION.SALES_REP, salesRepId: payload.fromRepId });
+          const free = Math.max(0, held - owed);
+          if (n > free) {
+            const name = productMap.get(productId)?.name || 'this product';
+            throw ApiError.badRequest(
+              `${owed} box(es) of ${name} are still owed on order ${owing.join(', ')}. Bring them back with a Return on that order — it closes the order and stops its fines.${free ? ` Only ${free} box(es) can be moved by transfer.` : ''}`,
+            );
+          }
+        }
+      }
+
       const transferNumber = await nextDocNumber(tx.stockTransfer, 'transferNumber', 'TRF');
 
       const transfer = await tx.stockTransfer.create({
