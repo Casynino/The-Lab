@@ -27,7 +27,8 @@
 // no arrows or emoji, so the little ▲ ▼ are drawn as shapes.
 // ===========================================================================
 
-const PDFDocument = require('pdfkit');
+// pdfkit is loaded when the first report is drawn (see createReport), not when the server starts: a
+// fresh server instance would otherwise load it before answering any request, though only PDFs use it.
 
 // ── the palette: the app's near-black and the logo's red, on paper ───────────
 const C = {
@@ -75,6 +76,7 @@ function pct(cur, prev) {
 }
 
 function createReport({ kind, title, period, number, generatedAt, blurb, logo, author = 'ZELab' }) {
+  const PDFDocument = require('pdfkit');
   const doc = new PDFDocument({
     size: 'A4',
     margins: { top: PAGE.top, bottom: PAGE.bottom, left: PAGE.left, right: PAGE.right },

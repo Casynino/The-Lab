@@ -1,13 +1,16 @@
 'use strict';
 
-const ExcelJS = require('exceljs');
-const PDFDocument = require('pdfkit');
 const env = require('../config/env');
+
+// exceljs and pdfkit are loaded the first time a file is actually made, not when the server starts:
+// together they are a large part of what a fresh server instance loads before it can answer anything,
+// and only exports need them.
 
 // Build an .xlsx buffer. `columns` = [{ header, key, width }]. `rows` = array
 // of objects keyed by column keys. Optional `totals` object appended as a bold
 // footer row.
 async function excelBuffer({ sheetName = 'Report', title, columns, rows, totals }) {
+  const ExcelJS = require('exceljs');
   const wb = new ExcelJS.Workbook();
   wb.creator = 'ZELab';
   wb.created = new Date();
@@ -43,6 +46,7 @@ async function excelBuffer({ sheetName = 'Report', title, columns, rows, totals 
 
 // Build a PDF buffer with a simple, clean tabular layout.
 function pdfBuffer({ title, subtitle, columns, rows, totalsRow }) {
+  const PDFDocument = require('pdfkit');
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 36 });
     const chunks = [];

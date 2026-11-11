@@ -5,7 +5,7 @@
 // crucially — pagination: every block checks remaining space and opens a new
 // page instead of colliding with the footer.
 
-const PDFDocument = require('pdfkit');
+// pdfkit is loaded when the first statement is drawn (see createStatement), not at server start.
 
 const INK = '#111827';
 const MUTED = '#6b7280';
@@ -18,6 +18,7 @@ const fmt = (n) => `TSh ${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
 // Creates a statement document. Returns drawing helpers plus done() which
 // finalizes the doc and resolves to the PDF Buffer.
 function createStatement({ title, periodLabel, generatedAt }) {
+  const PDFDocument = require('pdfkit');
   const doc = new PDFDocument({ size: 'A4', margin: 46 });
   const chunks = [];
   const buffer = new Promise((resolve, reject) => {
