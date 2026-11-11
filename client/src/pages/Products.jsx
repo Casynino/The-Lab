@@ -6,7 +6,8 @@ import { ROLES } from '@/lib/constants';
 import { useForm, Controller } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import { Plus, Pencil, Trash2, Package, X, TrendingDown, Boxes, Wallet } from 'lucide-react';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useBrands, useCategories, usePackagingUnits, useDebounce } from '@/lib/hooks';
 import { formatCurrency, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
@@ -211,8 +212,8 @@ function ProductsCatalogue() {
   const { data: units = [] } = usePackagingUnits();
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['products', { page, search: debounced, brandId, categoryId }],
-    queryFn: async () => unwrap(await api.get('/products', { params: { page, limit: 15, search: debounced, brandId: brandId || undefined, categoryId: categoryId || undefined } })),
+    ...pageQueries.products({ page, search: debounced, brandId, categoryId }),
+    placeholderData: keepOnPageTurn({ brandId, categoryId }),
   });
 
   const del = useMutation({

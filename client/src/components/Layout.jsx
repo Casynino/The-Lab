@@ -19,6 +19,7 @@ import { repRegions, sayRegions } from '@/lib/repRegions';
 import { tzDateLabel } from '@/lib/tz';
 import { initials, fromNow } from '@/lib/format';
 import api, { unwrap, apiError, tokenStore } from '@/lib/api';
+import { pageQueries, prefetchRoute, warmUp } from '@/lib/pageQueries';
 import { Modal, Button, Field, Input } from '@/components/ui';
 
 const ICONS = {
@@ -724,17 +725,77 @@ export default function Layout() {
   const setFold = (next) => { writeStore(SIDEBAR_KEY, next); setCollapsed(next); };
 
   const { data: unread = 0 } = useQuery({
-    queryKey: ['notifications', 'unread'],
-    queryFn: async () => unwrap(await api.get('/notifications/unread-count')).data.unread,
+    ...pageQueries.unread(),
     refetchInterval: STEADY,
   });
 
   const { data: pendingActions = {} } = useQuery({
-    queryKey: ['dashboard', 'pending-actions'],
-    queryFn: async () => unwrap(await api.get('/dashboard/pending-actions')).data,
+    ...pageQueries.pendingActions(),
     enabled: hasRole(ROLES.WAREHOUSE_STAFF),
     refetchInterval: STEADY,
   });
+
+  /* Opening a page should show it, not a spinner for a round trip to Frankfurt (~0.3 s from Tanzania).
+     So a page's first answers are asked for the moment a finger lands on its link, the mouse rests on
+     it or the keyboard reaches it — by the time the click lands they are usually here — and, once Home
+     has drawn, the person's main pages are read ahead quietly, one at a time (lib/routeQueries.js).
+     Nothing is asked twice: a fresh answer is kept, and a page that opens meanwhile shares the one on
+     its way. Any link in the app counts, not only the menu, and so does a tab button that names the
+     page it opens (data-prefetch, e.g. Finance's tabs). */
+  const role = user?.role;
+  useEffect(() => {
+    if (!role) return undefined;
+    let rest = 0;
+    const linkOf = (e) => {
+      const a = e.target instanceof Element ? e.target.closest('a[href], [data-prefetch]') : null;
+      if (!a) return null;
+      try {
+        const url = new URL(a.getAttribute('data-prefetch') || a.href, window.location.href);
+        return url.origin === window.location.origin ? url : null;
+      } catch {
+        return null;
+      }
+    };
+    const ahead = (url) => prefetchRoute(qc, url.pathname, url.search, role);
+    // A mouse passing over the menu on its way somewhere is not a choice; resting on a link is.
+    const onOver = (e) => {
+      if (e.pointerType && e.pointerType !== 'mouse') return;
+      window.clearTimeout(rest);
+      const url = linkOf(e);
+      if (url) rest = window.setTimeout(() => ahead(url), 60);
+    };
+    const onPress = (e) => { const url = linkOf(e); if (url) ahead(url); };
+    document.addEventListener('pointerover', onOver, { passive: true });
+    document.addEventListener('pointerdown', onPress, { capture: true, passive: true });
+    document.addEventListener('touchstart', onPress, { capture: true, passive: true });
+    document.addEventListener('focusin', onPress);
+    return () => {
+      window.clearTimeout(rest);
+      document.removeEventListener('pointerover', onOver);
+      document.removeEventListener('pointerdown', onPress, { capture: true });
+      document.removeEventListener('touchstart', onPress, { capture: true });
+      document.removeEventListener('focusin', onPress);
+    };
+  }, [role, qc]);
+
+  useEffect(() => {
+    if (!role) return undefined;
+    // A phone saving data, or on 2G, reads nothing it was not asked for.
+    const conn = navigator.connection;
+    if (conn?.saveData || /2g$/.test(conn?.effectiveType || '')) return undefined;
+    let alive = true;
+    let timer = 0;
+    // After the first screen has drawn and its answers are in (waiting at most a few seconds more).
+    const later = (tries) => {
+      timer = window.setTimeout(() => {
+        if (!alive) return;
+        if (qc.isFetching() > 0 && tries < 6) { later(tries + 1); return; }
+        warmUp(qc, role, { here: window.location.pathname, alive: () => alive });
+      }, tries ? 1000 : 2500);
+    };
+    later(0);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [user?.id, role, qc]);
 
   const { data: recentNotes = [] } = useQuery({
     queryKey: ['notifications', 'recent'],

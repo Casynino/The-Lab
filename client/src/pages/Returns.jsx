@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { Plus, Search, X, CheckCircle, XCircle, Eye, Clock, CheckCircle2, PackageOpen, PackageCheck } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/hooks';
 import { ROLES } from '@/lib/constants';
@@ -618,13 +619,12 @@ export default function Returns() {
   const [confirmCancelId, setConfirmCancelId] = useState(null); // the rep's "are you sure?" before a cancel
 
   const { data: summary } = useQuery({
-    queryKey: ['returns', 'summary'],
-    queryFn: async () => unwrap(await api.get('/returns/summary')).data,
+    ...pageQueries.returnsSummary(),
     refetchInterval: LIVE,
   });
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['returns', { type: typeFilter, page }],
-    queryFn: async () => unwrap(await api.get('/returns', { params: { page, limit: 100, type: typeFilter || undefined } })),
+    ...pageQueries.returns({ type: typeFilter, page }),
+    placeholderData: keepOnPageTurn({ type: typeFilter }),
     refetchInterval: LIVE,
   });
 

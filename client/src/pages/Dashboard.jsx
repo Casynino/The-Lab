@@ -30,7 +30,8 @@ import {
 import { motion } from 'motion/react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { apiError } from '@/lib/api';
+import { pageQueries } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber, formatPercent, formatDateTime } from '@/lib/format';
 import { TrendChart, BarChartCard, DonutChart, MonthBars } from '@/components/chartsLazy';
@@ -514,8 +515,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['dashboard', 'command'],
-    queryFn: async () => unwrap(await api.get('/dashboard/command')).data,
+    ...pageQueries.dashboardCommand(),
     refetchInterval: STEADY, // live business status
   });
   // The shape of the business, read on its own: months, ratios, the age of the
@@ -523,8 +523,7 @@ export default function Dashboard() {
   // sales must never keep the headline figures off the screen, and a failure
   // here hides one region rather than the page.
   const { data: analysis } = useQuery({
-    queryKey: ['dashboard', 'analysis'],
-    queryFn: async () => unwrap(await api.get('/dashboard/analysis')).data,
+    ...pageQueries.dashboardAnalysis(),
     refetchInterval: STEADY * 4,
     retry: 1,
   });

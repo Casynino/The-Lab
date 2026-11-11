@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, PackageX } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useWarehouses, useSalesReps, useDebounce } from '@/lib/hooks';
 import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, sharePercents } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
@@ -131,13 +132,10 @@ function Balances() {
   const [search, setSearch] = useState('');
   const [brand, setBrand] = useState('');
   const debounced = useDebounce(search);
-  const { data: brands = [] } = useQuery({
-    queryKey: ['brands', 'all'],
-    queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data,
-  });
+  const { data: brands = [] } = useQuery(pageQueries.brandsAll());
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['inventory', 'balances', { page, search: debounced, brand }],
-    queryFn: async () => unwrap(await api.get('/inventory/balances', { params: { page, limit: 24, search: debounced, brand: brand || undefined } })),
+    ...pageQueries.inventoryBalances({ page, search: debounced, brand }),
+    placeholderData: keepOnPageTurn({ brand }),
   });
 
   const rows = sortByCanonical(data?.data || []);
@@ -402,6 +400,7 @@ function Movements() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['inventory', 'movements', { page, type }],
     queryFn: async () => unwrap(await api.get('/inventory/movements', { params: { page, limit: 20, type: type || undefined } })),
+    placeholderData: keepOnPageTurn({ type }),
   });
   return (
     <Card>
@@ -452,6 +451,7 @@ function ProductStockModal({ row, onClose }) {
     queryFn: async () => unwrap(await api.get('/inventory/movements', {
       params: { productId: row.productId, page, limit: 15 },
     })),
+    placeholderData: keepOnPageTurn({ productId: row.productId }),
   });
 
   const sorted = [...(row.locations || [])].sort((a, b) => {

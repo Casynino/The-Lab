@@ -9,6 +9,7 @@ import {
   Loader2, CheckCircle2, Pencil, ChevronRight, Clock, XCircle, Ban, Boxes, Wallet, Timer,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts } from '@/lib/hooks';
 import { ROLES, REQUEST_STATUS_META } from '@/lib/constants';
@@ -674,8 +675,7 @@ function RepRequestRow({ r, onClick }) {
 
 function RepRequestsView({ onView }) {
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['stock-requests', 'rep-all'],
-    queryFn: async () => unwrap(await api.get('/stock-requests', { params: { limit: 100 } })),
+    ...pageQueries.stockRequestsMine(),
     refetchInterval: STEADY,
   });
 
@@ -732,8 +732,7 @@ function RepRequestsView({ onView }) {
 function PendingRequestApprovals({ onReview }) {
   const qc = useQueryClient();
   const { data } = useQuery({
-    queryKey: ['stock-requests', 'pending-approvals'],
-    queryFn: async () => unwrap(await api.get('/stock-requests', { params: { status: 'PENDING', limit: 50 } })),
+    ...pageQueries.stockRequestsWaiting(),
     refetchInterval: LIVE,
   });
   const pending = data?.data || [];
@@ -823,14 +822,9 @@ function StaffRequestTable({ onView }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['stock-requests', { page, status }],
-    // Pending requests live in the approval strip above — the history table
-    // shows decided ones unless the filter explicitly asks for pending. The
-    // server leaves them out before paging (`decided`), so every page is full
-    // and the pager counts the rows it shows.
-    queryFn: async () => unwrap(await api.get('/stock-requests', {
-      params: { page, limit: 15, status: status || undefined, decided: status ? undefined : 'true' },
-    })),
+    // Decided requests only unless the filter asks for pending: see pageQueries.stockRequests.
+    ...pageQueries.stockRequests({ page, status }),
+    placeholderData: keepOnPageTurn({ status }),
   });
 
   const rows = data?.data || [];

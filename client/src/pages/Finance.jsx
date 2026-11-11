@@ -2,7 +2,7 @@ import { STEADY } from '@/lib/polling';
 import { useState, useRef, useEffect } from 'react';
 import ReportsArchive from '@/components/ReportsArchive';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
   Wallet, TrendingDown, Banknote, Landmark, Smartphone, Coins,
@@ -11,6 +11,7 @@ import {
   Undo2, CheckCircle2, Eye, EyeOff,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useBrands } from '@/lib/hooks';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
@@ -515,14 +516,10 @@ const Op = ({ children, wide }) => <span className={`hidden self-center px-1 pt-
 function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
   const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'overview', period],
-    queryFn: async () => unwrap(await api.get('/finance/overview', { params: { period } })).data,
+    ...pageQueries.financeOverview(period),
     refetchInterval: STEADY,
   });
-  const { data: cf } = useQuery({
-    queryKey: ['finance', 'cashflow', 'all'],
-    queryFn: async () => unwrap(await api.get('/finance/cashflow', { params: { period: 'all' } })).data,
-  });
+  const { data: cf } = useQuery(pageQueries.financeCashflow('all'));
   // On a very wide screen the month chart grows a little so it does not look flat.
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1800px)').matches);
   useEffect(() => {
@@ -1134,6 +1131,8 @@ function AccountStatementModal({ account, onClose }) {
     queryFn: async () => unwrap(await api.get('/finance/transactions', {
       params: { accountId: account.id, page, limit: 25, sortBy: 'occurredAt', sortDir: 'desc' },
     })),
+    // One account per window, so the previous page is always this account's.
+    placeholderData: keepPreviousData,
   });
   const rows = data?.data || [];
   const sums = data?.meta?.sums;
@@ -1400,13 +1399,10 @@ function Accounts({ onQuick, onNavigate }) {
   const mask = (s) => (hidden ? DOTS : s);
   // Transfers and balance corrections are the owner's (the server refuses staff); staff do not see them.
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
-  const { data: accounts = [], isLoading } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
+  const { data: accounts = [], isLoading } = useQuery(pageQueries.financeAccounts());
   // The newest movements across every account (the Ledger's own list, first eight rows). Under the 'finance'
   // key, so recording income, an expense or a transfer refreshes it with everything else.
-  const { data: latest } = useQuery({
-    queryKey: ['finance', 'transactions', 'latest'],
-    queryFn: async () => unwrap(await api.get('/finance/transactions', { params: { page: 1, limit: 8, sortBy: 'occurredAt', sortDir: 'desc' } })).data,
-  });
+  const { data: latest } = useQuery(pageQueries.financeLatest());
   if (isLoading) return <PageSpinner />;
   // Wallets hold the money; the Commission account holds a record of money the
   // owner paid out of his own hand. Adding a record into a cash total would
@@ -1568,15 +1564,10 @@ function Ledger({ expensesOnly }) {
   const [searchDraft, setSearchDraft] = useState(''); // what is being typed
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: brands = [] } = useQuery({ queryKey: ['brands', 'all'], queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data });
-  const params = { page, limit: 25, accountId: account || undefined, brandId: brand || undefined, category: category || undefined, search: search || undefined };
-  // Only genuine expenses. Filtering on direction alone swept in account
-  // transfers, stock purchases and commission payouts, so "Spent in this
-  // view" reported money that was not spent and contradicted the Overview.
-  if (expensesOnly) { params.direction = 'OUT'; params.type = 'EXPENSE'; }
-  else if (type) params.type = type;
+  // Expenses are genuine expenses only (not every OUT): see pageQueries.financeTransactions.
   const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'transactions', { page, account, type, brand, category, search, expensesOnly }],
-    queryFn: async () => unwrap(await api.get('/finance/transactions', { params })),
+    ...pageQueries.financeTransactions({ page, account, type, brand, category, search, expensesOnly }),
+    placeholderData: keepOnPageTurn({ account, type, brand, category, expensesOnly }),
   });
   const del = useMutation({
     mutationFn: (id) => api.delete(`/finance/transactions/${id}`, { data: { reason: 'Removed from finance ledger' } }),
@@ -1853,14 +1844,8 @@ const PROFIT_PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'Th
 
 function ProfitTab({ accounts = [] }) {
   const [period, setPeriod] = useState('all');
-  const { data, isLoading } = useQuery({
-    queryKey: ['reports', 'profit-overview', period],
-    queryFn: async () => unwrap(await api.get('/reports/profit-overview', { params: { period } })).data,
-  });
-  const { data: brandStockData } = useQuery({
-    queryKey: ['dashboard', 'brands'],
-    queryFn: async () => unwrap(await api.get('/dashboard/brands')).data,
-  });
+  const { data, isLoading } = useQuery(pageQueries.profitOverview(period));
+  const { data: brandStockData } = useQuery(pageQueries.brandStock());
   if (isLoading || !data) return <PageSpinner />;
   const stockByBrand = new Map((brandStockData?.brands || []).map((b) => [b.brandId, b]));
   const t = data.totals;
@@ -2152,10 +2137,7 @@ function KindRows({ rows, total, colours, empty }) {
 
 function CashFlowTab() {
   const [period, setPeriod] = useState('month');
-  const { data, isLoading } = useQuery({
-    queryKey: ['finance', 'cashflow', period],
-    queryFn: async () => unwrap(await api.get('/finance/cashflow', { params: { period } })).data,
-  });
+  const { data, isLoading } = useQuery(pageQueries.financeCashflow(period));
   if (isLoading || !data) return <PageSpinner />;
 
   const inRows = (data.byType || []).filter((r) => r.direction === 'IN').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count, hex: TYPE_HEX[r.type] }));
@@ -2790,10 +2772,7 @@ function ReturnGoodsModal({ supplier, outstanding, onClose, onDone }) {
 function SuppliersTab({ accounts }) {
   const [addOpen, setAddOpen] = useState(false);
   const [viewing, setViewing] = useState(null);
-  const { data: suppliers = [], isLoading } = useQuery({
-    queryKey: ['finance', 'suppliers'],
-    queryFn: async () => unwrap(await api.get('/finance/suppliers')).data,
-  });
+  const { data: suppliers = [], isLoading } = useQuery(pageQueries.financeSuppliers());
   if (isLoading) return <PageSpinner />;
   const totals = suppliers.reduce((s, x) => ({
     purchased: s.purchased + x.totalPurchased,
@@ -2894,8 +2873,8 @@ export default function Finance() {
   const setTab = (k) => { setTabState(k); setSearchParams(k === 'overview' ? {} : { tab: k }, { replace: true }); };
   const [money, setMoney] = useState(null); // 'income' | 'expense'
   const [ownerMoney, setOwnerMoney] = useState(null); // 'in' | 'out'
-  const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
-  const { data: categories = [] } = useQuery({ queryKey: ['finance', 'categories'], queryFn: async () => unwrap(await api.get('/finance/categories')).data });
+  const { data: accounts = [] } = useQuery(pageQueries.financeAccounts());
+  const { data: categories = [] } = useQuery(pageQueries.financeCategories());
 
   return (
     <div>
@@ -2908,7 +2887,7 @@ export default function Finance() {
 
       <div className="mb-6 tab-row">
         {TABS.map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
+          <button key={k} onClick={() => setTab(k)} data-prefetch={k === 'overview' ? '/finance' : `/finance?tab=${k}`}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k
               ? 'bg-brand-500 text-white ring-brand-500'
               : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { queryClient } from '@/lib/queryClient';
+import { CACHE_KEY } from '@/lib/cacheSnapshot';
 
 const TOKEN_KEY = 'haostock.accessToken';
 // When this tab last reloaded itself to answer the host's security challenge.
@@ -13,9 +14,12 @@ export const tokenStore = {
     if (access) localStorage.setItem(TOKEN_KEY, access);
     if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
   },
+  // Every way out of a session comes through here (signing out, idle, a refused sign-in, a failed
+  // refresh, a rep on a computer), so the last screens kept on this device go with it (lib/cacheSnapshot.js).
   clear: () => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(REFRESH_KEY);
+    try { localStorage.removeItem(CACHE_KEY); } catch { /* storage blocked: nothing was kept */ }
   },
 };
 
@@ -27,7 +31,7 @@ const api = axios.create({
 // The app's own look at the screen, sent with every request: a touch screen whose shorter side is under
 // 600px is a phone. The server combines it with what the browser says about itself (server/src/utils/
 // device.js) to keep sales-rep accounts on phones only. It can only ever narrow, never widen, access.
-function clientForm() {
+export function clientForm() {
   try {
     if (!window.matchMedia('(pointer: coarse)').matches) return 'desktop';
     const short = Math.min(window.screen.width, window.screen.height);
@@ -75,6 +79,9 @@ api.interceptors.response.use(
         refreshing =
           refreshing ||
           api.post('/auth/refresh', { refreshToken: tokenStore.getRefresh() }).then((r) => {
+            // Signed out while this was on its way (another request was refused at the same moment, or
+            // the person signed out): a late answer must not sign them back in.
+            if (!tokenStore.getRefresh()) throw new Error('Signed out');
             const { accessToken, refreshToken } = r.data.data.tokens;
             tokenStore.set(accessToken, refreshToken);
             return accessToken;

@@ -10,6 +10,7 @@ import {
   Boxes, ChevronRight, Mail, Phone, MapPin, Calendar, Coins, PackagePlus, Pencil, MessageCircle, Gauge,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { pageQueries } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } from '@/lib/format';
@@ -643,10 +644,7 @@ export default function SalesRepProfile() {
   // switching period refetches rather than showing last period's numbers.
   const [period, setPeriod] = useState('all');
   const { data, isLoading } = useQuery({
-    queryKey: ['sales-rep-profile', id, period],
-    queryFn: async () => unwrap(await api.get(`/sales-reps/${id}/profile`, {
-      params: period === 'all' ? {} : { period },
-    })).data,
+    ...pageQueries.repProfile({ id, period }),
     refetchInterval: STEADY,
     keepPreviousData: true,
   });
@@ -654,8 +652,7 @@ export default function SalesRepProfile() {
   // folded into the profile payload: it is a small, separate question, and it
   // has to invalidate on the Commissions screen's own mutations.
   const { data: wd } = useQuery({
-    queryKey: ['commissions', 'withdrawals', 'rep', id],
-    queryFn: async () => unwrap(await api.get('/commissions/withdrawals', { params: { salesRepId: id, limit: 6 } })),
+    ...pageQueries.repWithdrawals(id),
   });
 
   const toggleActive = useMutation({

@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import {
   ClipboardList, Undo2, ArrowRight, Timer, Eye, NotebookPen,
 } from 'lucide-react';
-import api, { unwrap } from '@/lib/api';
+import { pageQueries } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import ProgressRows from '@/components/ProgressRows';
@@ -63,12 +63,10 @@ export default function RepDashboard() {
   // or not at all. Above the early returns, where every hook has to be.
 
   const { data: bonus } = useQuery({
-    queryKey: ['bonus', 'me'],
-    queryFn: async () => unwrap(await api.get('/commissions/bonus/me')).data,
+    ...pageQueries.bonusMe(),
   });
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['dashboard', 'me'],
-    queryFn: async () => unwrap(await api.get('/dashboard/me')).data,
+    ...pageQueries.dashboardMe(),
     refetchInterval: STEADY,
   });
 

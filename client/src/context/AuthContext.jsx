@@ -1,9 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import api, { tokenStore, unwrap, apiError } from '@/lib/api';
+import api, { tokenStore, unwrap, apiError, clientForm } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { idle } from '@/lib/idle';
 import { installOffer } from '@/lib/installOffer';
 import { sessionRefused, retryDelay } from '@/lib/sessionCheck';
+import { restoreSession, rememberUser, startPersisting, forgetCache } from '@/lib/persist';
+import { tokenClaims } from '@/lib/cacheSnapshot';
+import { prefetchRoute } from '@/lib/pageQueries';
 
 const AuthContext = createContext(null);
 
@@ -33,6 +36,23 @@ function endSession(reason) {
   }
 }
 
+/*
+  Opened with nothing kept from last time (a first open, or the first after a
+  deploy): ask for this screen's answers ALONGSIDE "who is this?" instead of
+  after it — one round trip to Frankfurt instead of two. The stored sign-in
+  only chooses what to ask for; every answer is still the server's, for
+  whoever the server says this is, and nothing shows until /auth/me answers.
+*/
+function startScreen() {
+  const claims = tokenClaims(tokenStore.get());
+  if (!claims?.role) return;
+  // A rep's account works on a phone only; anywhere else the server signs it out, so ask nothing first.
+  if (claims.role === 'SALES_REP' && clientForm() !== 'phone') return;
+  prefetchRoute(queryClient, window.location.pathname, window.location.search, claims.role, { shell: true });
+}
+
+startPersisting();
+
 // Wait `ms`, or less if the device says it is back online.
 function waitToRetry(ms) {
   return new Promise((resolve) => {
@@ -47,8 +67,12 @@ function waitToRetry(ms) {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Opened again by the same person on this device: their last screens are shown at once, from what
+  // was kept (lib/persist.js), while /auth/me checks the session behind them — a refused session still
+  // signs out, and takes the kept screens with it. Nothing kept: wait for /auth/me, as before.
+  const [boot] = useState(() => restoreSession());
+  const [user, setUser] = useState(boot);
+  const [loading, setLoading] = useState(!boot);
   // Opening with no signal: the session is kept and asked about again (see sessionCheck.js).
   const [reconnecting, setReconnecting] = useState(false);
   // Signed in from the sign-in page while that was still waiting: the waiting is over.
@@ -59,6 +83,11 @@ export function AuthProvider({ children }) {
     let active = true;
     async function bootstrap() {
       if (!tokenStore.get()) {
+        // Signed out in another tab in the moment since opening: nothing kept is shown either.
+        if (boot) {
+          queryClient.clear();
+          setUser(null);
+        }
         setLoading(false);
         return;
       }
@@ -67,10 +96,12 @@ export function AuthProvider({ children }) {
       // where it is caught.
       if (idle.expired()) {
         endSession('idle');
+        setUser(null);
         setLoading(false);
         return;
       }
       idle.touch(true);
+      if (!boot) startScreen();
       // Only the server refusing the sign-in forgets it (audit #116: opening the app with no signal
       // signed the rep out). No signal, a server error or the host in the way: keep it and ask again.
       for (let attempt = 0; active && !signedInHere.current; attempt += 1) {
@@ -80,6 +111,7 @@ export function AuthProvider({ children }) {
           // The wait for a signal can outlast the one-hour limit (a phone back in the pocket): still signed out.
           if (idle.expired()) {
             endSession('idle');
+            setUser(null);
             break;
           }
           setUser(unwrap(res).data);
@@ -88,7 +120,11 @@ export function AuthProvider({ children }) {
           if (!active || signedInHere.current) break;
           // Refused, or signed out meanwhile (another tab, or a refused device that cleared it).
           if (sessionRefused(err) || !tokenStore.get()) {
+            // Everything goes: the tokens, the kept screens (tokenStore.clear) and anything shown or
+            // read ahead from them.
             tokenStore.clear();
+            queryClient.clear();
+            setUser(null);
             break;
           }
           setReconnecting(true);
@@ -104,12 +140,18 @@ export function AuthProvider({ children }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [boot]);
+
+  // What is written to this device follows who is signed in here (nobody: nothing is written).
+  useEffect(() => { rememberUser(user); }, [user]);
 
   const login = useCallback(async (email, password) => {
     try {
       const res = await api.post('/auth/login', { email, password });
       const { user: u, tokens } = unwrap(res).data;
+      // Whoever signed in here before, none of their answers may show for this person.
+      queryClient.clear();
+      forgetCache();
       tokenStore.set(tokens.accessToken, tokens.refreshToken);
       idle.touch(true);
       // A real sign-in is the one moment the "Use it like an app" sheet may open by itself.

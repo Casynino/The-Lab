@@ -9,7 +9,8 @@ import {
   Timer, AlertTriangle, Clock, CheckCircle2, Eye,
   ChevronRight, Wallet, ShieldCheck, PackageOpen,
 } from 'lucide-react';
-import api, { unwrap, apiError } from '@/lib/api';
+import api, { apiError } from '@/lib/api';
+import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/format';
@@ -44,8 +45,7 @@ function CompletedRow({ s, onClick }) {
 
 function RepSettlements({ viewing, setViewing }) {
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['settlements', 'rep-all'],
-    queryFn: async () => unwrap(await api.get('/settlements', { params: { limit: 100 } })),
+    ...pageQueries.settlementsMine(),
     refetchInterval: STEADY,
   });
 
@@ -106,8 +106,7 @@ function RepSettlements({ viewing, setViewing }) {
 function PendingApprovals({ onReview }) {
   const qc = useQueryClient();
   const { data: pending = [] } = useQuery({
-    queryKey: ['settlements', 'pending-approvals'],
-    queryFn: async () => unwrap(await api.get('/settlements/pending-approvals')).data,
+    ...pageQueries.settlementsWaiting(),
     refetchInterval: LIVE,
   });
 
@@ -210,14 +209,13 @@ function StaffSettlements({ viewing, setViewing }) {
   });
 
   const { data: summary } = useQuery({
-    queryKey: ['settlements', 'summary'],
-    queryFn: async () => unwrap(await api.get('/settlements/summary')).data,
+    ...pageQueries.settlementsSummary(),
     refetchInterval: STEADY,
   });
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['settlements', { page, status }],
-    queryFn: async () => unwrap(await api.get('/settlements', { params: { page, limit: 15, status: status || undefined } })),
+    ...pageQueries.settlements({ page, status }),
+    placeholderData: keepOnPageTurn({ status }),
   });
 
   const pick = (next) => { setStatus(next); setPage(1); };
