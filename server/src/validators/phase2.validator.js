@@ -155,6 +155,10 @@ const withdrawalQuery = {
 };
 
 // --- Daily reports ---------------------------------------------------------
+const DAILY_REPORT_FIELDS = {
+  OPENING: ['cashOnHand', 'customersToVisit', 'openingNote', 'notes'],
+  CLOSING: ['salesAmount', 'cashCollected', 'debtsCreated', 'debtsCollected', 'closingNote', 'notes'],
+};
 const dailyReportSubmit = {
   body: z.object({
     type: z.enum(['OPENING', 'CLOSING']),
@@ -168,7 +172,11 @@ const dailyReportSubmit = {
     debtsCollected: money.optional().nullable(),
     closingNote: z.string().max(1000).optional().nullable(),
     notes: z.string().max(1000).optional().nullable(),
-  }),
+  }).refine(
+    // An empty report says nothing — at least one figure or a note for the kind of report sent.
+    (b) => DAILY_REPORT_FIELDS[b.type].some((k) => (typeof b[k] === 'string' ? b[k].trim() !== '' : b[k] != null)),
+    { message: 'Fill in at least one figure or a note', path: ['type'] },
+  ),
 };
 const dailyReportQuery = {
   query: z.object({ ...paginationFields, ...dateRangeFields, salesRepId: id.optional(), type: z.enum(['OPENING', 'CLOSING']).optional() }),
