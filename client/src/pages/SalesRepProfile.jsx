@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import {
   ArrowLeft, Package, Timer, Wallet, AlertTriangle, TrendingUp, History,
   ShieldCheck, ShieldAlert, Power, Trash2, CheckCircle2, Clock, Undo2, ClipboardList,
-  Boxes, ChevronRight, Mail, Phone, MapPin, Calendar, Coins, PackagePlus, Pencil, MessageCircle, Gauge,
+  Boxes, ChevronRight, Mail, Phone, MapPin, Calendar, Coins, PackagePlus, Pencil, MessageCircle, Gauge, UserX,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
@@ -22,7 +22,7 @@ import ProgressRows from '@/components/ProgressRows';
 import WithdrawalNote, { PayoutHistory, withdrawalState } from '@/components/WithdrawalNote';
 import { TrendChart } from '@/components/charts';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, StatCard,
   Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, NumberInput, Textarea,
 } from '@/components/ui';
 
@@ -643,9 +643,13 @@ export default function SalesRepProfile() {
   // Which window the performance figures cover. Kept in the query key so
   // switching period refetches rather than showing last period's numbers.
   const [period, setPeriod] = useState('all');
-  const { data, isLoading } = useQuery({
+  // An address with an unknown or removed rep is answered "not found" at once: no second try, no polling,
+  // and a page that says so instead of "Loading…" for ever (navigation-9).
+  const gone = (e) => [400, 404].includes(e?.response?.status);
+  const { data, isLoading, isError, error, refetch } = useQuery({
     ...pageQueries.repProfile({ id, period }),
-    refetchInterval: STEADY,
+    refetchInterval: (q) => (q.state.status === 'error' ? false : STEADY),
+    retry: (count, e) => !gone(e) && count < 1,
     keepPreviousData: true,
   });
   // This rep's payouts, so the admin and the rep are looking at one list. Not
@@ -681,6 +685,34 @@ export default function SalesRepProfile() {
     qc.invalidateQueries({ queryKey: ['commissions'] });
   };
 
+  // Back to where the profile was opened from (the filtered list, Commissions' rep view, the Dashboard)
+  // when that page is in this tab's history; opened straight from a link, to the list (navigation-5).
+  const cameFromApp = (Number(window.history.state?.idx) || 0) > 0;
+  const backButton = (
+    <Button variant="secondary" onClick={() => (cameFromApp ? navigate(-1) : navigate('/reps'))}>
+      <ArrowLeft className="h-4 w-4" /> {cameFromApp ? 'Back' : 'All reps'}
+    </Button>
+  );
+
+  if (isError && !data) {
+    return (
+      <div>
+        <PageHeader title="Sales Rep Profile">{backButton}</PageHeader>
+        <Card>
+          {gone(error) ? (
+            <EmptyState
+              icon={UserX}
+              title="This rep was not found"
+              message="The link may be old, or the rep has been removed."
+              action={<Button variant="secondary" onClick={() => navigate('/reps')}>All reps</Button>}
+            />
+          ) : (
+            <LoadError what="this rep" onRetry={refetch} />
+          )}
+        </Card>
+      </div>
+    );
+  }
   if (isLoading || !data) return <PageSpinner />;
 
   const { rep, stock, commission: c, settlements, performance: perf, activity } = data;
@@ -695,7 +727,7 @@ export default function SalesRepProfile() {
   return (
     <div>
       <PageHeader title="Sales Rep Profile" subtitle="Full control center — stock, settlements, commission, compliance.">
-        <Button variant="secondary" onClick={() => navigate('/reps')}><ArrowLeft className="h-4 w-4" /> All reps</Button>
+        {backButton}
       </PageHeader>
 
       {/* ── Identity header ── */}
@@ -1164,7 +1196,8 @@ export default function SalesRepProfile() {
       {viewing && <OrderDetailModal settlementId={viewing} onClose={() => { setViewing(null); refreshAll(); }} />}
       {addOpen && <AddStockModal repId={id} repName={rep.name} onClose={() => setAddOpen(false)} />}
       {editOpen && <EditRepModal rep={rep} onClose={() => setEditOpen(false)} />}
-      {deleteOpen && <DeleteRepModal rep={rep} onClose={() => setDeleteOpen(false)} onDone={() => navigate('/reps')} />}
+      {/* Replace: Back from the list must not land on the page of a rep who no longer exists. */}
+      {deleteOpen && <DeleteRepModal rep={rep} onClose={() => setDeleteOpen(false)} onDone={() => navigate('/reps', { replace: true })} />}
       {opening && (
         <OpenWindowModal
           rep={rep}

@@ -266,7 +266,9 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showPwd, setShowPwd] = useState(false);
-  const from = location.state?.from?.pathname || '/';
+  // Back to the whole address the person was sent here from, tab and filters included (navigation-8).
+  const back = location.state?.from;
+  const from = back?.pathname ? `${back.pathname}${back.search || ''}${back.hash || ''}` : '/';
   // A sales-rep account used on a computer or tablet (server rule): the reason stays on the page, not in a
   // toast that disappears — whether it came from this sign-in or from a session that was stopped.
   // Read, not consumed: the stopped-session path reloads the page, so a reader that removed the key lost
