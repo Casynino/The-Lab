@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenClaims, serializeSnapshot, readSnapshot, MAX_AGE_MS, ONE_MAX_CHARS } from './cacheSnapshot.js';
+import { tokenClaims, serializeSnapshot, readSnapshot, keptEntry, MAX_AGE_MS, ONE_MAX_CHARS } from './cacheSnapshot.js';
+
+test('the last good answer is kept even when the latest ask failed (offline); nothing else is', () => {
+  const k = ['settlements', { page: 1 }];
+  assert.deepEqual(keptEntry(k, { status: 'success', data: { a: 1 }, dataUpdatedAt: 50 }), { k, d: { a: 1 }, t: 50 });
+  // Asked again with no signal: still holds the answer from before — that is the one to keep.
+  assert.deepEqual(keptEntry(k, { status: 'error', data: { a: 1 }, dataUpdatedAt: 50 }), { k, d: { a: 1 }, t: 50 });
+  // Never had an answer: nothing to keep.
+  assert.equal(keptEntry(k, { status: 'error', data: undefined, dataUpdatedAt: 0 }), null);
+  assert.equal(keptEntry(k, { status: 'pending', data: undefined, dataUpdatedAt: 0 }), null);
+  assert.equal(keptEntry(k, undefined), null);
+});
 
 // A sign-in token as the server makes it (only the middle part is read here; the signature is the server's business).
 const b64url = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');

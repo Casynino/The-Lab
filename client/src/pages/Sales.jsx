@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { lazyPart, warmPart, PageLoadBoundary } from '@/components/LazyPage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -329,14 +330,16 @@ function Chip({ active, tone, label, count, onClick }) {
 // The invoice maker lives inside Sales for staff (Nino, 11 Nov 2026: "this should be in the Sales page,
 // inside, not on the sidebar"). Reps keep their own Invoice page (they have no Sales page). The tab is in
 // the address (?tab=invoice), so the old /invoice-generator link lands on it.
-const InvoiceGenerator = lazy(() => import('@/pages/InvoiceGenerator'));
+// Through the app's page loader (lib/pages.js), so a failed fetch-ahead never reloads the app (audit pwa-brand-load-3).
+const InvoiceGenerator = lazyPart('InvoiceGenerator');
 const SALES_TABS = [['list', 'Sales'], ['invoice', 'Invoice']];
 
 export default function Sales() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'invoice' ? 'invoice' : 'list';
-  // Fetch the invoice maker's code while the list is open, so the tab opens at once.
-  useEffect(() => { import('@/pages/InvoiceGenerator'); }, []);
+  // Fetch the invoice maker's code while the list is open, so the tab opens at once. Only ahead of the
+  // click: one that fails on a weak line is dropped, and the tab asks again when opened.
+  useEffect(() => { warmPart('InvoiceGenerator'); }, []);
   return (
     <div>
       <div className="mb-5 flex flex-wrap gap-2">
@@ -346,7 +349,11 @@ export default function Sales() {
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>
-      {tab === 'invoice' ? <Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense> : <SalesList />}
+      {tab === 'invoice' ? (
+        <PageLoadBoundary what="this tab" resetKey={tab}>
+          <Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense>
+        </PageLoadBoundary>
+      ) : <SalesList />}
     </div>
   );
 }
@@ -386,9 +393,12 @@ function SalesList() {
 
   // Chip counts are taken over the OTHER filter, so they hold still as you
   // click through them instead of collapsing onto whatever is selected.
+  // No count at all until the figures are here: a chip reading 0 over a load that failed (or has not
+  // come back yet) says "none" when nobody knows (audit pwa-brand-load-2).
+  const counted = sum?.byStatus != null;
   const statusChips = [
-    { value: '', label: 'All statuses', tone: 'slate', count: Object.values(sum?.byStatus || {}).reduce((a, b) => a + b, 0) },
-    ...STATUS_ORDER.map((k) => ({ value: k, label: SALE_STATUS_META[k].label, tone: STATUS_TONE[k], count: sum?.byStatus?.[k] ?? 0 })),
+    { value: '', label: 'All statuses', tone: 'slate', count: counted ? Object.values(sum.byStatus).reduce((a, b) => a + b, 0) : null },
+    ...STATUS_ORDER.map((k) => ({ value: k, label: SALE_STATUS_META[k].label, tone: STATUS_TONE[k], count: counted ? sum.byStatus[k] ?? 0 : null })),
   ];
   // The business sells for cash. A type row only appears once a second type
   // actually exists — offering a choice of one is how the old page looked.

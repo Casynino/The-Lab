@@ -9,6 +9,8 @@ import { queryClient } from '@/lib/queryClient';
 import { watchForNewVersion } from '@/lib/version';
 import { tokenStore } from '@/lib/api';
 import { pages, pageFor, roleFromToken } from '@/lib/pages';
+import { shouldReloadForChunk } from '@/lib/chunkLoader';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 // The sign-in and /nino pages' own styles stay in the main stylesheet, ahead of
 // index.css, exactly where they sat before those pages became files of their
 // own — a style that arrived later would win ties it used to lose.
@@ -23,11 +25,15 @@ import './index.css';
 // unfetchable — offline, or a stale entry cached under its old URL — fails
 // visibly instead of reloading forever. A file fetched only AHEAD of a click
 // (lib/pages.js) is not worth a reload: it is dropped, and the real open asks
-// again.
+// again. Nor is a file that failed with no signal: a reload then only swaps the
+// app for the browser's own "No internet" page and loses what was typed; the
+// page's "couldn't load" card shows instead (audit pwa-brand-load-3). The rules:
+// shouldReloadForChunk in lib/chunkLoader.js.
 window.addEventListener('vite:preloadError', (event) => {
-  if (pages.aheadOnly()) return;
-  if (sessionStorage.getItem('chunkReloadAttempted')) return;
-  sessionStorage.setItem('chunkReloadAttempted', '1');
+  let attempted = false;
+  try { attempted = !!sessionStorage.getItem('chunkReloadAttempted'); } catch { /* storage blocked */ }
+  if (!shouldReloadForChunk({ aheadOnly: pages.aheadOnly(), online: navigator.onLine !== false, attempted })) return;
+  try { sessionStorage.setItem('chunkReloadAttempted', '1'); } catch { return; /* cannot guard a loop: do not reload */ }
   event.preventDefault();
   window.location.reload();
 });
@@ -68,7 +74,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          {/* The last net: an error outside any page shows "Something went wrong — Reload" instead of a
+              black screen (audit pwa-brand-load-1). Pages have their own (components/LazyPage.jsx). */}
+          <AppErrorBoundary>
+            <App />
+          </AppErrorBoundary>
           {/* Every toast in this app was the library's default white card on a
               near-black page — a bright slab that arrived, took the eye off
               whatever it interrupted, and matched nothing around it. These are

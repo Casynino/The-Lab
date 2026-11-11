@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useId, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useId, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { lazyPart, PageLoadBoundary } from '@/components/LazyPage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
@@ -461,7 +462,8 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
 
 // The Pepa product label — the page a carton's QR code opens — belongs with the products (Nino, 11 Nov
 // 2026: "the Label should go inside the Products page"). Loaded only when its tab is opened.
-const ProductLabel = lazy(() => import('@/pages/ProductLabel'));
+// Through the app's page loader (lib/pages.js), like every page file (audit pwa-brand-load-3).
+const ProductLabel = lazyPart('ProductLabel');
 const PRODUCT_TABS = [['catalogue', 'Products'], ['label', 'Label']];
 
 export default function Products() {
@@ -482,7 +484,11 @@ export default function Products() {
               : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>
-      {tab === 'label' ? <Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense> : <ProductsCatalogue />}
+      {tab === 'label' ? (
+        <PageLoadBoundary what="this tab" resetKey={tab}>
+          <Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense>
+        </PageLoadBoundary>
+      ) : <ProductsCatalogue />}
     </div>
   );
 }

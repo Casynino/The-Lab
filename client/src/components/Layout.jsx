@@ -1,5 +1,6 @@
 import { LIVE, STEADY } from '@/lib/polling';
 import { InstallPrompt, InstallButton } from '@/components/InstallApp';
+import ConnectionNotice from '@/components/ConnectionNotice';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -925,6 +926,8 @@ export default function Layout() {
                     onViewAll={() => { setBellOpen(false); navigate('/notifications'); }} />
                 )}
               </div>
+              {/* No signal, or figures kept from before a refresh failed: said once, above the page. */}
+              <ConnectionNotice />
               <motion.div
                 key={location.pathname}
                 initial={{ opacity: 0, y: 8 }}
