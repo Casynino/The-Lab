@@ -29,11 +29,12 @@ async function save({ type, periodKey, label, from, to, pdf, meta }) {
   });
 }
 
-async function list({ type, year, search, limit = 60 } = {}) {
+async function list({ type, year, search, limit = 300 } = {}) {
   const where = {};
-  // No type = the weekly and monthly statements. A daily report is archived every day and would
-  // push them out of a 60-row list, so dailies are listed only when asked for.
-  where.type = type || { not: 'DAILY' };
+  // No type = every report, the daily ones included (Nino, 11 Nov 2026: "why only weekly and monthly —
+  // we should see the daily ones too"). The list is long enough for a year of them; the screen shows a
+  // page at a time.
+  if (type) where.type = type;
   if (year) where.periodKey = { startsWith: String(year) };
   if (search) {
     where.OR = [
@@ -44,7 +45,7 @@ async function list({ type, year, search, limit = 60 } = {}) {
   const rows = await prisma.reportArchive.findMany({
     where,
     orderBy: { from: 'desc' },
-    take: Math.min(Number(limit) || 60, 200),
+    take: Math.min(Number(limit) || 300, 500),
     select: { id: true, type: true, periodKey: true, label: true, from: true, to: true, createdAt: true, updatedAt: true, meta: true },
   });
   return rows.map((r) => ({ ...r, link: publicLink(r.id) }));

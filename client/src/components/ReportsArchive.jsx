@@ -12,19 +12,21 @@ import { Card, EmptyState, Input, Select } from '@/components/ui';
 // they are sent to the boss as a link"). One card per report: its kind, its period, the headline figures
 // it carried, and Open / Download. Used in the owner's profile (Reports) and in Finance > Statements.
 
-const KINDS = [['', 'Weekly & monthly'], ['DAILY', 'Daily'], ['WEEKLY', 'Weekly'], ['MONTHLY', 'Monthly']];
+const KINDS = [['', 'All'], ['DAILY', 'Daily'], ['WEEKLY', 'Weekly'], ['MONTHLY', 'Monthly'], ['YEARLY', 'Yearly']];
 const TONE = {
   DAILY: 'bg-amber-500/15 text-amber-300',
   WEEKLY: 'bg-emerald-500/15 text-emerald-300',
   MONTHLY: 'bg-violet-500/15 text-violet-300',
+  YEARLY: 'bg-brand-500/20 text-brand-300',
 };
-const NAME = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly' };
+const NAME = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly', YEARLY: 'Yearly' };
 
 function period(r) {
   const from = dayjs(r.from);
   const to = dayjs(r.to);
   if (r.type === 'DAILY') return from.format('dddd, D MMM YYYY');
   if (r.type === 'MONTHLY') return from.format('MMMM YYYY');
+  if (r.type === 'YEARLY') return `The year ${from.format('YYYY')}`;
   return `${from.format('D MMM')} – ${to.format('D MMM YYYY')}`;
 }
 
