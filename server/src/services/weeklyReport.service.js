@@ -32,10 +32,13 @@ async function setSetting(key, value, group = 'whatsapp') {
   await prisma.setting.upsert({ where: { key }, create: { key, value, group }, update: { value } });
 }
 
-// The week a report covers: on Mondays (cron day) the COMPLETED Mon–Sun week
-// that just ended; other days (manual sends) the current ISO week to date.
-// A weekKey like "2026-W27" pins an exact week (used by the PDF link).
-function reportWeek(weekKey) {
+// The weekly report goes out on TUESDAY at 08:00 EAT (business rule, Nino 11 Nov 2026; vercel.json
+// "0 5 * * 2" = 05:00 UTC). It covers the COMPLETED Monday–Sunday week that just ended — sent a day
+// later so Monday's approvals of the weekend's settlements are in it. On Monday or Tuesday (the cron
+// day, or a manual send before it) that is last week; later in the week a manual send shows the
+// current week to date. Days are Tanzania days. A weekKey like "2026-W27" pins an exact week (PDF link).
+const REPORT_WEEKDAY = 2; // ISO weekday: 1 = Monday, 2 = Tuesday
+function reportWeek(weekKey, now = eatNow()) {
   if (weekKey) {
     const m = /^(\d{4})-W(\d{2})$/.exec(weekKey);
     if (m) {
@@ -44,9 +47,9 @@ function reportWeek(weekKey) {
       return { start, end: start.add(6, 'day') };
     }
   }
-  const now = dayjs();
-  const start = now.isoWeekday() === 1 ? now.startOf('isoWeek').subtract(7, 'day') : now.startOf('isoWeek');
-  const end = now.isoWeekday() === 1 ? now.startOf('isoWeek').subtract(1, 'day') : now;
+  const lastWeek = now.isoWeekday() <= REPORT_WEEKDAY;
+  const start = lastWeek ? now.startOf('isoWeek').subtract(7, 'day') : now.startOf('isoWeek');
+  const end = lastWeek ? now.startOf('isoWeek').subtract(1, 'day') : now;
   return { start, end };
 }
 
@@ -256,9 +259,9 @@ async function sendWeeklyReport({ force = false, silent = false } = {}) {
   });
   if (result.reason === 'duplicate') return { sent: false, reason: `Already sent for ${weekKey}`, weekKey };
   // Only the scheduled send marks the week as done — a forced test send must
-  // never make Monday's real report skip itself as a "duplicate".
+  // never make Tuesday's real report skip itself as a "duplicate".
   if (result.sent && !force) await setSetting('whatsapp.lastWeeklySent', weekKey);
   return { ...result, weekKey, pdf: link, archiveId: saved.id, chars: text.length };
 }
 
-module.exports = { buildWeeklyData, buildWhatsAppText, sendWhatsApp, sendWeeklyReport, signWeek, pdfLink };
+module.exports = { buildWeeklyData, buildWhatsAppText, sendWhatsApp, sendWeeklyReport, signWeek, pdfLink, reportWeek, REPORT_WEEKDAY };

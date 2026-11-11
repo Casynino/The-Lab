@@ -94,7 +94,7 @@ async function reportGuard(name, fn, res) {
   }
 }
 
-// Weekly WhatsApp business report + archived PDF (Mondays 08:00 EAT).
+// Weekly WhatsApp business report + archived PDF (Tuesdays 08:00 EAT, for the Mon–Sun week just ended).
 // ?force=1 resends even if this week's report already went out (testing).
 router.get(
   '/weekly-report',

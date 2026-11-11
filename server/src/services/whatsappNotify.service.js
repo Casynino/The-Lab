@@ -43,7 +43,7 @@ const TYPES = {
   LOW_STOCK: { label: 'Low stock alert', priority: 'WARNING' },
   OUT_OF_STOCK: { label: 'Out of stock alert', priority: 'CRITICAL' },
   DAILY_SUMMARY: { label: 'Daily business report (21:00, with PDF)', priority: 'INFO' },
-  WEEKLY_REPORT: { label: 'Weekly business report (Monday 08:00, with PDF)', priority: 'INFO' },
+  WEEKLY_REPORT: { label: 'Weekly business report (Tuesday 08:00, with PDF)', priority: 'INFO' },
   MONTHLY_REPORT: { label: 'Monthly business report (1st of month 08:00, with PDF)', priority: 'INFO' },
   DEADLINE_IMMINENT: { label: 'An order is minutes from its deadline', priority: 'WARNING' },
   EXTENSION_TAKEN: { label: 'A rep took the 96-hour extension', priority: 'ACTION' },

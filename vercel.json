@@ -80,7 +80,7 @@
     },
     {
       "path": "/api/cron/weekly-report",
-      "schedule": "0 5 * * 1"
+      "schedule": "0 5 * * 2"
     },
     {
       "path": "/api/cron/monthly-report",
