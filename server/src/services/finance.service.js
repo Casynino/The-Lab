@@ -566,6 +566,14 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
     // can rebuild from the withdrawal itself.
     const acc = await commissionAccount();
     if (!acc) return null;
+    // One payout, one record (audit #31, 11 Nov 2026): if this withdrawal already has its payment row,
+    // return it instead of writing a second one.
+    if (refId) {
+      const existing = await prisma.financeTransaction.findFirst({
+        where: { type: 'COMMISSION_PAYMENT', refType: 'CommissionWithdrawal', refId },
+      });
+      if (existing) return existing;
+    }
     // The owner pays reps directly from his pocket — no business account is
     // involved on either side. This row exists ONLY as the record of what the
     // rep was paid (rule: "i only want the record of rep to be there"). It

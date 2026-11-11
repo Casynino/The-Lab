@@ -87,6 +87,7 @@ const prismaStub = {
   financeTransaction: {
     count: async ({ where } = {}) => rows.filter((r) => matches(r, where)).length,
     findMany: async ({ where } = {}) => rows.filter((r) => matches(r, where)),
+    findFirst: async ({ where } = {}) => rows.find((r) => matches(r, where)) || null, // one payout, one record
     create: async ({ data }) => { const t = { id: `txn-${++seq}`, refType: null, refId: null, brandId: null, ...data }; rows.push(t); return t; },
     groupBy: async ({ by, where, _sum }) => {
       const buckets = new Map();
@@ -209,6 +210,14 @@ test('the commission account is created if it is missing, never substituted', as
   const landed = accounts.find((a) => a.id === txn.accountId);
   assert.equal(landed.type, 'COMMISSION');
   assert.ok(![mpesa.id, airtel.id, cash.id].includes(txn.accountId), 'the payout landed on a wallet');
+});
+
+test('one withdrawal is recorded once, however many times the payment is recorded (audit #31)', async () => {
+  reset();
+  const first = await finance.recordCommissionPayment({ amount: 75000, refId: 'wd-dup', occurredAt: D('2026-08-03') }, null);
+  const second = await finance.recordCommissionPayment({ amount: 75000, refId: 'wd-dup', occurredAt: D('2026-08-03') }, null);
+  assert.equal(second.id, first.id);
+  assert.equal(rows.filter((r) => r.refId === 'wd-dup' && r.type === 'COMMISSION_PAYMENT').length, 1);
 });
 
 test('a payout moves no balance on any money account, and the record is not a balance', async () => {

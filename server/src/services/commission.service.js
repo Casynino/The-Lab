@@ -607,6 +607,44 @@ function emergencyStateFor(rep) {
 async function requestWithdrawal(salesRepId, amount, notes, actor) {
   const amt = round2(amount);
   if (amt <= 0) throw ApiError.badRequest('Amount must be greater than zero');
+
+  // One request at a time per rep (audit #30, 11 Nov 2026): the balance check and the create used to be a
+  // read followed by a write with nothing between them, so two taps at the same instant both saw the
+  // whole balance and both asked for it. The rep's row is locked for the check and the create; a second
+  // request waits, then reads a balance that already has the first one taken off (available counts
+  // pending requests), and is refused if nothing is left. computeForRep only reads, on its own
+  // connection, so it sees the first request once that has committed.
+  const w = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "sales_representatives" WHERE id = ${salesRepId} FOR UPDATE`;
+    return createWithdrawalTx(tx, salesRepId, amt, notes);
+  }, { maxWait: 10_000, timeout: 20_000 });
+
+  const repName = w.salesRep?.user?.name || 'A rep';
+  notification.notifyAdmins({
+    type: 'GENERAL',
+    severity: 'INFO',
+    title: 'Commission withdrawal requested',
+    message: `${repName} requested a commission withdrawal of ${formatCurrency(amt)}.`,
+    entityType: 'CommissionWithdrawal',
+    entityId: w.id,
+  }).catch(() => {});
+  if (actor?.id) {
+    notification.notifyUser(actor.id, {
+      type: 'GENERAL',
+      severity: 'INFO',
+      title: 'Withdrawal request submitted',
+      message: `Your withdrawal request of ${formatCurrency(amt)} has been submitted and is pending approval.`,
+      whatsapp: { kind: 'WITHDRAWAL_REQUESTED', amount: amt },
+      entityType: 'CommissionWithdrawal',
+      entityId: w.id,
+    }).catch(() => {});
+  }
+
+  return w;
+}
+
+// The checks and the create, run while the rep's row is locked (see requestWithdrawal).
+async function createWithdrawalTx(tx, salesRepId, amt, notes) {
   const c = await computeForRep(salesRepId);
   const minWithdrawal = c.minWithdrawal;
 
@@ -635,7 +673,7 @@ async function requestWithdrawal(salesRepId, amount, notes, actor) {
     // taps at the same instant would otherwise both pass and both create a
     // request for the whole balance. This is the compare-and-swap the rest of
     // the codebase uses for exactly this: exactly one caller can win.
-    const claimed = await prisma.salesRepresentative.updateMany({
+    const claimed = await tx.salesRepresentative.updateMany({
       where: { id: salesRepId, emergencyWindowAt: { not: null, gt: windowCutoff() } },
       data: { emergencyWindowAt: null },
     });
@@ -645,7 +683,7 @@ async function requestWithdrawal(salesRepId, amount, notes, actor) {
     underEmergency = true;
   }
 
-  const w = await prisma.commissionWithdrawal.create({
+  return tx.commissionWithdrawal.create({
     data: {
       salesRepId,
       amount: amt,
@@ -658,29 +696,6 @@ async function requestWithdrawal(salesRepId, amount, notes, actor) {
     },
     include: WITHDRAWAL_INCLUDE,
   });
-
-  const repName = w.salesRep?.user?.name || 'A rep';
-  notification.notifyAdmins({
-    type: 'GENERAL',
-    severity: 'INFO',
-    title: 'Commission withdrawal requested',
-    message: `${repName} requested a commission withdrawal of ${formatCurrency(amt)}.`,
-    entityType: 'CommissionWithdrawal',
-    entityId: w.id,
-  }).catch(() => {});
-  if (actor?.id) {
-    notification.notifyUser(actor.id, {
-      type: 'GENERAL',
-      severity: 'INFO',
-      title: 'Withdrawal request submitted',
-      message: `Your withdrawal request of ${formatCurrency(amt)} has been submitted and is pending approval.`,
-      whatsapp: { kind: 'WITHDRAWAL_REQUESTED', amount: amt },
-      entityType: 'CommissionWithdrawal',
-      entityId: w.id,
-    }).catch(() => {});
-  }
-
-  return w;
 }
 
 async function listWithdrawals(filters, pagination) {
@@ -709,16 +724,25 @@ async function decideWithdrawal(id, action, actor) {
     throw ApiError.badRequest(`Cannot ${action.toLowerCase()} a ${w.status} request`);
   }
 
-  const updated = await prisma.commissionWithdrawal.update({
-    where: { id },
+  // Claim the decision (audit #31, 11 Nov 2026): the status moves only if it is still the one read above.
+  // Two taps on "Approve & pay", or a PAY racing a REJECT, used to both pass the check and both write —
+  // and every PAID answer records a payout in finance, so one withdrawal could be booked twice. Now
+  // exactly one caller wins; the other is told it was already decided and nothing else happens.
+  const now = new Date();
+  const claimed = await prisma.commissionWithdrawal.updateMany({
+    where: { id, status: w.status },
     data: {
       status: t.to,
-      decidedAt: new Date(),
+      decidedAt: now,
       decidedById: actor ? actor.id : null,
-      paidAt: t.to === 'PAID' ? new Date() : w.paidAt,
+      ...(t.to === 'PAID' ? { paidAt: now } : {}),
     },
-    include: WITHDRAWAL_INCLUDE,
   });
+  if (claimed.count !== 1) {
+    const fresh = await prisma.commissionWithdrawal.findUnique({ where: { id }, select: { status: true } });
+    throw ApiError.conflict(`This withdrawal was already ${String(fresh?.status || 'decided').toLowerCase()} — refresh to see it.`);
+  }
+  const updated = await prisma.commissionWithdrawal.findUnique({ where: { id }, include: WITHDRAWAL_INCLUDE });
 
   // A rejected emergency request hands the window back. The rep spent it on a
   // wrong phone number, not on the money, and the alternative is that a typo at
