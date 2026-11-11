@@ -51,14 +51,19 @@ function resolveEndpoints(payload) {
 }
 
 async function createTransfer(payload, actor) {
+  return prisma.$transaction((tx) => createTransferTx(tx, payload, actor), { timeout: 30000 });
+}
+
+// The same, inside a transaction the caller already holds — so a stock-request approval can claim the
+// request, move the stock, open the order and mark the request in ONE commit (audit, 11 Nov 2026).
+async function createTransferTx(tx, payload, actor) {
   const { items } = payload;
   if (!items || items.length === 0) {
     throw ApiError.badRequest('A transfer must contain at least one item');
   }
   const { from, to } = resolveEndpoints(payload);
-
-  return prisma.$transaction(
-    async (tx) => {
+  {
+    {
       const productIds = [...new Set(items.map((i) => i.productId))];
       const products = await tx.product.findMany({ where: { id: { in: productIds } } });
       const productMap = new Map(products.map((p) => [p.id, p]));
@@ -141,9 +146,8 @@ async function createTransfer(payload, actor) {
       }
 
       return tx.stockTransfer.findUnique({ where: { id: transfer.id }, include: TRANSFER_INCLUDE });
-    },
-    { timeout: 30000 },
-  );
+    }
+  }
 }
 
 async function listTransfers(filters, pagination) {
@@ -258,4 +262,4 @@ async function cancelTransfer(id, actor, reason) {
   });
 }
 
-module.exports = { createTransfer, listTransfers, getTransfer, cancelTransfer, TRANSFER_INCLUDE };
+module.exports = { createTransfer, createTransferTx, listTransfers, getTransfer, cancelTransfer, TRANSFER_INCLUDE };

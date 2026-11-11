@@ -47,6 +47,7 @@ function loadService({ rep, existing }) {
     product: { findMany: async () => [{ id: 'p1', sellingPrice: 36000 }] },
     stockRequest: {
       count: async () => 0,
+      updateMany: async () => ({ count: 1 }),
       create: async ({ data }) => { written.create = data; return { id: 'r1', requestNumber: 'REQ-1', totalValue: data.totalValue, ...data }; },
       update: async ({ data }) => { written.update = data; return { id: 'r1', requestNumber: 'REQ-1', totalValue: data.totalValue, ...data }; },
     },
@@ -162,8 +163,11 @@ test('create: one product split between two cities is saved as two lines, each w
 test('approve: the stock is issued as one line per product, the cities stay on the request', async () => {
   const issued = [];
   const updates = [];
+  let claims = 0;
   const prisma = {
+    $transaction: async (fn) => fn(prisma),
     stockRequest: {
+      updateMany: async ({ where }) => { claims += 1; return { count: where.status === 'PENDING' && claims === 1 ? 1 : 0 }; },
       findUnique: async () => ({ id: 'r1', status: 'PENDING', salesRepId: 's1', warehouseId: null, requestNumber: 'REQ-1', items: [
         { id: 'i1', productId: 'p1', packagingUnitId: 'u1', quantityRequested: 2, unitPrice: 36000, region: 'Arusha' },
         { id: 'i2', productId: 'p1', packagingUnitId: 'u1', quantityRequested: 3, unitPrice: 36000, region: 'Kilimanjaro' },
@@ -182,7 +186,7 @@ test('approve: the stock is issued as one line per product, the cities stay on t
     convertToBase: async (_c, _p, _u, qty) => ({ packaging: { unitPrice: 36000, baseQuantity: 1 }, baseQuantity: qty }),
     warehouseBalances: async () => [{ productId: 'p1', baseQuantity: 99 }, { productId: 'p2', baseQuantity: 99 }],
   });
-  stub('../src/services/transfers.service', { createTransfer: async (args) => { issued.push(args); return { id: 't1' }; } });
+  stub('../src/services/transfers.service', { createTransferTx: async (_tx, args) => { issued.push(args); return { id: 't1' }; } });
   stub('../src/services/notification.service', { notifyAdmins: async () => {}, notifyUser: async () => {}, checkProductLowStock: async () => {} });
   stub('../src/services/whatsappNotify.service', { background: () => {}, stockRequestSubmitted: async () => {} });
   delete require.cache[require.resolve('../src/services/stockRequest.service')];
@@ -195,6 +199,10 @@ test('approve: the stock is issued as one line per product, the cities stay on t
   ]);
   // every request line still gets its own approved quantity
   assert.deepEqual(updates.sort(), [['i1', 2], ['i2', 3], ['i3', 1]]);
+
+  // A second approval (a double tap, a retry) finds the request already decided: nothing more is issued.
+  await assert.rejects(svc.approve('r1', { id: 'admin' }), (e) => e.statusCode === 409);
+  assert.equal(issued.length, 1);
 });
 
 test('STOCK REQUEST text split between cities says each line\'s city', () => {

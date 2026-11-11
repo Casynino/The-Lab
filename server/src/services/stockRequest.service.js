@@ -38,6 +38,13 @@ async function resolveWarehouseId(requested) {
   return wh.id;
 }
 
+async function resolveWarehouseIdTx(client, requested) {
+  if (requested) return requested;
+  const wh = await client.warehouse.findFirst({ where: { isActive: true }, orderBy: { isPrimary: 'desc' } });
+  if (!wh) throw ApiError.badRequest('No active warehouse available to fulfil from');
+  return wh.id;
+}
+
 // Boxes available to issue from the fulfilling warehouse, keyed by product.
 async function availabilityMap(client, warehouseId) {
   const whId = await resolveWarehouseId(warehouseId);
@@ -272,6 +279,11 @@ async function update(id, payload) {
   const items = mergeLines(city.items);
 
   const result = await prisma.$transaction(async (tx) => {
+    // Hold the request for the whole edit, and only while it is still pending: an approval, a rejection
+    // or a cancel that lands meanwhile waits for this to finish, or this finds it already decided.
+    const held = await tx.stockRequest.updateMany({ where: { id, status: 'PENDING' }, data: { updatedAt: new Date() } });
+    if (held.count !== 1) throw ApiError.conflict('This request was already decided, so it can no longer be edited.');
+
     const productIds = [...new Set(items.map((i) => i.productId))];
     const products = await tx.product.findMany({ where: { id: { in: productIds } } });
     const pMap = new Map(products.map((p) => [p.id, p]));
@@ -330,41 +342,49 @@ async function update(id, payload) {
   return result;
 }
 
-// Approve a request: optionally adjust quantities, then dispatch a
-// warehouse→rep transfer (which posts the ledger and opens a settlement).
+// Approve a request: optionally adjust quantities, then dispatch a warehouse->rep transfer (which posts the
+// ledger and opens the 72-hour order). Audit, 11 Nov 2026: this used to check "pending", move the stock and
+// mark the request in three separate commits, so a double tap, a retry after a timeout, or a rep editing or
+// cancelling at the same moment could issue the stock twice or leave a cancelled request with an open order.
+// Now it is ONE transaction that first claims the request (only if it is still PENDING): a second approval
+// waits for the first, then finds it decided and stops; any failure undoes everything.
 async function approve(id, actor, approvals = []) {
-  const request = await prisma.stockRequest.findUnique({ where: { id }, include: { items: true } });
-  if (!request) throw ApiError.notFound('Stock request not found');
-  if (request.status !== 'PENDING') throw ApiError.badRequest(`Request is already ${request.status}`);
-
   const approvalMap = new Map(approvals.map((a) => [a.itemId, a.quantityApproved]));
-  const fromWarehouseId = await resolveWarehouseId(request.warehouseId);
 
-  // Decide approved quantity per line (default: full requested amount).
-  const decided = request.items.map((it) => {
-    const qty = approvalMap.has(it.id) ? Number(approvalMap.get(it.id)) : it.quantityRequested;
-    return { ...it, quantityApproved: Math.max(0, qty) };
-  });
-  const toIssue = decided.filter((d) => d.quantityApproved > 0);
-  if (toIssue.length === 0) throw ApiError.badRequest('Nothing approved to issue');
+  const { finalResult, request, toIssue } = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.stockRequest.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'FULFILLED', decidedAt: new Date(), decidedById: actor ? actor.id : null },
+    });
+    if (claimed.count !== 1) {
+      const exists = await tx.stockRequest.findUnique({ where: { id }, select: { status: true } });
+      if (!exists) throw ApiError.notFound('Stock request not found');
+      throw ApiError.conflict(`This request is already ${exists.status.toLowerCase()}.`);
+    }
+    const request = await tx.stockRequest.findUnique({ where: { id }, include: { items: true } });
+    const fromWarehouseId = await resolveWarehouseIdTx(tx, request.warehouseId);
 
-  // Compute the approved order value from actually issued lines only.
-  const approvedTotal = round2(
-    toIssue.reduce((acc, d) => acc + round2(toNumber(d.unitPrice) * d.quantityApproved), 0),
-  );
+    // Decide approved quantity per line (default: full requested amount).
+    const decided = request.items.map((it) => {
+      const qty = approvalMap.has(it.id) ? Number(approvalMap.get(it.id)) : it.quantityRequested;
+      return { ...it, quantityApproved: Math.max(0, qty) };
+    });
+    const toIssue = decided.filter((d) => d.quantityApproved > 0);
+    if (toIssue.length === 0) throw ApiError.badRequest('Nothing approved to issue');
 
-  // Re-validate against current warehouse stock (it may have dropped since the
-  // request was raised). Clear message so the Doctor can adjust or reject.
-  const approvedByProduct = new Map();
-  for (const d of toIssue) {
-    const { baseQuantity } = await inventory.convertToBase(prisma, d.productId, d.packagingUnitId, d.quantityApproved);
-    approvedByProduct.set(d.productId, (approvedByProduct.get(d.productId) || 0) + baseQuantity);
-  }
-  await assertWithinStock(prisma, fromWarehouseId, approvedByProduct, 'Insufficient stock available for approval.');
+    // The approved order value from the issued lines only.
+    const approvedTotal = round2(toIssue.reduce((acc, d) => acc + round2(toNumber(d.unitPrice) * d.quantityApproved), 0));
 
-  // Dispatch the transfer (posts ledger + creates the 72h settlement).
-  const transfer = await transfers.createTransfer(
-    {
+    // Re-validate against current warehouse stock (it may have dropped since the request was raised).
+    const approvedByProduct = new Map();
+    for (const d of toIssue) {
+      const { baseQuantity } = await inventory.convertToBase(tx, d.productId, d.packagingUnitId, d.quantityApproved);
+      approvedByProduct.set(d.productId, (approvedByProduct.get(d.productId) || 0) + baseQuantity);
+    }
+    await assertWithinStock(tx, fromWarehouseId, approvedByProduct, 'Insufficient stock available for approval.');
+
+    // Dispatch the transfer (posts ledger + creates the 72h order) in this same transaction.
+    const transfer = await transfers.createTransferTx(tx, {
       direction: 'WAREHOUSE_TO_REP',
       fromWarehouseId,
       toRepId: request.salesRepId,
@@ -373,42 +393,34 @@ async function approve(id, actor, approvals = []) {
       items: mergeLines(toIssue.map((d) => ({ productId: d.productId, packagingUnitId: d.packagingUnitId, quantity: d.quantityApproved })))
         .map(({ productId, packagingUnitId, quantity }) => ({ productId, packagingUnitId, quantity })),
       notes: `Stock request ${request.requestNumber}`,
-    },
-    actor,
-  );
+    }, actor);
+    const settlement = await tx.settlement.findFirst({ where: { transferId: transfer.id } });
 
-  const settlement = await prisma.settlement.findFirst({ where: { transferId: transfer.id } });
-
-  // Persist approved quantities and resolved base amounts on the request items.
-  for (const d of decided) {
-    let baseQuantity = 0;
-    if (d.quantityApproved > 0) {
-      const conv = await inventory.convertToBase(prisma, d.productId, d.packagingUnitId, d.quantityApproved);
-      baseQuantity = conv.baseQuantity;
+    // Approved quantities and resolved base amounts on the request's own lines.
+    for (const d of decided) {
+      let baseQuantity = 0;
+      if (d.quantityApproved > 0) {
+        const conv = await inventory.convertToBase(tx, d.productId, d.packagingUnitId, d.quantityApproved);
+        baseQuantity = conv.baseQuantity;
+      }
+      await tx.stockRequestItem.update({
+        where: { id: d.id },
+        data: { quantityApproved: d.quantityApproved, baseQuantity, lineTotal: round2(d.quantityApproved * toNumber(d.unitPrice)) },
+      });
     }
-    await prisma.stockRequestItem.update({
-      where: { id: d.id },
-      data: {
-        quantityApproved: d.quantityApproved,
-        baseQuantity,
-        lineTotal: round2(d.quantityApproved * toNumber(d.unitPrice)),
-      },
-    });
-  }
 
-  const finalResult = await prisma.stockRequest.update({
-    where: { id },
-    data: {
-      status: 'FULFILLED',
-      decidedAt: new Date(),
-      decidedById: actor ? actor.id : null,
-      warehouseId: fromWarehouseId,
-      transferId: transfer.id,
-      settlementId: settlement ? settlement.id : null,
-      totalValue: approvedTotal,
-    },
-    include: INCLUDE,
-  });
+    const finalResult = await tx.stockRequest.update({
+      where: { id },
+      data: {
+        warehouseId: fromWarehouseId,
+        transferId: transfer.id,
+        settlementId: settlement ? settlement.id : null,
+        totalValue: approvedTotal,
+      },
+      include: INCLUDE,
+    });
+    return { finalResult, request, toIssue };
+  }, { timeout: 30000 });
 
   // Notify the rep their request was approved
   const rep = await prisma.salesRepresentative.findUnique({
@@ -435,12 +447,13 @@ async function approve(id, actor, approvals = []) {
 async function reject(id, actor, notes) {
   const request = await prisma.stockRequest.findUnique({ where: { id } });
   if (!request) throw ApiError.notFound('Stock request not found');
-  if (request.status !== 'PENDING') throw ApiError.badRequest(`Request is already ${request.status}`);
-  const result = await prisma.stockRequest.update({
-    where: { id },
+  // Only if it is still pending at the moment of writing (an approval may be landing at the same time).
+  const done = await prisma.stockRequest.updateMany({
+    where: { id, status: 'PENDING' },
     data: { status: 'REJECTED', decidedAt: new Date(), decidedById: actor ? actor.id : null, notes: notes || request.notes },
-    include: INCLUDE,
   });
+  if (done.count !== 1) throw ApiError.conflict('This request was already decided.');
+  const result = await prisma.stockRequest.findUnique({ where: { id }, include: INCLUDE });
 
   const rep = await prisma.salesRepresentative.findUnique({
     where: { id: request.salesRepId },
@@ -462,8 +475,9 @@ async function reject(id, actor, notes) {
 async function cancel(id, actor) {
   const request = await prisma.stockRequest.findUnique({ where: { id } });
   if (!request) throw ApiError.notFound('Stock request not found');
-  if (request.status !== 'PENDING') throw ApiError.badRequest('Only pending requests can be cancelled');
-  const result = await prisma.stockRequest.update({ where: { id }, data: { status: 'CANCELLED' }, include: INCLUDE });
+  const done = await prisma.stockRequest.updateMany({ where: { id, status: 'PENDING' }, data: { status: 'CANCELLED' } });
+  if (done.count !== 1) throw ApiError.conflict('Only pending requests can be cancelled — this one was already decided.');
+  const result = await prisma.stockRequest.findUnique({ where: { id }, include: INCLUDE });
 
   notification.notifyAdmins({
     type: 'GENERAL',

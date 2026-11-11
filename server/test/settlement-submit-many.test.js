@@ -42,7 +42,12 @@ const prismaStub = {
 const stub = (rel, exports) => { require.cache[require.resolve(rel)] = { id: rel, filename: rel, loaded: true, exports }; };
 stub('../src/config/prisma', prismaStub);
 stub('../src/services/inventory.service', { convertToBase: async (tx, pid, unit, qty) => ({ baseQuantity: qty }) });
-stub('../src/services/settlement.service', { productOutstanding: async (tx, s, pid) => OUTSTANDING[pid] });
+stub('../src/services/settlement.service', {
+  productOutstanding: async (tx, s, pid) => OUTSTANDING[pid],
+  lockOrder: async () => {},
+  pendingSubmissionBoxes: async () => new Map(Object.entries(db.pendingByProduct || {})),
+  pendingReturnBoxes: async () => new Map(Object.entries(db.pendingReturnByProduct || {})),
+});
 stub('../src/services/finance.service', { paymentAccountsForBrand: async (brandId) => ACCOUNTS[brandId] || [] });
 stub('../src/services/notification.service', { notifyAdmins: async (n) => { calls.notify.push(n); } });
 stub('../src/services/whatsappNotify.service', {
@@ -85,6 +90,14 @@ test('boxes already waiting for approval cannot be submitted again in a batch', 
   db.pendingByProduct = { p1: 4 }; // 5 outstanding, 4 already pending -> 1 available
   await assert.rejects(svc.submitMany('ord1', { items: [{ productId: 'p1', boxes: 2, accountId: 'mpesa' }] }, rep), /Only 1 box\(es\)/);
   assert.equal(db.committed.length, 0);
+});
+
+test('boxes locked in a pending return cannot also be submitted for settlement (audit, 11 Nov 2026)', async () => {
+  reset();
+  db.pendingReturnByProduct = { p1: 3 }; // 5 outstanding, 3 in a return waiting for ZELab -> 2 available
+  await assert.rejects(svc.submitMany('ord1', { items: [{ productId: 'p1', boxes: 3, accountId: 'mpesa' }] }, rep), /Only 2 box\(es\).*return waiting/);
+  assert.equal(db.committed.length, 0);
+  db.pendingReturnByProduct = {};
 });
 
 test('a product must be paid to its own brand\'s account', async () => {

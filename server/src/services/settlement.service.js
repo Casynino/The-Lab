@@ -514,6 +514,35 @@ async function recomputeStatus(client, id) {
 
 // Boxes of one product still outstanding on an order (issued − settled −
 // returned). Does NOT subtract pending submissions — callers add that.
+// Hold an order's row for the rest of the caller's transaction (audit, 11 Nov 2026). Everything that moves
+// boxes on an order — a settlement submitted or approved, a return submitted, approved, rejected, cancelled
+// or expired, a late fine — takes this first, so two of them on the same order run one after the other
+// instead of both reading the same numbers and both writing.
+async function lockOrder(tx, settlementId) {
+  if (!settlementId) return;
+  await tx.$queryRaw`SELECT id FROM "settlements" WHERE id = ${settlementId} FOR UPDATE`;
+}
+
+// Base boxes per product sitting on PENDING settlement submissions of an order.
+async function pendingSubmissionBoxes(client, settlementId) {
+  const rows = await client.settlementSubmission.groupBy({
+    by: ['productId'],
+    where: { settlementId, status: 'PENDING' },
+    _sum: { baseQuantity: true },
+  });
+  return new Map(rows.map((r) => [r.productId, r._sum.baseQuantity || 0]));
+}
+
+// Base boxes per product sitting in PENDING returns of an order.
+async function pendingReturnBoxes(client, settlementId) {
+  const rows = await client.returnItem.groupBy({
+    by: ['productId'],
+    where: { return: { settlementId, status: 'PENDING' } },
+    _sum: { baseQuantity: true },
+  });
+  return new Map(rows.map((r) => [r.productId, r._sum.baseQuantity || 0]));
+}
+
 async function productOutstanding(client, settlement, productId) {
   const transfer = settlement.transferId
     ? await client.stockTransfer.findUnique({ where: { id: settlement.transferId }, include: { items: { where: { productId } } } })
@@ -533,6 +562,7 @@ async function productOutstanding(client, settlement, productId) {
 // outstanding quantity at call time. Returns the sale + decorated settlement.
 // Reached ONLY when The Doctor approves a settlement submission.
 async function settleBoxesTx(tx, { settlementId, productId, packagingUnitId, boxes, method }, actor) {
+  await lockOrder(tx, settlementId); // settledValue below is read and written under the order's lock
   const s = await tx.settlement.findUnique({ where: { id: settlementId } });
   if (!s) throw ApiError.notFound('Settlement not found');
   if (s.status === 'SETTLED') throw ApiError.badRequest('This order is already settled');
@@ -1522,6 +1552,9 @@ async function analytics() {
 }
 
 module.exports = {
+  lockOrder,
+  pendingSubmissionBoxes,
+  pendingReturnBoxes,
   SETTLEMENT_WINDOW_HOURS,
   boxesForOrders,
   createForIssuance,

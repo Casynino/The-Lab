@@ -35,6 +35,7 @@ function chargeablePause(penaltyFrom, startedAt, endedAt) {
 }
 
 async function validateSettlementLines(client, settlementId, salesRepId, lines, productMap) {
+  await settlement.lockOrder(client, settlementId);
   const stl = await client.settlement.findUnique({
     where: { id: settlementId },
     select: { status: true, transferId: true, salesRepId: true, settlementNumber: true },
@@ -61,6 +62,9 @@ async function validateSettlementLines(client, settlementId, salesRepId, lines, 
   const settledMap = new Map(settledRows.map((r) => [r.productId, r._sum.baseQuantity || 0]));
   const retMap = new Map(retRows.map((r) => [r.productId, r._sum.baseQuantity || 0]));
   const pendingMap = new Map(pendingRows.map((r) => [r.productId, r._sum.baseQuantity || 0]));
+  // Boxes waiting on a PENDING settlement submission are claimed too: the same box can't be both settled
+  // and returned (audit, 11 Nov 2026).
+  const subMap = await settlement.pendingSubmissionBoxes(client, settlementId);
 
   for (const l of lines) {
     const name = productMap.get(l.productId)?.name || 'This product';
@@ -69,12 +73,15 @@ async function validateSettlementLines(client, settlementId, salesRepId, lines, 
       throw ApiError.badRequest(`${name} was not issued on order ${stl.settlementNumber} — it can't be returned here`);
     }
     const pending = pendingMap.get(l.productId) || 0;
-    const remaining = issued - (settledMap.get(l.productId) || 0) - (retMap.get(l.productId) || 0) - pending;
+    const inSettlement = subMap.get(l.productId) || 0;
+    const remaining = issued - (settledMap.get(l.productId) || 0) - (retMap.get(l.productId) || 0) - pending - inSettlement;
     if (l.baseQuantity > remaining) {
       throw ApiError.badRequest(
         pending > 0
           ? `Only ${Math.max(0, remaining)} box(es) of ${name} can still be returned on order ${stl.settlementNumber} — ${pending} box(es) are locked in a pending return.`
-          : `Only ${Math.max(0, remaining)} box(es) of ${name} remain to return on order ${stl.settlementNumber}`,
+          : inSettlement > 0
+            ? `Only ${Math.max(0, remaining)} box(es) of ${name} can still be returned on order ${stl.settlementNumber} — ${inSettlement} box(es) are in a settlement waiting for ZELab.`
+            : `Only ${Math.max(0, remaining)} box(es) of ${name} remain to return on order ${stl.settlementNumber}`,
       );
     }
   }
@@ -91,6 +98,7 @@ async function openOrderAvailability(client, salesRepId) {
   });
   const result = [];
   for (const stl of open) {
+    await settlement.lockOrder(client, stl.id);
     const transfer = stl.transferId
       ? await client.stockTransfer.findUnique({ where: { id: stl.transferId }, include: { items: true } })
       : null;
@@ -102,6 +110,7 @@ async function openOrderAvailability(client, salesRepId) {
     ]);
     settledRows.forEach((r) => avail.set(r.productId, (avail.get(r.productId) || 0) - (r._sum.baseQuantity || 0)));
     retRows.forEach((r) => avail.set(r.productId, (avail.get(r.productId) || 0) - (r._sum.baseQuantity || 0)));
+    (await settlement.pendingSubmissionBoxes(client, stl.id)).forEach((n, pid) => avail.set(pid, (avail.get(pid) || 0) - n));
     result.push({ settlementId: stl.id, settlementNumber: stl.settlementNumber, avail });
   }
   return result;
@@ -168,7 +177,10 @@ async function createReturn(payload, actor) {
           warehouseId: destWarehouseId || warehouseId || null,
           reason: reason || null,
           notes: [notes, extraNote].filter(Boolean).join(' ') || null,
-          processedAt: processedAt ? new Date(processedAt) : new Date(),
+          // A rep's return pauses his order from the moment it is SENT — a date sent by the caller would let
+          // the pause (and the deadline credit) be stretched backwards (audit, 11 Nov 2026). Staff may still
+          // record a customer return on its real date.
+          processedAt: processedAt && type === 'CUSTOMER_RETURN' ? new Date(processedAt) : new Date(),
           processedById: actor ? actor.id : null,
           items: {
             create: stlLines.map((l) => ({
@@ -255,11 +267,37 @@ async function createReturn(payload, actor) {
 // ── Approve — execute inventory moves and close settlement if possible ────────
 
 async function approveReturn(id, actor) {
-  const ret = await prisma.return.findUnique({ where: { id }, include: RETURN_INCLUDE });
-  if (!ret) throw ApiError.notFound('Return not found');
-  if (ret.status !== 'PENDING') throw ApiError.badRequest(`Cannot approve a return with status ${ret.status}`);
+  const found = await prisma.return.findUnique({ where: { id }, select: { id: true, status: true } });
+  if (!found) throw ApiError.notFound('Return not found');
+  if (found.status !== 'PENDING') throw ApiError.conflict(`This return is already ${found.status.toLowerCase()}`);
 
+  let ret;
   await prisma.$transaction(async (tx) => {
+    // Claim it first, only if still pending: a double tap, a second admin or the 24-hour expiry landing at
+    // the same moment waits for this one and then finds it decided — the boxes move exactly once.
+    const claimed = await tx.return.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'APPROVED', decidedById: actor ? actor.id : null, decidedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw ApiError.conflict('This return was already decided.');
+    ret = await tx.return.findUnique({ where: { id }, include: RETURN_INCLUDE });
+
+    // The boxes must still be on the order: settled or returned since this return was sent, they are not
+    // the rep's to give back again.
+    if (ret.settlementId && ret.type === 'SALES_RETURN') {
+      await settlement.lockOrder(tx, ret.settlementId);
+      const stl = await tx.settlement.findUnique({ where: { id: ret.settlementId } });
+      const want = new Map();
+      for (const l of ret.items) want.set(l.productId, (want.get(l.productId) || 0) + l.baseQuantity);
+      for (const [productId, n] of want) {
+        const outstanding = await settlement.productOutstanding(tx, stl, productId);
+        if (n > outstanding) {
+          const name = ret.items.find((l) => l.productId === productId)?.product?.name || 'a product';
+          throw ApiError.conflict(`Only ${Math.max(0, outstanding)} box(es) of ${name} are still on order ${stl.settlementNumber} — this return can no longer be approved as it is.`);
+        }
+      }
+    }
+
     const commonRef = { referenceType: 'RETURN', referenceId: ret.id, userId: actor ? actor.id : null };
 
     for (const l of ret.items) {
@@ -338,11 +376,7 @@ async function approveReturn(id, actor) {
       }
     }
 
-    // Mark approved
-    await tx.return.update({
-      where: { id },
-      data: { status: 'APPROVED', decidedById: actor ? actor.id : null, decidedAt: new Date() },
-    });
+    // (already marked approved by the claim above)
 
     // Sync the linked settlement (if any)
     if (ret.settlementId) {
@@ -368,51 +402,52 @@ async function approveReturn(id, actor) {
   return prisma.return.findUnique({ where: { id }, include: RETURN_INCLUDE });
 }
 
+// Give back the hours a return kept its order paused (reject, cancel, expiry), inside the caller's
+// transaction and under the order's lock, so the credit is applied exactly once (audit, 11 Nov 2026).
+async function creditPausedHours(tx, settlementId, pauseStart, pauseEnd) {
+  if (!settlementId) return null;
+  await settlement.lockOrder(tx, settlementId);
+  const stl = await tx.settlement.findUnique({ where: { id: settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true, settlementNumber: true, selfExtendedAt: true } });
+  if (!stl || stl.status === 'SETTLED') return stl;
+  const pauseMs = Math.max(0, new Date(pauseEnd).getTime() - new Date(pauseStart).getTime());
+  if (pauseMs > 0) {
+    await tx.settlement.update({
+      where: { id: settlementId },
+      data: {
+        deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
+        // The fine clock moves with it — but only by the part of the pause it could have charged for. After
+        // ZELab takes back time it gave by mistake the clock already forgives everything before that
+        // moment, and crediting those hours again would pay the rep for them twice.
+        ...(stl.penaltyFrom
+          ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
+          : {}),
+      },
+    });
+  }
+  return stl;
+}
+
 // ── Reject — no inventory changes ─────────────────────────────────────────────
 
 async function rejectReturn(id, actor, reason) {
-  const ret = await prisma.return.findUnique({ where: { id }, include: RETURN_INCLUDE });
-  if (!ret) throw ApiError.notFound('Return not found');
-  if (ret.status !== 'PENDING') throw ApiError.badRequest(`Cannot reject a return with status ${ret.status}`);
+  const found = await prisma.return.findUnique({ where: { id }, select: { status: true } });
+  if (!found) throw ApiError.notFound('Return not found');
+  if (found.status !== 'PENDING') throw ApiError.conflict(`This return is already ${found.status.toLowerCase()}`);
 
-  const updated = await prisma.return.update({
-    where: { id },
-    data: {
-      status: 'REJECTED',
-      decidedById: actor ? actor.id : null,
-      decidedAt: new Date(),
-      rejectionReason: reason || null,
-    },
-    include: RETURN_INCLUDE,
-  });
-
-  // Resume the penalty countdown: give back the hours the return sat pending, so
-  // the rep is never fined for the approval window. Prior penalties stay (the
-  // order simply becomes active again and the daily fine resumes).
-  if (updated.settlementId) {
-    const stl = await prisma.settlement.findUnique({ where: { id: updated.settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true } });
-    if (stl && stl.status !== 'SETTLED') {
-      const pauseStart = updated.processedAt;
-      const pauseEnd = updated.decidedAt;
-      const pauseMs = Math.max(0, new Date(pauseEnd).getTime() - new Date(pauseStart).getTime());
-      if (pauseMs > 0) {
-        await prisma.settlement.update({
-          where: { id: updated.settlementId },
-          data: {
-              deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
-              // The fine clock moves with it — but only by the part of the
-              // pause it could have charged for. After ZELab takes back time
-              // it gave by mistake the clock already forgives everything before
-              // that moment, and crediting those hours again would pay the rep
-              // for them twice.
-              ...(stl.penaltyFrom
-                ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
-                : {}),
-            },
-        });
-      }
-    }
-  }
+  // Claim and give back the paused hours in ONE transaction: never one without the other.
+  const updated = await prisma.$transaction(async (tx) => {
+    const decidedAt = new Date();
+    const claimed = await tx.return.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'REJECTED', decidedById: actor ? actor.id : null, decidedAt, rejectionReason: reason || null },
+    });
+    if (claimed.count !== 1) throw ApiError.conflict('This return was already decided.');
+    const row = await tx.return.findUnique({ where: { id }, include: RETURN_INCLUDE });
+    // Resume the penalty countdown: give back the hours the return sat pending, so the rep is never fined
+    // for the approval window. Prior penalties stay.
+    await creditPausedHours(tx, row.settlementId, row.processedAt, decidedAt);
+    return row;
+  }, { timeout: 30000 });
 
   const repUserId = updated.salesRep?.user?.id;
   if (repUserId) {
@@ -438,49 +473,30 @@ async function rejectReturn(id, actor, reason) {
 // boxes (the lock is computed from PENDING status) and resumes the penalty
 // countdown by giving back the paused hours.
 async function cancelReturn(id, actor, { asRep = false } = {}) {
-  const ret = await prisma.return.findUnique({ where: { id }, include: RETURN_INCLUDE });
+  const ret = await prisma.return.findUnique({ where: { id }, select: { status: true, salesRepId: true } });
   if (!ret) throw ApiError.notFound('Return not found');
-  if (ret.status !== 'PENDING') throw ApiError.badRequest(`Only pending returns can be cancelled (this one is ${ret.status})`);
   if (asRep && ret.salesRepId !== actor?.salesRepId) {
     throw ApiError.forbidden('You can only cancel your own return request');
   }
+  if (ret.status !== 'PENDING') throw ApiError.conflict(`Only pending returns can be cancelled (this one is ${ret.status.toLowerCase()})`);
 
-  const updated = await prisma.return.update({
-    where: { id },
-    data: {
-      status: 'CANCELLED',
-      decidedById: actor ? actor.id : null,
-      decidedAt: new Date(),
-      rejectionReason: asRep ? 'Cancelled by the sales rep before approval.' : 'Cancelled by ZELab before approval.',
-    },
-    include: RETURN_INCLUDE,
-  });
-
-  // Give back the hours the return sat pending (same rule as rejection).
-  if (updated.settlementId) {
-    const stl = await prisma.settlement.findUnique({ where: { id: updated.settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true } });
-    if (stl && stl.status !== 'SETTLED') {
-      const pauseStart = updated.processedAt;
-      const pauseEnd = updated.decidedAt;
-      const pauseMs = Math.max(0, new Date(pauseEnd).getTime() - new Date(pauseStart).getTime());
-      if (pauseMs > 0) {
-        await prisma.settlement.update({
-          where: { id: updated.settlementId },
-          data: {
-              deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
-              // The fine clock moves with it — but only by the part of the
-              // pause it could have charged for. After ZELab takes back time
-              // it gave by mistake the clock already forgives everything before
-              // that moment, and crediting those hours again would pay the rep
-              // for them twice.
-              ...(stl.penaltyFrom
-                ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
-                : {}),
-            },
-        });
-      }
-    }
-  }
+  // Claim and give back the paused hours in ONE transaction (same rule as rejection).
+  const updated = await prisma.$transaction(async (tx) => {
+    const decidedAt = new Date();
+    const claimed = await tx.return.updateMany({
+      where: { id, status: 'PENDING' },
+      data: {
+        status: 'CANCELLED',
+        decidedById: actor ? actor.id : null,
+        decidedAt,
+        rejectionReason: asRep ? 'Cancelled by the sales rep before approval.' : 'Cancelled by ZELab before approval.',
+      },
+    });
+    if (claimed.count !== 1) throw ApiError.conflict('This return was already decided.');
+    const row = await tx.return.findUnique({ where: { id }, include: RETURN_INCLUDE });
+    await creditPausedHours(tx, row.settlementId, row.processedAt, decidedAt);
+    return row;
+  }, { timeout: 30000 });
 
   if (asRep) {
     notification.notifyAdmins({
@@ -526,57 +542,45 @@ async function expireStaleReturns() {
   let expired = 0;
   for (const ret of stale) {
     let fineApplied = 0;
+    let claimedIt = false;
     await prisma.$transaction(async (tx) => {
-      await tx.return.update({
-        where: { id: ret.id },
+      // Claim it, only if still pending and still past the window: when two sweeps run at once (cron and a
+      // dashboard poll), or an admin decides it at the same moment, only one of them expires it — so the
+      // delay fine and the deadline shift happen exactly once (audit, 11 Nov 2026).
+      const pauseEnd = new Date();
+      const claimed = await tx.return.updateMany({
+        where: { id: ret.id, status: 'PENDING', processedAt: { lt: cutoff } },
         data: {
           status: 'EXPIRED',
-          decidedAt: new Date(),
+          decidedAt: pauseEnd,
           rejectionReason: `Expired automatically — not approved within ${RETURN_WINDOW_HOURS} hours of submission.`,
         },
       });
+      if (claimed.count !== 1) return;
+      claimedIt = true;
 
       if (ret.settlementId) {
-        const stl = await tx.settlement.findUnique({ where: { id: ret.settlementId }, select: { status: true, deadlineAt: true, settlementNumber: true, selfExtendedAt: true, penaltyFrom: true } });
-        if (stl && stl.status !== 'SETTLED') {
-          // The paused window is given back so daily late-fines never
-          // double-charge those hours — the expiry fine below covers them.
-          const pauseStart = ret.processedAt;
-          const pauseEnd = new Date();
-          const pauseMs = Math.max(0, pauseEnd.getTime() - new Date(pauseStart).getTime());
-          await tx.settlement.update({
-            where: { id: ret.settlementId },
+        // The paused window is given back so daily late-fines never double-charge those hours — the expiry
+        // fine below covers them.
+        const stl = await creditPausedHours(tx, ret.settlementId, ret.processedAt, pauseEnd);
+        if (stl && stl.status !== 'SETTLED' && ret.type === 'SALES_RETURN' && ret.salesRepId) {
+          fineApplied = returnFineFor(stl);
+          await tx.settlementPenalty.create({
             data: {
-              deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
-              // The fine clock moves with it — but only by the part of the
-              // pause it could have charged for. After ZELab takes back time
-              // it gave by mistake the clock already forgives everything before
-              // that moment, and crediting those hours again would pay the rep
-              // for them twice.
-              ...(stl.penaltyFrom
-                ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
-                : {}),
+              salesRepId: ret.salesRepId,
+              settlementId: ret.settlementId,
+              kind: 'EXPIRY_FINE',
+              amount: fineApplied,
+              daysOverdue: 0, // expiry fine, not a daily late-fine
+              notes: stl.selfExtendedAt
+                ? `Extended period return failure — return ${ret.returnNumber} not completed within ${RETURN_WINDOW_HOURS} hours.`
+                : `Return ${ret.returnNumber} not completed within ${RETURN_WINDOW_HOURS} hours — delay fine.`,
             },
           });
-
-          if (ret.type === 'SALES_RETURN' && ret.salesRepId) {
-            fineApplied = returnFineFor(stl);
-            await tx.settlementPenalty.create({
-              data: {
-                salesRepId: ret.salesRepId,
-                settlementId: ret.settlementId,
-                kind: 'EXPIRY_FINE',
-                amount: fineApplied,
-                daysOverdue: 0, // expiry fine, not a daily late-fine
-                notes: stl.selfExtendedAt
-                  ? `Extended period return failure — return ${ret.returnNumber} not completed within ${RETURN_WINDOW_HOURS} hours.`
-                  : `Return ${ret.returnNumber} not completed within ${RETURN_WINDOW_HOURS} hours — delay fine.`,
-              },
-            });
-          }
         }
       }
     }, { timeout: 30000 });
+    if (!claimedIt) continue;
     expired++;
 
     const repUserId = ret.salesRep?.user?.id;

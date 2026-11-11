@@ -64,46 +64,52 @@ async function applyDuePenalties() {
 
   let applied = 0;
   for (const s of overdue) {
-    // Pause while a return is awaiting The Doctor's decision.
-    const pendingReturns = await prisma.return.count({ where: { settlementId: s.id, status: 'PENDING' } });
-    if (pendingReturns > 0) continue;
+    // Every check and every new fine for this order happen in ONE transaction holding the order's lock
+    // (audit, 11 Nov 2026): the cron and the dashboard polls can run this at the same moment, and without
+    // the lock both counted the same charged days and both wrote the next one — a fine charged twice.
+    const result = await prisma.$transaction(async (tx) => {
+      await require('./settlement.service').lockOrder(tx, s.id);
+      // Pause while a return is awaiting The Doctor's decision.
+      const pendingReturns = await tx.return.count({ where: { settlementId: s.id, status: 'PENDING' } });
+      if (pendingReturns > 0) return null;
 
-    // Read the order again before pricing anything. The list above is a
-    // snapshot, and between it and this line ZELab may have taken back an
-    // extension — which changes the rate, the clock and whether a fine is owed
-    // at all. A fine written from the snapshot would be priced against a
-    // deadline that no longer exists.
-    const fresh = await prisma.settlement.findUnique({
-      where: { id: s.id },
-      select: { status: true, deadlineAt: true, penaltyFrom: true, selfExtendedAt: true, settlementNumber: true },
-    });
-    if (!fresh || fresh.status === 'SETTLED') continue;
-    Object.assign(s, fresh);
-    const clock = fineClockStart(s);
-    if (clock > now) continue; // time taken back today is not charged today
-    const due = penaltyDaysDue(clock, now);
-    // Count EVERY daily row including WAIVED ones: a forgiven fine is still a
-    // charged penalty-day, so forgiveness never causes a re-charge. Rows with
-    // daysOverdue = 0 are return-expiry delay fines, not daily late-fines.
-    const charged = await prisma.settlementPenalty.count({ where: { settlementId: s.id, daysOverdue: { gt: 0 } } });
-    if (due <= charged) continue;
-
-    const rate = dailyRateFor(s);
-    for (let day = charged + 1; day <= due; day++) {
-      await prisma.settlementPenalty.create({
-        data: {
-          salesRepId: s.salesRepId,
-          settlementId: s.id,
-          kind: 'LATE_FINE',
-          amount: rate,
-          daysOverdue: day,
-          notes: s.selfExtendedAt
-            ? `Extended settlement period expired — ${s.settlementNumber} not completed within 168 hours (day ${day}).`
-            : `Late settlement fine — failed to complete ${s.settlementNumber} within 72 hours (day ${day}).`,
-        },
+      // Read the order again before pricing anything. The list above is a snapshot, and between it and this
+      // line ZELab may have taken back an extension — which changes the rate, the clock and whether a fine
+      // is owed at all.
+      const fresh = await tx.settlement.findUnique({
+        where: { id: s.id },
+        select: { status: true, deadlineAt: true, penaltyFrom: true, selfExtendedAt: true, settlementNumber: true },
       });
-      applied++;
-    }
+      if (!fresh || fresh.status === 'SETTLED') return null;
+      Object.assign(s, fresh);
+      const clock = fineClockStart(s);
+      if (clock > now) return null; // time taken back today is not charged today
+      const due = penaltyDaysDue(clock, now);
+      // Count EVERY daily row including WAIVED ones: a forgiven fine is still a charged penalty-day, so
+      // forgiveness never causes a re-charge. Rows with daysOverdue = 0 are return-expiry fines.
+      const charged = await tx.settlementPenalty.count({ where: { settlementId: s.id, daysOverdue: { gt: 0 } } });
+      if (due <= charged) return null;
+
+      const rate = dailyRateFor(s);
+      for (let day = charged + 1; day <= due; day++) {
+        await tx.settlementPenalty.create({
+          data: {
+            salesRepId: s.salesRepId,
+            settlementId: s.id,
+            kind: 'LATE_FINE',
+            amount: rate,
+            daysOverdue: day,
+            notes: s.selfExtendedAt
+              ? `Extended settlement period expired — ${s.settlementNumber} not completed within 168 hours (day ${day}).`
+              : `Late settlement fine — failed to complete ${s.settlementNumber} within 72 hours (day ${day}).`,
+          },
+        });
+      }
+      return { due, charged, rate };
+    }, { timeout: 30000 });
+    if (!result) continue;
+    const { due, charged, rate } = result;
+    applied += due - charged;
 
     const newFines = due - charged;
     const fineValue = newFines * rate;

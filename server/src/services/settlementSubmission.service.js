@@ -26,6 +26,7 @@ async function submitLineTx(tx, settlementId, payload, actor) {
   if (!productId) throw ApiError.badRequest('Select a product to settle');
   if (!Number.isInteger(boxes) || boxes <= 0) throw ApiError.badRequest('Boxes settled must be a positive whole number');
 
+  await settlement.lockOrder(tx, settlementId);
   const s = await tx.settlement.findUnique({
     where: { id: settlementId },
     include: { salesRep: { include: { user: { select: { id: true, name: true } } } } },
@@ -60,16 +61,20 @@ async function submitLineTx(tx, settlementId, payload, actor) {
   if (!pkg) throw ApiError.badRequest(`${product.name} has no base (Box) packaging configured`);
   const { baseQuantity } = await inventory.convertToBase(tx, productId, pkg.packagingUnitId, boxes);
 
-  // Outstanding boxes, minus boxes already sitting on PENDING submissions for
-  // the same product (so a rep can't submit the same boxes twice).
+  // Outstanding boxes, minus boxes already sitting on PENDING submissions for the same product (so a rep
+  // can't submit the same boxes twice) AND boxes locked in a PENDING return (so the same boxes can't be both
+  // settled and returned — audit, 11 Nov 2026).
   const outstanding = await settlement.productOutstanding(tx, s, productId);
-  const pendingAgg = await tx.settlementSubmission.aggregate({
-    where: { settlementId, productId, status: 'PENDING' },
-    _sum: { boxes: true },
-  });
-  const available = outstanding - (pendingAgg._sum.boxes || 0);
-  if (boxes > available) {
-    throw ApiError.badRequest(`Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order`);
+  const [pendingSubs, pendingRets] = await Promise.all([
+    settlement.pendingSubmissionBoxes(tx, settlementId),
+    settlement.pendingReturnBoxes(tx, settlementId),
+  ]);
+  const inReturn = pendingRets.get(productId) || 0;
+  const available = outstanding - (pendingSubs.get(productId) || 0) - inReturn;
+  if (baseQuantity > available) {
+    throw ApiError.badRequest(inReturn > 0
+      ? `Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order — ${inReturn} box(es) are in a return waiting for ZELab.`
+      : `Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order`);
   }
 
   const amount = round2(baseQuantity * toNumber(product.sellingPrice));
@@ -159,18 +164,22 @@ async function submitMany(settlementId, payload, actor) {
 async function approve(submissionId, actor) {
   const sub = await prisma.settlementSubmission.findUnique({ where: { id: submissionId } });
   if (!sub) throw ApiError.notFound('Settlement submission not found');
-  if (sub.status !== 'PENDING') throw ApiError.badRequest(`This submission is already ${sub.status.toLowerCase()}`);
+  if (sub.status !== 'PENDING') throw ApiError.conflict(`This submission is already ${sub.status.toLowerCase()}`);
 
   const out = await prisma.$transaction(async (tx) => {
+    // Claim it first, and only if it is still pending (audit, 11 Nov 2026): a double tap or a second admin
+    // waits for this one, then finds it decided — the sale and the commission are recorded exactly once.
+    const claimed = await tx.settlementSubmission.updateMany({
+      where: { id: submissionId, status: 'PENDING' },
+      data: { status: 'APPROVED', decidedById: actor ? actor.id : null, decidedAt: new Date() },
+    });
+    if (claimed.count !== 1) throw ApiError.conflict('This submission was already decided.');
     const { sale, settlement: dec } = await settlement.settleBoxesTx(
       tx,
       { settlementId: sub.settlementId, productId: sub.productId, packagingUnitId: sub.packagingUnitId, boxes: sub.boxes, method: sub.method },
       actor,
     );
-    await tx.settlementSubmission.update({
-      where: { id: submissionId },
-      data: { status: 'APPROVED', saleId: sale.id, decidedById: actor ? actor.id : null, decidedAt: new Date() },
-    });
+    await tx.settlementSubmission.update({ where: { id: submissionId }, data: { saleId: sale.id } });
     return { dec, sale };
   }, { timeout: 30000 });
 
@@ -242,12 +251,15 @@ async function approve(submissionId, actor) {
 async function reject(submissionId, actor, reason) {
   const sub = await prisma.settlementSubmission.findUnique({ where: { id: submissionId } });
   if (!sub) throw ApiError.notFound('Settlement submission not found');
-  if (sub.status !== 'PENDING') throw ApiError.badRequest(`This submission is already ${sub.status.toLowerCase()}`);
+  if (sub.status !== 'PENDING') throw ApiError.conflict(`This submission is already ${sub.status.toLowerCase()}`);
 
-  const updated = await prisma.settlementSubmission.update({
-    where: { id: submissionId },
+  // Only if it is still pending at the moment of writing (an approval may be landing at the same time).
+  const done = await prisma.settlementSubmission.updateMany({
+    where: { id: submissionId, status: 'PENDING' },
     data: { status: 'REJECTED', rejectionReason: reason || null, decidedById: actor ? actor.id : null, decidedAt: new Date() },
   });
+  if (done.count !== 1) throw ApiError.conflict('This submission was already decided.');
+  const updated = await prisma.settlementSubmission.findUnique({ where: { id: submissionId } });
 
   const rep = await prisma.salesRepresentative.findUnique({ where: { id: sub.salesRepId }, select: { userId: true } });
   notification.notifyUser(rep?.userId, {
