@@ -22,10 +22,12 @@ function ReportModal({ type, onClose }) {
     onSuccess: () => { toast.success('Report submitted'); qc.invalidateQueries({ queryKey: ['daily-reports'] }); onClose(); },
     onError: (e) => toast.error(apiError(e)),
   });
+  // Nothing to send until at least one figure or a note is filled in.
+  const filled = Object.values(form).some((v) => (typeof v === 'string' ? v.trim() !== '' : v !== undefined && !Number.isNaN(v)));
 
   return (
     <Modal open onClose={onClose} title={type === 'OPENING' ? 'Opening report' : 'Closing report'}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={submit.isPending} onClick={() => submit.mutate()}>Submit</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={submit.isPending} disabled={!filled} onClick={() => submit.mutate()}>Submit</Button></>}>
       <div className="space-y-4">
         {type === 'OPENING' ? (
           <>
@@ -76,21 +78,42 @@ export default function DailyReports() {
           <EmptyState title="No daily reports yet" icon={NotebookPen} />
         ) : (
           <>
-            <Table>
-              <THead><TR><TH>Date</TH>{staff && <TH>Rep</TH>}<TH>Type</TH><TH>Cash / Sales</TH><TH>Collected</TH><TH>Notes</TH></TR></THead>
-              <TBody>
-                {data.data.map((r) => (
-                  <TR key={r.id}>
-                    <TD>{formatDate(r.reportDate)}</TD>
-                    {staff && <TD>{r.salesRep?.user?.name}</TD>}
-                    <TD><Badge className={r.type === 'OPENING' ? 'bg-amber-500/15 text-amber-300' : 'bg-indigo-500/15 text-indigo-300'}>{r.type}</Badge></TD>
-                    <TD>{r.type === 'OPENING' ? formatCurrency(r.cashOnHand || 0) : formatCurrency(r.salesAmount || 0)}</TD>
-                    <TD>{r.type === 'CLOSING' ? formatCurrency(r.cashCollected || 0) : '—'}</TD>
-                    <TD className="max-w-[260px] truncate text-muted">{r.openingNote || r.closingNote || '—'}</TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
+            {/* On a phone, one stacked row per report: the six-column table pushed Collected and
+                Notes off the screen. The table stays from the sm breakpoint up. */}
+            <div className="divide-y divide-border sm:hidden">
+              {data.data.map((r) => (
+                <div key={r.id} className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-sm font-semibold text-foreground">{formatDate(r.reportDate)}</span>
+                    <Badge className={r.type === 'OPENING' ? 'bg-amber-500/15 text-amber-300' : 'bg-indigo-500/15 text-indigo-300'}>{r.type}</Badge>
+                    {staff && <span className="ml-auto truncate text-xs text-muted">{r.salesRep?.user?.name}</span>}
+                  </div>
+                  <p className="mt-1 text-xs tabular-nums text-muted">
+                    {r.type === 'OPENING'
+                      ? <>Cash <span className="text-foreground">{formatCurrency(r.cashOnHand || 0)}</span></>
+                      : <>Sales <span className="text-foreground">{formatCurrency(r.salesAmount || 0)}</span> · Collected <span className="text-foreground">{formatCurrency(r.cashCollected || 0)}</span></>}
+                  </p>
+                  {(r.openingNote || r.closingNote) && <p className="mt-0.5 truncate text-xs text-faint">{r.openingNote || r.closingNote}</p>}
+                </div>
+              ))}
+            </div>
+            <div className="hidden sm:block">
+              <Table>
+                <THead><TR><TH>Date</TH>{staff && <TH>Rep</TH>}<TH>Type</TH><TH>Cash / Sales</TH><TH>Collected</TH><TH>Notes</TH></TR></THead>
+                <TBody>
+                  {data.data.map((r) => (
+                    <TR key={r.id}>
+                      <TD>{formatDate(r.reportDate)}</TD>
+                      {staff && <TD>{r.salesRep?.user?.name}</TD>}
+                      <TD><Badge className={r.type === 'OPENING' ? 'bg-amber-500/15 text-amber-300' : 'bg-indigo-500/15 text-indigo-300'}>{r.type}</Badge></TD>
+                      <TD>{r.type === 'OPENING' ? formatCurrency(r.cashOnHand || 0) : formatCurrency(r.salesAmount || 0)}</TD>
+                      <TD>{r.type === 'CLOSING' ? formatCurrency(r.cashCollected || 0) : '—'}</TD>
+                      <TD className="max-w-[260px] truncate text-muted">{r.openingNote || r.closingNote || '—'}</TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
             <Pagination page={page} totalPages={data.meta?.totalPages} total={data.meta?.total} onChange={setPage} />
           </>
         )}

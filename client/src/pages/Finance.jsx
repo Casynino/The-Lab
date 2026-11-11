@@ -1002,7 +1002,9 @@ function AccountStatementModal({ account, onClose }) {
   // Balance after each row, newest first. A record has no running balance to
   // walk — every row on it was paid from the owner's own hand and moved no
   // account — so the column is dropped rather than filled with zeroes.
-  let running = account.balance;
+  // Page 2 onwards starts below the rows on the pages before it (newerNet = their in minus out),
+  // not at today's balance again.
+  let running = Math.round((account.balance - Number(data?.meta?.newerNet || 0)) * 100) / 100;
   const withBalance = rows.map((t) => {
     const after = running;
     running = Math.round((after - (t.direction === 'IN' ? Number(t.amount) : -Number(t.amount))) * 100) / 100;

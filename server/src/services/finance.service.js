@@ -639,13 +639,15 @@ async function listTransactions(filters, pagination) {
   // out" did not add up to its "balance now" (Airtel showed -480,000 by the strip, 1,060,000 held).
   const epoch = await reports.financeEpoch();
   const sinceEpoch = epoch ? { occurredAt: { gte: epoch } } : {};
-  const [items, total, brands, inAgg, outAgg, offInAgg, offOutAgg, byCatRows] = await Promise.all([
+  // Rows that share a date keep one fixed order, so a page and the rows "before" it never overlap.
+  const orderBy = [pagination.orderBy, { id: 'desc' }];
+  const [items, total, brands, inAgg, outAgg, offInAgg, offOutAgg, byCatRows, newerRows] = await Promise.all([
     prisma.financeTransaction.findMany({
       where,
       include: { account: { select: { name: true, type: true } } },
       skip: pagination.skip,
       take: pagination.take,
-      orderBy: pagination.orderBy,
+      orderBy,
     }),
     prisma.financeTransaction.count({ where }),
     prisma.brand.findMany({ select: { id: true, name: true } }),
@@ -666,7 +668,16 @@ async function listTransactions(filters, pagination) {
       _sum: { amount: true },
       _count: true,
     }),
+    // An account statement walks its "balance after" column back from today's balance, newest
+    // first. Page 2 onwards needs the rows on the earlier pages to start from the right figure —
+    // without them every page restarted at today's balance. Same filter, same order, just the
+    // rows before this page.
+    filters.accountId && pagination.skip > 0
+      ? prisma.financeTransaction.findMany({ where, select: { amount: true, direction: true }, take: pagination.skip, orderBy })
+      : [],
   ]);
+  // In minus out over every row newer than this page.
+  const newerNet = round2(newerRows.reduce((s, t) => s + (t.direction === 'IN' ? 1 : -1) * toNumber(t.amount), 0));
   const brandName = new Map(brands.map((b) => [b.id, b.name]));
   const fromPocket = round2(toNumber(offOutAgg._sum.amount));
   const sumIn = round2(toNumber(inAgg._sum.amount) - toNumber(offInAgg._sum.amount));
@@ -709,6 +720,7 @@ async function listTransactions(filters, pagination) {
       };
     }),
     total,
+    newerNet,
     // `fromPocket` is reported beside in/out, never inside them.
     sums: { in: sumIn, out: sumOut, net: round2(sumIn - sumOut), fromPocket },
     byCategory: byCatRows
