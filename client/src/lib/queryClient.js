@@ -31,3 +31,11 @@ export const queryClient = new QueryClient({
 for (const key of [['brands'], ['categories'], ['packaging-units'], ['commission-rates'], ['bonus-rules'], ['finance', 'categories'], ['roles']]) {
   queryClient.setQueryDefaults(key, { staleTime: 5 * 60_000 });
 }
+
+// The queues people act on — approvals waiting, returns, the activity feed (the
+// LIVE pace in lib/polling) — keep the old 30 s: polling only runs while a page
+// is open, so coming back to one of them after half a minute asks again (behind
+// the rows already shown) rather than showing a list up to two minutes old.
+for (const key of [['stock-requests', 'pending-approvals'], ['settlements', 'pending-approvals'], ['returns'], ['activity']]) {
+  queryClient.setQueryDefaults(key, { staleTime: 30_000 });
+}

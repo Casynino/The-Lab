@@ -484,11 +484,13 @@ export default function ProductLabel() {
   const [removing, setRemoving] = useState(null);
 
   useEffect(() => {
-    if (!saved?.content || form) return;
+    // The editor is filled once, so never from a copy that is being asked again: an answer kept in
+    // memory (up to an hour) would otherwise become the form, and Save would put the old page back.
+    if (!saved?.content || form || isFetching) return;
     const draft = unsavedDraft;
     const mine = draft && me?.id && draft.who === me.id && draft.base === JSON.stringify(saved.content);
     setForm(mine ? draft.form : saved.content);
-  }, [saved, form, me?.id]);
+  }, [saved, form, me?.id, isFetching]);
 
   const save = useMutation({
     mutationFn: (body) => api.put('/product-page', body),
