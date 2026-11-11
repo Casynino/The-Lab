@@ -396,11 +396,15 @@ function AdminProfile({ user, sub }) {
 
   // A phone: one column — the card, the business, the password last. A computer: the person and the
   // password on the left, the business on the right. (The password form is placed twice and only one of
-  // the two is ever shown, so each layout keeps its natural order.)
+  // the two is ever shown, so each layout keeps its natural order.) For the owner it is always open, in
+  // its own card — not folded away (Nino, 11 Nov 2026: "it should be visible, not hidden in the drop-down").
   const password = (
-    <CollapsibleList title="Change password" variant="premium">
-      <ChangePasswordForm />
-    </CollapsibleList>
+    <section>
+      <SectionTitle>Change password</SectionTitle>
+      <div className="premium-card p-5">
+        <ChangePasswordForm />
+      </div>
+    </section>
   );
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start">
