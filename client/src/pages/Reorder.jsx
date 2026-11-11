@@ -143,7 +143,7 @@ export default function Reorder() {
           )}
           {s.belowMinCount > 0 && (
             <> <b className="text-foreground">{formatNumber(s.belowMinCount)}</b> product{s.belowMinCount === 1 ? ' sits' : 's sit'} at or below the
-              {' '}minimum stock level — where the cover is still long that is printed as a reason, not sounded as an alarm.</>
+              {' '}minimum stock level in the warehouse — where the cover is still long that is printed as a reason, not sounded as an alarm.</>
           )}
           {s.noVelocityCount > 0 && (
             <> {formatNumber(s.noVelocityCount)} sold nothing at all in {pace}, so they have no run-out date to rank by.</>

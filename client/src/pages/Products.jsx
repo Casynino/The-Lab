@@ -307,6 +307,10 @@ function ProductsCatalogue() {
                       {p.onHandBase <= 0
                         ? <Badge className="ml-2 bg-rose-500/15 text-rose-300">Out</Badge>
                         : p.lowStock && <Badge className="ml-2 bg-amber-500/15 text-amber-300">Low</Badge>}
+                      {/* Low is the warehouse against its minimum; the count above includes the reps' boxes. */}
+                      {p.onHandBase > 0 && p.lowStock && p.warehouseBase !== p.onHandBase && (
+                        <div className="text-[11px] text-faint">{formatNumber(p.warehouseBase)} in the warehouse</div>
+                      )}
                     </TD>
                     <TD><Badge className={p.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/[0.06] text-muted'}>{p.isActive ? 'Active' : 'Inactive'}</Badge></TD>
                     <TD>

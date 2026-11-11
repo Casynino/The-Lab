@@ -105,7 +105,7 @@ const balances = asyncHandler(async (req, res) => {
   const q = req.validatedQuery || req.query;
   const scope = q.scope || 'ALL';
 
-  const [whBalances, repBalances, warehouses, reps, products] = await Promise.all([
+  const [whBalances, repBalances, warehouses, reps, products, shelf] = await Promise.all([
     scope === 'SALES_REP' ? [] : inventory.warehouseBalances(prisma, q.warehouseId),
     scope === 'WAREHOUSE' ? [] : inventory.repBalances(prisma, q.salesRepId),
     prisma.warehouse.findMany({ select: { id: true, name: true } }),
@@ -114,6 +114,8 @@ const balances = asyncHandler(async (req, res) => {
       where: q.productId ? { id: q.productId } : undefined,
       select: { id: true, name: true, sku: true, baseUnitName: true, purchasePrice: true, sellingPrice: true, minStockLevel: true, brand: { select: { id: true, name: true } } },
     }),
+    // Low is measured on the warehouse shelves, whatever scope is being viewed — as the stock alerts do.
+    inventory.warehouseOnHand(prisma),
   ]);
 
   const whName = new Map(warehouses.map((w) => [w.id, w.name]));
@@ -169,7 +171,7 @@ const balances = asyncHandler(async (req, res) => {
       brandName: p.brand?.name || null,
       minStockLevel: p.minStockLevel,
       sellingPrice: toNumber(p.sellingPrice),
-      lowStock: g.totalBase > 0 && p.minStockLevel > 0 && g.totalBase <= p.minStockLevel,
+      lowStock: g.totalBase > 0 && p.minStockLevel > 0 && (shelf.get(g.productId) || 0) <= p.minStockLevel,
       totalBase: g.totalBase,
       value: round2(g.totalBase * toNumber(p.purchasePrice)),
       locations: g.locations.sort((a, b) => b.baseQuantity - a.baseQuantity),

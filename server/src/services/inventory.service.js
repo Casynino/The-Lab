@@ -128,6 +128,21 @@ async function productOnHand(client) {
   return map;
 }
 
+// Base units per product on the warehouse shelves only. The minimum-stock level is measured against
+// this — the same figure the low/out-of-stock alerts read — because boxes issued to reps are not there
+// to sell or issue from the store. (Reorder and Products counted the reps' boxes as on hand, so a
+// product the alerts called LOW showed "OK" there; audit, 11 Nov 2026.)
+async function warehouseOnHand(client) {
+  const rows = await client.inventoryTransaction.groupBy({
+    by: ['productId'],
+    where: { warehouseId: { not: null } },
+    _sum: { baseQuantity: true },
+  });
+  const map = new Map();
+  rows.forEach((r) => map.set(r.productId, r._sum.baseQuantity || 0));
+  return map;
+}
+
 // --- Availability guard ----------------------------------------------------
 
 // Serialise stock leaving one place (audit #48, 11 Nov 2026): the availability check below reads the
@@ -412,6 +427,7 @@ module.exports = {
   warehouseBalances,
   repBalances,
   productOnHand,
+  warehouseOnHand,
   assertAvailable,
   postMovement,
   increaseStock,
