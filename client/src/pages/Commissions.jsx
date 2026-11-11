@@ -1460,9 +1460,11 @@ function AdminView() {
                 <TD className="text-faint">{formatDateTime(w.requestedAt)}</TD>
                 <TD>
                   <div className="flex justify-end gap-1">
+                    {/* Busy while a decision is on its way (audit #19): a second tap used to send a second PAY.
+                        The server now refuses it too; this keeps the button from inviting it. */}
                     {w.status === 'PENDING' && <>
-                      <Button className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>Approve &amp; pay</Button>
-                      <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
+                      <Button className="px-2 py-1 text-xs" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>Approve &amp; pay</Button>
+                      <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'REJECT' })}>Reject</Button>
                     </>}
                     {w.status === 'APPROVED' && (
                       // One button, because there is only one truth: rep
@@ -1472,7 +1474,7 @@ function AdminView() {
                       // two called the same endpoint with the same result, and
                       // the choice only invited the confusion the Commission
                       // account exists to end.
-                      <Button className="px-2 py-1 text-xs" onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                      <Button className="px-2 py-1 text-xs" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
                         Mark paid — from my pocket
                       </Button>
                     )}

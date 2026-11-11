@@ -458,6 +458,8 @@ function resolveOccurredAt(v) {
 async function recordTransaction(data, actor, client = prisma) {
   const amount = round2(toNumber(data.amount));
   if (!(amount > 0)) throw ApiError.badRequest('Amount must be greater than zero');
+  // Said plainly: without it Prisma answered "Invalid database query".
+  if (!data.accountId) throw ApiError.badRequest('Choose the account the money moved through');
   const account = await client.businessAccount.findUnique({ where: { id: data.accountId } });
   if (!account || !account.isActive) throw ApiError.badRequest('Select a valid account');
   // The commission account holds the record of rep payouts and nothing else.

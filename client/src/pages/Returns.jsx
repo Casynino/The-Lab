@@ -442,7 +442,7 @@ function HistoryRow({ r, onView }) {
 // showed me for requests — nice, not this"): a premium New return card, the returns still waiting as soft
 // cards, the rest in a History list that opens and closes. The tiles and the paragraph under them are gone;
 // the owner's and the warehouse's page is untouched.
-function RepReturnsView({ all, isLoading, onNew, onView, onCancel }) {
+function RepReturnsView({ all, isLoading, onNew, onView, onCancel, cancellingId = null }) {
   const pending = all.filter((r) => r.status === 'PENDING');
   const done = all.filter((r) => r.status !== 'PENDING');
   return (
@@ -499,12 +499,14 @@ function RepReturnsView({ all, isLoading, onNew, onView, onCancel }) {
                       )}
                       <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[0.08] pt-3">
                         <span className="text-xs text-muted">Waiting for ZELab</span>
+                        {/* Busy while the cancel is on its way (audit #28): no second tap. */}
                         <button
                           type="button"
+                          disabled={cancellingId != null}
                           onClick={(e) => { e.stopPropagation(); onCancel(r.id); }}
-                          className="text-xs font-semibold text-rose-300 transition hover:text-rose-200"
+                          className="text-xs font-semibold text-rose-300 transition hover:text-rose-200 disabled:opacity-50"
                         >
-                          Cancel
+                          {cancellingId === r.id ? 'Cancelling…' : 'Cancel'}
                         </button>
                       </div>
                     </div>
@@ -591,7 +593,7 @@ export default function Returns() {
   if (isRep) {
     return (
       <div>
-        <RepReturnsView all={all} isLoading={isLoading} onNew={() => setOpen(true)} onView={setViewingId} onCancel={(id) => cancel.mutate(id)} />
+        <RepReturnsView all={all} isLoading={isLoading} onNew={() => setOpen(true)} onView={setViewingId} onCancel={(id) => cancel.mutate(id)} cancellingId={cancel.isPending ? cancel.variables : null} />
         {open && <ReturnModal onClose={() => setOpen(false)} />}
         {viewingId && <ReturnDetailModal returnId={viewingId} canDecide={false} onClose={() => setViewingId(null)} />}
       </div>
