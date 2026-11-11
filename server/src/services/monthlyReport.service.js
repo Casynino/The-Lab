@@ -9,6 +9,7 @@
 // ===========================================================================
 
 const prisma = require('../config/prisma');
+const ApiError = require('../utils/ApiError');
 const finance = require('./finance.service');
 const reports = require('./reports.service');
 const reorder = require('./reorder.service');
@@ -210,15 +211,30 @@ function buildWhatsAppText(d, link) {
   });
 }
 
-// Generate → archive → send. Deduped per month; `force` bypasses for tests;
-// `silent` regenerates/repairs the archived PDF without sending WhatsApp.
+// Generate → archive → send. Deduped per month; `force` bypasses for tests
+// (linking to the PDF already on file, never replacing it); `silent`
+// regenerates/repairs the archived PDF without sending WhatsApp.
 async function sendMonthlyReport({ force = false, silent = false, monthKey } = {}) {
   const wa = require('./whatsappNotify.service');
   const archive = require('./reportArchive.service');
   const { monthlyPdf } = require('./reportPdf.service');
 
+  // Decided before anything is built. Only a real, finished month: '2026-13' used to roll over into
+  // January 2027, and a month still under way would use up the key of the real report.
+  if (monthKey) {
+    const m = /^(\d{4})-(\d{2})$/.exec(monthKey);
+    if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) throw ApiError.badRequest(`Not a month: ${monthKey} (use YYYY-MM)`);
+  }
+  const { eatStart, eatEnd } = reportMonth(monthKey);
+  const key = monthKeyOf(eatStart);
+  if (!eatEnd.isBefore(eatNow())) throw ApiError.badRequest(`${eatStart.format('MMMM YYYY')} is not over yet`);
+  // Already sent (or waiting in the queue): answer before building, so a re-run never overwrites
+  // the PDF the owner was sent.
+  if (!force && !silent && (await prisma.whatsAppNotification.findFirst({ where: { dedupeKey: `monthly:${key}` }, select: { id: true } }))) {
+    return { sent: false, reason: `Already sent for ${key}`, monthKey: key };
+  }
+
   const data = await buildMonthlyData(monthKey);
-  const key = data.period.monthKey;
 
   const pdf = await monthlyPdf(data);
   const saved = await archive.save({
@@ -229,6 +245,7 @@ async function sendMonthlyReport({ force = false, silent = false, monthKey } = {
     to: data.period.to,
     pdf,
     meta: { revenue: data.finance.revenue, netProfit: data.finance.netProfit, boxes: data.finance.boxesSold },
+    keep: force && !silent,
   });
   const link = archive.publicLink(saved.id);
   if (silent) return { sent: false, reason: 'silent-regeneration', monthKey: key, pdf: link, archiveId: saved.id };

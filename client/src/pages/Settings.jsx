@@ -2,7 +2,7 @@ import { SLOW } from '@/lib/polling';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Save, Send, MessageCircle, Eye, EyeOff, Lock } from 'lucide-react';
+import { Save, Send, MessageCircle, Eye, EyeOff, Lock, RotateCw } from 'lucide-react';
 import dayjs from 'dayjs';
 import api, { unwrap, apiError } from '@/lib/api';
 import { PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, Input, Button, Select, Badge } from '@/components/ui';
@@ -77,17 +77,46 @@ function StatusChip({ row }) {
 
 // The last messages: a short list, the rest on request.
 function RecentMessages() {
+  const qc = useQueryClient();
   const [all, setAll] = useState(false);
   const { data: history, isLoading } = useQuery({
     queryKey: ['whatsapp-history'],
     queryFn: async () => unwrap(await api.get('/settings/whatsapp/history?limit=25')).data,
     refetchInterval: SLOW,
   });
+  // The newest failed message, asked for on its own: on a busy day it is no longer among the 25 above,
+  // and the button must still show while it can be resent.
+  const { data: lastFailed } = useQuery({
+    queryKey: ['whatsapp-history', 'failed'],
+    queryFn: async () => unwrap(await api.get('/settings/whatsapp/history?status=FAILED&limit=1')).data,
+    refetchInterval: SLOW,
+  });
+  // Failed messages go back in the queue (the server only resends the last 48 hours; older news is
+  // not sent). Two go out at once, the rest over the next few minutes.
+  const retry = useMutation({
+    mutationFn: async () => unwrap(await api.post('/settings/whatsapp/retry-failed')).data,
+    onSuccess: (r) => {
+      if (!r.requeued) toast('Nothing to resend: only messages from the last 48 hours are resent.');
+      else toast.success(`${r.requeued} message${r.requeued === 1 ? '' : 's'} back in the queue, ${r.sent || 0} sent now${r.requeued > (r.retried || 0) ? '; the rest follow shortly' : ''}.`);
+      qc.invalidateQueries({ queryKey: ['whatsapp-history'] });
+    },
+    onError: (e) => toast.error(apiError(e)),
+  });
   const rows = history || [];
   const shown = all ? rows : rows.slice(0, 8);
+  const canRetry = [...rows, ...(lastFailed || [])]
+    .some((r) => r.status === 'FAILED' && dayjs().diff(dayjs(r.createdAt), 'hour', true) < 48);
   return (
     <Card>
-      <CardHeader title="Recent WhatsApp messages" subtitle="What was sent, and whether it arrived." />
+      <CardHeader
+        title="Recent WhatsApp messages"
+        subtitle="What was sent, and whether it arrived."
+        action={canRetry && (
+          <Button variant="secondary" className="whitespace-nowrap py-1.5 text-xs" loading={retry.isPending} onClick={() => retry.mutate()}>
+            <RotateCw className="h-3.5 w-3.5" /> Retry failed
+          </Button>
+        )}
+      />
       <CardBody>
         {isLoading ? <PageSpinner label="Loading…" /> : rows.length === 0 ? (
           <EmptyState icon={MessageCircle} title="Nothing sent yet" message="Messages appear here as things happen." />

@@ -62,7 +62,7 @@ const whatsappTypes = asyncHandler(async (_req, res) => {
 
 const whatsappHistory = asyncHandler(async (req, res) => {
   const wa = require('../services/whatsappNotify.service');
-  return ok(res, await wa.history(req.query.limit));
+  return ok(res, await wa.history(req.query.limit, { failedOnly: req.query.status === 'FAILED' }));
 });
 
 // Re-queue messages that failed, after the reason they failed has been fixed.

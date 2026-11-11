@@ -258,6 +258,9 @@ async function queue(type, { priority, dedupeKey = null, refType = null, refId =
 
 // Re-attempt undelivered rows. Called from crons and (throttled) from admin
 // polling. Sends at most two per run with a gap — CallMeBot rate-limits bursts.
+// Only rows from the last FLUSH_WINDOW_HOURS are retried: older news is not sent.
+const FLUSH_WINDOW_HOURS = 48;
+const PRIORITY_RANK = { CRITICAL: 0, ACTION: 1, WARNING: 2, INFO: 3 };
 let lastFlushAt = 0;
 async function flush({ throttleMs = 60000 } = {}) {
   const now = Date.now();
@@ -265,24 +268,46 @@ async function flush({ throttleMs = 60000 } = {}) {
   lastFlushAt = now;
 
   const quiet = await inQuietHours();
-  const rows = await prisma.whatsAppNotification.findMany({
+  const candidates = await prisma.whatsAppNotification.findMany({
     where: {
       status: 'PENDING',
       attempts: { lt: MAX_ATTEMPTS },
-      createdAt: { gt: new Date(now - 48 * 3600 * 1000) },
+      createdAt: { gt: new Date(now - FLUSH_WINDOW_HOURS * 3600 * 1000) },
       // Anti-duplicate cool-down: an attempt may have actually been delivered
       // even if it read as failed — never echo it within 10 minutes.
       OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: new Date(now - 10 * 60 * 1000) } }],
       ...(quiet ? { priority: 'CRITICAL' } : {}),
     },
     orderBy: { createdAt: 'asc' },
-    take: 2,
+    take: 50,
   });
+  // The most urgent first (oldest first within one priority). An INFO row whose
+  // recipient has used up the provider budget would only be held again by
+  // deliver(), without an attempt, so it is passed over here: otherwise two held
+  // rows sat at the head of the queue on every run and the alerts behind them
+  // were never retried.
+  const cap = await providerBudgetCap();
+  const usedBy = new Map();
+  const heldByBudget = async (row) => {
+    if (!(cap > 0 && row.priority === 'INFO' && row.type !== 'TEST')) return false;
+    const to = row.toPhone || null;
+    if (!usedBy.has(to)) usedBy.set(to, await providerBudgetUsed(to));
+    return usedBy.get(to) >= cap;
+  };
+  const ranked = [...candidates].sort((a, b) => (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3));
+  const rows = [];
+  for (const row of ranked) {
+    if (rows.length >= 2) break;
+    if (!(await heldByBudget(row))) rows.push(row);
+  }
   let sent = 0;
-  for (const row of rows) {
-    const r = await deliver(row);
+  for (let i = 0; i < rows.length; i += 1) {
+    const r = await deliver(rows[i]);
     if (r.sent) sent += 1;
-    if (rows.length > 1) await new Promise((res) => setTimeout(res, 8000));
+    // The gap is for CallMeBot's burst limit, so it is only needed between two
+    // real attempts — not after the last row, nor after a row that was held.
+    const attempted = r.attempts !== undefined;
+    if (attempted && i < rows.length - 1) await new Promise((res) => setTimeout(res, 8000));
   }
   return { retried: rows.length, sent };
 }
@@ -569,6 +594,59 @@ async function dailySummaryCatchup() {
   return dailySummary();
 }
 
+// ── Reports that were missed ─────────────────────────────────────────────────
+// A scheduled report whose run failed (the database out of reach for a moment)
+// or never ran (a skipped cron) used to be lost for good: the next run builds
+// the NEXT period. The morning sweep calls this. For each kind it takes the
+// latest period whose send time has passed and, if that period's dedupe key is
+// missing, sends it late. A report that went out (or is waiting in the queue)
+// has its key, so nothing is ever sent twice; and only one period per kind is
+// looked at, so a long outage never ends in a flood of old reports. Reports
+// that are switched off, or WhatsApp not set up, are left alone (otherwise the
+// same report would be rebuilt every morning).
+async function catchUpReports(now = nowEAT()) {
+  if (!(await getConfig()).configured) return { skipped: 'not-configured' };
+  const isMissing = async (type, dedupeKey) => (await isEnabled(type))
+    && !(await prisma.whatsAppNotification.findFirst({ where: { dedupeKey }, select: { id: true } }));
+
+  const out = {};
+  const attempt = async (kind, name, key, dedupeKey, type, send) => {
+    try {
+      out[kind] = (await isMissing(type, dedupeKey)) ? { key, ...(await send()) } : { key, missing: false };
+    } catch (err) {
+      out[kind] = { key, error: String(err.message).slice(0, 200) };
+      require('./notification.service').notifyAdmins({
+        type: 'GENERAL',
+        severity: 'CRITICAL',
+        title: `${name} failed to generate`,
+        message: `${name} for ${key} was missed and could not be sent late either: ${String(err.message).slice(0, 200)}. The next morning check tries again.`,
+        entityType: 'Report',
+        entityId: name,
+      }).catch(() => {});
+    }
+  };
+
+  // Daily: yesterday's, due at 21:00 yesterday. It is built now, so the message says it is late.
+  const day = now.subtract(1, 'day').format('YYYY-MM-DD');
+  await attempt('daily', 'Daily report', day, `daily:${day}`, 'DAILY_SUMMARY', () =>
+    require('./dailyBusinessReport.service').sendDailyReport({ dateKey: day, queue, late: true }));
+
+  // Weekly: due on Tuesday 08:00 for the Monday–Sunday week before it.
+  const weekly = require('./weeklyReport.service');
+  const monday = now.startOf('isoWeek');
+  const weekDue = monday.add(weekly.REPORT_WEEKDAY - 1, 'day').hour(8);
+  const weekKey = weekly.weekKeyOf(now.isBefore(weekDue) ? monday.subtract(14, 'day') : monday.subtract(7, 'day'));
+  await attempt('weekly', 'Weekly report', weekKey, `weekly:${weekKey}`, 'WEEKLY_REPORT', () => weekly.sendWeeklyReport({ weekKey }));
+
+  // Monthly: due on the 1st at 08:00 for the month before it.
+  const first = now.startOf('month');
+  const monthKey = (now.isBefore(first.hour(8)) ? first.subtract(2, 'month') : first.subtract(1, 'month')).format('YYYY-MM');
+  await attempt('monthly', 'Monthly report', monthKey, `monthly:${monthKey}`, 'MONTHLY_REPORT', () =>
+    require('./monthlyReport.service').sendMonthlyReport({ monthKey }));
+
+  return out;
+}
+
 // ── Per-rep alerts ───────────────────────────────────────────────────────────
 // Reps activate their own CallMeBot number; when both phone+apikey are stored
 // on their profile, their important alerts are pushed to their WhatsApp.
@@ -656,8 +734,11 @@ async function testRep(salesRepId) {
 // Put failed messages back in the queue. Used after the cause of the failure is
 // fixed — a renewed provider plan, a corrected number — since those rows are
 // otherwise terminal and their text would never be delivered at all.
-async function retryFailed({ hours = 168 } = {}) {
-  const since = new Date(Date.now() - hours * 3600 * 1000);
+// Only rows flush() can still send are put back: it skips anything older than
+// FLUSH_WINDOW_HOURS, so an older row would sit PENDING and never go out.
+async function retryFailed({ hours = FLUSH_WINDOW_HOURS } = {}) {
+  const h = Math.min(Number(hours) || FLUSH_WINDOW_HOURS, FLUSH_WINDOW_HOURS);
+  const since = new Date(Date.now() - h * 3600 * 1000);
   const { count } = await prisma.whatsAppNotification.updateMany({
     where: { status: 'FAILED', createdAt: { gt: since } },
     // attempts reset so the retry budget applies afresh; lastAttemptAt cleared
@@ -670,8 +751,12 @@ async function retryFailed({ hours = 168 } = {}) {
   return { requeued: count, ...flushed };
 }
 
-async function history(limit = 30) {
+// `failedOnly`: the newest FAILED rows, whatever came after them. The Settings
+// "Retry failed" button needs to know about a failure even when a busy day has
+// pushed it off the short list of recent messages.
+async function history(limit = 30, { failedOnly = false } = {}) {
   return prisma.whatsAppNotification.findMany({
+    ...(failedOnly ? { where: { status: 'FAILED' } } : {}),
     orderBy: { createdAt: 'desc' },
     take: Math.min(Number(limit) || 30, 100),
   });
@@ -712,6 +797,7 @@ module.exports = {
   scanStockAlerts,
   dailySummary,
   dailySummaryCatchup,
+  catchUpReports,
   notifyRep,
   mirrorToRep,
   testRep,

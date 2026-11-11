@@ -39,7 +39,9 @@ router.get(
     const penalties = await penalty.applyDuePenalties();
     const stockAlerts = await wa.scanStockAlerts().catch(() => null);
     const whatsappRetries = await wa.flush({ throttleMs: 0 }).catch(() => null);
-    return res.json({ success: true, data: { overdue, reminders, penalties, returnExpiry, stockAlerts, whatsappRetries, at: new Date().toISOString() } });
+    // A daily, weekly or monthly report whose own run failed or never ran is sent late from here.
+    const missedReports = await wa.catchUpReports().catch(() => null);
+    return res.json({ success: true, data: { overdue, reminders, penalties, returnExpiry, stockAlerts, whatsappRetries, missedReports, at: new Date().toISOString() } });
   }),
 );
 
@@ -76,17 +78,21 @@ router.get(
 );
 
 // A failed scheduled report must not die silently: log it and raise a
-// CRITICAL in-app notification for the admin.
+// CRITICAL in-app notification for the admin. A refused request (a month that
+// is not over, a week still under way) is an answer, not a failure: no alert.
 async function reportGuard(name, fn, res) {
   try {
     const result = await fn();
     return res.json({ success: true, data: result });
   } catch (err) {
+    if (err.statusCode && err.statusCode < 500) {
+      return res.status(err.statusCode).json({ success: false, error: { message: err.message } });
+    }
     require('../services/notification.service').notifyAdmins({
       type: 'GENERAL',
       severity: 'CRITICAL',
       title: `${name} failed to generate`,
-      message: `${name} could not be generated/sent: ${String(err.message).slice(0, 200)}. It will retry on the next run.`,
+      message: `${name} could not be generated/sent: ${String(err.message).slice(0, 200)}. The morning check (09:00) tries it again and sends it late.`,
       entityType: 'Report',
       entityId: name,
     }).catch(() => {});
