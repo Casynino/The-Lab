@@ -18,7 +18,8 @@ function RepModal({ onClose }) {
   const [regions, setRegions] = useState([]);
   const [monthlyTarget, setMonthlyTarget] = useState('');
 
-  const candidates = users.filter((u) => !u.salesRep);
+  // Only Sales rep accounts: the server refuses any other role (an admin made a rep kept admin powers).
+  const candidates = users.filter((u) => u.role?.name === 'SALES_REP' && !u.salesRep);
 
   const create = useMutation({
     mutationFn: () => api.post('/sales-reps', { userId, regions, monthlyTarget: monthlyTarget ? Number(monthlyTarget) : null }),
