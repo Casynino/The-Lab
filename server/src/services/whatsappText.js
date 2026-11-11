@@ -249,8 +249,26 @@ const stockRequestApproved = ({ request, order, deadline, items }) => {
   return fitted(build, steps.length ? steps : [{ shown: 0 }]);
 };
 
+// Stock the admin issued straight from Transfers, with no request behind it (audit, 11 Nov 2026: the
+// rep was never told): the order it opened and its deadline, then one lettered line per product, the
+// same shape as the approved request. A very long list drops products from the end, never the deadline.
+const stockIssued = ({ transfer, order, deadline, items }) => {
+  const list = Array.isArray(items) ? items : [];
+  const line = (i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.quantity, i.unit)}`;
+  const build = ({ shown }) => rep(
+    'STOCK ISSUED',
+    lines(transfer && `Transfer: ${transfer}`, order && `Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`),
+    list.length > 0 && lines(...list.slice(0, shown).map(line), shown < list.length && `+${list.length - shown} more, see ZELab`),
+    'Stock has been issued to you. Settle or return it before the deadline.',
+  );
+  const steps = [];
+  for (let k = list.length; k >= 1; k -= 1) steps.push({ shown: k });
+  return fitted(build, steps.length ? steps : [{ shown: 0 }]);
+};
+
 const repTexts = {
   STOCK_REQUEST_APPROVED: stockRequestApproved,
+  STOCK_ISSUED: stockIssued,
   STOCK_REQUEST_REJECTED: ({ request, reason }) => rep('STOCK REQUEST REJECTED', `Request: ${request}`, lines('Your stock request was not approved.', reason && `Reason: ${reason}`)),
   STOCK_ADDED: ({ product, boxes: n, order, attached }) => rep(
     'NEW STOCK ADDED',
