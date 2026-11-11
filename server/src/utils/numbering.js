@@ -37,6 +37,32 @@ async function nextDocNumber(delegate, field, prefix) {
   return `${like}${pad(max + 1)}`;
 }
 
+// Two actions at the same moment (two requests sent together, two approvals at once) can both read the
+// same highest number before either commits; the second insert then hits the unique key and used to fail
+// with "A record with this requestNumber already exists" (audit, 11 Nov 2026). The unique key stays the
+// real guarantee: the clash rolls the caller's whole transaction back, so running that transaction again
+// is safe, and by then the other action has committed, so the next read finds a free number. Only a clash
+// on a document number is retried; any other error is thrown straight away.
+const DOC_NUMBER_FIELDS = ['requestNumber', 'transferNumber', 'settlementNumber', 'saleNumber', 'returnNumber',
+  'submissionNumber', 'txnNumber', 'poNumber', 'countNumber'];
+function isDocNumberClash(err) {
+  if (!err || err.code !== 'P2002') return false;
+  const target = Array.isArray(err.meta?.target) ? err.meta.target.join(',') : String(err.meta?.target || '');
+  return DOC_NUMBER_FIELDS.some((f) => target.includes(f));
+}
+
+// `run` must be a whole transaction (e.g. () => prisma.$transaction(...)), never a step inside one:
+// Postgres refuses every further statement of a transaction once one has failed.
+async function withDocNumberRetry(run, attempts = 3) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (err) {
+      if (attempt >= attempts || !isDocNumberClash(err)) throw err;
+    }
+  }
+}
+
 // Next sequential sales-rep code (REP-006). Derived from the HIGHEST existing
 // code, not the row count — reps can be hard-deleted, so a count would reuse a
 // number that is still taken (e.g. 4 reps left but REP-005 exists).
@@ -60,4 +86,4 @@ function randomCode(length = 6) {
   return out;
 }
 
-module.exports = { nextDocNumber, nextRepCode, randomCode, compactDate, pad };
+module.exports = { nextDocNumber, withDocNumberRetry, isDocNumberClash, nextRepCode, randomCode, compactDate, pad };

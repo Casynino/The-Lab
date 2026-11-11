@@ -226,8 +226,30 @@ owner.monthlyReport = periodReport('ZELAB — MONTHLY REPORT', 'Full Report (PDF
 const FOOT = 'ZELab';
 const rep = (title, ...parts) => doc(bold(title), ...parts, FOOT);
 
+// The approved request (audit, 11 Nov 2026: the rep was not told about a part-approval): Nino's sample,
+// plus the order it opened and its deadline, then one lettered line per product as on the owner's
+// STOCK REQUEST — a line cut by the admin reads "3 of 4 Boxes". A very long list drops products from the
+// end ("+2 more, see ZELab"), never the order or the deadline.
+const stockRequestApproved = ({ request, order, deadline, items }) => {
+  const list = Array.isArray(items) ? items : [];
+  const short = (i) => Number(i.approved) < Number(i.requested);
+  const cut = list.some(short);
+  const line = (i, k) => `(${letter(k)}) ${i.name}: ${short(i)
+    ? `${Math.round(Number(i.approved) || 0)} of ${boxes(i.requested, i.unit)}`
+    : boxes(i.approved, i.unit)}`;
+  const build = ({ shown }) => rep(
+    'STOCK REQUEST APPROVED',
+    lines(`Request: ${request}`, order && `Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`),
+    list.length > 0 && lines(...list.slice(0, shown).map(line), shown < list.length && `+${list.length - shown} more, see ZELab`),
+    lines('Your stock request has been approved and issued.', cut && 'Some products were approved in a smaller quantity than you asked for.'),
+  );
+  const steps = [];
+  for (let k = list.length; k >= 1; k -= 1) steps.push({ shown: k });
+  return fitted(build, steps.length ? steps : [{ shown: 0 }]);
+};
+
 const repTexts = {
-  STOCK_REQUEST_APPROVED: ({ request }) => rep('STOCK REQUEST APPROVED', `Request: ${request}`, 'Your stock request has been approved and issued.'),
+  STOCK_REQUEST_APPROVED: stockRequestApproved,
   STOCK_REQUEST_REJECTED: ({ request, reason }) => rep('STOCK REQUEST REJECTED', `Request: ${request}`, lines('Your stock request was not approved.', reason && `Reason: ${reason}`)),
   STOCK_ADDED: ({ product, boxes: n, order, attached }) => rep(
     'NEW STOCK ADDED',

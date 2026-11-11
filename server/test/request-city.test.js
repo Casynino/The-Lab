@@ -177,6 +177,8 @@ test('approve: the stock is issued as one line per product, the cities stay on t
       update: async ({ data }) => ({ id: 'r1', ...data }),
     },
     stockRequestItem: { update: async ({ where, data }) => { updates.push([where.id, data.quantityApproved]); return {}; } },
+    // the approval checks the products are still switched on
+    product: { findMany: async ({ where }) => where.id.in.map((id) => ({ id, name: id, isActive: true })) },
     settlement: { findFirst: async () => ({ id: 'stl1' }) },
     salesRepresentative: { findUnique: async () => ({ userId: 'u1' }) },
     warehouse: { findFirst: async () => ({ id: 'w1' }) },

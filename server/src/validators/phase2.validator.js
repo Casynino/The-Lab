@@ -107,6 +107,7 @@ const stockRequestQuery = {
     ...paginationFields,
     status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'FULFILLED', 'CANCELLED']).optional(),
     salesRepId: id.optional(),
+    decided: boolQuery, // the admin history table: leave the pending ones out (they have their own strip)
   }),
 };
 
