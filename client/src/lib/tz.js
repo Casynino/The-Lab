@@ -25,3 +25,10 @@ export function tzDateLabel(opts = {}) {
 export function eatDay(value, opts = { day: 'numeric', month: 'short' }) {
   return new Date(value).toLocaleDateString('en-GB', { timeZone: TZ, ...opts });
 }
+
+// An instant's day as Tanzania sees it, as 'YYYY-MM-DD' — the value a date field shows and sends. The
+// finance forms used toISOString(), which is the UTC day: from 00:00 to 03:00 EAT it offered yesterday,
+// and a correction opened on a row from those hours showed the day before the one in the list.
+export function eatISODate(value = new Date()) {
+  return new Date(new Date(value).getTime() + 3 * 3_600_000).toISOString().slice(0, 10);
+}

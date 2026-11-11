@@ -109,6 +109,8 @@ const recordAdjustment = asyncHandler(async (req, res) => {
       occurredAt: req.body.occurredAt,
     },
     req.user,
+    undefined,
+    { checkBrand: true }, // a brand-reserved account only takes its own brand's money (#79)
   );
   await audit.record(req, {
     action: 'CREATE',
