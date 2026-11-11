@@ -59,11 +59,10 @@ const TINT = {
 function TintCard({ label, value, icon: Icon, sub, tone = 'brand' }) {
   const t = TINT[tone] || TINT.brand;
   return (
-    <div className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${t.ring}`}>
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${t.glow} to-transparent`} aria-hidden="true" />
+    <div className={`premium-card premium-card--sm p-4`}>
       <div className="relative flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-muted">{label}</p>
-        {Icon && <span className={`rounded-lg p-1.5 ${t.chip}`}><Icon className="h-3.5 w-3.5" /></span>}
+        {Icon && <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${t.chip}`}><Icon className="h-3.5 w-3.5" /></span>}
       </div>
       <p className={`relative mt-2 text-2xl font-bold tabular-nums ${t.num}`}>{value}</p>
       {sub && <p className="relative mt-0.5 text-[11px] text-faint">{sub}</p>}
@@ -108,17 +107,19 @@ const SEG_WASH = {
   violet: { bg: 'bg-gradient-to-br from-violet-500/[0.12] via-violet-500/[0.04] to-transparent', num: 'text-violet-300' },
   slate: { bg: 'bg-gradient-to-br from-white/[0.04] to-transparent', num: 'text-foreground' },
 };
+// In the premium finish (Nino, 11 Nov 2026: "nice but too big — follow the new design"): the red-lit
+// card, numbers a size smaller, plain-case labels.
 function SegmentStrip({ segments, size = 'lg' }) {
-  const numCls = size === 'lg' ? 'text-2xl xl:text-3xl' : 'text-xl';
+  const numCls = size === 'lg' ? 'text-xl xl:text-2xl' : 'text-lg';
   return (
-    <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-surface sm:flex sm:divide-x sm:divide-white/[0.06]">
+    <div className="premium-card grid grid-cols-2 sm:flex sm:divide-x sm:divide-white/[0.06]">
       {segments.map((seg) => {
         const w = SEG_WASH[seg.tone] || SEG_WASH.slate;
         return (
-          <div key={seg.label} className={`flex-1 p-5 ${w.bg}`}>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{seg.label}</p>
-            <p className={`mt-2 font-bold leading-none tabular-nums ${numCls} ${w.num}`}>{seg.value}</p>
-            {seg.sub && <p className="mt-1.5 text-xs text-faint">{seg.sub}</p>}
+          <div key={seg.label} className={`flex-1 px-4 py-3.5 ${w.bg}`}>
+            <p className="text-[11px] font-medium text-white/55">{seg.label}</p>
+            <p className={`mt-1.5 font-bold leading-none tabular-nums ${numCls} ${w.num}`}>{seg.value}</p>
+            {seg.sub && <p className="mt-1 text-[11px] text-faint">{seg.sub}</p>}
           </div>
         );
       })}
@@ -599,6 +600,9 @@ function Overview({ onNavigate, onOwnerMoney }) {
             )}
           </p>
 
+          {/* One compact premium card per wallet (Nino, 11 Nov 2026: "too big, too much — keep the clear
+              picture, well arranged, the new design"): the cash, one bar for whose it is, three small
+              figures, the cost/profit split on one line, and one short line on what is due. */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {data.cashSplit.buckets.filter((b) => b.cash > 0 || b.revenue > 0).map((b, i) => {
               const tint = ACCOUNT_TINT[i % ACCOUNT_TINT.length];
@@ -606,135 +610,89 @@ function Overview({ onNavigate, onOwnerMoney }) {
               const Icon = named[0] ? (ACCOUNT_ICON[data.accounts.find((a) => a.name === named[0].name)?.type] || Wallet) : Wallet;
               const yoursPct = b.cash > 0 ? (b.yours / b.cash) * 100 : 0;
               return (
-                <div key={b.key} className={`relative overflow-hidden rounded-2xl bg-surface ring-1 ${tint.ring}`}>
-                  <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tint.glow} to-transparent`} aria-hidden="true" />
-                  <div className="relative p-5">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-4 w-4" /></span>
-                        <div>
-                          <p className="text-sm font-bold text-foreground">{b.brandName}</p>
-                          <p className="text-[11px] text-faint">{named.map((a) => a.name).join(', ') || 'no account holds money'}</p>
-                        </div>
+                <div key={b.key} className="premium-card p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${tint.chip}`}><Icon className="h-4 w-4" /></span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">{b.brandName}</p>
+                        <p className="truncate text-[11px] text-faint">{named.map((a) => a.name).join(', ') || 'no account holds money'}</p>
                       </div>
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${b.setAside > 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
-                        {b.setAside > 0 ? 'Supplier owed' : 'All yours'}
-                      </span>
                     </div>
-
-                    <p className="mt-4 text-3xl font-bold leading-none tabular-nums text-foreground">{formatCurrency(b.cash)}</p>
-                    <p className="mt-1 text-xs text-faint">cash in this wallet</p>
-
-                    {b.cash > 0 && (
-                      <>
-                        <div className="mt-4 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                          <div className="h-full bg-rose-500" style={{ width: `${100 - yoursPct}%` }} />
-                          <div className="h-full bg-emerald-500" style={{ width: `${yoursPct}%` }} />
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                            <span className="h-2 w-2 rounded-full bg-rose-400" />
-                            {b.supplierName || 'Supplier'} <b className="tabular-nums text-foreground">{formatCurrency(b.setAside)}</b>
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                            Yours <b className="tabular-nums text-foreground">{formatCurrency(b.yours)}</b>
-                          </span>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Figures that RECONCILE with the balance above: what
-                        went through this wallet. All-time sales totals sat
-                        here before and could never add up to the cash — cost
-                        1,984,000 plus profit 2,677,500 is 4,661,500 against a
-                        wallet holding 2,551,500, which is why it read as
-                        nonsense. Sales belong under a period heading, and
-                        that is where they now live. */}
-                    {(b.moneyIn > 0 || b.moneyOut > 0) && (
-                      <>
-                        <div className="mt-4 grid grid-cols-2 divide-x divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.07]">
-                          <div className="bg-gradient-to-br from-emerald-500/[0.08] to-transparent p-3">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Came in</p>
-                            <p className="mt-1 text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(b.moneyIn)}</p>
-                          </div>
-                          <div className="bg-gradient-to-br from-rose-500/[0.08] to-transparent p-3">
-                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Went out</p>
-                            <p className="mt-1 text-sm font-bold tabular-nums text-rose-400">{formatCurrency(b.moneyOut)}</p>
-                          </div>
-                        </div>
-                        <p className="mt-2 text-[11px] text-faint">
-                          {formatCurrency(b.moneyIn)} in − {formatCurrency(b.moneyOut)} out = the {formatCurrency(b.cash)} above. All time.
-                        </p>
-
-                        {/* The owner's question, answered on the card: of the
-                            money he is holding, which part is cost and which
-                            is profit. Cost is covered first out of everything
-                            already spent putting stock back. */}
-                        {/* The owner's question: of the money he is HOLDING,
-                            which part is cost and which is profit. Split by
-                            the same ratio as the sales that produced it —
-                            every shilling that came in was part cost, part
-                            profit, so what is still sitting there carries the
-                            same mix. */}
-                        <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3.5">
-                          <p className="text-xs font-semibold text-foreground">Of the {formatCurrency(b.cash)} you are holding</p>
-
-                          <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
-                            <div className="h-full bg-rose-500" style={{ width: `${b.costShare}%` }} />
-                            <div className="h-full bg-emerald-500" style={{ width: `${b.profitShare}%` }} />
-                          </div>
-
-                          <div className="mt-3 space-y-2">
-                            <div className="flex items-baseline justify-between gap-3">
-                              <span className="inline-flex items-center gap-1.5 text-xs text-muted">
-                                <span className="h-2 w-2 rounded-full bg-rose-400" /> Cost of the goods — to buy stock again
-                              </span>
-                              <span className="text-sm font-bold tabular-nums text-rose-400">
-                                {formatCurrency(b.costPart)} <span className="text-[11px] font-normal text-faint">({Math.round(b.costShare)}%)</span>
-                              </span>
-                            </div>
-                            <div className="flex items-baseline justify-between gap-3 border-t border-white/[0.06] pt-2">
-                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
-                                <span className="h-2 w-2 rounded-full bg-emerald-400" /> Your profit
-                              </span>
-                              <span className="text-sm font-bold tabular-nums text-emerald-400">
-                                {formatCurrency(b.profitPart)} <span className="text-[11px] font-normal text-faint">({Math.round(b.profitShare)}%)</span>
-                              </span>
-                            </div>
-                          </div>
-
-                          <p className="mt-2.5 border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-faint">
-                            For every 100 shillings of {b.brandName} you sold, <b className="text-muted">{Math.round(b.costShare)}</b> was the cost of the boxes
-                            and <b className="text-muted">{Math.round(b.profitShare)}</b> was profit. The money still in this wallet splits the same way.
-                          </p>
-                        </div>
-                      </>
-                    )}
-
-                    <p className="mt-3 border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-faint">
-                      {b.setAside > 0
-                        ? <>{formatCurrency(b.setAside)} of this wallet is {b.supplierName}&apos;s, for boxes already sold.</>
-                        : <>Nothing is due right now{b.paidAhead > 0 && <> — you have paid {b.supplierName} {formatCurrency(b.paidAhead)} more than the sold boxes cost</>}.</>}
-                      {b.dueLater > 0 && <> {b.supplierName} still has {formatCurrency(b.dueLater)} invoiced for stock on your shelf; it falls due as those boxes sell.</>}
-                    </p>
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${b.setAside > 0 ? 'bg-rose-500/15 text-rose-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                      {b.setAside > 0 ? 'Supplier owed' : 'All yours'}
+                    </span>
                   </div>
+
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <p className="text-2xl font-bold leading-none tabular-nums text-white">{formatCurrency(b.cash)}</p>
+                    <p className="text-[11px] text-faint">in this wallet</p>
+                  </div>
+
+                  {b.cash > 0 && (
+                    <>
+                      <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="h-full bg-rose-500" style={{ width: `${100 - yoursPct}%` }} />
+                        <div className="h-full bg-emerald-500" style={{ width: `${yoursPct}%` }} />
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+                        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-rose-400" />{b.supplierName || 'Supplier'} <b className="tabular-nums text-white/90">{formatCurrency(b.setAside)}</b></span>
+                        <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />Yours <b className="tabular-nums text-white/90">{formatCurrency(b.yours)}</b></span>
+                      </div>
+                    </>
+                  )}
+
+                  {(b.moneyIn > 0 || b.moneyOut > 0) && (
+                    <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/[0.08] pt-3">
+                      <div className="min-w-0">
+                        <p className="text-[10.5px] text-faint">Came in</p>
+                        <p className="truncate text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(b.moneyIn)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10.5px] text-faint">Went out</p>
+                        <p className="truncate text-sm font-semibold tabular-nums text-rose-300">{formatCurrency(b.moneyOut)}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10.5px] text-faint">Profit in it</p>
+                        <p className="truncate text-sm font-semibold tabular-nums text-white/90">{formatCurrency(b.profitPart)}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {b.cash > 0 && b.revenue > 0 && (
+                    // What the money held is made of — the same mix as the sales that brought it in.
+                    <div className="mt-3">
+                      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07]">
+                        <div className="h-full bg-rose-400/80" style={{ width: `${b.costShare}%` }} />
+                        <div className="h-full bg-emerald-400/80" style={{ width: `${b.profitShare}%` }} />
+                      </div>
+                      <p className="mt-1.5 text-[11px] text-faint">
+                        Cost of goods <b className="tabular-nums text-white/80">{formatCurrency(b.costPart)}</b> ({Math.round(b.costShare)}%) · profit <b className="tabular-nums text-white/80">{formatCurrency(b.profitPart)}</b> ({Math.round(b.profitShare)}%)
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="mt-3 border-t border-white/[0.08] pt-2.5 text-[11px] leading-snug text-faint">
+                    {b.setAside > 0
+                      ? <>{formatCurrency(b.setAside)} is {b.supplierName}&apos;s, for boxes already sold.</>
+                      : <>Nothing due now{b.paidAhead > 0 && <> — {formatCurrency(b.paidAhead)} paid ahead</>}.</>}
+                    {b.dueLater > 0 && <> {formatCurrency(b.dueLater)} more as shelf stock sells.</>}
+                  </p>
                 </div>
               );
             })}
           </div>
-
           {/* What the owner has laid out for the business — chiefly rep
               commissions, which he pays himself. It is money the business
               owes him back, not a balance it is holding. */}
           {/* The total, then the two ways it went in. It was one run-on
               sentence, which is a poor way to read three numbers. */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl border border-sky-500/20 bg-sky-500/[0.04] px-5 py-4">
-            <span className="rounded-lg bg-sky-500/15 p-1.5 text-sky-300"><PiggyBank className="h-3.5 w-3.5" /></span>
+          <div className="premium-card premium-card--sm flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5 sm:px-5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 ring-1 ring-inset ring-sky-500/30"><PiggyBank className="h-4 w-4" /></span>
 
             <span className="min-w-[9rem]">
-              <span className="block text-[11px] uppercase tracking-wider text-muted">Your money in the business</span>
-              <span className="block text-xl font-bold tabular-nums text-sky-300">{formatCurrency(om.owedBackToOwner || 0)}</span>
+              <span className="block text-[11px] font-medium text-white/55">Your money in the business</span>
+              <span className="block text-lg font-bold tabular-nums text-sky-300">{formatCurrency(om.owedBackToOwner || 0)}</span>
               <span className="block text-[11px] text-faint">
                 {split
                   ? 'owed back to you when it can afford it'
@@ -750,7 +708,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
                 breakdown would print the total a second time. */}
             {split && (om.contributed || 0) > 0 && (
               <span className="min-w-[8rem]">
-                <span className="block text-[11px] uppercase tracking-wider text-muted">Cash you put in</span>
+                <span className="block text-[11px] font-medium text-white/55">Cash you put in</span>
                 <span className="block text-base font-semibold tabular-nums text-foreground">{formatCurrency(om.contributed)}</span>
                 <span className="block text-[11px] text-faint">
                   {ownerBrands.length > 0
@@ -762,7 +720,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
 
             {split && (om.paidRepsFromPocket || 0) > 0 && (
               <span className="min-w-[8rem]">
-                <span className="block text-[11px] uppercase tracking-wider text-muted">Commission from your pocket</span>
+                <span className="block text-[11px] font-medium text-white/55">Commission from your pocket</span>
                 <span className="block text-base font-semibold tabular-nums text-foreground">{formatCurrency(om.paidRepsFromPocket)}</span>
                 <span className="block text-[11px] text-faint">hand to hand — never through an account</span>
               </span>
@@ -1210,9 +1168,8 @@ function Accounts({ onQuick }) {
               key={a.id}
               type="button"
               onClick={() => setViewing(a)}
-              className={`relative cursor-pointer overflow-hidden rounded-2xl bg-surface p-5 text-left ring-1 transition duration-200 hover:ring-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${tint.ring}`}
+              className={`premium-card premium-card--sm cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400`}
             >
-              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${tint.glow} to-transparent`} aria-hidden="true" />
               <div className="relative flex items-center justify-between">
                 <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tint.chip}`}><Icon className="h-5 w-5" /></span>
                 {a.isDefault && <Badge className="bg-brand-500/15 text-brand-600">Default</Badge>}
@@ -1243,9 +1200,8 @@ function Accounts({ onQuick }) {
             key={a.id}
             type="button"
             onClick={() => setViewing(a)}
-            className="relative cursor-pointer overflow-hidden rounded-2xl bg-surface p-5 text-left ring-1 ring-violet-500/25 transition duration-200 hover:ring-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            className="premium-card premium-card--sm cursor-pointer p-5 text-left transition duration-200 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-500/[0.10] to-transparent" aria-hidden="true" />
             <div className="relative flex items-center justify-between">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300"><Coins className="h-5 w-5" /></span>
               <Badge className="bg-violet-500/15 text-violet-300">Record only</Badge>
@@ -1577,11 +1533,10 @@ function ProfitTab() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         {cards.map((c) => (
-          <div key={c.label} className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.ring}`}>
-            <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.glow} to-transparent`} aria-hidden="true" />
+          <div key={c.label} className={`premium-card premium-card--sm p-4`}>
             <div className="relative flex items-start justify-between gap-2">
               <p className="text-xs font-medium text-muted">{c.label}</p>
-              <span className={`rounded-lg p-1.5 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
+              <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
             </div>
             <p className={`relative mt-2 text-2xl font-bold tabular-nums ${c.num}`}>{c.value}</p>
             <p className="relative mt-0.5 text-[11px] text-faint">{c.sub}</p>

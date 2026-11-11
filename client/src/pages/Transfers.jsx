@@ -117,11 +117,10 @@ const DIR_TONE = {
 
 function TintCard({ label, value, sub, icon: Icon, ring, glow, chip, num }) {
   return (
-    <div className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${ring}`}>
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${glow} to-transparent`} aria-hidden="true" />
+    <div className={`premium-card premium-card--sm p-4`}>
       <div className="relative flex items-start justify-between gap-2">
         <p className="text-xs font-medium text-muted">{label}</p>
-        <span className={`rounded-lg p-1.5 ${chip}`}><Icon className="h-3.5 w-3.5" /></span>
+        <span className={`rounded-full p-1.5 ring-1 ring-inset ring-white/10 ${chip}`}><Icon className="h-3.5 w-3.5" /></span>
       </div>
       <p className={`relative mt-2 text-2xl font-bold tabular-nums ${num}`}>{value}</p>
       <p className="relative mt-0.5 text-[11px] text-faint">{sub}</p>

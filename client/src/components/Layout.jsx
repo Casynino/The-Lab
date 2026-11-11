@@ -828,7 +828,8 @@ export default function Layout() {
               so a single pb-[...] for the tab bar silently vanished on every
               screen past 640px — which is most phones held sideways and every
               tablet. The room under the page is a spacer now, below. */}
-          <main className="overflow-x-clip px-3 pb-3 pt-1 sm:px-4 sm:pb-4 lg:px-6 lg:pb-8 lg:pt-6">
+          {/* `lab-app`: every admin page's cards and tables wear the owner profile's finish (index.css). Reps keep their own look. */}
+          <main className={`overflow-x-clip px-3 pb-3 pt-1 sm:px-4 sm:pb-4 lg:px-6 lg:pb-8 lg:pt-6${isRep ? '' : ' lab-app'}`}>
             {/* 1400px was a cap for a laptop. On the owner's own screen it
                 left a hand's width of empty page between the rail and the
                 banner, and the same again on the right — the panel looked

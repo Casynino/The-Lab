@@ -115,12 +115,8 @@ export default function Reorder() {
         {cards.map((c) => (
           <div
             key={c.label}
-            className={`relative overflow-hidden rounded-2xl bg-surface p-4 ring-1 ${c.quiet ? 'ring-white/[0.08]' : c.ring}`}
+            className={`premium-card premium-card--sm p-4`}
           >
-            <div
-              className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.quiet ? 'from-white/[0.03]' : c.glow} to-transparent`}
-              aria-hidden="true"
-            />
             <div className="relative flex items-start justify-between gap-2">
               <p className="text-xs font-medium text-muted">{c.label}</p>
               <span className={`rounded-lg p-1.5 ${c.quiet ? 'bg-white/10 text-muted' : c.chip}`}><c.icon className="h-3.5 w-3.5" /></span>
