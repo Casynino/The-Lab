@@ -71,7 +71,7 @@ export default function Notifications() {
   }, [items]);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <div className="mb-5 flex items-end justify-between gap-3 px-1">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Notifications</h1>
