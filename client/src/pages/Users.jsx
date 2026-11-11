@@ -168,15 +168,21 @@ export default function Users() {
         </div>
         {isLoading ? <PageSpinner /> : !data?.data?.length ? <EmptyState title="No users" /> : (
           <>
-            <Table>
-              <THead><TR><TH>Name</TH><TH>Email</TH><TH>Role</TH><TH>Last login</TH><TH>Status</TH><TH /></TR></THead>
+            <Table stack>
+              {/* The email sits under the name and the last sign-in under the role: six columns did not fit
+                  the profile's right-hand column, and Status and the buttons were off its edge at 1280 px. */}
+              <THead><TR><TH>Name</TH><TH>Role</TH><TH>Status</TH><TH /></TR></THead>
               <TBody>
                 {data.data.map((u) => (
                   <TR key={u.id}>
-                    <TD className="font-medium text-foreground">{u.name}</TD>
-                    <TD>{u.email}</TD>
-                    <TD><Badge className="bg-elevated text-muted">{ROLE_LABELS[u.role?.name] || u.role?.name}</Badge></TD>
-                    <TD className="text-faint">{u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never'}</TD>
+                    <TD className="stack-full">
+                      <div className="font-medium text-foreground">{u.name}</div>
+                      <div className="text-xs text-faint">{u.email}</div>
+                    </TD>
+                    <TD>
+                      <Badge className="bg-elevated text-muted">{ROLE_LABELS[u.role?.name] || u.role?.name}</Badge>
+                      <div className="mt-1 text-xs text-faint">{u.lastLoginAt ? `Last in ${formatDateTime(u.lastLoginAt)}` : 'Never signed in'}</div>
+                    </TD>
                     <TD>
                       <Badge className={u.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-elevated text-muted'}>
                         {u.isActive ? 'Active' : 'Inactive'}
@@ -184,14 +190,14 @@ export default function Users() {
                     </TD>
                     <TD>
                       <div className="flex justify-end gap-1">
-                        <button title="Edit" className="btn-ghost px-2 py-1" onClick={() => setModal({ open: true, editing: u })}><Pencil className="h-4 w-4" /></button>
+                        <button title="Edit" aria-label="Edit" className="btn-ghost min-h-11 min-w-11 px-2 py-1 sm:min-h-0 sm:min-w-0" onClick={() => setModal({ open: true, editing: u })}><Pencil className="h-4 w-4" /></button>
                         {/* Your own account is never offered for Suspend or Delete — the server refuses
                             both, but the buttons should not be there to click. */}
                         {u.id !== me?.id && (
-                          <button title={u.isActive ? 'Suspend' : 'Activate'} className="btn-ghost px-2 py-1 text-faint hover:text-rose-400" onClick={() => (u.isActive ? setSuspending(u) : toggle.mutate(u))}><Power className="h-4 w-4" /></button>
+                          <button title={u.isActive ? 'Suspend' : 'Activate'} aria-label={u.isActive ? 'Suspend' : 'Activate'} className="btn-ghost min-h-11 min-w-11 px-2 py-1 text-faint sm:min-h-0 sm:min-w-0 hover:text-rose-400" onClick={() => (u.isActive ? setSuspending(u) : toggle.mutate(u))}><Power className="h-4 w-4" /></button>
                         )}
                         {u.id !== me?.id && (
-                          <button title="Delete for good" className="btn-ghost px-2 py-1 text-faint hover:text-rose-400" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4" /></button>
+                          <button title="Delete for good" aria-label="Delete for good" className="btn-ghost min-h-11 min-w-11 px-2 py-1 text-faint sm:min-h-0 sm:min-w-0 hover:text-rose-400" onClick={() => setDeleting(u)}><Trash2 className="h-4 w-4" /></button>
                         )}
                       </div>
                     </TD>

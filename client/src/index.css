@@ -222,6 +222,13 @@
   .card-tile { padding: 0.875rem; border-radius: 0.875rem; }
 }
 
+/* A word-sized link or button ("Open Finance →", "Mark all read", "See all 7 orders") keeps its look and
+   its place on a phone but becomes a 44 px target: the box grows, the negative margins give the room back
+   (audit, 12 Nov 2026: these were 16-24 px tall). */
+@media (max-width: 639.98px) {
+  .tap-phone { display: inline-flex; align-items: center; min-height: 44px; margin-top: -12px; margin-bottom: -12px; }
+}
+
 /* A row of tabs or filters is a row, not a paragraph of pills. On a phone it
    scrolls sideways under the thumb; from sm it wraps as before. Ten Finance
    tabs took four lines and pushed the page itself off the first screen. */
@@ -511,6 +518,9 @@ body:has([data-login-scene]) { background-color: transparent; }
   background:
     radial-gradient(120% 55% at 100% 0%, rgba(238, 49, 36, 0.11), transparent 62%),
     linear-gradient(155deg, rgba(31, 25, 26, 0.97), rgba(17, 16, 19, 0.97));
+  /* An opaque base under the 97% gradients: the bell panel opens with no dim layer behind it, and
+     the Home greeting and wallet figures showed through its rows (audit, 12 Nov 2026). */
+  background-color: rgb(17, 16, 19);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 32px 64px -28px rgba(0, 0, 0, 0.95);
 }
 .active-card[data-tone='brand'] {
@@ -626,4 +636,96 @@ body {
 @keyframes hello-in { from { opacity: 0; transform: translateY(7px); } }
 @media (prefers-reduced-motion: reduce) {
   .hello-in { animation: none; }
+}
+
+/* ───────── A table that turns into cards (ui.jsx <Table stack>) ─────────
+   When the table's own box is narrower than 40rem — a phone, a window on a phone, a narrow column —
+   (48rem for a wide list, <Table stack="wide">, so a tablet gets the cards too) —
+   each row is a small card: the header's words above each figure, as many figures a line as fit
+   (two on a phone), money never behind a sideways swipe. Wider boxes keep the table untouched.
+   A container query, so it follows the box and not the screen: the Users table in the profile's
+   right-hand column turns into cards on a laptop too. Browsers without container queries keep the
+   table and its sideways scroll, as before. */
+.table-stack,
+.table-stack-wide { container-type: inline-size; }
+@container (max-width: 39.99rem) {
+  .table-stack > table,
+  .table-stack > table > tbody { display: block; width: 100%; min-width: 0; }
+  .table-stack > table > thead { display: none; }
+  .table-stack > table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+    gap: 0.625rem 1rem;
+    padding: 0.875rem 1rem;
+  }
+  .table-stack > table > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-align: left;
+  }
+  .table-stack > table > tbody > tr > td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.125rem;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.42);
+  }
+  /* No label (an actions column, a row that spans the table): the whole width, no caption. */
+  .table-stack > table > tbody > tr > td[data-label='']::before { content: none; }
+  .table-stack > table > tbody > tr > td[data-label=''],
+  .table-stack > table > tbody > tr > td[colspan],
+  .table-stack > table > tbody > tr > td.stack-full { grid-column: 1 / -1; }
+  /* An empty cell (the "In" of money that went out) is not a card line, and a cell a page hides on a
+     phone (`hidden sm:table-cell`) stays hidden on the card. */
+  .table-stack > table > tbody > tr > td:empty,
+  .table-stack > table > tbody > tr > td.hidden { display: none; }
+}
+/* The same, for a wide list in a box under 48rem. */
+@container (max-width: 47.99rem) {
+  .table-stack-wide > table,
+  .table-stack-wide > table > tbody { display: block; width: 100%; min-width: 0; }
+  .table-stack-wide > table > thead { display: none; }
+  .table-stack-wide > table > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+    gap: 0.625rem 1rem;
+    padding: 0.875rem 1rem;
+  }
+  .table-stack-wide > table > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    max-width: none;
+    padding: 0;
+    white-space: normal;
+    overflow-wrap: break-word;
+    text-align: left;
+  }
+  .table-stack-wide > table > tbody > tr > td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.125rem;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.42);
+  }
+  /* No label (an actions column, a row that spans the table): the whole width, no caption. */
+  .table-stack-wide > table > tbody > tr > td[data-label='']::before { content: none; }
+  .table-stack-wide > table > tbody > tr > td[data-label=''],
+  .table-stack-wide > table > tbody > tr > td[colspan],
+  .table-stack-wide > table > tbody > tr > td.stack-full { grid-column: 1 / -1; }
+  /* An empty cell (the "In" of money that went out) is not a card line, and a cell a page hides on a
+     phone (`hidden sm:table-cell`) stays hidden on the card. */
+  .table-stack-wide > table > tbody > tr > td:empty,
+  .table-stack-wide > table > tbody > tr > td.hidden { display: none; }
 }

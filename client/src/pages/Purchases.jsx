@@ -325,14 +325,14 @@ function PODetailModal({ po, onClose, onEdit, onDelete, onReceive }) {
 
         <div>
           <div className="mb-2 text-sm font-semibold text-foreground">What was ordered</div>
-          <Table>
+          <Table stack>
             <THead>
               <TR><TH>Product</TH><TH>Ordered</TH><TH>Boxes</TH><TH className="text-right">Cost / box</TH><TH className="text-right">Line total</TH></TR>
             </THead>
             <TBody>
               {(po.items || []).map((i) => (
                 <TR key={i.id}>
-                  <TD className="font-medium text-foreground">
+                  <TD className="stack-full font-medium text-foreground">
                     {i.product?.name}
                     {i.product?.sku && <span className="ml-1.5 text-[11px] text-faint">{i.product.sku}</span>}
                   </TD>
@@ -446,7 +446,7 @@ function PurchaseOrders() {
       </div>
       {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the purchase orders" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No purchase orders" icon={Ship} /> : (
         <>
-          <Table>
+          <Table stack="wide">
             <THead><TR><TH>PO</TH><TH>Supplier</TH><TH>Boxes</TH><TH>Products</TH><TH>Total cost</TH><TH>Expected</TH><TH>Status</TH><TH /></TR></THead>
             <TBody>
               {data.data.map((po) => (
@@ -529,7 +529,7 @@ function Suppliers() {
         <Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New supplier</Button>
       </div>
       {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the suppliers" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No suppliers" /> : (
-        <Table>
+        <Table stack>
           <THead><TR><TH>Name</TH><TH>Country</TH><TH>Contact</TH><TH>Phone</TH><TH>POs</TH><TH /></TR></THead>
           <TBody>{data.data.map((s) => (
             <TR key={s.id}><TD className="font-medium">{s.name}</TD><TD>{s.country}</TD><TD>{s.contactName || '—'}</TD><TD>{s.phone || '—'}</TD><TD>{s._count?.purchaseOrders ?? 0}</TD>

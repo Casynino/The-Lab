@@ -347,7 +347,7 @@ function CartOrderSheet({ onClose, existing }) {
                     <button
                       onClick={() => dec(product.id)}
                       disabled={qty === 0}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
+                      className="flex h-11 w-11 items-center justify-center rounded-full border sm:h-8 sm:w-8 border-white/[0.12] bg-white/[0.05] text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
@@ -360,7 +360,7 @@ function CartOrderSheet({ onClose, existing }) {
                         setQty(product.id, isNaN(v) || v < 0 ? 0 : v);
                       }}
                       placeholder="0"
-                      className={`h-8 w-14 rounded-lg border text-center text-sm font-semibold tabular-nums outline-none transition
+                      className={`h-11 w-14 rounded-lg border sm:h-8 text-center text-sm font-semibold tabular-nums outline-none transition
                         [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none
                         ${inCart
                           ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 focus:ring-1 focus:ring-brand-500/30'
@@ -369,7 +369,7 @@ function CartOrderSheet({ onClose, existing }) {
                     />
                     <button
                       onClick={() => inc(product.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-brand-500 transition hover:bg-brand-500/25 active:scale-90"
+                      className="flex h-11 w-11 items-center justify-center rounded-full border sm:h-8 sm:w-8 border-brand-500/40 bg-brand-500/15 text-brand-500 transition hover:bg-brand-500/25 active:scale-90"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
@@ -926,7 +926,7 @@ function StaffRequestTable({ onView }) {
           <EmptyState title="No stock requests" icon={ClipboardList} />
         ) : (
           <>
-            <Table>
+            <Table stack="wide">
               <THead>
                 <TR>
                   {/* On a phone the status sits under the order number and Products, Requested and the View

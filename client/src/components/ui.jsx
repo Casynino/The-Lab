@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import {
   withCommas, meaning, sameNumber, toPlain, readTyped, readPaste, stepPlain, rangeMessage, countsForCaret, caretAfter,
 } from '@/lib/typedNumber';
+import { timeLeftLabel } from '@/lib/labels';
 import { motion, useReducedMotion } from 'motion/react';
 import { Loader2, X, ChevronLeft, ChevronRight, Search, Inbox, AlertTriangle } from 'lucide-react';
 
@@ -284,19 +285,8 @@ export function Badge({ className, children }) {
 // exported from there: Settlements already imports OrderDetail, so the arrow
 // would point both ways.
 
-function hoursLabel(h) {
-  if (h == null) return '—';
-  // Rounding made the first hour either side of the deadline read as its
-  // opposite: half an hour late came out "0h overdue", which looks like it is
-  // not late, and the last minutes came out "0h left".
-  if (h < 0) {
-    const over = Math.abs(h);
-    return over < 1 ? 'just overdue' : `${Math.round(over)}h overdue`;
-  }
-  if (h < 1) return 'due now';
-  if (h < 24) return `${Math.round(h)}h left`;
-  return `${Math.round(h / 24)}d left`;
-}
+// The words themselves are lib/labels.js timeLeftLabel (rounded down, so the time before a fine is
+// never overstated; tested there).
 
 // How much time is left, told by colour as well as by words. It used to be
 // text-faint — the quietest style in the app — on the one figure in the row
@@ -316,7 +306,7 @@ function remainingTone(h) {
 export function Remaining({ hours, className = '' }) {
   return (
     <span className={`text-[13px] font-bold tabular-nums ${remainingTone(hours)} ${className}`}>
-      {hoursLabel(hours)}
+      {timeLeftLabel(hours)}
     </span>
   );
 }
@@ -445,10 +435,50 @@ export function LoadError({ what = 'this list', onRetry }) {
 // --- Table ------------------------------------------------------------------
 // The wrapper scrolls horizontally WITHIN its card on small screens, so a wide
 // table never forces the whole page to scroll sideways. Touch momentum on iOS.
-export function Table({ children, className }) {
+//
+// `stack`: when the table's own box is narrower than 40rem (a phone, a window on a
+// phone, a narrow column), each row becomes a small card of labelled figures instead
+// of a row whose money columns sit behind a sideways swipe (audit, 12 Nov 2026: the
+// statement's In/Out/Balance, the ledger's Amount, a sale's Total started past the
+// edge of a 390 px screen). stack="wide" does it under 48rem, for a long list that
+// does not fit a tablet either. index.css `.table-stack` does the layout with a container
+// query; the labels are the header's own words, copied onto each cell here. A header
+// cell may give a shorter label with data-label; a cell with class `stack-full` takes
+// the whole width of the card.
+function labelCells(table) {
+  const head = table.tHead?.rows[table.tHead.rows.length - 1];
+  if (!head) return;
+  const names = [];
+  for (const th of head.cells) {
+    const name = th.dataset.label ?? th.textContent.trim();
+    for (let k = 0; k < (th.colSpan || 1); k += 1) names.push(k === 0 ? name : '');
+  }
+  for (const body of table.tBodies) {
+    for (const row of body.rows) {
+      let col = 0;
+      for (const cell of row.cells) {
+        const span = cell.colSpan || 1;
+        const name = span === 1 ? (names[col] || '') : '';
+        if (cell.getAttribute('data-label') !== name) cell.setAttribute('data-label', name);
+        col += span;
+      }
+    }
+  }
+}
+export function Table({ children, className, stack = false }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const table = ref.current;
+    if (!stack || !table) return undefined;
+    labelCells(table);
+    // Rows come and go (a page, a filter, a refetch) without this component rendering again.
+    const watch = new MutationObserver(() => labelCells(table));
+    watch.observe(table, { childList: true, subtree: true, characterData: true });
+    return () => watch.disconnect();
+  }, [stack]);
   return (
-    <div className={clsx('-mx-px overflow-x-auto [-webkit-overflow-scrolling:touch]', className)}>
-      <table className="min-w-full divide-y divide-border">{children}</table>
+    <div className={clsx('-mx-px overflow-x-auto [-webkit-overflow-scrolling:touch]', stack && (stack === 'wide' ? 'table-stack-wide' : 'table-stack'), className)}>
+      <table ref={ref} className="min-w-full divide-y divide-border">{children}</table>
     </div>
   );
 }
@@ -459,7 +489,7 @@ export const TR = ({ children, className, ...props }) => (
     {children}
   </tr>
 );
-export const TH = ({ children, className }) => <th className={clsx('th', className)}>{children}</th>;
+export const TH = ({ children, className, ...props }) => <th className={clsx('th', className)} {...props}>{children}</th>;
 export const TD = ({ children, className, ...props }) => <td className={clsx('td', className)} {...props}>{children}</td>;
 
 // --- Pagination -------------------------------------------------------------
@@ -475,11 +505,11 @@ export function Pagination({ page, totalPages, total, onChange }) {
         Page {page} of {totalPages}
         {total != null ? ` · ${total} records` : ''}
       </span>
-      <div className="flex gap-1">
-        <button className="btn-secondary px-2 py-1" aria-label="Previous page" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+      <div className="flex gap-2 sm:gap-1">
+        <button className="btn-secondary min-h-11 min-w-11 px-2 py-1 sm:min-h-0 sm:min-w-0" aria-label="Previous page" disabled={page <= 1} onClick={() => onChange(page - 1)}>
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-        <button className="btn-secondary px-2 py-1" aria-label="Next page" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
+        <button className="btn-secondary min-h-11 min-w-11 px-2 py-1 sm:min-h-0 sm:min-w-0" aria-label="Next page" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
           <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
@@ -541,7 +571,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
       <div className={clsx('modal-panel modal-glass my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-5 py-4">
           <h3 id={titleId} className="text-base font-semibold text-foreground">{title}</h3>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-faint hover:bg-elevated hover:text-muted">
+          <button onClick={onClose} aria-label="Close" className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-faint hover:bg-elevated hover:text-muted sm:m-0 sm:h-auto sm:w-auto sm:p-1">
             <X className="h-5 w-5" />
           </button>
         </div>
