@@ -541,7 +541,26 @@ function PenaltyPolicyCard() {
         <FineRow first label="Normal" time="72 hours" daily="10,000" late="15,000" />
         <FineRow label="Extension" time="+96 hours" daily="20,000" late="30,000" />
       </div>
-      <p className="mt-4 text-[11px] leading-snug text-faint">A late return is one not done in 24 hours. One extension per order, with no fine while it runs.</p>
+      {/* What the table means, one short line per row (Nino, 11 Nov 2026: "explain the rule a bit — if you
+          take a box you have 72 hours to settle, if not this fine applies; very simple, clear, not too many
+          words, same style"). The words sit under the same first column as the table so they line up. */}
+      <dl className="mt-5 grid grid-cols-[4.75rem_minmax(0,1fr)] gap-x-2 gap-y-3 text-[12px] leading-relaxed text-muted [text-wrap:pretty]">
+        <dt className="text-faint">Normal</dt>
+        <dd>
+          <span className="block">Settle within <b className="font-medium text-foreground">72 hours</b> of taking boxes.</span>
+          <span className="block">If not, the Fine a day applies until it is settled.</span>
+        </dd>
+        <dt className="text-faint">Extension</dt>
+        <dd>
+          <span className="block">Once per order: <b className="font-medium text-foreground">96 more hours</b>, no fine.</span>
+          <span className="block">After that, the higher Fine a day applies.</span>
+        </dd>
+        <dt className="text-faint">Return</dt>
+        <dd>
+          <span className="block">Complete a return within <b className="font-medium text-foreground">24 hours</b>.</span>
+          <span className="block">If not, the Late return fine applies.</span>
+        </dd>
+      </dl>
     </section>
   );
 }
