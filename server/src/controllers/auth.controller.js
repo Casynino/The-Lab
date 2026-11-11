@@ -5,9 +5,28 @@ const { ok } = require('../utils/response');
 const authService = require('../services/auth.service');
 const auditService = require('../services/audit.service');
 
+// Every refused sign-in leaves a line in the audit log (audit #102): the email tried and why it was refused
+// (the address and browser come with every audit row), never the password. A refusal by the phone-only
+// rule is also marked for the login limiter, which gives that try back (see auth.routes.js).
+async function recordRefusedLogin(req, res, email, err) {
+  if (!err || (err.statusCode !== 401 && err.statusCode !== 403)) return;
+  if (err.details && err.details.reason === 'DEVICE_RESTRICTED') res.locals.deviceRestricted = true;
+  await auditService.record(req, {
+    action: 'LOGIN_FAILED',
+    entityType: 'User',
+    newValues: { email: String(email).toLowerCase().trim(), reason: err.message },
+  });
+}
+
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  const result = await authService.login(email, password, req.headers);
+  let result;
+  try {
+    result = await authService.login(email, password, req.headers);
+  } catch (err) {
+    await recordRefusedLogin(req, res, email, err);
+    throw err;
+  }
   await auditService.record(req, {
     action: 'LOGIN',
     entityType: 'User',

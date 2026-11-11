@@ -25,6 +25,7 @@ const ACTION = {
   PAY: { verb: 'paid', icon: HandCoins, cls: 'bg-emerald-500/15 text-emerald-300' },
   LOGIN: { verb: 'signed in', icon: LogIn, cls: 'bg-sky-500/15 text-sky-300', self: true },
   LOGOUT: { verb: 'signed out', icon: LogOut, cls: 'bg-white/[0.07] text-white/60', self: true },
+  LOGIN_FAILED: { verb: 'refused a sign-in', icon: Ban, cls: 'bg-rose-500/15 text-rose-300', self: true },
   // Every other action the live log holds (11 Nov 2026), in words.
   SUBMIT_SETTLEMENT: { verb: 'sent', icon: Send, cls: 'bg-sky-500/15 text-sky-300', obj: 'a settlement' },
   APPROVE_SETTLEMENT: { verb: 'approved', icon: CheckCircle2, cls: 'bg-emerald-500/15 text-emerald-300', obj: 'a settlement' },

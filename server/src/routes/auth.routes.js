@@ -20,6 +20,12 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { message: 'Too many login attempts, try again later' } },
+  // A rep refused by the phone-only rule typed the right password (the rule is checked only after it), so
+  // that try is no guess and is given back; before, a rep retrying on a computer used up the tries of
+  // everyone behind the same address (audit #102 / C28). The limiter gives back every request this calls
+  // unsuccessful, and here only that refusal is; every other try still counts as before.
+  skipFailedRequests: true,
+  requestWasSuccessful: (_req, res) => !res.locals.deviceRestricted,
 });
 
 router.post('/login', loginLimiter, validate(loginSchema), ctrl.login);
