@@ -5,6 +5,7 @@ import {
 } from '@/lib/typedNumber';
 import { motion, useReducedMotion } from 'motion/react';
 import { Loader2, X, ChevronLeft, ChevronRight, Search, Inbox, AlertTriangle } from 'lucide-react';
+import { useBackToClose } from '@/lib/useBackToClose';
 
 // --- Buttons ---------------------------------------------------------------
 const VARIANTS = {
@@ -515,10 +516,15 @@ export function SearchInput({ value, onChange, placeholder = 'Search…' }) {
 const SIZES = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 // Escape closes the window, like its X. With one window open over another (a "Reject?" step over an
 // order) only the top one closes: the open windows are kept in the order they opened.
+// Phone/browser Back closes it too (lib/backToClose.js). While a save started from it is on its way it
+// cannot be closed at all: X, Escape, Back and the footer's buttons wait for the answer (audit rep-app-10).
 const openModals = [];
 export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const busy = useBackToClose(open, onClose);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
   // The title names the window for a screen reader.
   const titleId = useId();
   useEffect(() => {
@@ -526,7 +532,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
     const me = {};
     openModals.push(me);
     const onKey = (e) => {
-      if (e.key === 'Escape' && openModals[openModals.length - 1] === me) closeRef.current?.();
+      if (e.key === 'Escape' && openModals[openModals.length - 1] === me && !busyRef.current) closeRef.current?.();
     };
     window.addEventListener('keydown', onKey);
     return () => {
@@ -538,15 +544,16 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
   if (!open) return null;
   return (
     <div className="modal-safe fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/65 backdrop-blur-md">
-      <div className={clsx('modal-panel modal-glass my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className={clsx('modal-panel modal-glass my-4 flex w-full flex-col sm:my-8', SIZES[size])} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy || undefined}>
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] px-5 py-4">
           <h3 id={titleId} className="text-base font-semibold text-foreground">{title}</h3>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-faint hover:bg-elevated hover:text-muted">
+          <button onClick={onClose} disabled={busy} aria-label="Close" className="rounded-lg p-1 text-faint hover:bg-elevated hover:text-muted disabled:cursor-not-allowed disabled:opacity-40">
             <X className="h-5 w-5" />
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-white/[0.07] px-5 py-4">{footer}</div>}
+        {/* A fieldset, so while a save is on its way every button in the footer (Cancel too) is disabled. */}
+        {footer && <fieldset disabled={busy} className="m-0 flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 border-t border-white/[0.07] px-5 py-4">{footer}</fieldset>}
       </div>
     </div>
   );

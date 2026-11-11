@@ -9,6 +9,8 @@ import { queryClient } from '@/lib/queryClient';
 import { watchForNewVersion } from '@/lib/version';
 import { tokenStore } from '@/lib/api';
 import { pages, pageFor, roleFromToken } from '@/lib/pages';
+import { installBackToClose } from '@/lib/backToClose';
+import { installScrollMemory } from '@/lib/scrollMemory';
 // The sign-in and /nino pages' own styles stay in the main stylesheet, ahead of
 // index.css, exactly where they sat before those pages became files of their
 // own — a style that arrived later would win ties it used to lose.
@@ -36,6 +38,11 @@ window.addEventListener('vite:preloadError', (event) => {
 // that failed is opened again right after the reload, and a file still failing
 // then must show the "couldn't load" card instead of reloading in a loop.
 window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('chunkReloadAttempted'), 15000));
+
+// Back closes the window on top instead of leaving the page, and the app keeps each page's scroll place
+// itself. Both before the router starts: its history listener has to come after ours (lib/backToClose.js).
+installBackToClose();
+installScrollMemory();
 
 // Start this address's page file now, alongside the session check, instead of
 // after it. The role in the stored token only picks WHICH file (the owner's

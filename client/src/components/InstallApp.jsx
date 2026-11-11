@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowDown, Download, EllipsisVertical, Menu, Share, SquarePlus, X } from 'lucide-react';
 import { installOffer } from '@/lib/installOffer';
+import { useBackToClose } from '@/lib/useBackToClose';
 
 /**
  * Use it like an app.
@@ -153,6 +154,8 @@ function steps(browser, ios) {
 
 export function InstallSheet({ open, onClose }) {
   const { ios, browser, canPrompt, install } = useInstall();
+  // The phone's Back closes the sheet, not the page under it (lib/backToClose.js).
+  useBackToClose(open, onClose, { guard: false });
 
   useEffect(() => {
     if (!open) return undefined;
