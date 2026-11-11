@@ -15,6 +15,7 @@ import {
   PageHeader, Card, CardHeader, StatCard, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
+import DoneReceipt from '@/components/DoneReceipt';
 
 // Requesting a payout used to be a bare number field over a green strip, and it
 // ended in a four-word toast. It is the one moment in this app that is purely
@@ -63,47 +64,19 @@ function WithdrawModal({ commission, firstName, onClose }) {
 
   if (done != null) {
     return (
-      <Modal open onClose={onClose} title="Withdrawal requested">
-        <div className="flex flex-col items-center px-2 py-6 text-center">
-          <div className="relative mb-5">
-            <span className="animate-halo absolute inset-0 rounded-full bg-emerald-400/30" aria-hidden="true" />
-            <span className="animate-pop relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40">
-              <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" aria-hidden="true">
-                <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#34d399" strokeWidth="2.6"
-                  strokeLinecap="round" strokeLinejoin="round" className="animate-tick" />
-              </svg>
-            </span>
-          </div>
-
-          <h3 className="animate-rise text-2xl font-bold tracking-tight text-foreground" style={{ animationDelay: '0.28s' }}>
-            On its way{firstName ? `, ${firstName}` : ''}
-          </h3>
-          <span
-            className="animate-rise mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300 ring-1 ring-amber-500/25"
-            style={{ animationDelay: '0.33s' }}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-            Waiting on approval
-          </span>
-
-          <p className="animate-rise mt-4 text-3xl font-bold tabular-nums text-emerald-400" style={{ animationDelay: '0.36s' }}>
-            {formatCurrency(done.amount)}
-          </p>
-          <p className="animate-rise mt-1 max-w-xs truncate text-xs text-faint" style={{ animationDelay: '0.42s' }}>
-            to {done.to}
-          </p>
-
-          <p className="animate-rise mt-5 max-w-xs text-[13px] leading-relaxed text-muted" style={{ animationDelay: '0.5s' }}>
-            Once approved the money reaches you in <b className="text-foreground">1–2 hours</b>, during working hours.
-          </p>
-          <p className="animate-rise mt-2 max-w-xs text-[11px] leading-snug text-faint" style={{ animationDelay: '0.56s' }}>
-            It is held aside from now, so the same money cannot be requested twice.
-          </p>
-
-          <Button className="animate-rise mt-6 w-full justify-center py-3 text-[15px]" style={{ animationDelay: '0.62s' }} onClick={onClose}>
-            Done
-          </Button>
-        </div>
+      <Modal open onClose={onClose} title="Withdraw">
+        {/* One calm receipt (Nino, 11 Nov 2026: the old one was "not cool — too much"): where the money goes
+            on two short lines (how and the number, then the name), and one line for when it arrives. */}
+        <DoneReceipt
+          label={`On its way${firstName ? `, ${firstName}` : ''}`}
+          amount={formatCurrency(done.amount)}
+          details={(() => {
+            const parts = String(done.to || '').split(' · ').filter(Boolean);
+            return parts.length > 1 ? [parts.slice(0, -1).join(' · '), parts[parts.length - 1]] : parts;
+          })()}
+          note="Once approved, it reaches you in 1–2 hours, during working hours."
+          onClose={onClose}
+        />
       </Modal>
     );
   }

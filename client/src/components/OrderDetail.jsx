@@ -15,6 +15,7 @@ import {
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
 import StepperLines from '@/components/StepperLines';
+import DoneReceipt from '@/components/DoneReceipt';
 
 // --- Submit settlement: the rep submits boxes + cash for The Doctor's approval
 // Nothing is recorded (no sale, commission, revenue or profit) until approved.
@@ -69,44 +70,16 @@ function BoxStepper({ value, max, onChange }) {
 // real money — so the modal turns into the confirmation, says the amount back,
 // and tells them plainly what happens next and when the commission is theirs.
 function SettleDone({ amount, boxes, productName, onClose }) {
+  // One calm receipt (Nino, 11 Nov 2026: the old "Deposited" screen was "too much"). The commission is
+  // recorded only when ZELab approves, so that is what the line under the card says.
   return (
-    <div className="flex flex-col items-center px-2 py-6 text-center">
-      <div className="relative mb-5">
-        <span className="animate-halo absolute inset-0 rounded-full bg-emerald-400/30" aria-hidden="true" />
-        <span className="animate-pop relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/40">
-          <svg viewBox="0 0 24 24" className="h-10 w-10" fill="none" aria-hidden="true">
-            <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#34d399" strokeWidth="2.6"
-              strokeLinecap="round" strokeLinejoin="round" className="animate-tick" />
-          </svg>
-        </span>
-      </div>
-
-      <h3 className="animate-rise text-2xl font-bold tracking-tight text-foreground" style={{ animationDelay: '0.28s' }}>
-        Deposited
-      </h3>
-      <span
-        className="animate-rise mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300 ring-1 ring-amber-500/25"
-        style={{ animationDelay: '0.33s' }}
-      >
-        <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-        Waiting on approval
-      </span>
-
-      <p className="animate-rise mt-4 text-3xl font-bold tabular-nums text-emerald-400" style={{ animationDelay: '0.36s' }}>
-        {formatCurrency(amount)}
-      </p>
-      <p className="animate-rise mt-1 text-xs text-faint" style={{ animationDelay: '0.42s' }}>
-        {formatNumber(boxes)} {Number(boxes) === 1 ? 'box' : 'boxes'}{productName ? ` · ${productName}` : ''}
-      </p>
-
-      <p className="animate-rise mt-5 text-[13px] text-muted" style={{ animationDelay: '0.5s' }}>
-        The money is added to your wallet once it is approved.
-      </p>
-
-      <Button className="animate-rise mt-6 w-full" style={{ animationDelay: '0.58s' }} onClick={onClose}>
-        Done
-      </Button>
-    </div>
+    <DoneReceipt
+      label="Settlement sent"
+      amount={formatCurrency(amount)}
+      details={[`${formatNumber(boxes)} ${Number(boxes) === 1 ? 'box' : 'boxes'}${productName ? ` · ${productName}` : ''}`]}
+      note="Your commission comes in once ZELab approves it."
+      onClose={onClose}
+    />
   );
 }
 
