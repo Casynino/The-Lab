@@ -176,19 +176,59 @@ function ReturnModal({ onClose }) {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState({});
 
+  // A rep can only give back boxes still on his open orders. Read them as the order's own Return screen
+  // does — what is left, less boxes locked in a pending return or waiting in a settlement — added up over
+  // every open order. The server matches the boxes to the orders oldest-first and checks again.
+  const { data: openOrders = [], isLoading: loadingOrders } = useQuery({
+    queryKey: ['settlements', 'return-availability'],
+    enabled: isRep,
+    staleTime: 0, // read fresh each time the box opens
+    queryFn: async () => {
+      const rows = unwrap(await api.get('/settlements', { params: { open: true, limit: 100 } })).data || [];
+      return Promise.all(rows.map(async (s) => unwrap(await api.get(`/settlements/${s.id}`)).data));
+    },
+  });
+  // available: productId -> boxes. fines: the delay fine of each order the boxes could land on (TSh 30,000
+  // on an extended order, 15,000 otherwise — the server sends each order's own figure).
+  const { available, fines } = useMemo(() => {
+    const avail = new Map();
+    const rates = new Set();
+    for (const o of openOrders) {
+      const inSettlement = new Map();
+      (o.pendingSubmissionsList || []).forEach((p) => inSettlement.set(p.productId, (inSettlement.get(p.productId) || 0) + (p.boxes || 0)));
+      for (const l of o.order?.lines || []) {
+        const n = l.remaining - (l.pendingReturn || 0) - (inSettlement.get(l.productId) || 0);
+        if (n <= 0) continue;
+        avail.set(l.productId, (avail.get(l.productId) || 0) + n);
+        if (o.returnFailurePenalty) rates.add(o.returnFailurePenalty);
+      }
+    }
+    return { available: avail, fines: [...rates].sort((a, b) => a - b) };
+  }, [openOrders]);
+  const maxFor = (id) => (isRep ? available.get(id) || 0 : Infinity);
+
   function setQty(productId, qty) {
+    const capped = Math.min(qty, maxFor(productId));
     setCart((prev) => {
-      if (qty <= 0) { const n = { ...prev }; delete n[productId]; return n; }
-      return { ...prev, [productId]: qty };
+      if (capped <= 0) { const n = { ...prev }; delete n[productId]; return n; }
+      return { ...prev, [productId]: capped };
     });
   }
   const inc = (id) => setQty(id, (cart[id] || 0) + 1);
   const dec = (id) => setQty(id, (cart[id] || 0) - 1);
 
   const filtered = useMemo(() => {
+    // Reps see only what they hold on an open order; staff pick from the whole catalogue.
+    const pool = isRep ? products.filter((p) => (available.get(p.id) || 0) > 0) : products;
     const q = search.trim().toLowerCase();
-    return q ? products.filter((p) => p.name.toLowerCase().includes(q)) : products;
-  }, [products, search]);
+    return q ? pool.filter((p) => p.name.toLowerCase().includes(q)) : pool;
+  }, [products, search, isRep, available]);
+
+  const fineText = fines.length === 0
+    ? 'a delay fine'
+    : fines.length === 1
+      ? `a ${formatCurrency(fines[0])} delay fine`
+      : `a ${formatCurrency(fines[0])} delay fine (${formatCurrency(fines[fines.length - 1])} on an extended order)`;
 
   const totalBoxes = Object.values(cart).reduce((s, q) => s + q, 0);
   const hasCart = totalBoxes > 0;
@@ -212,6 +252,7 @@ function ReturnModal({ onClose }) {
         ? `Return submitted as ${related.join(' + ')} (matched to your open orders)`
         : 'Return sent');
       qc.invalidateQueries({ queryKey: ['returns'] });
+      qc.invalidateQueries({ queryKey: ['settlements'] });
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),
@@ -251,7 +292,7 @@ function ReturnModal({ onClose }) {
         {/* Pending-approval notice — a slim amber line down the side, no box */}
         <div className="border-l-2 border-amber-400/60 pl-3 text-xs leading-relaxed text-amber-300">
           {isRep
-            ? 'Your boxes go back to ZELab and are cleared off your open orders once approved. Submitted boxes are locked, and the request must be decided within 24 hours or it expires with a TSh 15,000 delay fine.'
+            ? `Your boxes go back to ZELab and are cleared off your open orders once approved. Submitted boxes are locked, and the request must be decided within 24 hours or it expires with ${fineText}.`
             : 'Returns are pending until verified by the warehouse. Inventory updates only after approval. Pending returns expire after 24 hours.'}
         </div>
 
@@ -299,22 +340,28 @@ function ReturnModal({ onClose }) {
 
         {/* Product list */}
         <div className="-mx-1 max-h-56 divide-y divide-border overflow-y-auto">
+          {isRep && loadingOrders && <p className="py-4 text-center text-sm text-muted">Loading your open orders…</p>}
+          {isRep && !loadingOrders && available.size === 0 && (
+            <p className="py-4 text-center text-sm text-muted">No boxes left to return on your open orders.</p>
+          )}
           {filtered.map((product) => {
             const qty = cart[product.id] || 0;
             const inCart = qty > 0;
+            const max = maxFor(product.id);
             return (
               <div key={product.id} className={`px-1 py-2.5 transition ${inCart ? 'bg-brand-500/5' : ''}`}>
                 {/* The name has the line to itself and stays on it; the stepper sits under it. */}
                 <div title={product.name} className={`truncate text-sm font-medium ${inCart ? 'text-foreground' : 'text-muted'}`}>{product.name}</div>
                 <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                  {isRep && <span className="mr-auto text-xs text-faint">{formatNumber(max)} available</span>}
                   <button onClick={() => dec(product.id)} disabled={qty === 0}
                     className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-lg font-bold text-muted transition hover:text-foreground disabled:opacity-30">−</button>
-                  <input type="number" min="0" value={qty === 0 ? '' : qty}
+                  <input type="number" min="0" max={isRep ? max : undefined} value={qty === 0 ? '' : qty}
                     onChange={(e) => { const v = parseInt(e.target.value, 10); setQty(product.id, isNaN(v) || v < 0 ? 0 : v); }}
                     placeholder="0"
                     className="h-8 w-14 rounded-lg border border-border bg-elevated text-center text-sm font-semibold text-foreground [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                  <button onClick={() => inc(product.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-lg font-bold text-brand-500 transition hover:bg-brand-500/25">+</button>
+                  <button onClick={() => inc(product.id)} disabled={qty >= max}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-lg font-bold text-brand-500 transition hover:bg-brand-500/25 disabled:opacity-30">+</button>
                 </div>
               </div>
             );
