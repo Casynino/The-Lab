@@ -1214,10 +1214,14 @@ function AccountStatementModal({ account, onClose }) {
                   <TR key={t.id}>
                     <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                     <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
-                    <TD className="max-w-[260px] truncate text-foreground">
-                      {isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || '—')}
-                      {isRecord && t.payeeCode && <span className="ml-1.5 text-[11px] text-faint">{t.payeeCode}</span>}
-                      {t.brandName && <span className="ml-1.5 text-[11px] text-faint">{t.brandName}</span>}
+                    {/* Wraps to two lines rather than pushing Balance past the window's edge (it ran 63 px over at 1440). */}
+                    <TD className="min-w-[170px] max-w-[260px] whitespace-normal text-foreground"
+                      title={isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || undefined)}>
+                      <div className="line-clamp-2 break-words leading-snug">
+                        {isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || '—')}
+                        {isRecord && t.payeeCode && <span className="ml-1.5 text-[11px] text-faint">{t.payeeCode}</span>}
+                        {t.brandName && <span className="ml-1.5 text-[11px] text-faint">{t.brandName}</span>}
+                      </div>
                     </TD>
                     {isRecord ? (
                       <TD className="text-right font-semibold tabular-nums text-violet-300">{formatCurrency(t.amount)}</TD>
