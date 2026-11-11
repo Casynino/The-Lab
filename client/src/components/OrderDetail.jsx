@@ -122,7 +122,9 @@ function SettleOneModal({ order, onClose, onDone }) {
       setSent({ amount: value, boxes: Number(boxes), productName: line?.name });
       onDone();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have gone through: reload the order so the sheet shows what is left (audit
+    // backend-integrity-5), and the server's refusal of a retry says the boxes are already waiting.
+    onError: (e) => { toast.error(apiError(e)); onDone(); },
   });
 
   // Once it is sent the form is over: no footer buttons, nothing left to fill
@@ -303,7 +305,8 @@ function SettleManyModal({ order, onClose, onDone }) {
       setSent({ amount: total, boxes: totalBoxes, productName: chosen.length > 1 ? `${chosen.length} products` : chosen[0]?.name });
       onDone();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have gone through: reload the order (audit backend-integrity-5).
+    onError: (e) => { toast.error(apiError(e)); onDone(); },
   });
 
   if (sent) {
@@ -438,7 +441,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
       });
     },
     onSuccess: () => { toast.success('Return sent'); onDone(); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => { toast.error(apiError(e)); onDone(); },
   });
 
   const footer = (

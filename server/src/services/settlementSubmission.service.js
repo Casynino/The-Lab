@@ -77,11 +77,17 @@ async function submitLineTx(tx, settlementId, payload, actor) {
     settlement.pendingReturnBoxes(tx, settlementId),
   ]);
   const inReturn = pendingRets.get(productId) || 0;
-  const available = outstanding - (pendingSubs.get(productId) || 0) - inReturn;
+  const inSettlement = pendingSubs.get(productId) || 0;
+  const available = outstanding - inSettlement - inReturn;
   if (baseQuantity > available) {
+    // Nothing left because the boxes are already sent and waiting (typically a retry after a lost
+    // answer): say that, so the rep knows his first send went through (audit backend-integrity-5).
+    if (available <= 0 && inSettlement > 0 && inReturn === 0) {
+      throw ApiError.badRequest(`These ${product.name} boxes are already sent and waiting for ZELab to approve — nothing more to submit on this order.`);
+    }
     throw ApiError.badRequest(inReturn > 0
       ? `Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order — ${inReturn} box(es) are in a return waiting for ZELab.`
-      : `Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order`);
+      : `Only ${Math.max(0, available)} box(es) of ${product.name} can still be submitted on this order${inSettlement > 0 ? ` — ${inSettlement} box(es) are already sent and waiting for ZELab` : ''}`);
   }
 
   const amount = round2(baseQuantity * toNumber(product.sellingPrice));

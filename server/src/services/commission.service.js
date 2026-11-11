@@ -728,6 +728,11 @@ async function decideWithdrawal(id, action, actor) {
   const t = transitions[action];
   if (!t) throw ApiError.badRequest('Unknown action');
   if (!t.from.includes(w.status)) {
+    // Already where this press wanted it (a retry after a lost answer): say the first one went through,
+    // not "Cannot pay a PAID request" (audit backend-integrity-5).
+    if (w.status === t.to) {
+      throw ApiError.conflict(`This withdrawal is already ${t.to === 'PAID' ? 'paid' : t.to.toLowerCase()} — your first press went through. Refresh to see it.`);
+    }
     throw ApiError.badRequest(`Cannot ${action.toLowerCase()} a ${w.status} request`);
   }
 

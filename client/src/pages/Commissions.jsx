@@ -221,7 +221,8 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
       refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have paid it: reload so the row shows its real state (audit backend-integrity-5).
+    onError: (e) => { toast.error(apiError(e)); refresh(); },
   });
 
   // Reject asks once more before it goes: the rep is told at once that it was not approved.
@@ -321,7 +322,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
       toast.success(v.action === 'PAY' ? 'Paid — and recorded on the Commission account' : 'Request rejected');
       refresh();
     },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => { toast.error(apiError(e)); refresh(); },
   });
 
   if (!items.length) return null;
@@ -2580,7 +2581,12 @@ function AdminView() {
       qc.invalidateQueries({ queryKey: ['commissions'] });
       qc.invalidateQueries({ queryKey: ['finance'] });
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have paid it: reload so the row shows its real state (audit backend-integrity-5).
+    onError: (e) => {
+      toast.error(apiError(e));
+      qc.invalidateQueries({ queryKey: ['commissions'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+    },
   });
 
   if (isLoading || !summary) return <PageSpinner />;
