@@ -109,7 +109,9 @@ function ChangePasswordForm({ compact = false }) {
 }
 
 // ── The profile card: same dark red-lit card as the wallet, with who this is and how to reach them ──
-function ProfileCard({ user, sub, cities = [] }) {
+// `quiet`: the owner's profile wears the rep side's neutral glass (Nino, 11 Nov 2026: "the red here is too
+// much … mix the other colours, clean like the rep side"); a rep's own profile keeps its red-lit card.
+function ProfileCard({ user, sub, cities = [], quiet = false }) {
   const repInfo = user?.salesRep;
   const rows = [
     ['Email', user?.email],
@@ -118,17 +120,19 @@ function ProfileCard({ user, sub, cities = [] }) {
   ].filter(([, v]) => v);
   return (
     <section
-      className="relative isolate overflow-hidden rounded-[22px] p-5 ring-1 ring-inset ring-white/[0.09]"
-      style={{
+      className={quiet ? 'stat-glass p-5' : 'relative isolate overflow-hidden rounded-[22px] p-5 ring-1 ring-inset ring-white/[0.09]'}
+      style={quiet ? undefined : {
         background: 'linear-gradient(140deg,#2c0e0c 0%,#170a0a 52%,#0e0e10 100%)',
         boxShadow: '0 14px 32px -16px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07)',
       }}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-12 -top-20 -z-10 h-56 w-56 rounded-full"
-        style={{ background: 'radial-gradient(closest-side, rgba(238,49,36,.34), transparent)' }}
-      />
+      {!quiet && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-12 -top-20 -z-10 h-56 w-56 rounded-full"
+          style={{ background: 'radial-gradient(closest-side, rgba(238,49,36,.34), transparent)' }}
+        />
+      )}
       {/* Just the name — no initials circle (Nino, 11 Nov 2026: "no need of the MK, the name is ok"). */}
       <div className="min-w-0">
         {/* The blue verified mark after the name (Nino, 11 Nov 2026) — for an active account only. */}
@@ -261,17 +265,8 @@ function BusinessCard({ cmd }) {
   ];
   return (
     <section
-      className="relative isolate overflow-hidden rounded-[22px] p-5 ring-1 ring-inset ring-white/[0.09]"
-      style={{
-        background: 'linear-gradient(140deg,#2c0e0c 0%,#170a0a 52%,#0e0e10 100%)',
-        boxShadow: '0 14px 32px -16px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07)',
-      }}
+      className="stat-glass p-5"
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-12 -top-20 -z-10 h-56 w-56 rounded-full"
-        style={{ background: 'radial-gradient(closest-side, rgba(238,49,36,.34), transparent)' }}
-      />
       <p className="text-[11px] font-medium tracking-wide text-white/55">Money in the accounts</p>
       <p className="mt-1 text-[30px] font-bold leading-tight tabular-nums text-white">{formatCurrency(cmd.totalFunds)}</p>
       <p className="mt-1 text-[12px] text-white/50">
@@ -298,11 +293,11 @@ function BusinessDoingCard({ a }) {
   const best = trend.reduce((b, t) => (t.revenue > (b?.revenue || 0) ? t : b), null);
   const top = Math.max(1, ...trend.map((t) => t.revenue));
   return (
-    <section className="premium-card p-5">
+    <section className="stat-glass p-5">
       <div className="flex items-center gap-5">
         {margin != null && (
-          <div style={{ filter: 'drop-shadow(0 0 9px rgba(238,49,36,0.4))' }}>
-            <Ring size={88} stroke={7} total={100} segments={[{ value: Math.max(0, Math.min(100, margin)), color: RED }]}>
+          <div>
+            <Ring size={88} stroke={7} total={100} segments={[{ value: Math.max(0, Math.min(100, margin)), color: '#34d399' }]}>
               <span className="text-lg font-bold leading-none tabular-nums text-white">{Math.round(margin)}%</span>
               <span className="mt-1 text-[9px] text-white/50">margin</span>
             </Ring>
@@ -336,8 +331,8 @@ function BusinessDoingCard({ a }) {
               <div key={t.period} className="flex flex-1 flex-col items-center gap-1.5">
                 <div className="flex h-10 w-full items-end justify-center">
                   <div
-                    className={`w-full max-w-[26px] rounded-md ${isBest ? 'bg-brand-500' : 'bg-white/[0.14]'}`}
-                    style={{ height: `${Math.max(6, (t.revenue / top) * 100)}%`, boxShadow: isBest ? '0 0 12px rgba(238,49,36,.45)' : undefined }}
+                    className={`w-full max-w-[26px] rounded-md ${isBest ? 'bg-emerald-400' : 'bg-white/[0.14]'}`}
+                    style={{ height: `${Math.max(6, (t.revenue / top) * 100)}%` }}
                   />
                 </div>
                 <span className="text-[9px] text-white/40">{t.period}</span>
@@ -474,7 +469,7 @@ export const LAB_SECTIONS = [
 // wash, its icon glowing — the others light up gently under the pointer.
 function LabNav({ tab, onChange }) {
   return (
-    <nav aria-label="The Lab" className="premium-card p-2">
+    <nav aria-label="The Lab" className="stat-glass p-2">
       <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium tracking-wide text-white/50">The Lab</p>
       <ul className="space-y-0.5">
         {LAB_SECTIONS.map((s) => {
@@ -487,13 +482,13 @@ function LabNav({ tab, onChange }) {
                 onClick={() => onChange(s.key)}
                 aria-current={active ? 'page' : undefined}
                 className={`group relative flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${active
-                  ? 'bg-gradient-to-r from-brand-500/[0.22] via-brand-500/[0.08] to-transparent'
+                  ? 'bg-white/[0.07]'
                   : 'hover:bg-white/[0.045]'}`}
               >
-                {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-brand-500" style={{ boxShadow: '0 0 10px rgba(238,49,36,.7)' }} aria-hidden="true" />}
+                {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-brand-500" aria-hidden="true" />}
                 <span
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-inset transition ${active ? 'bg-brand-500/20 text-brand-400 ring-brand-500/40' : 'bg-white/[0.05] text-white/55 ring-white/10 group-hover:text-white/80'}`}
-                  style={active ? { boxShadow: '0 0 14px rgba(238,49,36,.35)' } : undefined}
+                  style={undefined}
                 >
                   <Icon className="h-4 w-4" />
                 </span>
@@ -566,7 +561,7 @@ function AdminProfile({ user, sub }) {
   // Compact (Nino, 11 Nov 2026: "the password card looks big"): a small heading inside the card, slimmer
   // fields, the same three steps.
   const password = (
-    <section className="premium-card p-4">
+    <section className="stat-glass p-4">
       <p className="mb-3 text-[11px] font-medium tracking-wide text-white/50">Change password</p>
       <ChangePasswordForm compact />
     </section>
@@ -577,7 +572,7 @@ function AdminProfile({ user, sub }) {
       {/* Left: who he is, his pages, his password. It stays in view while a long section scrolls on the
           right (no empty space under it), and scrolls on its own if the window is shorter than it. */}
       <div className="space-y-5 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:p-0.5 lg:[scrollbar-width:thin]">
-        <ProfileCard user={user} sub={sub} />
+        <ProfileCard user={user} sub={sub} quiet />
         <LabNav tab={tab} onChange={openSection} />
         <div className="hidden lg:block">{password}</div>
       </div>
