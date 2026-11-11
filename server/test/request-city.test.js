@@ -16,11 +16,15 @@ const ONE = { region: 'Arusha', regions: ['Arusha'] };
 const OLD = { region: 'Arusha', regions: [] }; // a rep from before the list existed
 const TWO = { region: 'Arusha', regions: ['Arusha', 'Kilimanjaro'] };
 
-test('a one-city rep is never asked and nothing is stored, whatever is sent', () => {
-  assert.deepEqual(requestRegion(ONE, undefined), { region: null });
-  assert.deepEqual(requestRegion(ONE, 'Kilimanjaro'), { region: null });
-  assert.deepEqual(requestRegion(OLD, undefined), { region: null });
+test('a one-city rep is never asked: his one city is the request\'s city, whatever is sent', () => {
+  assert.deepEqual(requestRegion(ONE, undefined), { region: 'Arusha' });
+  assert.deepEqual(requestRegion(ONE, 'Kilimanjaro'), { region: 'Arusha' });
+  assert.deepEqual(requestRegion(OLD, undefined), { region: 'Arusha' });
+});
+
+test('a rep with no city on record stores none', () => {
   assert.deepEqual(requestRegion(null, 'Arusha'), { region: null });
+  assert.deepEqual(requestRegion({ region: null, regions: [] }, 'Arusha'), { region: null });
 });
 
 test('a rep with two cities must pick one', () => {
@@ -85,10 +89,10 @@ test('create: a two-city rep\'s pick is stored', async () => {
   assert.equal(written.create.region, 'Kilimanjaro');
 });
 
-test('create: a one-city rep\'s request is exactly as before (no city stored)', async () => {
+test('create: a one-city rep sends nothing and the request still gets his city', async () => {
   const { svc, written } = loadService({ rep: ONE });
   await svc.create('s1', { items: ITEMS });
-  assert.equal(written.create.region, null);
+  assert.equal(written.create.region, 'Arusha');
 });
 
 test('update: an edit that does not mention the city keeps the one already chosen', async () => {

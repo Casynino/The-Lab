@@ -144,12 +144,14 @@ function mergeRegionRevenue(rows) {
 }
 
 // The city a stock request is for (Nino, 11 Nov 2026: "when the rep has two cities, every time he requests
-// stock he picks which city — from the cities he is registered to; with one city nothing changes").
-// A rep with two or more regions must name one of THEM; a rep with one region (or none) has nothing to
-// choose, so nothing is stored and whatever was sent is ignored. Returns { region } or { error }.
+// stock he picks which city — from the cities he is registered to"; then: "the rep with one city should see
+// it too, as the default, without picking"). A rep with ONE region gets that one, whatever was sent; a rep
+// with two or more must name one of HIS; a rep with none (an old record — Dar es Salaam by default) stores
+// nothing. Returns { region } or { error }.
 function requestRegion(rep, asked) {
   const mine = repRegions(rep);
-  if (mine.length < 2) return { region: null };
+  if (mine.length === 0) return { region: null };
+  if (mine.length === 1) return { region: mine[0] };
   const picked = asked ? canonicalRegion(asked) : null;
   if (!picked) return { error: 'Pick the city this stock is for.' };
   if (!mine.includes(picked)) return { error: `${picked} is not one of your cities.` };

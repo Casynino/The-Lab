@@ -1,5 +1,5 @@
 import { LIVE, STEADY } from '@/lib/polling';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
 import clsx from 'clsx';
@@ -84,12 +84,18 @@ function CartOrderSheet({ onClose, existing }) {
   const [search, setSearch] = useState('');
   const [notes, setNotes] = useState(existing?.notes || '');
   const qc = useQueryClient();
-  // A rep who works two or more cities picks the city this stock is for, from his own cities, every time
-  // (Nino, 11 Nov 2026). One city: nothing to pick, and the sheet is exactly as it was.
+  // The city this stock is for (Nino, 11 Nov 2026). One city: it is shown, already chosen, nothing to tap.
+  // Two or more: he picks one of his own — whenever he likes, products first is fine; only a Request
+  // without a city is stopped, with "Choose the city".
   const { user } = useAuth();
   const cities = repRegions(user?.salesRep);
+  const hasCity = cities.length > 0;
   const multiCity = cities.length > 1;
-  const [city, setCity] = useState(() => (existing?.region && cities.includes(existing.region) ? existing.region : ''));
+  const [city, setCity] = useState(() => (cities.length === 1
+    ? cities[0]
+    : existing?.region && cities.includes(existing.region) ? existing.region : ''));
+  const [askCity, setAskCity] = useState(false);
+  const cityRef = useRef(null);
 
   // In-stock set; when editing, keep this order's existing products visible too
   // so they can still be reduced/removed even if now out of stock.
@@ -136,7 +142,7 @@ function CartOrderSheet({ onClose, existing }) {
           quantity: qty,
         })),
         notes: notes || undefined,
-        ...(multiCity ? { region: city } : {}),
+        ...(hasCity && city ? { region: city } : {}),
       };
       return editing
         ? api.put(`/stock-requests/${existing.id}`, body)
@@ -160,7 +166,7 @@ function CartOrderSheet({ onClose, existing }) {
         <div className="flex items-baseline justify-between gap-3 px-1">
           <span className="text-[13px] text-muted">
             {formatNumber(totalBoxes)} box{totalBoxes !== 1 ? 'es' : ''} · {cartCount} product{cartCount !== 1 ? 's' : ''}
-            {multiCity && city ? ` · ${shortRegion(city)}` : ''}
+            {hasCity && city ? ` · ${shortRegion(city)}` : ''}
           </span>
           <span className="text-base font-bold tabular-nums text-foreground">{formatCurrency(totalAmount)}</span>
         </div>
@@ -172,8 +178,16 @@ function CartOrderSheet({ onClose, existing }) {
         </button>
         <Button
           className="h-9 flex-1 justify-center rounded-full px-4 text-[13px] font-semibold"
-          disabled={cartCount === 0 || create.isPending || (multiCity && !city)}
-          onClick={() => create.mutate()}
+          disabled={cartCount === 0 || create.isPending}
+          onClick={() => {
+            if (multiCity && !city) {
+              setAskCity(true);
+              toast.error('Choose the city');
+              cityRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              return;
+            }
+            create.mutate();
+          }}
         >
           {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           {editing ? 'Save' : 'Request'}
@@ -184,14 +198,14 @@ function CartOrderSheet({ onClose, existing }) {
 
   return (
     <Modal open onClose={onClose} title={editing ? `Edit order ${existing.requestNumber}` : 'New stock request'} size="lg" footer={footerContent}>
-      {/* The city, for a rep with two or more: plain words, no box round them (Nino, 11 Nov 2026: "no funny
-          shapes around the city") — the picked one white with a red line under it, like the wallet's tabs.
-          They wrap onto more lines for a rep with many cities. Until one is picked the Request button stays
-          off, and once there is something in the order the word above asks. */}
-      {multiCity && (
-        <div className="mb-4 px-1">
-          <p className={clsx('text-xs', !city && cartCount > 0 ? 'font-medium text-brand-600' : 'text-muted')}>
-            {!city && cartCount > 0 ? 'Pick the city' : 'City'}
+      {/* The city: plain words, no box round them (Nino, 11 Nov 2026: "no funny shapes around the city") —
+          the chosen one white with a red line under it, like the wallet's tabs; they wrap for a rep with many
+          cities. A one-city rep just sees his city, already chosen. The word above turns red and says
+          "Choose the city" only after a Request was tapped without one. */}
+      {hasCity && (
+        <div ref={cityRef} className="mb-4 px-1">
+          <p className={clsx('text-xs', askCity && !city ? 'font-medium text-brand-600' : 'text-muted')}>
+            {askCity && !city ? 'Choose the city' : 'City'}
           </p>
           <div role="radiogroup" aria-label="City" className="flex flex-wrap gap-x-5">
             {cities.map((c) => (
@@ -200,9 +214,10 @@ function CartOrderSheet({ onClose, existing }) {
                 type="button"
                 role="radio"
                 aria-checked={city === c}
-                onClick={() => setCity(c)}
+                disabled={!multiCity}
+                onClick={() => { setCity(c); setAskCity(false); }}
                 className={clsx(
-                  'relative py-2.5 text-[15px] transition',
+                  'relative py-2.5 text-[15px] transition disabled:cursor-default',
                   city === c ? 'font-semibold text-foreground' : 'font-medium text-muted hover:text-foreground',
                 )}
               >
