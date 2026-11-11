@@ -52,7 +52,7 @@ export function routeQueries(pathname, search, role) {
       return [['returnsSummary'], ['returns', { type: '', page: 1 }]];
     case '/commissions': {
       if (rep) return [['commissionsInsights'], ['commissionsMine'], ['withdrawalsMine'], ['bonusMe']];
-      // A rep card names its rep (?rep=id, never opened as an address): what his side sheet asks for.
+      // A rep card names its rep (?rep=id, also the open sheet's own address): what his side sheet asks for.
       const card = params.get('rep');
       if (card) return [['repSheetProfile', card], ['repSheetWithdrawals', card], ['repFines', card]];
       return [...COMMISSIONS_STAFF];

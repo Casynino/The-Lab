@@ -514,7 +514,8 @@ function AdminProfile({ user, sub }) {
   const section = LAB_SECTIONS.find((s) => s.key === tab);
   const contentRef = useRef(null);
   const openSection = (key) => {
-    setParams(key === 'overview' ? {} : { tab: key });
+    // Replace, like every tab in the app: a section is not a Back step (navigation-10).
+    setParams(key === 'overview' ? {} : { tab: key }, { replace: true });
     // On a phone the section opens below the list: bring it into view.
     if (window.innerWidth < 1024) setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };

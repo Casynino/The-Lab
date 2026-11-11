@@ -2906,9 +2906,11 @@ const TABS = [
 
 export default function Finance() {
   const [searchParams, setSearchParams] = useSearchParams();
+  // The tab IS the address, both ways: the sidebar's Finance link or the phone's Money tab opens Overview
+  // from any tab, and Back/Forward show the tab their address names (navigation-7).
   const urlTab = searchParams.get('tab');
-  const [tab, setTabState] = useState(TABS.some(([k]) => k === urlTab) ? urlTab : 'overview');
-  const setTab = (k) => { setTabState(k); setSearchParams(k === 'overview' ? {} : { tab: k }, { replace: true }); };
+  const tab = TABS.some(([k]) => k === urlTab) ? urlTab : 'overview';
+  const setTab = (k) => setSearchParams(k === 'overview' ? {} : { tab: k }, { replace: true });
   const [money, setMoney] = useState(null); // 'income' | 'expense'
   const [ownerMoney, setOwnerMoney] = useState(null); // 'in' | 'out'
   const { data: accounts = [] } = useQuery(pageQueries.financeAccounts());

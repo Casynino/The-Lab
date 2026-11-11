@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/format';
@@ -200,13 +201,13 @@ function FilterChip({ label, count, active, tone, onClick }) {
 }
 
 function StaffSettlements({ viewing, setViewing }) {
-  const [page, setPage] = useState(1);
-  // A link can open the page on one chip (the Dashboard's "orders past the deadline" opens Overdue).
-  const [params] = useSearchParams();
-  const [status, setStatus] = useState(() => {
-    const asked = params.get('status');
-    return ['OPEN', 'PARTIAL', 'OVERDUE', 'SETTLED'].includes(asked) ? asked : '';
-  });
+  // The chip and the page are in the address (?status=SETTLED&page=3), written with replace: Back from an
+  // order's page comes back to the same list, a reload keeps it, and the Dashboard's "orders past the
+  // deadline" link (?status=OVERDUE) and the chips always agree (navigation-6, navigation-11).
+  const [params, setParams] = useSearchParams();
+  const status = pickParam(params, 'status', ['OPEN', 'PARTIAL', 'OVERDUE', 'SETTLED']);
+  const page = pageParam(params);
+  const setPage = (n) => setParams((p) => withParams(p, { page: n }), { replace: true });
 
   const { data: summary } = useQuery({
     ...pageQueries.settlementsSummary(),
@@ -218,7 +219,7 @@ function StaffSettlements({ viewing, setViewing }) {
     placeholderData: keepOnPageTurn({ status }),
   });
 
-  const pick = (next) => { setStatus(next); setPage(1); };
+  const pick = (next) => setParams((p) => withParams(p, { status: next, page: null }), { replace: true });
 
   const b = summary?.boxes || { issued: 0, settled: 0, returned: 0, remaining: 0 };
   const sc = summary?.statusCounts || {};

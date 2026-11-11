@@ -700,7 +700,7 @@ export default function Inventory() {
   const tabs = (
     <div className="mb-5 flex flex-wrap gap-2">
       {INVENTORY_TABS.map(([k, label]) => (
-        <button key={k} type="button" onClick={() => setParams(k === 'balances' ? {} : { tab: k })}
+        <button key={k} type="button" onClick={() => setParams(k === 'balances' ? {} : { tab: k }, { replace: true })}
           aria-current={tab === k ? 'page' : undefined}
           className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
       ))}

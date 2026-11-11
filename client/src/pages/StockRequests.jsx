@@ -9,7 +9,9 @@ import {
   Loader2, CheckCircle2, Pencil, ChevronRight, Clock, XCircle, Ban, Boxes, Wallet, Timer,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { useSearchParams } from 'react-router-dom';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts } from '@/lib/hooks';
 import { ROLES, REQUEST_STATUS_META } from '@/lib/constants';
@@ -227,7 +229,7 @@ function CartOrderSheet({ onClose, existing }) {
       )}
       <div className="flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
         <button type="button" onClick={onClose}
-          className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]">
+          className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97] disabled:opacity-40">
           Cancel
         </button>
         <Button
@@ -819,8 +821,11 @@ function PendingRequestApprovals({ onReview }) {
 // ── Staff table (admin / warehouse review) ────────────────────────────────────
 
 function StaffRequestTable({ onView }) {
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  // The chip and the page are in the address, written with replace, so Back comes back to them (navigation-6).
+  const [params, setParams] = useSearchParams();
+  const status = pickParam(params, 'status', Object.keys(REQUEST_STATUS_META).filter((k) => k !== 'APPROVED'));
+  const page = pageParam(params);
+  const setPage = (n) => setParams((p) => withParams(p, { page: n }), { replace: true });
   const { data, isLoading, isError, refetch } = useQuery({
     // Decided requests only unless the filter asks for pending: see pageQueries.stockRequests.
     ...pageQueries.stockRequests({ page, status }),
@@ -914,7 +919,7 @@ function StaffRequestTable({ onView }) {
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
           {chips.map((c) => (
-            <button key={c.key || 'all'} type="button" onClick={() => { setStatus(c.key); setPage(1); }}
+            <button key={c.key || 'all'} type="button" onClick={() => setParams((p) => withParams(p, { status: c.key, page: null }), { replace: true })}
               className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
                 status === c.key ? TONE[c.tone] : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
               {c.label}
