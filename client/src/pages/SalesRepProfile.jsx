@@ -27,9 +27,10 @@ import {
 import { RED } from '@/lib/brand';
 
 // ── Section wrapper ──────────────────────────────────────────────────────────
-function Section({ icon: Icon, title, count, children, action }) {
+// `fill`: the card takes the height it is given and its body scrolls inside it (the activity feed).
+function Section({ icon: Icon, title, count, children, action, fill = false }) {
   return (
-    <Card>
+    <Card className={fill ? 'flex h-full flex-col' : undefined}>
       {/* Wraps as two blocks rather than squeezing both. With four actions in
           the header the row had no room to give, so the title broke across two
           lines and the buttons broke mid-phrase — "Allow / withdrawal" — and
@@ -43,7 +44,7 @@ function Section({ icon: Icon, title, count, children, action }) {
         </div>
         {action}
       </div>
-      <div className="p-4">{children}</div>
+      <div className={fill ? 'min-h-0 flex-1 overflow-y-auto p-4' : 'p-4'}>{children}</div>
     </Card>
   );
 }
@@ -975,8 +976,8 @@ export default function SalesRepProfile() {
           </Section>
         </div>
 
-        {/* ── Right column ── */}
-        <div className="space-y-6">
+        {/* ── Right column ── (a flex column, so the activity feed can take exactly what is left) */}
+        <div className="flex flex-col gap-6">
           {/* The same two bars the rep sees, so a conversation about their
               progress is had over identical numbers. */}
           <ProgressRows
@@ -1118,15 +1119,17 @@ export default function SalesRepProfile() {
               between a rep who is safe and one who has simply been lucky. */}
           <ClosingSpeed closings={settlements.closings} discipline={data.discipline} onOpen={setViewing} />
 
-          {/* Activity */}
-          <Section icon={History} title="Activity history" count={activity.length}>
+          {/* Activity — on a computer it ends where the left column ends and scrolls inside itself, so the
+              two columns finish together with no empty space under either (Nino, 11 Nov 2026: "balance the
+              space; if they need to scroll, scroll inside"). `contain: size` stops the feed's own length from
+              making the row taller; it then takes exactly the height left over (at least 260 px). On a phone
+              it stays a capped list. */}
+          <div className="flex flex-col lg:min-h-[260px] lg:flex-1 lg:[contain:size]">
+          <Section icon={History} title="Activity history" count={activity.length} fill>
             {activity.length === 0 ? (
               <p className="py-2 text-sm text-faint">No recorded activity yet.</p>
             ) : (
-              // Capped and scrolled inside itself. An unbounded feed made this
-              // column run hundreds of pixels past the other one, and nothing
-              // on the left could ever be long enough to meet it.
-              <ul className="max-h-[520px] space-y-3 overflow-y-auto pr-1">
+              <ul className="max-h-[520px] space-y-3 overflow-y-auto pr-1 lg:max-h-none lg:overflow-visible">
                 {activity.map((e, i) => {
                   const m = ACTIVITY_META[e.type] || ACTIVITY_META.STOCK_REQUEST;
                   const Icon = m.icon;
@@ -1149,6 +1152,7 @@ export default function SalesRepProfile() {
               </ul>
             )}
           </Section>
+          </div>
         </div>
       </div>
 

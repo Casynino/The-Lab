@@ -381,6 +381,54 @@ function RepsThisMonth({ reps, onOpen }) {
   );
 }
 
+// Each brand's month, side by side (the dashboard's own colours: OHIS green, Civlily violet).
+const BRAND_DOT = { OHIS: 'bg-emerald-400', CIVLILY: 'bg-violet-400' };
+function BrandsThisMonth({ brands }) {
+  if (!brands?.length) return null;
+  return (
+    <section>
+      <SectionTitle>Your brands this month</SectionTitle>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {brands.map((b) => (
+          <div key={b.brandId} className="premium-card premium-card--sm p-4">
+            <div className="flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${BRAND_DOT[String(b.name).toUpperCase()] || 'bg-white/50'}`} aria-hidden="true" />
+              <p className="text-sm font-semibold text-white">{b.name}</p>
+              {b.marginMonth != null && <span className="ml-auto text-[11px] tabular-nums text-white/50">{Math.round(b.marginMonth)}% margin</span>}
+            </div>
+            <p className="mt-3 text-[22px] font-bold leading-tight tabular-nums text-white">{formatCurrency(b.revenueMonth)}</p>
+            <p className="mt-0.5 text-[11px] text-white/45">{formatNumber(b.boxesSoldMonth)} {b.boxesSoldMonth === 1 ? 'box' : 'boxes'} sold</p>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-white/10 pt-3 text-[12px] text-white/60">
+              <span><span className="tabular-nums text-white/85">{formatNumber(b.warehouseBoxes)}</span> in the warehouse</span>
+              <span><span className="tabular-nums text-white/85">{formatNumber(b.repBoxes)}</span> with reps</span>
+            </div>
+            {b.topProduct?.name && <p className="mt-2 truncate text-[11px] text-white/40">Best seller · {b.topProduct.name}</p>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// Where the money is: every account and its balance (the commission record is not money, so it is left out).
+function AccountsCard({ accounts }) {
+  const list = (accounts || []).filter((a) => !a.isCommissionRecord);
+  if (!list.length) return null;
+  return (
+    <section>
+      <SectionTitle>Accounts</SectionTitle>
+      <div className="glass-list divide-y divide-white/[0.06]">
+        {list.map((a) => (
+          <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-3">
+            <p className="min-w-0 truncate text-sm font-medium text-foreground">{a.name}</p>
+            <span className={`shrink-0 text-sm font-semibold tabular-nums ${a.balance < 0 ? 'text-rose-300' : 'text-white'}`}>{formatCurrency(a.balance)}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AdminProfile({ user, sub }) {
   const navigate = useNavigate();
   const { data: cmd, isError: cmdError } = useQuery({
@@ -406,9 +454,10 @@ function AdminProfile({ user, sub }) {
       </div>
     </section>
   );
+  // The whole width of the screen (Nino, 11 Nov 2026: "why the space on the sides — I want the page full").
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start">
-      <div className="space-y-6">
+    <div className="flex w-full flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start 2xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+      <div className="space-y-6 lg:sticky lg:top-6">
         <ProfileCard user={user} sub={sub} />
         <div className="hidden lg:block">{password}</div>
       </div>
@@ -433,7 +482,14 @@ function AdminProfile({ user, sub }) {
               </div>
             </section>
 
-            <RepsThisMonth reps={cmd.reps} onOpen={(id) => navigate(`/reps/${id}`)} />
+            {/* Wide screens: the reps beside the brands and the accounts; narrower ones: one under the other. */}
+            <div className="grid items-start gap-8 2xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+              <RepsThisMonth reps={cmd.reps} onOpen={(id) => navigate(`/reps/${id}`)} />
+              <div className="space-y-8">
+                <BrandsThisMonth brands={cmd.brands} />
+                <AccountsCard accounts={cmd.accounts} />
+              </div>
+            </div>
           </>
         )}
       </div>
