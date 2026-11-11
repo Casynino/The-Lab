@@ -55,7 +55,8 @@ export default function Notifications() {
   });
 
   const items = data?.data || [];
-  const unread = items.filter((n) => !n.isRead).length;
+  // The server counts every unread one (meta.unread); this page only holds 20 of them.
+  const unread = data?.meta?.unread ?? items.filter((n) => !n.isRead).length;
 
   // Newest first, in day groups (the server already sends newest first; this only splits it up).
   const groups = useMemo(() => {

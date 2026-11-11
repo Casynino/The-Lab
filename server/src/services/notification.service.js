@@ -38,7 +38,10 @@ async function unreadCount(user) {
 
 async function markRead(id, user) {
   const n = await prisma.notification.findUnique({ where: { id } });
-  if (!n) throw ApiError.notFound('Notification not found');
+  // Only a notification the user can see (the visibility rule above): anyone else could clear
+  // another person's alert, or an admin broadcast, by its id. Not found, so ids are not confirmed.
+  const visible = n && (!user || user.role === 'ADMIN' || n.userId === user.id);
+  if (!visible) throw ApiError.notFound('Notification not found');
   return prisma.notification.update({ where: { id }, data: { isRead: true, readAt: new Date() } });
 }
 
