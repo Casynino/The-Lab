@@ -96,25 +96,37 @@ export function isPageLoadError(error) {
   return /dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(String(error.message || ''));
 }
 
-// Fetch ahead one at a time, and never while the screen is still asking the
-// server for its own figures: on a 1.5 Mbit/s line a page file in the way of
-// an answer is time the person waits for. A file that fails is skipped.
+// Fetch ahead in order, `concurrency` files at a time, and never start one
+// while the screen is still asking the server for its own figures: on a
+// 1.5 Mbit/s line a page file in the way of an answer is time the person waits
+// for. A file that fails is skipped. (Each fetch costs a full round trip from
+// Tanzania, ~0.3 s, and the files are small: one at a time left the menu
+// half-fetched for ~5 s after the first screen, so an early click still waited
+// for its page's code. A few at a time closes that gap much sooner.)
 export async function warmInTurn(names, load, {
   isBusy = () => false,
   stopped = () => false,
   pause = (ms) => new Promise((r) => setTimeout(r, ms)),
   step = 250,
   maxWait = 4000,
+  concurrency = 1,
 } = {}) {
-  for (const name of names) {
-    for (let waited = 0; isBusy() && waited < maxWait && !stopped(); waited += step) await pause(step);
-    if (stopped()) return;
-    try {
-      await load(name);
-    } catch {
-      /* only a missed head start; opening the page fetches it again */
+  const queue = [...names];
+  async function worker() {
+    while (queue.length) {
+      for (let waited = 0; isBusy() && waited < maxWait && !stopped(); waited += step) await pause(step);
+      if (stopped()) return;
+      const name = queue.shift();
+      if (name === undefined) return;
+      try {
+        await load(name);
+      } catch {
+        /* only a missed head start; opening the page fetches it again */
+      }
     }
   }
+  const workers = Math.max(1, Math.min(concurrency, queue.length));
+  await Promise.all(Array.from({ length: workers }, worker));
 }
 
 // Data saver on, or a 2G line: fetch nothing the person did not ask for.

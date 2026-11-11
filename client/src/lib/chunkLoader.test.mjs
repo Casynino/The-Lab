@@ -130,6 +130,45 @@ test('warmInTurn: one at a time, in order, skipping failures', async () => {
   assert.equal(maxActive, 1);
 });
 
+test('warmInTurn with concurrency: never more than that many at once, each page once, started in order, failures skipped', async () => {
+  const started = [];
+  let active = 0;
+  let maxActive = 0;
+  const load = async (name) => {
+    started.push(name);
+    active += 1; maxActive = Math.max(maxActive, active);
+    await new Promise((r) => setTimeout(r, name === 'A' ? 6 : 2));
+    active -= 1;
+    if (name === 'C') throw new Error('offline');
+  };
+  await warmInTurn(['A', 'B', 'C', 'D', 'E', 'F', 'G'], load, { pause: async () => {}, concurrency: 3 });
+  assert.deepEqual(started, ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+  assert.equal(maxActive, 3);
+
+  // fewer pages than workers: no idle worker, nothing fetched twice
+  const few = [];
+  await warmInTurn(['X'], async (n) => { few.push(n); }, { concurrency: 3 });
+  assert.deepEqual(few, ['X']);
+});
+
+test('warmInTurn with concurrency: no new fetch starts while the screen is busy, and all stop on sign-out', async () => {
+  let busy = true;
+  const started = [];
+  const pauses = [];
+  let stop = false;
+  const run = warmInTurn(['A', 'B', 'C', 'D'], async (n) => { started.push(n); if (n === 'B') stop = true; }, {
+    isBusy: () => busy,
+    stopped: () => stop,
+    pause: async (ms) => { pauses.push(ms); if (pauses.length === 6) busy = false; },
+    step: 250,
+    concurrency: 3,
+  });
+  await run;
+  assert.ok(pauses.length >= 6, 'waited while busy');
+  assert.ok(!started.includes('D'), 'nothing started after sign-out');
+  assert.ok(started.length <= 3);
+});
+
 test('warmInTurn waits while the screen is still fetching, but not for ever', async () => {
   const pauses = [];
   let busyFor = 3;
