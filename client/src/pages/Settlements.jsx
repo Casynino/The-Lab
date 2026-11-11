@@ -1,5 +1,6 @@
 import { LIVE, STEADY } from '@/lib/polling';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'motion/react';
 import clsx from 'clsx';
@@ -199,7 +200,12 @@ function FilterChip({ label, count, active, tone, onClick }) {
 
 function StaffSettlements({ viewing, setViewing }) {
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  // A link can open the page on one chip (the Dashboard's "orders past the deadline" opens Overdue).
+  const [params] = useSearchParams();
+  const [status, setStatus] = useState(() => {
+    const asked = params.get('status');
+    return ['OPEN', 'PARTIAL', 'OVERDUE', 'SETTLED'].includes(asked) ? asked : '';
+  });
 
   const { data: summary } = useQuery({
     queryKey: ['settlements', 'summary'],

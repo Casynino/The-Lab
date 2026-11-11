@@ -125,6 +125,12 @@ api.interceptors.response.use(
 // Normalize an axios error into a readable message.
 export function apiError(error, fallback = 'Something went wrong') {
   const said = error?.response?.data?.error?.message || error?.response?.data?.message;
+  // A 422 says which field and why in `details`; "Validation failed" alone left nobody able to fix it.
+  const details = error?.response?.data?.error?.details;
+  if (said && Array.isArray(details) && details.length) {
+    const why = details.slice(0, 2).map((d) => (d?.path ? `${d.path}: ${d.message}` : d?.message)).filter(Boolean);
+    if (why.length) return `${said} — ${why.join('; ')}`;
+  }
   if (said) return said;
 
   const status = error?.response?.status;

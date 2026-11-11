@@ -8,7 +8,7 @@ import { formatDate, formatDateTime, formatNumber } from '@/lib/format';
 import ItemLines from '@/components/ItemLines';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
-  Pagination, Table, THead, TBody, TR, TH, TD,
+  Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 const DIR_LABEL = {
@@ -135,7 +135,7 @@ export default function Transfers() {
   const [direction, setDirection] = useState('');
   const [expanded, setExpanded] = useState(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['transfers', { page, direction }],
     queryFn: async () => unwrap(await api.get('/transfers', { params: { page, limit: 15, direction: direction || undefined } })),
   });
@@ -221,7 +221,7 @@ export default function Transfers() {
       </div>
 
       <Card>
-        {isLoading ? <PageSpinner /> : !rows.length ? (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the transfers" onRetry={refetch} /> : !rows.length ? (
           <EmptyState title="No transfers here" icon={Truck}
             message={direction ? 'Nothing moved this way yet.' : 'Move stock to a rep or another store to see it here.'}
             action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New transfer</Button>} />
@@ -264,7 +264,9 @@ export default function Transfers() {
                             {dead ? 'Reversed' : 'Delivered'}
                           </Badge>
                         </TD>
-                        <TD>{!dead && (
+                        {/* A transfer to a rep opened his order; its boxes come back through a Return on that
+                            order (the server refuses to cancel it), so it offers no cancel here. */}
+                        <TD>{!dead && t.direction !== 'WAREHOUSE_TO_REP' && (
                           <button className="btn-ghost px-2 py-1 text-faint hover:text-rose-400" title="Cancel & return the stock"
                             onClick={() => { if (confirm(`Cancel ${t.transferNumber}? All ${t.boxes} boxes go back to ${from(t)}.`)) cancel.mutate(t.id); }}>
                             <Ban className="h-4 w-4" />

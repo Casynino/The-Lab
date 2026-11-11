@@ -168,7 +168,7 @@ async function listProducts(filters, pagination) {
     ];
   }
 
-  const [items, total, onHand] = await Promise.all([
+  const [items, total, onHand, inWarehouse] = await Promise.all([
     prisma.product.findMany({
       where,
       include: PRODUCT_INCLUDE,
@@ -178,15 +178,19 @@ async function listProducts(filters, pagination) {
     }),
     prisma.product.count({ where }),
     inventory.productOnHand(prisma),
+    inventory.warehouseOnHand(prisma),
   ]);
 
   const enriched = items.map((p) => {
     const onHandBase = onHand.get(p.id) || 0;
+    const warehouseBase = inWarehouse.get(p.id) || 0;
     return {
       ...p,
       onHandBase,
+      warehouseBase,
       stockValue: Number((onHandBase * toNumber(p.purchasePrice)).toFixed(2)),
-      lowStock: p.minStockLevel > 0 && onHandBase <= p.minStockLevel,
+      // The minimum is a warehouse level, as the stock alerts measure it — boxes with reps are not on the shelf.
+      lowStock: p.minStockLevel > 0 && warehouseBase <= p.minStockLevel,
     };
   });
 

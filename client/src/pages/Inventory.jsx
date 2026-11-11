@@ -10,7 +10,7 @@ import { MOVEMENT_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, NumberInput, Textarea,
-  SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
+  SearchInput, Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function ReceiveModal({ onClose }) {
@@ -134,7 +134,7 @@ function Balances() {
     queryKey: ['brands', 'all'],
     queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data,
   });
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['inventory', 'balances', { page, search: debounced, brand }],
     queryFn: async () => unwrap(await api.get('/inventory/balances', { params: { page, limit: 24, search: debounced, brand: brand || undefined } })),
   });
@@ -157,6 +157,8 @@ function Balances() {
       </div>
       {isLoading ? (
         <Card><PageSpinner /></Card>
+      ) : isError && !data ? (
+        <Card><LoadError what="the stock" onRetry={refetch} /></Card>
       ) : !rows.length ? (
         <Card><EmptyState title="No stock on hand" message="Receive stock to get started." icon={Boxes} /></Card>
       ) : (
@@ -396,7 +398,7 @@ function Balances() {
 function Movements() {
   const [page, setPage] = useState(1);
   const [type, setType] = useState('');
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['inventory', 'movements', { page, type }],
     queryFn: async () => unwrap(await api.get('/inventory/movements', { params: { page, limit: 20, type: type || undefined } })),
   });
@@ -408,7 +410,7 @@ function Movements() {
           {Object.entries(MOVEMENT_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </Select>
       </div>
-      {isLoading ? <PageSpinner /> : !data?.data?.length ? <EmptyState title="No movements" /> : (
+      {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the movements" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No movements" /> : (
         <>
           <Table>
             <THead><TR><TH>When</TH><TH>Type</TH><TH>Product</TH><TH>Qty</TH><TH>Base Δ</TH><TH>Location</TH><TH>By</TH></TR></THead>
@@ -444,7 +446,7 @@ function Movements() {
 // of it lives, so nobody has to go and cross-read the ledger filtered by hand.
 function ProductStockModal({ row, onClose }) {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['inventory', 'movements', { productId: row.productId, page }],
     queryFn: async () => unwrap(await api.get('/inventory/movements', {
       params: { productId: row.productId, page, limit: 15 },
@@ -516,7 +518,7 @@ function ProductStockModal({ row, onClose }) {
             Movement of these {unit}
             {data?.meta?.total != null && <span className="ml-1 font-normal text-faint">· {formatNumber(data.meta.total)} recorded</span>}
           </h4>
-          {isLoading ? <PageSpinner /> : !data?.data?.length ? (
+          {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="this product's movement" onRetry={refetch} /> : !data?.data?.length ? (
             <EmptyState title="No movement recorded for this product yet" icon={Boxes} />
           ) : (
             <>

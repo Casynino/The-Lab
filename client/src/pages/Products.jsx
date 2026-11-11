@@ -11,7 +11,7 @@ import { useBrands, useCategories, usePackagingUnits, useDebounce } from '@/lib/
 import { formatCurrency, formatNumber, pluralizeUnit } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
-  SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
+  SearchInput, Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function PackagingEditor({ rows, setRows, units }) {
@@ -72,6 +72,10 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
 
   const save = useMutation({
     mutationFn: async (values) => {
+      // A level left blank went up as 0 and came back only as "Validation failed".
+      if (rows.some((r) => !Number.isInteger(Number(r.baseQuantity)) || Number(r.baseQuantity) < 1)) {
+        throw new Error('Enter how many base units each packaging level holds (e.g. Box = 50), or remove the empty level.');
+      }
       const packagings = rows.map((r) => ({
         packagingUnitId: r.packagingUnitId,
         baseQuantity: Number(r.baseQuantity),
@@ -120,7 +124,7 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
     >
       <div className="space-y-4">
         <Field label="Product name" required error={errors.name?.message}>
-          <Input {...register('name', { required: 'Name is required' })} />
+          <Input maxLength={200} {...register('name', { required: 'Name is required' })} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="SKU" hint={isEdit ? 'SKU cannot be changed' : 'Auto-generated if blank'}>
@@ -204,7 +208,7 @@ function ProductsCatalogue() {
   const { data: categories = [] } = useCategories();
   const { data: units = [] } = usePackagingUnits();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['products', { page, search: debounced, brandId, categoryId }],
     queryFn: async () => unwrap(await api.get('/products', { params: { page, limit: 15, search: debounced, brandId: brandId || undefined, categoryId: categoryId || undefined } })),
   });
@@ -240,6 +244,8 @@ function ProductsCatalogue() {
             ring: lowCount ? 'ring-amber-500/30' : 'ring-white/[0.07]', glow: lowCount ? 'from-amber-500/[0.16]' : 'from-white/[0.02]',
             chip: 'bg-amber-500/15 text-amber-400', num: lowCount ? 'text-amber-300' : 'text-foreground' },
         ];
+        // A failed load shows dashes, not a catalogue of zero (kept apart from the tiles above).
+        if (isError && !data) cards.forEach((c) => { c.value = '—'; c.sub = "couldn't load"; });
         return (
           <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
             {cards.map((c) => (
@@ -277,9 +283,13 @@ function ProductsCatalogue() {
           </div>
         </div>
 
-        {isLoading ? <PageSpinner /> : !data?.data?.length ? (
-          <EmptyState title="No products" message="Create your first product to start tracking stock." icon={Package}
-            action={<Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New product</Button>} />
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the products" onRetry={refetch} /> : !data?.data?.length ? (
+          debounced || brandId || categoryId ? (
+            <EmptyState title="No products match" message="Nothing matches this search or filter. Try another, or clear it." icon={Package} />
+          ) : (
+            <EmptyState title="No products" message="Create your first product to start tracking stock." icon={Package}
+              action={<Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New product</Button>} />
+          )
         ) : (
           <>
             <Table>
@@ -307,6 +317,10 @@ function ProductsCatalogue() {
                       {p.onHandBase <= 0
                         ? <Badge className="ml-2 bg-rose-500/15 text-rose-300">Out</Badge>
                         : p.lowStock && <Badge className="ml-2 bg-amber-500/15 text-amber-300">Low</Badge>}
+                      {/* Low is the warehouse against its minimum; the count above includes the reps' boxes. */}
+                      {p.onHandBase > 0 && p.lowStock && p.warehouseBase !== p.onHandBase && (
+                        <div className="text-[11px] text-faint">{formatNumber(p.warehouseBase)} in the warehouse</div>
+                      )}
                     </TD>
                     <TD><Badge className={p.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/[0.06] text-muted'}>{p.isActive ? 'Active' : 'Inactive'}</Badge></TD>
                     <TD>

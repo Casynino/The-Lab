@@ -76,10 +76,17 @@ const userQuery = {
 };
 
 // --- Customers -------------------------------------------------------------
+// A phone number written any usual way (0712 345 678, +255 712-345-678, a foreign number), or nothing.
+// Any text at all used to be saved as the phone — "not-a-phone!!" was accepted (audit, 11 Nov 2026).
+const digitsIn = (v) => v.replace(/\D/g, '').length;
+const customerPhone = z.string().trim().max(40).refine(
+  (v) => v === '' || (/^[+\d\s().-]+$/.test(v) && digitsIn(v) >= 9 && digitsIn(v) <= 15),
+  { message: 'Enter a phone number in digits, e.g. 0712 345 678 or +255 712 345 678' },
+);
 const customerCreate = {
   body: z.object({
     name: z.string().trim().min(1).max(160),
-    phone: z.string().trim().max(40).optional().nullable(),
+    phone: customerPhone.optional().nullable(),
     region: tzRegion,
     address: z.string().trim().max(300).optional().nullable(),
     notes: z.string().trim().max(1000).optional().nullable(),

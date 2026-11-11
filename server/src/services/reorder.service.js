@@ -23,7 +23,7 @@ async function reorderAnalysis(options = {}) {
   const coverDays = options.coverDays || 30; // target days of stock to hold
   const since = dayjs().subtract(lookbackDays, 'day').toDate();
 
-  const [products, soldRows, onHandMap] = await Promise.all([
+  const [products, soldRows, onHandMap, warehouseMap] = await Promise.all([
     prisma.product.findMany({
       where: { isActive: true },
       include: { brand: { select: { name: true } }, category: { select: { name: true } } },
@@ -34,18 +34,26 @@ async function reorderAnalysis(options = {}) {
       _sum: { baseQuantity: true }, // negative numbers (outflows)
     }),
     inventory.productOnHand(prisma),
+    inventory.warehouseOnHand(prisma),
   ]);
 
   const soldMap = new Map(soldRows.map((r) => [r.productId, Math.abs(r._sum.baseQuantity || 0)]));
 
   const items = products.map((p) => {
     const onHand = onHandMap.get(p.id) || 0;
+    // The minimum is a warehouse level (as the stock alerts measure it); boxes with reps still count
+    // towards days of cover, since the pace includes what the reps settle.
+    const inWarehouse = warehouseMap.get(p.id) || 0;
+    const withReps = onHand - inWarehouse;
     const soldBase = soldMap.get(p.id) || 0;
     const avgDaily = round2(soldBase / lookbackDays);
     const daysRemaining = avgDaily > 0 ? Math.floor(onHand / avgDaily) : null;
 
     const target = Math.ceil(avgDaily * coverDays);
-    const belowMin = p.minStockLevel > 0 && onHand <= p.minStockLevel;
+    const belowMin = p.minStockLevel > 0 && inWarehouse <= p.minStockLevel;
+    const minNote = withReps > 0
+      ? `${groupDigits(inWarehouse)} in the warehouse, below your minimum of ${groupDigits(p.minStockLevel)}`
+      : `below your minimum of ${groupDigits(p.minStockLevel)}`;
     const shortCover = daysRemaining !== null && daysRemaining <= coverDays;
 
     // Days of cover decides the rank, and nothing else does. The minimum-stock
@@ -70,13 +78,13 @@ async function reorderAnalysis(options = {}) {
       reason = `out of stock — was selling ${avgDaily}/day`;
     } else if (shortCover) {
       reason = `runs out in ${groupDigits(daysRemaining)} day${daysRemaining === 1 ? '' : 's'} at ${avgDaily}/day`;
-      if (belowMin) reason += `, and below your minimum of ${groupDigits(p.minStockLevel)}`;
+      if (belowMin) reason += `, and ${minNote}`;
     } else if (onHand <= 0) {
       reason = `out of stock, and nothing sold in the last ${lookbackDays} days`;
     } else if (belowMin) {
       reason = daysRemaining !== null
-        ? `below your minimum of ${groupDigits(p.minStockLevel)}, but ${groupDigits(daysRemaining)} days of cover`
-        : `below your minimum of ${groupDigits(p.minStockLevel)}, but nothing sold in the last ${lookbackDays} days`;
+        ? `${minNote}, but ${groupDigits(daysRemaining)} days of cover`
+        : `${minNote}, but nothing sold in the last ${lookbackDays} days`;
     } else {
       reason = daysRemaining !== null
         ? `${groupDigits(daysRemaining)} days of cover left`
@@ -85,7 +93,7 @@ async function reorderAnalysis(options = {}) {
 
     let recommendedQty = 0;
     if (needsReorder) {
-      const gap = Math.max(target - onHand, p.minStockLevel - onHand, 0);
+      const gap = Math.max(target - onHand, p.minStockLevel - inWarehouse, 0);
       // The supplier's pack size is a floor only where cover is genuinely
       // short. Rounding a one-box top-up up to a 50-box pack is how a product
       // with years of cover came to ask for millions of shillings of stock.
@@ -107,6 +115,8 @@ async function reorderAnalysis(options = {}) {
       category: p.category?.name,
       baseUnitName: p.baseUnitName,
       onHand,
+      inWarehouse,
+      withReps,
       minStockLevel: p.minStockLevel,
       avgDailySales: avgDaily,
       daysRemaining,
@@ -160,15 +170,19 @@ async function reorderAnalysis(options = {}) {
   };
 }
 
-// Products at or below their configured minimum stock level.
+// Products at or below their configured minimum stock level in the warehouse — the level the stock
+// alerts use. `onHand` is that warehouse figure; `withReps` is what is out with the reps on top of it.
 async function lowStock() {
   const products = await prisma.product.findMany({
     where: { isActive: true },
     select: { id: true, name: true, sku: true, minStockLevel: true, baseUnitName: true },
   });
-  const onHand = await inventory.productOnHand(prisma);
+  const [total, inWarehouse] = await Promise.all([inventory.productOnHand(prisma), inventory.warehouseOnHand(prisma)]);
   return products
-    .map((p) => ({ ...p, onHand: onHand.get(p.id) || 0 }))
+    .map((p) => {
+      const onHand = inWarehouse.get(p.id) || 0;
+      return { ...p, onHand, withReps: (total.get(p.id) || 0) - onHand };
+    })
     .filter((p) => p.minStockLevel > 0 && p.onHand <= p.minStockLevel)
     .sort((a, b) => a.onHand - b.onHand);
 }

@@ -4,7 +4,7 @@ import {
   withCommas, meaning, sameNumber, toPlain, readTyped, readPaste, stepPlain, rangeMessage, countsForCaret, caretAfter,
 } from '@/lib/typedNumber';
 import { motion, useReducedMotion } from 'motion/react';
-import { Loader2, X, ChevronLeft, ChevronRight, Search, Inbox } from 'lucide-react';
+import { Loader2, X, ChevronLeft, ChevronRight, Search, Inbox, AlertTriangle } from 'lucide-react';
 
 // --- Buttons ---------------------------------------------------------------
 const VARIANTS = {
@@ -425,6 +425,20 @@ export function EmptyState({ title = 'Nothing here yet', message, icon: Icon = I
       {message && <p className="max-w-sm text-sm text-muted">{message}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
+  );
+}
+
+// A list whose request failed is not an empty list: "No sales yet" over a request that never came back
+// told the owner something false about the books (audit, 11 Nov 2026). Same look as the Dashboard's
+// "Couldn't load" state, with a way to try again.
+export function LoadError({ what = 'this list', onRetry }) {
+  return (
+    <EmptyState
+      icon={AlertTriangle}
+      title={`Couldn't load ${what}`}
+      message="The request did not come back, so nothing is shown rather than a wrong figure. Check the connection and try again."
+      action={onRetry ? <Button variant="secondary" onClick={() => onRetry()}>Try again</Button> : null}
+    />
   );
 }
 

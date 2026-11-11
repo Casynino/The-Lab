@@ -100,7 +100,7 @@ function Mini({ label, value, sub }) {
   return (
     <div className="min-w-0 rounded-xl bg-black/20 p-3">
       <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
-      <div className="mt-0.5 break-words text-sm font-bold leading-snug tabular-nums text-foreground lg:text-base">{value}</div>
+      <div className="mt-0.5 break-words text-sm font-bold leading-snug tabular-nums text-foreground lg:text-base xl:text-sm 2xl:text-base">{value}</div>
       {sub && <div className="text-[11px] text-faint">{sub}</div>}
     </div>
   );
@@ -597,7 +597,7 @@ export default function Dashboard() {
             key: 'overdue', tone: 'rose',
             title: `${attention.overdueSettlements} order${attention.overdueSettlements !== 1 ? 's' : ''} past the deadline`,
             desc: 'Past 72 hours and collecting a daily fine',
-            value: formatCurrency(attention.overdueValue), to: '/settlements',
+            value: formatCurrency(attention.overdueValue), to: '/settlements?status=OVERDUE',
           },
           attention.outOfStock > 0 && {
             key: 'oos', tone: 'rose',

@@ -43,10 +43,22 @@ const PO_INCLUDE = {
   items: { include: { product: { select: { id: true, name: true, sku: true, baseUnitName: true } }, packagingUnit: true } },
 };
 
+// Goods cannot be expected before they were ordered (a PO dated "ordered 20 Nov, arriving 1 Nov" was
+// accepted; audit, 11 Nov 2026). Compared by calendar day, so the same day is fine whatever the time.
+function assertArrivalNotBeforeOrder(orderedAt, expectedArrival) {
+  if (!orderedAt || !expectedArrival) return;
+  const day = (d) => new Date(d).toISOString().slice(0, 10);
+  if (Number.isNaN(new Date(orderedAt).getTime()) || Number.isNaN(new Date(expectedArrival).getTime())) return;
+  if (day(expectedArrival) < day(orderedAt)) {
+    throw ApiError.badRequest('Expected arrival cannot be before the order date.');
+  }
+}
+
 async function createPurchaseOrder(payload, actor) {
   if (!payload.items || payload.items.length === 0) {
     throw ApiError.badRequest('A purchase order needs at least one item');
   }
+  assertArrivalNotBeforeOrder(payload.orderedAt, payload.expectedArrival);
   return prisma.$transaction(async (tx) => {
     const lines = [];
     for (const i of payload.items) {
@@ -209,6 +221,14 @@ async function updatePurchaseOrder(id, payload) {
   ['orderedAt', 'expectedArrival'].forEach((f) => {
     if (payload[f] !== undefined) data[f] = payload[f] ? new Date(payload[f]) : null;
   });
+  // Only when a date is being changed, checked against the stored one when just one is sent — an
+  // edit of anything else on an older order is never refused for its dates.
+  if (data.orderedAt !== undefined || data.expectedArrival !== undefined) {
+    assertArrivalNotBeforeOrder(
+      data.orderedAt !== undefined ? data.orderedAt : po.orderedAt,
+      data.expectedArrival !== undefined ? data.expectedArrival : po.expectedArrival,
+    );
+  }
   ['shippingCost', 'clearingCost', 'otherCost'].forEach((f) => {
     if (payload[f] !== undefined) data[f] = round2(payload[f]);
   });

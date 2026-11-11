@@ -15,7 +15,7 @@ import { ROLES, REQUEST_STATUS_META } from '@/lib/constants';
 import { formatDate, formatDateTime, formatCurrency, formatNumber } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput,
-  Pagination, Table, THead, TBody, TR, TH, TD,
+  Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
 import CollapsibleList from '@/components/CollapsibleList';
@@ -820,7 +820,7 @@ function PendingRequestApprovals({ onReview }) {
 function StaffRequestTable({ onView }) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['stock-requests', { page, status }],
     // Pending requests live in the approval strip above — the history table
     // shows decided ones unless the filter explicitly asks for pending. The
@@ -926,7 +926,7 @@ function StaffRequestTable({ onView }) {
           ))}
         </div>
 
-        {isLoading ? <PageSpinner /> : !rows.length ? (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the stock requests" onRetry={refetch} /> : !rows.length ? (
           <EmptyState title="No stock requests" icon={ClipboardList} />
         ) : (
           <>

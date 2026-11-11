@@ -11,7 +11,7 @@ import { ROLES } from '@/lib/constants';
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from '@/lib/format';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
-  Table, THead, TBody, TR, TH, TD,
+  Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
 import CollapsibleList from '@/components/CollapsibleList';
@@ -606,6 +606,8 @@ export default function Returns() {
 
   const qc = useQueryClient();
   const [typeFilter, setTypeFilter] = useState('');
+  // The admin list pages through every return (it stopped at the latest 100); a rep's stays one page.
+  const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
   const [rejectingId, setRejectingId] = useState(null);
   const [viewingId, setViewingId] = useState(null);
@@ -616,8 +618,8 @@ export default function Returns() {
     refetchInterval: LIVE,
   });
   const { data, isLoading } = useQuery({
-    queryKey: ['returns', { type: typeFilter }],
-    queryFn: async () => unwrap(await api.get('/returns', { params: { limit: 100, type: typeFilter || undefined } })),
+    queryKey: ['returns', { type: typeFilter, page }],
+    queryFn: async () => unwrap(await api.get('/returns', { params: { page, limit: 100, type: typeFilter || undefined } })),
     refetchInterval: LIVE,
   });
 
@@ -766,7 +768,7 @@ export default function Returns() {
       {!isRep && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {chips.map((c) => (
-            <button key={c.key || 'all'} type="button" onClick={() => setTypeFilter(c.key)}
+            <button key={c.key || 'all'} type="button" onClick={() => { setTypeFilter(c.key); setPage(1); }}
               className={`inline-flex cursor-pointer items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
                 typeFilter === c.key ? c.tone : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
               {c.label}
@@ -781,10 +783,7 @@ export default function Returns() {
         </div>
       )}
 
-      {/* The list is one page of records; the cards above are the full history. */}
-      {total > all.length && (
-        <p className="mt-2 text-[11px] text-faint">Listing the {formatNumber(all.length)} most recent of {formatNumber(total)} returns.</p>
-      )}
+      {/* The list is one page of records (the pager below walks the rest); the cards above are the full history. */}
       {isLoading ? (
         <Card className="mt-4"><PageSpinner /></Card>
       ) : all.length === 0 ? (
@@ -841,6 +840,10 @@ export default function Returns() {
               </div>
               <Card><div className="divide-y divide-border">{rejected.map((r) => <HistoryRow key={r.id} r={r} onView={setViewingId} />)}</div></Card>
             </div>
+          )}
+
+          {(page > 1 || total > all.length) && (
+            <Pagination page={page} totalPages={data?.meta?.totalPages} total={data?.meta?.total} onChange={setPage} />
           )}
         </div>
       )}

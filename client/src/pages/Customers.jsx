@@ -11,7 +11,7 @@ import { formatCurrency, formatDate } from '@/lib/format';
 import { TZ_REGIONS } from '@/lib/regions';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, Textarea, Select,
-  SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
+  SearchInput, Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
 function CustomerModal({ open, onClose, editing, reps, canAssign }) {
@@ -32,9 +32,9 @@ function CustomerModal({ open, onClose, editing, reps, canAssign }) {
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit customer' : 'New customer'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} onClick={handleSubmit((v) => save.mutate(v))}>{isEdit ? 'Save' : 'Add'}</Button></>}>
       <div className="space-y-4">
-        <Field label="Name" required error={errors.name?.message}><Input {...register('name', { required: 'Name is required' })} /></Field>
+        <Field label="Name" required error={errors.name?.message}><Input maxLength={160} {...register('name', { required: 'Name is required' })} /></Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Phone"><Input {...register('phone')} /></Field>
+          <Field label="Phone" hint="Digits, e.g. 0712 345 678"><Input type="tel" inputMode="tel" maxLength={40} {...register('phone')} /></Field>
           <Field label="Region">
             <Select {...register('region')}>
             <option value="">— Select region —</option>
@@ -114,7 +114,7 @@ export default function Customers() {
   const debounced = useDebounce(search);
 
   const { data: reps = [] } = useSalesReps();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['customers', { page, search: debounced }],
     queryFn: async () => unwrap(await api.get('/customers', { params: { page, limit: 15, search: debounced } })),
   });
@@ -126,7 +126,7 @@ export default function Customers() {
       </PageHeader>
       <Card>
         <div className="border-b border-border p-4"><div className="max-w-sm"><SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search name or phone…" /></div></div>
-        {isLoading ? <PageSpinner /> : !data?.data?.length ? (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the customers" onRetry={refetch} /> : !data?.data?.length ? (
           <EmptyState title="No customers" icon={UsersIcon} action={<Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New customer</Button>} />
         ) : (
           <>
