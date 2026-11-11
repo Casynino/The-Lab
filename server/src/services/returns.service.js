@@ -416,14 +416,21 @@ async function approveReturn(id, actor) {
 async function creditPausedHours(tx, settlementId, pauseStart, pauseEnd) {
   if (!settlementId) return null;
   await settlement.lockOrder(tx, settlementId);
-  const stl = await tx.settlement.findUnique({ where: { id: settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true, settlementNumber: true, selfExtendedAt: true } });
+  const stl = await tx.settlement.findUnique({ where: { id: settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true, settlementNumber: true, selfExtendedAt: true, settledValue: true, returnedValue: true } });
   if (!stl || stl.status === 'SETTLED') return stl;
   const pauseMs = Math.max(0, new Date(pauseEnd).getTime() - new Date(pauseStart).getTime());
   if (pauseMs > 0) {
+    const deadlineAt = new Date(new Date(stl.deadlineAt).getTime() + pauseMs);
     await tx.settlement.update({
       where: { id: settlementId },
       data: {
-        deadlineAt: new Date(new Date(stl.deadlineAt).getTime() + pauseMs),
+        deadlineAt,
+        // An order stored as Overdue whose deadline is ahead again is live again, the rule an admin
+        // extension follows. It stayed Overdue: it showed overdue and the rep could not take his own
+        // extension (audit #98, 11 Nov 2026).
+        ...(stl.status === 'OVERDUE' && deadlineAt > new Date()
+          ? { status: toNumber(stl.settledValue) > 0 || toNumber(stl.returnedValue) > 0 ? 'PARTIAL' : 'OPEN' }
+          : {}),
         // The fine clock moves with it — but only by the part of the pause it could have charged for. After
         // ZELab takes back time it gave by mistake the clock already forgives everything before that
         // moment, and crediting those hours again would pay the rep for them twice.
@@ -597,8 +604,11 @@ async function expireStaleReturns() {
       notification.notifyUser(repUserId, {
         type: 'GENERAL',
         severity: 'CRITICAL',
-        title: `Return ${ret.returnNumber} expired — TSh ${fineApplied.toLocaleString('en-US')} fine`,
-        message: `Your return was not completed within ${RETURN_WINDOW_HOURS} hours, so it was cancelled automatically and a TSh ${fineApplied.toLocaleString('en-US')} delay fine was applied. The boxes are back on your order — settle them or submit a new return.`,
+        // The fine is named only when one was charged: an expiry with no fine said "TSh 0 fine" (audit #128).
+        title: fineApplied > 0
+          ? `Return ${ret.returnNumber} expired — TSh ${fineApplied.toLocaleString('en-US')} fine`
+          : `Return ${ret.returnNumber} expired`,
+        message: `Your return was not completed within ${RETURN_WINDOW_HOURS} hours, so it was cancelled automatically${fineApplied > 0 ? ` and a TSh ${fineApplied.toLocaleString('en-US')} delay fine was applied` : ''}. The boxes are back on your order — settle them or submit a new return.`,
         whatsapp: { kind: 'RETURN_EXPIRED', number: ret.returnNumber, fine: fineApplied, hours: RETURN_WINDOW_HOURS },
         entityType: 'Return',
         entityId: ret.id,
