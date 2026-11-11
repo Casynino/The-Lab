@@ -80,7 +80,9 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
         key="commission"
         label="Wallet"
         pct={(avail / min) * 100}
-        reward={min}
+        // Ready: his balance, the money he can take out. Below the line: the minimum he is working towards.
+        // Showing the minimum next to "Ready to withdraw" read as "I can withdraw TSh 250,000" (audit rep-app-4).
+        reward={ready ? avail : min}
         ready={ready}
         readyLabel="Ready to withdraw"
         hint={avail / min >= 0.9
