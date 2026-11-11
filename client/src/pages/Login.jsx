@@ -145,8 +145,8 @@ function Scene() {
  * it opens the card over a dimmed screen (Escape, the X, or a tap outside
  * closes it) — on a phone and on a computer alike.
  */
-function Gate({ children }) {
-  const [open, setOpen] = useState(false);
+function Gate({ children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [closing, setClosing] = useState(false);
   const timer = useRef(0);
 
@@ -269,9 +269,10 @@ export default function Login() {
   const from = location.state?.from?.pathname || '/';
   // A sales-rep account used on a computer or tablet (server rule): the reason stays on the page, not in a
   // toast that disappears — whether it came from this sign-in or from a session that was stopped.
+  // Read, not consumed: the stopped-session path reloads the page, so a reader that removed the key lost
+  // the message on the second mount (audit 11 Nov 2026). It is cleared on a successful sign-in.
   const [restricted, setRestricted] = useState(() => {
-    try { const s = sessionStorage.getItem(RESTRICTED_KEY); if (s) { sessionStorage.removeItem(RESTRICTED_KEY); return JSON.parse(s); } } catch { /* private window */ }
-    return null;
+    try { const s = sessionStorage.getItem(RESTRICTED_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
   });
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
@@ -285,6 +286,7 @@ export default function Login() {
     const res = await login(values.email, values.password);
     if (res.ok) {
       setRestricted(null);
+      try { sessionStorage.removeItem(RESTRICTED_KEY); } catch { /* private window */ }
       offerToSave(values.email, values.password, res.user.name);
       navigate(from, { replace: true });
     } else if (res.reason === 'DEVICE_RESTRICTED') {
@@ -319,13 +321,9 @@ export default function Login() {
             We keep Tanzania <span className="md:text-brand-500">stocked.</span>
           </h2>
 
-          {/* The same reason on the page itself when a stopped session sent the rep here. */}
-          {restricted && (
-            <p role="alert" className="ls-up mb-3 max-w-[20rem] text-center text-[12.5px] leading-snug text-rose-300" style={rise(0.4)}>
-              {restricted.message}
-            </p>
-          )}
-          <Gate>
+          {/* The reason is shown once, inside the card, and the card opens by itself when there is one (it
+              used to appear twice, the top copy half behind the card). */}
+          <Gate defaultOpen={!!restricted}>
             {/* The same frosted glass as the install card (Nino, 10 Nov 2026, on
                 the installed app: the form "looks big and bad, it should match
                 the clean design"): see-through, warm, a title and two fields and

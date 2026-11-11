@@ -30,19 +30,24 @@ const api = axios.create({
 function clientForm() {
   try {
     if (!window.matchMedia('(pointer: coarse)').matches) return 'desktop';
-    return Math.min(window.screen.width, window.screen.height) < 600 ? 'phone' : 'tablet';
+    const short = Math.min(window.screen.width, window.screen.height);
+    // A foldable phone opened wide (Galaxy Z Fold, Pixel Fold ~690-700px) still says it is a phone in its
+    // User-Agent ("iPhone" / "Android ... Mobile"); tablets do not. Trust that up to 900px (audit 11 Nov).
+    const phoneUA = /iPhone|iPod|Android.*Mobile/i.test(navigator.userAgent || '');
+    return short < 600 || (phoneUA && short < 900) ? 'phone' : 'tablet';
   } catch {
     return '';
   }
 }
-const CLIENT_FORM = clientForm();
 export const RESTRICTED_KEY = 'zl.restricted';
 
 // Attach the bearer token to every request.
 api.interceptors.request.use((config) => {
   const token = tokenStore.get();
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  if (CLIENT_FORM) config.headers['X-Client-Form'] = CLIENT_FORM;
+  // Worked out per request: a phone folded or unfolded mid-session sends what it is now.
+  const form = clientForm();
+  if (form) config.headers['X-Client-Form'] = form;
   return config;
 });
 

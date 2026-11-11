@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -31,17 +31,22 @@ import { Ring } from '@/components/RepCharts';
 // closed orders in one list that opens and closes, and the password form in a soft card.
 
 // ── Change-password form: three short fields and one word ─────────────────────
-function PasswordField({ label, value, onChange, autoComplete, show, onToggle, error }) {
+// `compact`: the label sits inside the field as its placeholder, and the field is slimmer (the owner's card).
+function PasswordField({ label, value, onChange, autoComplete, show, onToggle, error, compact = false }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11px] text-white/50">{label}</span>
+      {!compact && <span className="mb-1 block text-[11px] text-white/50">{label}</span>}
       <div className="relative">
         <input
           type={onToggle && show ? 'text' : 'password'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           autoComplete={autoComplete}
-          className="input h-10 text-[14px] [&]:pr-10"
+          placeholder={compact ? label : undefined}
+          aria-label={label}
+          className={compact
+            ? 'input h-9 border-white/10 bg-black/25 text-[13px] placeholder:text-white/35 [&]:pr-10'
+            : 'input h-10 text-[14px] [&]:pr-10'}
         />
         {onToggle && (
           <button type="button" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
@@ -54,7 +59,7 @@ function PasswordField({ label, value, onChange, autoComplete, show, onToggle, e
   );
 }
 
-function ChangePasswordForm() {
+function ChangePasswordForm({ compact = false }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -80,11 +85,11 @@ function ChangePasswordForm() {
   const valid = current.length > 0 && next.length >= 8 && next === confirm;
 
   return (
-    <div className="space-y-3">
-      <PasswordField label="Current password" value={current} onChange={setCurrent} autoComplete="current-password" show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} />
-      <PasswordField label="New password · 8 or more characters" value={next} onChange={setNext} autoComplete="new-password" show={showNext} onToggle={() => setShowNext((v) => !v)} />
-      <PasswordField label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={mismatch ? 'These do not match' : undefined} />
-      <Button className="mt-1 h-10 w-full justify-center rounded-full text-[13px] font-semibold" disabled={!valid || change.isPending} onClick={() => change.mutate()}>
+    <div className={compact ? 'space-y-2' : 'space-y-3'}>
+      <PasswordField compact={compact} label="Current password" value={current} onChange={setCurrent} autoComplete="current-password" show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} />
+      <PasswordField compact={compact} label={compact ? 'New password (8+ characters)' : 'New password · 8 or more characters'} value={next} onChange={setNext} autoComplete="new-password" show={showNext} onToggle={() => setShowNext((v) => !v)} />
+      <PasswordField compact={compact} label="Confirm new password" value={confirm} onChange={setConfirm} autoComplete="new-password" error={mismatch ? 'These do not match' : undefined} />
+      <Button className={`${compact ? 'mt-0.5 h-9' : 'mt-1 h-10'} w-full justify-center rounded-full text-[13px] font-semibold`} disabled={!valid || change.isPending} onClick={() => change.mutate()}>
         {change.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
         Update
       </Button>
@@ -452,35 +457,45 @@ export const LAB_SECTIONS = [
   { key: 'reports', label: 'Daily reports', hint: "The reps' opening and closing reports", icon: NotebookPen, Page: DailyReportsPage },
 ];
 
+// The owner's pages as one premium card (Nino, 11 Nov 2026: "the list should be nice — the selected one
+// and all of it should match the design"): the chosen page is lit — a red bar at its edge, a soft red
+// wash, its icon glowing — the others light up gently under the pointer.
 function LabNav({ tab, onChange }) {
   return (
-    <section>
-      <SectionTitle>The Lab</SectionTitle>
-      <nav aria-label="The Lab" className="glass-list divide-y divide-white/[0.06]">
+    <nav aria-label="The Lab" className="premium-card p-2">
+      <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium tracking-wide text-white/50">The Lab</p>
+      <ul className="space-y-0.5">
         {LAB_SECTIONS.map((s) => {
           const active = s.key === tab;
           const Icon = s.icon;
           return (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => onChange(s.key)}
-              aria-current={active ? 'page' : undefined}
-              className={`flex w-full items-center gap-3 px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-500 ${active ? 'bg-brand-500/[0.12]' : 'hover:bg-white/[0.03]'}`}
-            >
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-inset ${active ? 'bg-brand-500/20 text-brand-400 ring-brand-500/40' : 'bg-white/[0.05] text-white/55 ring-white/10'}`}>
-                <Icon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className={`block text-sm font-medium ${active ? 'text-white' : 'text-foreground'}`}>{s.label}</span>
-                <span className="block truncate text-[11px] text-white/45">{s.hint}</span>
-              </span>
-              <ChevronRight className={`h-4 w-4 shrink-0 ${active ? 'text-brand-400' : 'text-white/25'}`} aria-hidden="true" />
-            </button>
+            <li key={s.key}>
+              <button
+                type="button"
+                onClick={() => onChange(s.key)}
+                aria-current={active ? 'page' : undefined}
+                className={`group relative flex w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 ${active
+                  ? 'bg-gradient-to-r from-brand-500/[0.22] via-brand-500/[0.08] to-transparent'
+                  : 'hover:bg-white/[0.045]'}`}
+              >
+                {active && <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-brand-500" style={{ boxShadow: '0 0 10px rgba(238,49,36,.7)' }} aria-hidden="true" />}
+                <span
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ring-inset transition ${active ? 'bg-brand-500/20 text-brand-400 ring-brand-500/40' : 'bg-white/[0.05] text-white/55 ring-white/10 group-hover:text-white/80'}`}
+                  style={active ? { boxShadow: '0 0 14px rgba(238,49,36,.35)' } : undefined}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-sm ${active ? 'font-semibold text-white' : 'font-medium text-white/85'}`}>{s.label}</span>
+                  <span className="block truncate text-[11px] text-white/45">{s.hint}</span>
+                </span>
+                <ChevronRight className={`h-4 w-4 shrink-0 transition ${active ? 'text-brand-400' : 'text-white/20 group-hover:translate-x-0.5 group-hover:text-white/45'}`} aria-hidden="true" />
+              </button>
+            </li>
           );
         })}
-      </nav>
-    </section>
+      </ul>
+    </nav>
   );
 }
 
@@ -509,23 +524,46 @@ function AdminProfile({ user, sub }) {
   });
   const at = cmd?.attention || {};
 
+  // Opening one of his pages should be instant (Nino, 11 Nov 2026: "why does it take so long to load —
+  // make everything fast"). A moment after the profile has drawn, each section's first screen is fetched
+  // quietly into the cache, under the very keys those pages use; a fresh answer is never asked for twice.
+  const qc = useQueryClient();
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const get = (url, params) => api.get(url, params ? { params } : undefined);
+      const warm = [
+        [['users', { page: 1, search: '' }], async () => unwrap(await get('/users', { page: 1, limit: 20, search: '' }))],
+        [['roles'], async () => unwrap(await get('/roles')).data],
+        [['settings'], async () => unwrap(await get('/settings')).data],
+        [['whatsapp-types'], async () => unwrap(await get('/settings/whatsapp/types')).data],
+        [['whatsapp-history'], async () => unwrap(await get('/settings/whatsapp/history?limit=25')).data],
+        [['activity'], async () => unwrap(await get('/activity', { limit: 50 })).data],
+        [['audit-logs', { page: 1, search: '' }], async () => unwrap(await get('/audit-logs', { page: 1, limit: 25, search: '' }))],
+        [['daily-reports', { page: 1 }], async () => unwrap(await get('/daily-reports', { page: 1, limit: 20 }))],
+      ];
+      warm.forEach(([queryKey, queryFn]) => qc.prefetchQuery({ queryKey, queryFn }).catch(() => {}));
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [qc]);
+
   // A phone: one column — the card, the business, the password last. A computer: the person and the
   // password on the left, the business on the right. (The password form is placed twice and only one of
   // the two is ever shown, so each layout keeps its natural order.) For the owner it is always open, in
   // its own card — not folded away (Nino, 11 Nov 2026: "it should be visible, not hidden in the drop-down").
+  // Compact (Nino, 11 Nov 2026: "the password card looks big"): a small heading inside the card, slimmer
+  // fields, the same three steps.
   const password = (
-    <section>
-      <SectionTitle>Change password</SectionTitle>
-      <div className="premium-card p-5">
-        <ChangePasswordForm />
-      </div>
+    <section className="premium-card p-4">
+      <p className="mb-3 text-[11px] font-medium tracking-wide text-white/50">Change password</p>
+      <ChangePasswordForm compact />
     </section>
   );
   // The whole width of the screen (Nino, 11 Nov 2026: "why the space on the sides — I want the page full").
   return (
     <div className="flex w-full flex-col gap-8 lg:grid lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start 2xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-      {/* Left: who he is, his pages, his password — the column no longer ends in empty space. */}
-      <div className="space-y-6">
+      {/* Left: who he is, his pages, his password. It stays in view while a long section scrolls on the
+          right (no empty space under it), and scrolls on its own if the window is shorter than it. */}
+      <div className="space-y-5 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:p-0.5 lg:[scrollbar-width:thin]">
         <ProfileCard user={user} sub={sub} />
         <LabNav tab={tab} onChange={openSection} />
         <div className="hidden lg:block">{password}</div>
@@ -533,8 +571,8 @@ function AdminProfile({ user, sub }) {
 
       <div ref={contentRef} className="min-w-0 scroll-mt-4 space-y-8">
         {section?.Page ? (
-          // One of his pages, exactly as it was on its own — its title, its tools, its tables.
-          <section.Page />
+          // One of his pages — its title, its tools, its tables — in the profile's own finish (.lab-section).
+          <div className="lab-section"><section.Page /></div>
         ) : !cmd ? (
           cmdError ? <p className="px-1 text-sm text-muted">The business figures are not available right now.</p> : <PageSpinner />
         ) : (

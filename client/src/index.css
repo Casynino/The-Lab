@@ -431,6 +431,38 @@ body:has([data-login-scene]) { background-color: transparent; }
 .premium-card--sm { border-radius: 1.15rem; }
 .premium-card--sm::before { right: -2.5rem; top: -4rem; width: 9rem; height: 9rem; }
 
+/* The owner's pages opened inside his profile (Users, Settings, Activity, Audit log, Daily reports) wear the
+   profile's own finish (Nino, 11 Nov 2026: "make it nice — it should match the colours and the design"):
+   every card is a premium card with the red light in its corner, the table head is quiet, the rows have
+   hairlines. Scoped to `.lab-section`, so the same pages anywhere else are unchanged. */
+.lab-section .card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 0;
+  border-radius: 1.4rem;
+  background: linear-gradient(140deg, #2c0e0c 0%, #170a0a 52%, #0e0e10 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 14px 32px -16px rgba(0, 0, 0, 0.9);
+}
+.lab-section .card::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -3rem;
+  top: -6rem;
+  width: 18rem;
+  height: 18rem;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, rgba(238, 49, 36, 0.26), transparent);
+  pointer-events: none;
+}
+.lab-section thead { background: rgba(255, 255, 255, 0.035); }
+.lab-section .th { color: rgba(255, 255, 255, 0.45); }
+.lab-section table, .lab-section tbody, .lab-section tr { border-color: rgba(255, 255, 255, 0.06); }
+.lab-section tbody tr { transition: background-color 150ms; }
+.lab-section tbody tr:hover { background: rgba(255, 255, 255, 0.035); }
+.lab-section .input { background: rgba(0, 0, 0, 0.28); border-color: rgba(255, 255, 255, 0.1); }
+
 /* A grouped list of finished items: one soft glass card, rows divided by hairlines. */
 .glass-list {
   overflow: hidden;
