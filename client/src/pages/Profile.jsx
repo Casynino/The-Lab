@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Eye, EyeOff, Loader2, ClipboardList, CheckCircle2, Boxes, Undo2 } from 'lucide-react';
+import { Eye, EyeOff, Loader2, ClipboardList, CheckCircle2, Boxes, Undo2, MapPin } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import api, { unwrap, apiError } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
@@ -12,6 +12,7 @@ import { PageSpinner, Button } from '@/components/ui';
 import { repRegions, shortRegion } from '@/lib/repRegions';
 import CollapsibleList from '@/components/CollapsibleList';
 import WalletCard from '@/components/WalletCard';
+import VerifiedBadge from '@/components/VerifiedBadge';
 import { Ring } from '@/components/RepCharts';
 
 // The profile, built from the same few shapes as the rest of the rep app (Nino, 11 Nov 2026: "it should have
@@ -76,7 +77,7 @@ function ChangePasswordForm() {
 }
 
 // ── The profile card: same dark red-lit card as the wallet, with who this is and how to reach them ──
-function ProfileCard({ user, sub }) {
+function ProfileCard({ user, sub, cities = [] }) {
   const repInfo = user?.salesRep;
   const rows = [
     ['Email', user?.email],
@@ -98,11 +99,28 @@ function ProfileCard({ user, sub }) {
       />
       {/* Just the name — no initials circle (Nino, 11 Nov 2026: "no need of the MK, the name is ok"). */}
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold leading-tight tracking-tight text-white">{user?.name}</h1>
-        <p className="mt-1 text-[13px] leading-snug text-white/60">
-          {sub}
-          {user?.isActive === false && <span className="ml-2 text-rose-300">· Inactive</span>}
-        </p>
+        {/* The blue verified mark after the name (Nino, 11 Nov 2026) — for an active account only. */}
+        <div className="flex items-center gap-2">
+          <h1 className="min-w-0 truncate text-2xl font-bold leading-tight tracking-tight text-white">{user?.name}</h1>
+          {user?.isActive !== false && <VerifiedBadge className="h-[22px] w-[22px] shrink-0" />}
+        </div>
+        {(sub || user?.isActive === false) && (
+          <p className="mt-1 text-[13px] leading-snug text-white/60">
+            {sub}
+            {user?.isActive === false && <span className={sub ? 'ml-2 text-rose-300' : 'text-rose-300'}>{sub ? '· ' : ''}Inactive</span>}
+          </p>
+        )}
+        {/* Where the rep works: a pin, then each city on its own soft chip, the main one first — one city
+            or three, they sit on one line and wrap neatly on a narrow phone (Nino, 11 Nov 2026: "a rep can
+            serve more cities, so make it nicer"). */}
+        {cities.length > 0 && (
+          <ul className="mt-3.5 flex flex-wrap items-center gap-1.5" aria-label={cities.length > 1 ? 'Cities' : 'City'}>
+            <li aria-hidden="true" className="mr-0.5 flex items-center"><MapPin className="h-3.5 w-3.5 text-white/40" /></li>
+            {cities.map((c) => (
+              <li key={c} className="rounded-full bg-white/[0.08] px-2.5 py-1 text-[12px] font-medium leading-none text-white/85 ring-1 ring-inset ring-white/[0.07]">{c}</li>
+            ))}
+          </ul>
+        )}
       </div>
       {rows.length > 0 && (
         <div className="mt-5 space-y-2.5 border-t border-white/10 pt-4">
@@ -230,10 +248,10 @@ export default function Profile() {
   const repInfo = user?.salesRep;
   // A rep's line is their number and their cities (Nino, 11 Nov 2026: "no need of Sales Representative, just the
   // rep number and name and cities"); anybody else keeps their role.
-  const cities = repRegions(repInfo).map(shortRegion).join(', ');
-  const sub = isRep
-    ? [repInfo?.code, cities].filter(Boolean).join(' · ')
-    : (ROLE_LABELS[user?.role] || user?.role);
+  // The cities now stand on their own line as chips under the number (Nino, 11 Nov 2026), so the line
+  // under the name is just the rep number — or the role, for anybody else.
+  const cities = isRep ? repRegions(repInfo).map(shortRegion).filter(Boolean) : [];
+  const sub = isRep ? (repInfo?.code || '') : (ROLE_LABELS[user?.role] || user?.role);
 
   // The wallet card, fed exactly as on the wallet page (same rule for "can withdraw", same progress).
   const canWithdraw = c ? (c.eligible ?? (c.available >= c.minWithdrawal)) : false;
@@ -241,7 +259,7 @@ export default function Profile() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
-      <ProfileCard user={user} sub={sub} />
+      <ProfileCard user={user} sub={sub} cities={cities} />
 
       {isRep && (
         <>
