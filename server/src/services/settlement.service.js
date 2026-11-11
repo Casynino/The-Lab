@@ -1110,8 +1110,8 @@ async function selfExtend(id, actor) {
     return true;
   });
   if (!claimed) {
-    const now = await prisma.settlement.findUnique({ where: { id }, select: { selfExtendedAt: true } });
-    throw ApiError.conflict(now?.selfExtendedAt
+    const latest = await prisma.settlement.findUnique({ where: { id }, select: { selfExtendedAt: true } });
+    throw ApiError.conflict(latest?.selfExtendedAt
       ? 'This order has already been extended — the extension can only be used once'
       : 'This order changed while you were looking at it — open it again and check its deadline');
   }
