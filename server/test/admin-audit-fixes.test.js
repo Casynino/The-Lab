@@ -216,3 +216,16 @@ test('other transfers tell nobody, and a failed message never fails the transfer
   assert.equal(out2.code, 201);
   notifyFails = false;
 });
+
+// ── A customer's phone is a phone number ─────────────────────────────────────────────────────────────
+test('a customer phone must be a number written any usual way, or nothing', () => {
+  const { customerCreate, customerUpdate } = require('../src/validators/people.validator');
+  const ok = (phone) => customerCreate.body.safeParse({ name: 'Mama Neema', phone }).success;
+  assert.equal(ok('not-a-phone!!'), false);
+  assert.equal(ok('12345'), false, 'too few digits');
+  for (const good of ['0712 345 678', '+255 712-345-678', '(0712) 345678', '+254 712 345 678', '', null, undefined]) {
+    assert.equal(ok(good), true, String(good));
+  }
+  assert.equal(customerUpdate.body.safeParse({ phone: 'call me' }).success, false);
+  assert.equal(customerUpdate.body.safeParse({ notes: 'no phone sent' }).success, true);
+});

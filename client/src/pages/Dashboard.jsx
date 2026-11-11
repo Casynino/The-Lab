@@ -595,7 +595,7 @@ export default function Dashboard() {
             key: 'overdue', tone: 'rose',
             title: `${attention.overdueSettlements} order${attention.overdueSettlements !== 1 ? 's' : ''} past the deadline`,
             desc: 'Past 72 hours and collecting a daily fine',
-            value: formatCurrency(attention.overdueValue), to: '/settlements',
+            value: formatCurrency(attention.overdueValue), to: '/settlements?status=OVERDUE',
           },
           attention.outOfStock > 0 && {
             key: 'oos', tone: 'rose',
