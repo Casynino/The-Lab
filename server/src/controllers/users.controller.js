@@ -25,6 +25,15 @@ const PUBLIC_SELECT = {
   salesRep: { select: { id: true, code: true, region: true, regions: true } },
 };
 
+// Refuses when this account is an active administrator and no other active administrator would be left.
+// Called before an administrator is demoted, switched off, suspended or deleted.
+async function assertNotLastAdmin(userId) {
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { isActive: true, role: { select: { name: true } } } });
+  if (!target || !target.isActive || target.role?.name !== 'ADMIN') return;
+  const others = await prisma.user.count({ where: { id: { not: userId }, isActive: true, role: { name: 'ADMIN' } } });
+  if (others < 1) throw ApiError.badRequest('Cannot remove the last active administrator');
+}
+
 const list = asyncHandler(async (req, res) => {
   const q = req.validatedQuery || req.query;
   const pagination = parsePagination(q, { defaultSortBy: 'createdAt', defaultSortDir: 'desc' });
@@ -97,11 +106,25 @@ const update = asyncHandler(async (req, res) => {
   if (req.body.email) data.email = req.body.email.toLowerCase().trim();
   if (req.body.password) data.passwordHash = await bcrypt.hash(req.body.password, env.bcryptSaltRounds);
 
+  const roleChanges = Boolean(data.roleId && data.roleId !== existing.roleId);
+
+  // Don't let an admin lock themselves out: not by switching their own account off, and not by giving it
+  // another role (audit 11 Nov 2026, admin-system-3: the owner could demote himself and nobody could
+  // reach Users, Settings or the audit log again without a database fix).
+  if (req.params.id === req.user.id && data.isActive === false) {
+    throw ApiError.badRequest('You cannot deactivate your own account');
+  }
+  if (req.params.id === req.user.id && roleChanges) {
+    throw ApiError.badRequest('You cannot change your own role. Ask another administrator to do it.');
+  }
+
   // A sales rep's account cannot be given another role while it has a rep profile (that would hand rep
   // data and admin powers to one login); and moving any account into the SALES_REP role is done by
   // creating the rep, not here.
-  if (data.roleId && data.roleId !== existing.roleId) {
-    const [rep, newRole] = await Promise.all([
+  let newRole = null;
+  if (roleChanges) {
+    let rep;
+    [rep, newRole] = await Promise.all([
       prisma.salesRepresentative.findUnique({ where: { userId: existing.id }, select: { id: true } }),
       prisma.role.findUnique({ where: { id: data.roleId }, select: { name: true } }),
     ]);
@@ -110,14 +133,14 @@ const update = asyncHandler(async (req, res) => {
       throw ApiError.badRequest('This account is a sales rep. Remove or switch off the rep first, then change the role.');
     }
   }
-  // A new password, a new role or switching the account off signs it out everywhere.
-  if (data.passwordHash || (data.roleId && data.roleId !== existing.roleId) || data.isActive === false) {
-    data.sessionVersion = { increment: 1 };
-  }
 
-  // Don't let an admin lock themselves out by self-deactivating.
-  if (req.params.id === req.user.id && data.isActive === false) {
-    throw ApiError.badRequest('You cannot deactivate your own account');
+  // The last active administrator keeps the role and stays switched on.
+  const losesAdmin = (roleChanges && newRole.name !== 'ADMIN') || data.isActive === false;
+  if (losesAdmin) await assertNotLastAdmin(existing.id);
+
+  // A new password, a new role or switching the account off signs it out everywhere.
+  if (data.passwordHash || roleChanges || data.isActive === false) {
+    data.sessionVersion = { increment: 1 };
   }
 
   const user = await prisma.user.update({ where: { id: req.params.id }, data, select: PUBLIC_SELECT });
@@ -131,10 +154,7 @@ const remove = asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.id }, include: { role: true } });
   if (!user) throw ApiError.notFound('User not found');
 
-  if (user.role.name === 'ADMIN') {
-    const activeAdmins = await prisma.user.count({ where: { role: { name: 'ADMIN' }, isActive: true } });
-    if (activeAdmins <= 1) throw ApiError.badRequest('Cannot remove the last active administrator');
-  }
+  await assertNotLastAdmin(user.id);
 
   // Removing an account for good, rather than parking it as Inactive. An
   // account created by mistake should leave no trace — a suspended row still
@@ -178,8 +198,14 @@ const remove = asyncHandler(async (req, res) => {
   }
 
   // Default stays as it was: deactivate, preserving audit trails and ledger
-  // actor references.
-  const updated = await prisma.user.update({ where: { id: req.params.id }, data: { isActive: false }, select: PUBLIC_SELECT });
+  // actor references. Suspending ends every session for good, as switching the account off in the edit
+  // form does: the session version moves on, so the old keys stay refused after the account is activated
+  // again (audit 11 Nov 2026, admin-system-2 / auth-device-1).
+  const updated = await prisma.user.update({
+    where: { id: req.params.id },
+    data: { isActive: false, sessionVersion: { increment: 1 } },
+    select: PUBLIC_SELECT,
+  });
   await audit.record(req, { action: 'DEACTIVATE', entityType: 'User', entityId: req.params.id });
   return ok(res, { ...updated, deactivated: true });
 });
