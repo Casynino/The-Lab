@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -8,111 +8,236 @@ import { useProducts, useWarehouses, useSalesReps, useDebounce } from '@/lib/hoo
 import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, sharePercents } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
 import { MOVEMENT_META } from '@/lib/constants';
-import ItemLines from '@/components/ItemLines';
+import ProductPicker, {
+  useHomeWarehouse, useStockAt, saveStockWarehouse, PlaceLine, Chips, Caution, Segmented, ReasonField, MoreToggle, DiscardFooter,
+  REP_WARNING, changeBtn,
+} from '@/components/ProductPicker';
+import { pickerRows, pickedItems, pickedBoxes, shortPlace, buttonPlace, boxWord, ADJUST_REASONS, DAMAGE_REASONS } from '@/lib/stockPick';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, NumberInput, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
   SearchInput, Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
+// Receive stock, Adjust and Record damage — the quick way (Nino, 11 Nov 2026: "make it for me to just pick
+// and add the quantity"). The warehouse is already chosen (the Dar es Salaam one, or the one this device last
+// used) on one quiet line with Change; every product is listed with a  −  qty  +  in its box, as ItemLines
+// chose it. The requests are the old ones, field for field.
 function ReceiveModal({ onClose }) {
   const qc = useQueryClient();
-  const { data: products = [] } = useProducts();
-  const { data: warehouses = [] } = useWarehouses();
-  const [warehouseId, setWarehouseId] = useState('');
-  const [items, setItems] = useState([]);
+  const { data: products = [], isLoading: productsLoading } = useProducts();
+  const { data: warehouses = [], isLoading: warehousesLoading } = useWarehouses();
+  const { active, home, usual } = useHomeWarehouse(warehouses);
+  const [picked, setPicked] = useState(''); // '' = the home warehouse
+  const [editPlace, setEditPlace] = useState(false);
+  const [qty, setQty] = useState({});
   const [notes, setNotes] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const sending = useRef(false);
+
+  const warehouse = active.find((w) => w.id === picked) || home;
+  const warehouseId = warehouse?.id || '';
+  const away = !!(warehouse && usual && warehouse.id !== usual.id);
+  const stock = useStockAt(warehouseId ? { type: 'WAREHOUSE', id: warehouseId } : null);
+  const rows = useMemo(() => pickerRows(products), [products]);
+  const items = pickedItems(rows, qty);
+  const boxes = pickedBoxes(rows, qty);
 
   const save = useMutation({
     mutationFn: () => api.post('/inventory/stock-in', {
       warehouseId,
-      items: items.filter((l) => l.productId && l.quantity > 0).map((l) => ({ productId: l.productId, packagingUnitId: l.packagingUnitId, quantity: Number(l.quantity) })),
+      items,
       notes: notes || undefined,
     }),
-    onSuccess: () => { toast.success('Stock received'); qc.invalidateQueries({ queryKey: ['inventory'] }); onClose(); },
+    onSuccess: () => { saveStockWarehouse(warehouseId); toast.success('Stock received'); qc.invalidateQueries({ queryKey: ['inventory'] }); onClose(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: () => { sending.current = false; },
   });
 
+  const canSubmit = !!warehouseId && items.length > 0;
+  const submit = () => {
+    if (sending.current || save.isPending || !canSubmit) return;
+    sending.current = true;
+    save.mutate();
+  };
+  const requestClose = () => {
+    if (save.isPending) return;
+    if (items.length === 0 || confirmDiscard) onClose(); else setConfirmDiscard(true);
+  };
+  const pick = (next) => { setQty(next); setConfirmDiscard(false); };
+
   return (
-    <Modal open onClose={onClose} size="lg" title="Receive stock"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!warehouseId || !items.some((l) => l.productId && l.quantity > 0)} onClick={() => save.mutate()}>Receive</Button></>}>
-      <div className="space-y-4">
-        <Field label="Into warehouse" required>
-          <Select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-            <option value="">Select…</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </Select>
-        </Field>
-        <ItemLines products={products} value={items} onChange={setItems} />
-        <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+    <Modal open onClose={requestClose} size="lg" title="Receive stock"
+      footer={confirmDiscard ? (
+        <DiscardFooter what="delivery" detail={`${formatNumber(boxes)} ${boxWord(boxes)} picked will be lost.`} onDiscard={onClose} onKeep={() => setConfirmDiscard(false)} />
+      ) : (
+        <>
+          <div className="mr-auto min-w-0 flex-1 basis-0 text-sm">
+            {items.length === 0 ? <span className="text-muted">Tap + on what arrived</span> : (
+              <div className="truncate text-muted">{items.length} {items.length === 1 ? 'product' : 'products'}</div>
+            )}
+          </div>
+          <Button variant="secondary" className="hidden sm:inline-flex" onClick={requestClose}>Cancel</Button>
+          <Button data-picker-submit="" className="h-12 w-full text-base sm:h-auto sm:w-auto sm:text-sm" loading={save.isPending} disabled={!canSubmit} onClick={submit}>
+            {items.length && warehouse ? `Receive ${formatNumber(boxes)} ${boxWord(boxes)} into ${buttonPlace(warehouse.name)}` : 'Receive stock'}
+          </Button>
+        </>
+      )}>
+      <div className="space-y-2.5 sm:space-y-4 max-sm:min-h-[calc(100dvh_-_17rem)]">
+        <PlaceLine
+          parts={[{ label: 'Into warehouse', kind: 'warehouse', name: warehouse ? warehouse.name : warehousesLoading ? '…' : 'No active warehouse', sub: warehouse?.region, amber: away, empty: !warehouse }]}
+          open={editPlace}
+          onToggle={active.length > 1 ? () => setEditPlace((x) => !x) : undefined}
+          note={away && <Caution action={<button type="button" onClick={() => setPicked(usual.id)} className={changeBtn}>Use {usual.name}</button>}>Not the usual warehouse.</Caution>}
+        >
+          <Chips label="Into warehouse" value={warehouseId} onChange={(id) => { setPicked(id); setEditPlace(false); }}
+            options={active.map((w) => ({ value: w.id, label: w.name, sub: w.region }))} />
+        </PlaceLine>
+
+        <ProductPicker rows={rows} value={qty} onChange={pick} stock={warehouseId ? stock : null}
+          placeName={warehouse ? shortPlace(warehouse.name) : 'here'} loading={productsLoading} emptyText="No products yet." />
+
+        <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" /></Field>
       </div>
     </Modal>
   );
 }
 
+// One product per request (the server takes one): tap the product, then how many. A rep's stock is never
+// chosen for you — it sits behind Change → "A rep's stock", with the warning that his order does not move.
 function AdjustModal({ mode, onClose }) {
+  const isAdjust = mode === 'adjust';
   const qc = useQueryClient();
-  const { data: products = [] } = useProducts();
-  const { data: warehouses = [] } = useWarehouses();
+  const { data: products = [], isLoading: productsLoading } = useProducts();
+  const { data: warehouses = [], isLoading: warehousesLoading } = useWarehouses();
   const { data: reps = [] } = useSalesReps();
-  const [source, setSource] = useState('');
-  const [productId, setProductId] = useState('');
-  const [packagingUnitId, setPackagingUnitId] = useState('');
-  const [quantity, setQuantity] = useState(1);
+  const { active, home, usual } = useHomeWarehouse(warehouses);
+  const [place, setPlace] = useState(null); // null = the home warehouse; else { type, id }
+  const [editPlace, setEditPlace] = useState(false);
+  const [showReps, setShowReps] = useState(false);
   const [direction, setDirection] = useState('DECREASE');
+  const [qty, setQty] = useState({});
   const [reason, setReason] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const sending = useRef(false);
 
-  const product = products.find((p) => p.id === productId);
-  const packagings = (product?.packagings || []).slice().sort((a, b) => a.baseQuantity - b.baseQuantity);
+  const loc = place || (home ? { type: 'WAREHOUSE', id: home.id } : null);
+  const warehouse = loc?.type === 'WAREHOUSE' ? active.find((w) => w.id === loc.id) : null;
+  const rep = loc?.type === 'SALES_REP' ? reps.find((r) => r.id === loc.id) : null;
+  const away = !!(warehouse && usual && warehouse.id !== usual.id);
+  const placeName = warehouse ? shortPlace(warehouse.name) : rep ? (rep.user?.name || rep.code) : '';
+  const btnPlace = warehouse ? buttonPlace(warehouse.name) : placeName;
+  const removing = !isAdjust || direction === 'DECREASE';
+  const stock = useStockAt(loc);
+  const rows = useMemo(() => pickerRows(products), [products]);
+  const key = Object.keys(qty)[0];
+  const row = rows.find((r) => r.key === key) || null;
+  const quantity = row ? Number(qty[row.key]) || 0 : 0;
+  const here = row && stock.ready ? Math.floor((stock.map.get(row.id) || 0) / (row.size || 1)) : null;
+  // Never more out than is there — the server refuses it too.
+  const overStock = removing && !!row && (!stock.ready || quantity > here);
 
   const buildLocation = () => {
-    if (source.startsWith('w:')) return { type: 'WAREHOUSE', warehouseId: source.slice(2) };
-    if (source.startsWith('r:')) return { type: 'SALES_REP', salesRepId: source.slice(2) };
+    if (loc?.type === 'WAREHOUSE') return { type: 'WAREHOUSE', warehouseId: loc.id };
+    if (loc?.type === 'SALES_REP') return { type: 'SALES_REP', salesRepId: loc.id };
     return null;
   };
 
   const save = useMutation({
     mutationFn: () => {
-      const body = { location: buildLocation(), productId, packagingUnitId, quantity: Number(quantity), reason };
+      const body = { location: buildLocation(), productId: row.id, packagingUnitId: row.packagingUnitId, quantity: Number(quantity), reason };
       if (mode === 'adjust') return api.post('/inventory/adjustments', { ...body, direction });
       return api.post('/inventory/damage', body);
     },
-    onSuccess: () => { toast.success(mode === 'adjust' ? 'Adjustment posted' : 'Damage recorded'); qc.invalidateQueries({ queryKey: ['inventory'] }); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
+    onSuccess: () => {
+      if (loc?.type === 'WAREHOUSE') saveStockWarehouse(loc.id);
+      toast.success(mode === 'adjust' ? 'Adjustment posted' : 'Damage recorded');
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+      onClose();
+    },
+    onError: (e) => { toast.error(apiError(e)); stock.refetch(); },
+    onSettled: () => { sending.current = false; },
   });
 
-  const valid = source && productId && packagingUnitId && quantity > 0 && reason.trim();
+  const valid = !!loc && !!row && quantity > 0 && !!reason.trim() && !overStock;
+  const submit = () => {
+    if (sending.current || save.isPending || !valid) return;
+    sending.current = true;
+    save.mutate();
+  };
+  const requestClose = () => {
+    if (save.isPending) return;
+    if (!row || confirmDiscard) onClose(); else setConfirmDiscard(true);
+  };
+  const pick = (next) => { setQty(next); setConfirmDiscard(false); };
+  const choosePlace = (next) => { setPlace(next); setEditPlace(false); };
+
+  const n = formatNumber(quantity);
+  const what = `${n} ${boxWord(quantity)}`;
+  const action = !row
+    ? (isAdjust ? 'Post adjustment' : 'Record damage')
+    : quantity <= 0 ? 'Type how many'
+    : !isAdjust ? `Remove ${n} damaged ${boxWord(quantity)} from ${btnPlace}`
+      : removing ? `Remove ${what} from ${btnPlace}` : `Add ${what} to ${btnPlace}`;
+  const after = row && here != null ? (removing ? here - quantity : here + quantity) : null;
 
   return (
-    <Modal open onClose={onClose} title={mode === 'adjust' ? 'Stock adjustment' : 'Record damage'}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>{mode === 'adjust' ? 'Post adjustment' : 'Record damage'}</Button></>}>
-      <div className="space-y-4">
-        <Field label="Location" required>
-          <Select value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="">Select…</option>
-            <optgroup label="Warehouses">{warehouses.map((w) => <option key={w.id} value={`w:${w.id}`}>{w.name}</option>)}</optgroup>
-            <optgroup label="Sales reps">{reps.map((r) => <option key={r.id} value={`r:${r.id}`}>{r.user?.name} ({r.code})</option>)}</optgroup>
-          </Select>
-        </Field>
-        <Field label="Product" required>
-          <Select value={productId} onChange={(e) => { setProductId(e.target.value); const p = products.find((x) => x.id === e.target.value); const b = p?.packagings?.find((k) => k.isBaseUnit) || p?.packagings?.[0]; setPackagingUnitId(b?.packagingUnitId || ''); }}>
-            <option value="">Select…</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
-        </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Packaging">
-            <Select value={packagingUnitId} onChange={(e) => setPackagingUnitId(e.target.value)} disabled={!product}>
-              {packagings.map((pk) => <option key={pk.id} value={pk.packagingUnitId}>{pk.packagingUnit.name} (×{pk.baseQuantity})</option>)}
-            </Select>
-          </Field>
-          <Field label="Quantity"><NumberInput min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></Field>
-        </div>
-        {mode === 'adjust' && (
-          <Field label="Direction">
-            <Select value={direction} onChange={(e) => setDirection(e.target.value)}>
-              <option value="DECREASE">Decrease (remove)</option><option value="INCREASE">Increase (add)</option>
-            </Select>
-          </Field>
+    <Modal open onClose={requestClose} size="lg" title={isAdjust ? 'Stock adjustment' : 'Record damage'}
+      footer={confirmDiscard ? (
+        <DiscardFooter what={isAdjust ? 'adjustment' : 'damage record'} detail={row ? `${row.short}: ${what} picked will be lost.` : undefined}
+          onDiscard={onClose} onKeep={() => setConfirmDiscard(false)} />
+      ) : (
+        <>
+          <div className="mr-auto min-w-0 flex-1 basis-0 text-sm">
+            {!row ? <span className="text-muted">Tap the product</span> : (
+              <>
+                <div className="truncate text-muted">
+                  <span className="font-medium text-foreground">{row.short}</span>
+                  {after != null && <> · {formatNumber(here)} → <span className="font-semibold tabular-nums text-foreground">{formatNumber(after)}</span> at {btnPlace}</>}
+                </div>
+                {!reason.trim() && <div className="text-xs text-amber-300">Pick or write a reason</div>}
+              </>
+            )}
+          </div>
+          <Button variant="secondary" className="hidden sm:inline-flex" onClick={requestClose}>Cancel</Button>
+          <Button data-picker-submit="" className="h-12 w-full text-base sm:h-auto sm:w-auto sm:text-sm" loading={save.isPending} disabled={!valid} onClick={submit}>
+            {action}
+          </Button>
+        </>
+      )}>
+      <div className="space-y-2.5 sm:space-y-4 max-sm:min-h-[calc(100dvh_-_17rem)]">
+        <PlaceLine
+          parts={[rep
+            ? { label: "Rep's stock", kind: 'rep', name: rep.user?.name || rep.code, sub: rep.code, amber: true }
+            : { label: 'Warehouse', kind: 'warehouse', name: warehouse ? warehouse.name : warehousesLoading ? '…' : 'No active warehouse', sub: warehouse?.region, amber: away, empty: !warehouse }]}
+          open={editPlace}
+          onToggle={() => { setEditPlace((x) => !x); setShowReps(!!rep); }}
+          note={rep
+            ? <Caution>{removing ? REP_WARNING : 'This does not change his open orders.'}</Caution>
+            : away && <Caution action={<button type="button" onClick={() => setPlace({ type: 'WAREHOUSE', id: usual.id })} className={changeBtn}>Use {usual.name}</button>}>Not the usual warehouse.</Caution>}
+        >
+          <Chips label="Warehouse" value={warehouse?.id || ''} onChange={(id) => choosePlace({ type: 'WAREHOUSE', id })}
+            options={active.map((w) => ({ value: w.id, label: w.name, sub: w.region }))} />
+          <div className="border-t border-white/[0.07] pt-2">
+            <MoreToggle open={showReps} onToggle={() => setShowReps((x) => !x)}>A rep&apos;s stock</MoreToggle>
+            {showReps && (
+              <div className="mt-2 space-y-2">
+                <Caution>{REP_WARNING}</Caution>
+                <Chips label="Rep" value={rep?.id || ''} onChange={(id) => choosePlace({ type: 'SALES_REP', id })}
+                  options={reps.map((r) => ({ value: r.id, label: r.user?.name || r.code, sub: r.code }))} empty="No active reps" />
+              </div>
+            )}
+          </div>
+        </PlaceLine>
+
+        {isAdjust && (
+          <Segmented label="Direction" value={direction} onChange={setDirection}
+            options={[{ value: 'DECREASE', label: 'Remove boxes' }, { value: 'INCREASE', label: 'Add boxes' }]} />
         )}
-        <Field label="Reason" required><Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+
+        <ProductPicker rows={rows} value={qty} onChange={pick} single cap={removing} stock={loc ? stock : null}
+          onlyHeld={!!rep && removing} placeName={placeName || 'here'} loading={productsLoading} emptyText="No products yet." />
+
+        <ReasonField value={reason} onChange={setReason} chips={isAdjust ? ADJUST_REASONS : DAMAGE_REASONS} />
       </div>
     </Modal>
   );

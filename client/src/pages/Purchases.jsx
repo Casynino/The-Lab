@@ -1,61 +1,92 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Plus, Ship, PackageCheck, X, Pencil, Trash2, Eye } from 'lucide-react';
+import { Plus, Ship, PackageCheck, Pencil, Trash2, Eye } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatNumber, pluralizeUnit } from '@/lib/format';
+import { eatISODate } from '@/lib/tz';
+import ProductPicker, { useHomeWarehouse, PlaceLine, Chips, Caution, MoreToggle, DiscardFooter, changeBtn } from '@/components/ProductPicker';
+import { pickerRows, rowsWithSaved, pickedBoxes, primaryWarehouse, lineCost, boxWord, shortPlace, buttonPlace } from '@/lib/stockPick';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
+// New purchase order — the quick way (Nino, 11 Nov 2026: "the PO should be easy, not complicated and hard to
+// fill and select all the time"). The supplier is the one this device last ordered from; the order goes to the
+// primary warehouse (named in no request, as before) unless changed here — never to the warehouse another
+// window last used; ordered today; every product is listed with a  −  qty  +  and its cost per box filled in
+// from the buying price (still editable). The dates and the shipping, clearing and other costs sit behind two
+// quiet toggles that only show or hide them — closing one never changes a figure. An order being edited keeps
+// every saved line as it was — a carton line stays in cartons.
+// The request is the old one, field for field.
+const LAST_SUPPLIER_KEY = 'zl.po.supplier';
+const readLastSupplier = () => { try { return localStorage.getItem(LAST_SUPPLIER_KEY) || ''; } catch { return ''; } };
+const saveLastSupplier = (id) => { try { if (id) localStorage.setItem(LAST_SUPPLIER_KEY, id); } catch { /* private window */ } };
+
 function POModal({ onClose, editing }) {
   const qc = useQueryClient();
-  const { data: products = [] } = useProducts();
+  const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: warehouses = [] } = useWarehouses();
-  const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers', 'opts'], queryFn: async () => unwrap(await api.get('/suppliers', { params: { limit: 200 } })).data });
+  const { data: suppliers = [], isLoading: suppliersLoading } = useQuery({ queryKey: ['suppliers', 'opts'], queryFn: async () => unwrap(await api.get('/suppliers', { params: { limit: 200 } })).data });
+  const { active } = useHomeWarehouse(warehouses);
+  const primary = primaryWarehouse(active);
 
   const day = (d) => (d ? String(d).slice(0, 10) : '');
-  const [supplierId, setSupplierId] = useState(editing?.supplierId || '');
-  const [rows, setRows] = useState(
-    editing?.items?.length
-      ? editing.items.map((i) => ({
-          productId: i.productId,
-          packagingUnitId: i.packagingUnitId,
-          quantity: i.quantity,
-          unitCost: Number(i.unitCost) || 0,
-        }))
-      : [{ productId: '', packagingUnitId: '', quantity: 1, unitCost: 0 }],
-  );
+  const [lastSupplier] = useState(readLastSupplier);
+  const [supplierPick, setSupplierPick] = useState(editing?.supplierId || '');
+  const [editSupplier, setEditSupplier] = useState(false);
+  // '' = the primary warehouse (the server's own choice when none is named), as the old "Primary warehouse".
+  const [whPick, setWhPick] = useState(editing?.warehouseId || '');
+  const [editWh, setEditWh] = useState(false);
+  const [qty, setQty] = useState({});
+  const [cost, setCost] = useState({});
   const [costs, setCosts] = useState({
     shippingCost: Number(editing?.shippingCost) || 0,
     clearingCost: Number(editing?.clearingCost) || 0,
     otherCost: Number(editing?.otherCost) || 0,
   });
+  const [extras, setExtras] = useState(!!(Number(editing?.shippingCost) || Number(editing?.clearingCost) || Number(editing?.otherCost)));
+  const [showDates, setShowDates] = useState(false);
   const [expectedArrival, setExpectedArrival] = useState(day(editing?.expectedArrival));
+  // No date by default, as before: a new PO starts as a DRAFT. A date makes it ORDERED, and whether an ordered
+  // PO already counts as money owed to the supplier is the owner's open decision (D8) — not changed here.
   const [orderedAt, setOrderedAt] = useState(day(editing?.orderedAt));
-  const [warehouseId, setWarehouseId] = useState(editing?.warehouseId || '');
   const [notes, setNotes] = useState(editing?.notes || '');
+  const [touched, setTouched] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const sending = useRef(false);
 
-  const setRow = (i, p) => setRows(rows.map((r, idx) => (idx === i ? { ...r, ...p } : r)));
-  const onProduct = (i, productId) => {
-    const product = products.find((p) => p.id === productId);
-    const base = product?.packagings?.find((k) => k.isBaseUnit) || product?.packagings?.[0];
-    // The buying price is already on the product — typing it again on every
-    // order is work the system can do, and a chance to fat-finger a cost that
-    // becomes COGS. Still editable, because a supplier's price does move.
-    setRow(i, {
-      productId,
-      packagingUnitId: base?.packagingUnitId || '',
-      unitCost: Number(product?.purchasePrice) || 0,
-    });
-  };
+  const supplierId = supplierPick || (!editing && suppliers.some((s) => s.id === lastSupplier) ? lastSupplier : '');
+  const supplier = suppliers.find((s) => s.id === supplierId) || (editing && editing.supplierId === supplierId ? editing.supplier : null);
+  // A new order names no warehouse unless one is picked here (the server then uses the primary, as before).
+  const warehouseId = whPick;
+  const into = warehouseId ? (active.find((w) => w.id === warehouseId) || (editing?.warehouseId === warehouseId ? editing.warehouse : null)) : primary;
+  const intoAway = !!(warehouseId && primary && warehouseId !== primary.id);
 
+  // Every product in its box; an order being edited also gets a row for any saved line that is not that.
+  const baseRows = useMemo(() => pickerRows(products), [products]);
+  const productsReady = !productsLoading;
+  const saved = useMemo(
+    () => (editing && productsReady ? rowsWithSaved(baseRows, editing.items, products) : null),
+    [editing, productsReady, baseRows, products],
+  );
+  const rows = saved ? saved.rows : baseRows;
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!saved || seeded.current) return;
+    seeded.current = true;
+    setQty(saved.qty);
+    setCost(saved.cost);
+  }, [saved]);
+
+  const picked = rows.filter((r) => Number(qty[r.key]) > 0);
   const payload = () => ({
     supplierId,
-    items: rows.filter((r) => r.productId && r.quantity > 0).map((r) => ({ productId: r.productId, packagingUnitId: r.packagingUnitId, quantity: Number(r.quantity), unitCost: Number(r.unitCost) || 0 })),
+    items: picked.map((r) => ({ productId: r.id, packagingUnitId: r.packagingUnitId, quantity: Number(qty[r.key]), unitCost: Number(lineCost(cost, r)) || 0 })),
     shippingCost: Number(costs.shippingCost) || 0,
     clearingCost: Number(costs.clearingCost) || 0,
     otherCost: Number(costs.otherCost) || 0,
@@ -70,94 +101,139 @@ function POModal({ onClose, editing }) {
       ? api.put(`/purchase-orders/${editing.id}`, payload())
       : api.post('/purchase-orders', payload())),
     onSuccess: () => {
+      saveLastSupplier(supplierId);
       toast.success(editing ? 'Purchase order updated' : 'Purchase order created');
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: () => { sending.current = false; },
   });
 
-  const valid = supplierId && rows.some((r) => r.productId && r.quantity > 0);
+  // Same sums as before: boxes × cost per box, plus the extra costs.
+  const boxes = pickedBoxes(rows, qty);
+  const goods = picked.reduce((n, r) => n + Number(qty[r.key]) * (r.size || 1) * (Number(lineCost(cost, r)) || 0), 0);
+  const extraSum = (Number(costs.shippingCost) || 0) + (Number(costs.clearingCost) || 0) + (Number(costs.otherCost) || 0);
+  const total = goods + extraSum;
+
+  const valid = !!supplierId && picked.length > 0 && !(editing && !seeded.current);
+  const submit = () => {
+    if (sending.current || save.isPending || !valid) return;
+    sending.current = true;
+    save.mutate();
+  };
+  const dirty = editing ? touched : picked.length > 0;
+  const requestClose = () => {
+    if (save.isPending) return;
+    if (!dirty || confirmDiscard) onClose(); else setConfirmDiscard(true);
+  };
+  const touch = () => { setTouched(true); setConfirmDiscard(false); };
+  const pick = (next) => { setQty(next); touch(); };
+  const setRowCost = (key, v) => { setCost((c) => ({ ...c, [key]: v })); touch(); };
+  // The toggle only shows or hides the costs: closing it never changes a figure, and the closed toggle shows their sum.
+  const toggleExtras = () => setExtras((x) => !x);
+
+  const supplierOptions = suppliers.map((s) => ({ value: s.id, label: s.name, sub: s.country || undefined }));
+  // The primary is '' (named in no request) — except on an order saved into another warehouse: there, choosing
+  // the primary must name it, or the server would keep the old warehouse while the window says the primary.
+  const primaryValue = (id) => (primary && id === primary.id && !editing?.warehouseId ? '' : id);
+
+  const today = eatISODate();
+  const datesLabel = `${orderedAt ? (orderedAt === today ? 'Ordered today' : `Ordered ${formatDate(orderedAt)}`) : 'No order date (draft)'}`
+    + `${expectedArrival ? ` · arriving ${formatDate(expectedArrival)}` : ''}`;
 
   return (
-    <Modal open onClose={onClose} size="lg" title={editing ? `Edit ${editing.poNumber}` : 'New purchase order (import)'}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>{editing ? 'Save changes' : 'Create PO'}</Button></>}>
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Supplier" required>
-            <Select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
-              <option value="">Select supplier…</option>{suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
-          </Field>
-          <Field label="Receive into warehouse"><Select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}><option value="">Primary warehouse</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</Select></Field>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between"><span className="label mb-0">Items (cost per base unit)</span>
-            <button type="button" onClick={() => setRows([...rows, { productId: '', packagingUnitId: '', quantity: 1, unitCost: 0 }])} className="text-xs font-medium text-brand-600 hover:underline">+ Add</button>
+    <Modal open onClose={requestClose} size="lg" title={editing ? `Edit ${editing.poNumber}` : 'New purchase order (import)'}
+      footer={confirmDiscard ? (
+        <DiscardFooter what={editing ? 'change' : 'order'} detail={editing ? 'What you changed on this order will be lost.' : `${formatNumber(boxes)} ${boxWord(boxes)} picked will be lost.`}
+          onDiscard={onClose} onKeep={() => setConfirmDiscard(false)} />
+      ) : (
+        <>
+          <div className="mr-auto min-w-0 flex-1 basis-0 text-sm">
+            {picked.length === 0 ? <span className="text-muted">Tap + on what you are ordering</span> : (
+              <>
+                <div className="truncate text-muted">
+                  <span className="font-semibold tabular-nums text-foreground">{formatNumber(boxes)}</span> {boxWord(boxes)}
+                  {supplier && <> from <span className="font-medium text-foreground">{supplier.name}</span></>}
+                  {into && <> into <span className={clsx('font-medium', intoAway ? 'text-amber-300' : 'text-foreground')}>{buttonPlace(into.name)}</span></>}
+                </div>
+                {boxes > 0 && total > 0 && (
+                  <div className="text-xs text-faint">
+                    goods {formatCurrency(goods)}{extraSum > 0 && <> + costs {formatCurrency(extraSum)}</>} · {formatCurrency(total / boxes)} a box
+                  </div>
+                )}
+              </>
+            )}
           </div>
-          {rows.map((r, i) => {
-            const product = products.find((p) => p.id === r.productId);
-            const pkgs = (product?.packagings || []).slice().sort((a, b) => a.baseQuantity - b.baseQuantity);
-            return (
-              <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
-                <Select value={r.productId} onChange={(e) => onProduct(i, e.target.value)} className="min-w-[160px] flex-1"><option value="">Product…</option>{products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</Select>
-                <Select value={r.packagingUnitId} onChange={(e) => setRow(i, { packagingUnitId: e.target.value })} className="w-32" disabled={!product}>{pkgs.map((pk) => <option key={pk.id} value={pk.packagingUnitId}>{pk.packagingUnit.name} (×{pk.baseQuantity})</option>)}</Select>
-                <NumberInput min="1" value={r.quantity} onChange={(e) => setRow(i, { quantity: e.target.value })} className="w-20" placeholder="Qty" />
-                <NumberInput min="0" value={r.unitCost} onChange={(e) => setRow(i, { unitCost: e.target.value })} className="w-28" placeholder="Cost/box" />
-                {(() => {
-                  const pk = pkgs.find((k) => k.packagingUnitId === r.packagingUnitId);
-                  const boxes = (Number(r.quantity) || 0) * (pk?.baseQuantity || 1);
-                  const line = boxes * (Number(r.unitCost) || 0);
-                  return line > 0 ? (
-                    <span className="whitespace-nowrap text-xs tabular-nums text-muted">
-                      {formatNumber(boxes)} boxes · <b className="text-foreground">{formatCurrency(line)}</b>
-                    </span>
-                  ) : null;
-                })()}
-                <button type="button" onClick={() => setRows(rows.filter((_, idx) => idx !== i))} className="ml-auto text-faint hover:text-rose-400"><X className="h-4 w-4" /></button>
+          <Button variant="secondary" className="hidden sm:inline-flex" onClick={requestClose}>Cancel</Button>
+          <Button data-picker-submit="" className="h-12 w-full text-base sm:h-auto sm:w-auto sm:text-sm" loading={save.isPending} disabled={!valid} onClick={submit}>
+            {editing ? 'Save changes' : 'Create PO'}
+            {picked.length > 0 && <span className="tabular-nums">· {formatCurrency(total)}</span>}
+          </Button>
+        </>
+      )}>
+      <div className="space-y-2.5 sm:space-y-4 max-sm:min-h-[calc(100dvh_-_17rem)]">
+        {supplierId && !editSupplier ? (
+          <PlaceLine
+            parts={[
+              { label: 'Supplier', kind: 'supplier', name: supplier?.name || '…', sub: supplier?.country },
+              { label: 'Into', kind: 'warehouse', name: into ? shortPlace(into.name) : '…', sub: warehouseId ? into?.region : 'primary', title: into?.name, amber: intoAway },
+            ]}
+            open={false}
+            onToggle={() => { setEditSupplier(true); setEditWh(true); }}
+            note={intoAway && primary && (
+              <Caution action={<button type="button" onClick={() => { setWhPick(primaryValue(primary.id)); touch(); }} className={changeBtn}>Use {shortPlace(primary.name)}</button>}>
+                Not the usual warehouse.
+              </Caution>
+            )}
+          />
+        ) : (
+          <div className="space-y-3 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/[0.08]">
+            <Chips label="Supplier" value={supplierId} onChange={(id) => { setSupplierPick(id); touch(); }} options={supplierOptions}
+              empty={suppliersLoading ? 'Loading suppliers…' : 'No suppliers yet — add one under Suppliers.'} />
+            {(editWh || editSupplier) && active.length > 0 && (
+              <Chips label="Receive into" value={primaryValue(warehouseId)} onChange={(id) => { setWhPick(id); touch(); }}
+                options={active.map((w) => ({ value: primaryValue(w.id), label: w.name, sub: primary && w.id === primary.id ? 'primary' : w.region }))} />
+            )}
+            {supplierId && (
+              <div className="flex justify-end">
+                <button type="button" onClick={() => { setEditSupplier(false); setEditWh(false); }} className={clsx(changeBtn, 'text-foreground')}>Done</button>
               </div>
-            );
-          })}
+            )}
+          </div>
+        )}
+
+        <ProductPicker rows={rows} value={qty} onChange={pick} cost={cost} onCost={setRowCost}
+          loading={productsLoading || (!!editing && !seeded.current)} emptyText="No products yet." />
+
+        <div className="flex flex-col gap-1 [&>div]:mb-2">
+          <MoreToggle open={showDates} onToggle={() => setShowDates((x) => !x)}>{datesLabel}</MoreToggle>
+          {showDates && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs text-muted">Ordered
+                <Input type="date" value={orderedAt} onChange={(e) => { setOrderedAt(e.target.value); touch(); }} className="mt-1" />
+              </label>
+              <label className="block text-xs text-muted">Expected arrival <span className="text-faint">(optional)</span>
+                <Input type="date" min={orderedAt || undefined} value={expectedArrival} onChange={(e) => { setExpectedArrival(e.target.value); touch(); }} className="mt-1" />
+              </label>
+            </div>
+          )}
+          <MoreToggle open={extras} onToggle={toggleExtras}>
+            Extra costs{!extras && extraSum > 0 ? ` · ${formatCurrency(extraSum)}` : ''}
+          </MoreToggle>
+          {extras && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field label="Shipping (TZS)"><NumberInput min="0" value={costs.shippingCost} onChange={(e) => { setCosts({ ...costs, shippingCost: e.target.value }); touch(); }} /></Field>
+                <Field label="Clearing (TZS)"><NumberInput min="0" value={costs.clearingCost} onChange={(e) => { setCosts({ ...costs, clearingCost: e.target.value }); touch(); }} /></Field>
+                <Field label="Other (TZS)"><NumberInput min="0" value={costs.otherCost} onChange={(e) => { setCosts({ ...costs, otherCost: e.target.value }); touch(); }} /></Field>
+              </div>
+              <p className="text-xs text-faint">Spread over the boxes as landed cost when the order is received.</p>
+            </div>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Field label="Shipping cost (TZS)"><NumberInput min="0" value={costs.shippingCost} onChange={(e) => setCosts({ ...costs, shippingCost: e.target.value })} /></Field>
-          <Field label="Clearing cost (TZS)"><NumberInput min="0" value={costs.clearingCost} onChange={(e) => setCosts({ ...costs, clearingCost: e.target.value })} /></Field>
-          <Field label="Other cost (TZS)"><NumberInput min="0" value={costs.otherCost} onChange={(e) => setCosts({ ...costs, otherCost: e.target.value })} /></Field>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Ordered date"><Input type="date" value={orderedAt} onChange={(e) => setOrderedAt(e.target.value)} /></Field>
-          <Field label="Expected arrival"><Input type="date" min={orderedAt || undefined} value={expectedArrival} onChange={(e) => setExpectedArrival(e.target.value)} /></Field>
-        </div>
-        <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
-        {(() => {
-          const goods = rows.reduce((n, r) => {
-            const product = products.find((p) => p.id === r.productId);
-            const pk = (product?.packagings || []).find((k) => k.packagingUnitId === r.packagingUnitId);
-            return n + (Number(r.quantity) || 0) * (pk?.baseQuantity || 1) * (Number(r.unitCost) || 0);
-          }, 0);
-          const extras = (Number(costs.shippingCost) || 0) + (Number(costs.clearingCost) || 0) + (Number(costs.otherCost) || 0);
-          const boxes = rows.reduce((n, r) => {
-            const product = products.find((p) => p.id === r.productId);
-            const pk = (product?.packagings || []).find((k) => k.packagingUnitId === r.packagingUnitId);
-            return n + (Number(r.quantity) || 0) * (pk?.baseQuantity || 1);
-          }, 0);
-          if (!goods && !extras) return null;
-          return (
-            <div className="flex flex-wrap items-baseline justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3">
-              <span className="text-xs text-muted">
-                {formatNumber(boxes)} box{boxes === 1 ? '' : 'es'} · goods {formatCurrency(goods)}
-                {extras > 0 && <> · shipping &amp; costs {formatCurrency(extras)}</>}
-              </span>
-              <span className="text-sm font-bold tabular-nums text-foreground">
-                {formatCurrency(goods + extras)}
-                {boxes > 0 && <span className="ml-2 text-[11px] font-normal text-faint">{formatCurrency((goods + extras) / boxes)} a box</span>}
-              </span>
-            </div>
-          );
-        })()}
-        <p className="text-xs text-faint">Cost per box is filled in from the product's buying price — change it if this supplier charged something else. Shipping, clearing and other costs are spread across the boxes as landed cost when you receive the order.</p>
+        <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => { setNotes(e.target.value); touch(); }} placeholder="Optional" /></Field>
       </div>
     </Modal>
   );

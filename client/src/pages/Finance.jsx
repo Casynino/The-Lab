@@ -1,6 +1,8 @@
 import { STEADY } from '@/lib/polling';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import ReportsArchive from '@/components/ReportsArchive';
+import ProductPicker, { MoreToggle, DiscardFooter } from '@/components/ProductPicker';
+import { pickerRows, lineCost, primaryWarehouse, shortPlace, buttonPlace } from '@/lib/stockPick';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -11,7 +13,7 @@ import {
   Undo2, CheckCircle2, Eye, EyeOff,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
-import { useProducts, useBrands } from '@/lib/hooks';
+import { useProducts, useBrands, useWarehouses } from '@/lib/hooks';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
 import ReportsPage from '@/pages/Reports';
@@ -2446,13 +2448,24 @@ function PayBalanceModal({ supplier, outstanding, accounts: all, onClose, onDone
 // one step — inventory goes up, the supplier's balance (what you owe) goes up.
 // No payment happens here; pay later in installments.
 function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
-  const { data: products = [] } = useProducts();
+  const { data: products = [], isLoading: productsLoading } = useProducts();
+  // Only to name where the boxes land: the request names no warehouse and the server receives into the primary.
+  const { data: warehouses = [] } = useWarehouses();
+  const into = primaryWarehouse(warehouses);
   const accounts = wallets(all);
-  const [lines, setLines] = useState([{ productId: '', quantity: '', unitCost: '' }]);
+  // Every product of this supplier's brand, each with a  −  boxes  +  and its cost per box filled in from the
+  // buying price (still editable) — the quick list from Record a sale, no "Add product" and no select.
+  const supplierBrand = supplier.brandId || null;
+  const rows = useMemo(() => pickerRows(products, { brandId: supplierBrand || undefined }), [products, supplierBrand]);
+  const [qty, setQty] = useState({});
+  const [cost, setCost] = useState({});
+  const [extras, setExtras] = useState(false);
   const [shippingCost, setShippingCost] = useState('');
   const [otherCost, setOtherCost] = useState('');
   const [date, setDate] = useState(eatISODate());
   const [notes, setNotes] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const sending = useRef(false);
   // Stock bought with the cash in the drawer used to be recorded as a debt and
   // nothing else, and the money then left the books on whatever day somebody
   // came back to pay it off. So the form asks here, while the person who paid
@@ -2461,13 +2474,11 @@ function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
   const [payAccountId, setPayAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
   const [payAmount, setPayAmount] = useState('');
 
-  const patch = (i, p) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...p } : l)));
-  const pickProduct = (i, productId) => {
-    const prod = products.find((p) => p.id === productId);
-    patch(i, { productId, unitCost: prod ? String(Number(prod.purchasePrice) || '') : '' });
-  };
-  const supplierBrand = supplier.brandId || null;
-  const options = supplierBrand ? products.filter((p) => p.brandId === supplierBrand) : products;
+  // The picked lines, as the old form held them: boxes and the cost per box.
+  const lines = rows
+    .filter((r) => Number(qty[r.key]) > 0)
+    .map((r) => ({ productId: r.id, packagingUnitId: r.packagingUnitId, quantity: qty[r.key], unitCost: lineCost(cost, r) }));
+  const boxes = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
 
   const goods = lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unitCost) || 0), 0);
   const total = goods + (Number(shippingCost) || 0) + (Number(otherCost) || 0);
@@ -2486,11 +2497,9 @@ function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
     mutationFn: async () => {
       let po = createdPo.current;
       if (!po) {
-        const items = validLines.map((l) => {
-          const prod = products.find((p) => p.id === l.productId);
-          const pkg = prod?.packagings?.find((pk) => pk.isBaseUnit) || prod?.packagings?.[0];
-          return { productId: l.productId, packagingUnitId: pkg?.packagingUnitId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) };
-        });
+        const items = validLines.map((l) => (
+          { productId: l.productId, packagingUnitId: l.packagingUnitId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) }
+        ));
         po = unwrap(await api.post('/purchase-orders', {
           supplierId: supplier.id, currency: 'TZS', items,
           shippingCost: Number(shippingCost) || 0, otherCost: Number(otherCost) || 0,
@@ -2526,36 +2535,65 @@ function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
     onError: (e) => toast.error(e?.response ? apiError(e) : e.message),
   });
 
+  // One purchase per press, however fast the taps come.
+  const submit = () => {
+    if (sending.current || save.isPending || !valid) return;
+    sending.current = true;
+    save.mutate(undefined, { onSettled: () => { sending.current = false; } });
+  };
+  const requestClose = () => {
+    if (save.isPending) return;
+    if (lines.length === 0 || confirmDiscard) onClose(); else setConfirmDiscard(true);
+  };
+  const pick = (next) => { setQty(next); setConfirmDiscard(false); };
+  // The toggle only shows or hides the costs: closing it never changes a figure, and the closed toggle shows their sum.
+  const toggleExtras = () => setExtras((x) => !x);
+  const extraSum = (Number(shippingCost) || 0) + (Number(otherCost) || 0);
+  // What the money side will be, in the footer, so it is never a screen away from the button.
+  const payFrom = accounts.find((a) => a.id === payAccountId);
+  const owedAfter = round2ui(total - (paidNow ? paying : 0));
+  const moneyLine = !paidNow ? `You will owe ${supplier.name} ${formatCurrency(total)} more`
+    : overpaid ? 'More paid than this purchase cost'
+      : owedAfter > 0 ? `Paid ${formatCurrency(paying)}${payFrom ? ` from ${payFrom.name}` : ''} · ${formatCurrency(owedAfter)} still owed`
+        : `Paid in full${payFrom ? ` from ${payFrom.name}` : ''}`;
+
   return (
-    <Modal open onClose={onClose} size="lg" title={`New purchase from ${supplier.name}`}
-      footer={<>
-        <div className="mr-auto text-sm"><span className="text-muted">Total</span> <b>{formatCurrency(total)}</b></div>
-        <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}><Package className="h-4 w-4" /> Receive stock</Button>
-      </>}>
-      <div className="space-y-4">
+    <Modal open onClose={requestClose} size="lg" title={`New purchase from ${supplier.name}`}
+      footer={confirmDiscard ? (
+        <DiscardFooter what="purchase" detail={`${formatNumber(boxes)} ${boxes === 1 ? 'box' : 'boxes'} picked will be lost.`} onDiscard={onClose} onKeep={() => setConfirmDiscard(false)} />
+      ) : (
+        <>
+          <div className="mr-auto min-w-0 flex-1 basis-0 text-sm">
+            {lines.length === 0 ? <span className="text-muted">Tap + on what you bought</span> : (
+              <>
+                <div className="truncate"><span className="text-muted">Total</span> <b className="tabular-nums">{formatCurrency(total)}</b></div>
+                <div className={clsx('truncate text-xs', paidNow && overpaid ? 'text-rose-300' : 'text-muted')}>{moneyLine}</div>
+              </>
+            )}
+          </div>
+          <Button variant="secondary" className="hidden sm:inline-flex" onClick={requestClose}>Cancel</Button>
+          <Button data-picker-submit="" className="h-12 w-full text-base sm:h-auto sm:w-auto sm:text-sm" loading={save.isPending} disabled={!valid} onClick={submit}>
+            <Package className="h-4 w-4" />
+            {boxes > 0 ? `Receive ${formatNumber(boxes)} ${boxes === 1 ? 'box' : 'boxes'}${into ? ` into ${buttonPlace(into.name)}` : ''}` : 'Receive stock'}
+          </Button>
+        </>
+      )}>
+      <div className="space-y-2.5 sm:space-y-4 max-sm:min-h-[calc(100dvh_-_17rem)]">
         <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
-          Records stock received from {supplier.name}: inventory increases, and so does what you owe them — unless you say below that you
-          paid for it, in which case the money leaves the account you choose, dated the purchase date.
+          Stock from {supplier.name} goes into {into ? shortPlace(into.name) : 'the main warehouse'} now, and what you owe them goes up — unless you tick below that you paid.
         </p>
-        <div className="space-y-2">
-          {lines.map((l, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <Select className="min-w-[200px] flex-1" value={l.productId} onChange={(e) => pickProduct(i, e.target.value)}>
-                <option value="">Select product…</option>
-                {options.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
-              <NumberInput min="1" className="w-20" placeholder="Boxes" value={l.quantity} onChange={(e) => patch(i, { quantity: e.target.value })} />
-              <NumberInput min="0" className="w-28" placeholder="Cost/box" value={l.unitCost} onChange={(e) => patch(i, { unitCost: e.target.value })} />
-              <button onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))} className="text-faint hover:text-rose-500"><Trash2 className="h-4 w-4" /></button>
+        <ProductPicker rows={rows} value={qty} onChange={pick} cost={cost} onCost={(key, v) => setCost((c) => ({ ...c, [key]: v }))}
+          loading={productsLoading} emptyText={supplierBrand ? 'No products of this supplier’s brand yet.' : 'No products yet.'} />
+        <div className="space-y-3">
+          <MoreToggle open={extras} onToggle={toggleExtras}>
+            Extra costs (shipping, other){!extras && extraSum > 0 ? ` · ${formatCurrency(extraSum)}` : ''}
+          </MoreToggle>
+          {extras && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Shipping / transport (TZS)"><NumberInput min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="0" /></Field>
+              <Field label="Other costs (TZS)"><NumberInput min="0" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" /></Field>
             </div>
-          ))}
-          <button onClick={() => setLines((ls) => [...ls, { productId: '', quantity: '', unitCost: '' }])}
-            className="inline-flex items-center gap-1 text-xs font-medium text-brand-500 hover:underline"><Plus className="h-3.5 w-3.5" /> Add product</button>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Shipping / transport (TZS)"><NumberInput min="0" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} placeholder="0" /></Field>
-          <Field label="Other costs (TZS)"><NumberInput min="0" value={otherCost} onChange={(e) => setOtherCost(e.target.value)} placeholder="0" /></Field>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Purchase date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>

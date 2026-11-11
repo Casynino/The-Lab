@@ -1,41 +1,92 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Plus, Truck, Ban, ArrowRight, Boxes, Warehouse, UserRound, RotateCcw, ChevronDown } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useWarehouses, useSalesReps } from '@/lib/hooks';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/format';
-import ItemLines from '@/components/ItemLines';
+import ProductPicker, {
+  useHomeWarehouse, useStockAt, saveStockWarehouse, PlaceLine, Chips, Caution, Segmented, MoreToggle, DiscardFooter,
+  REP_WARNING, changeBtn,
+} from '@/components/ProductPicker';
+import { pickerRows, pickedItems, pickedBoxes, shortPlace, buttonPlace, boxWord } from '@/lib/stockPick';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Textarea,
   Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
-const DIR_LABEL = {
-  WAREHOUSE_TO_REP: 'Warehouse → Rep',
-  REP_TO_WAREHOUSE: 'Rep → Warehouse',
-  WAREHOUSE_TO_WAREHOUSE: 'Warehouse → Warehouse',
-};
+// New transfer — the quick way. Out to a rep is the usual move, so it is chosen; the warehouse the boxes
+// leave is already chosen (Dar es Salaam, or the one this device last used); every product is listed with
+// a  −  qty  +  capped at what that place holds. Taking boxes back off a rep stays an explicit choice behind
+// "Other moves": it does not touch his open order (audit #23) — a Return does. Once the rep (or the other
+// warehouse) is tapped, the choice folds into one line "Main Warehouse → Mrema" with Change, so the list is
+// what fills the screen. The request is the old one.
+const DIRECTIONS = [
+  { value: 'WAREHOUSE_TO_REP', label: 'To a rep' },
+  { value: 'WAREHOUSE_TO_WAREHOUSE', label: 'To a warehouse' },
+];
+const BACK = { value: 'REP_TO_WAREHOUSE', label: 'Back from a rep' };
 
 function TransferModal({ onClose }) {
   const qc = useQueryClient();
-  const { data: products = [] } = useProducts();
-  const { data: warehouses = [] } = useWarehouses();
+  const { data: products = [], isLoading: productsLoading } = useProducts();
+  const { data: warehouses = [], isLoading: warehousesLoading } = useWarehouses();
   const { data: reps = [] } = useSalesReps();
+  const { active, home, usual } = useHomeWarehouse(warehouses);
 
   const [direction, setDirection] = useState('WAREHOUSE_TO_REP');
-  const [fromWarehouseId, setFromWarehouseId] = useState('');
+  const [more, setMore] = useState(false);
+  const [fromPick, setFromPick] = useState(''); // '' = the home warehouse
+  const [editFrom, setEditFrom] = useState(false);
+  const [editPlaces, setEditPlaces] = useState(false); // the folded "From → To" line, opened
   const [toRepId, setToRepId] = useState('');
   const [fromRepId, setFromRepId] = useState('');
-  const [toWarehouseId, setToWarehouseId] = useState('');
-  const [items, setItems] = useState([]);
+  const [wwTo, setWwTo] = useState('');
+  const [backPick, setBackPick] = useState(''); // '' = the home warehouse
+  const [editBack, setEditBack] = useState(false);
+  const [qty, setQty] = useState({});
   const [notes, setNotes] = useState('');
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const sending = useRef(false);
+
+  const fromRep = direction === 'REP_TO_WAREHOUSE';
+  const fromWarehouse = active.find((w) => w.id === fromPick) || home;
+  const fromWarehouseId = fromWarehouse?.id || '';
+  const others = active.filter((w) => w.id !== fromWarehouseId);
+  // Between warehouses: with one other warehouse, that is where they go.
+  const wwTarget = others.find((w) => w.id === wwTo) || (others.length === 1 ? others[0] : null);
+  const backWarehouse = active.find((w) => w.id === backPick) || home;
+  const repOf = (id) => reps.find((r) => r.id === id);
+  const repName = (id) => repOf(id)?.user?.name || repOf(id)?.code || '';
+
+  const fromLoc = fromRep
+    ? (fromRepId ? { type: 'SALES_REP', id: fromRepId } : null)
+    : (fromWarehouseId ? { type: 'WAREHOUSE', id: fromWarehouseId } : null);
+  const stock = useStockAt(fromLoc);
+  const rows = useMemo(() => pickerRows(products), [products]);
+  const items = pickedItems(rows, qty);
+  const boxes = pickedBoxes(rows, qty);
+  const held = (r) => Math.floor((stock.map.get(r.id) || 0) / (r.size || 1));
+  const overStock = items.length > 0 && (!stock.ready || rows.some((r) => (qty[r.key] || 0) > held(r)));
+
+  // Boxes picked against one place are not carried to another kind of place: a different rep, or a rep
+  // instead of a warehouse, starts the list again (as Returns does). Between warehouses they stay, re-checked.
+  const fromKey = fromLoc ? `${fromLoc.type}:${fromLoc.id}` : '';
+  const lastFrom = useRef(fromKey);
+  useEffect(() => {
+    const was = lastFrom.current;
+    lastFrom.current = fromKey;
+    if (was === fromKey) return;
+    if (!(was.startsWith('WAREHOUSE:') && fromKey.startsWith('WAREHOUSE:'))) setQty({});
+  }, [fromKey]);
+
+  const toWarehouseId = direction === 'WAREHOUSE_TO_WAREHOUSE' ? (wwTarget?.id || '') : (backWarehouse?.id || '');
 
   const create = useMutation({
     mutationFn: () => {
       const payload = {
         direction,
-        items: items.filter((l) => l.productId && l.quantity > 0).map((l) => ({ productId: l.productId, packagingUnitId: l.packagingUnitId, quantity: Number(l.quantity) })),
+        items,
         notes: notes || undefined,
       };
       if (direction === 'WAREHOUSE_TO_REP') { payload.fromWarehouseId = fromWarehouseId; payload.toRepId = toRepId; }
@@ -43,58 +94,134 @@ function TransferModal({ onClose }) {
       if (direction === 'WAREHOUSE_TO_WAREHOUSE') { payload.fromWarehouseId = fromWarehouseId; payload.toWarehouseId = toWarehouseId; }
       return api.post('/transfers', payload);
     },
-    onSuccess: () => { toast.success('Transfer completed'); qc.invalidateQueries({ queryKey: ['transfers'] }); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
+    onSuccess: () => {
+      saveStockWarehouse(fromRep ? toWarehouseId : fromWarehouseId);
+      toast.success('Transfer completed');
+      qc.invalidateQueries({ queryKey: ['transfers'] });
+      onClose();
+    },
+    onError: (e) => { toast.error(apiError(e)); stock.refetch(); },
+    onSettled: () => { sending.current = false; },
   });
 
-  const needsFromWh = direction !== 'REP_TO_WAREHOUSE';
-  const needsToWh = direction !== 'WAREHOUSE_TO_REP';
-  const valid = items.some((l) => l.productId && l.quantity > 0) &&
-    (direction === 'WAREHOUSE_TO_REP' ? fromWarehouseId && toRepId :
-     direction === 'REP_TO_WAREHOUSE' ? fromRepId && toWarehouseId :
-     fromWarehouseId && toWarehouseId && fromWarehouseId !== toWarehouseId);
+  const placesOk = direction === 'WAREHOUSE_TO_REP' ? fromWarehouseId && toRepId
+    : direction === 'REP_TO_WAREHOUSE' ? fromRepId && toWarehouseId
+      : fromWarehouseId && toWarehouseId && fromWarehouseId !== toWarehouseId;
+  const valid = items.length > 0 && !!placesOk && !overStock;
+  const submit = () => {
+    if (sending.current || create.isPending || !valid) return;
+    sending.current = true;
+    create.mutate();
+  };
+  const requestClose = () => {
+    if (create.isPending) return;
+    if (items.length === 0 || confirmDiscard) onClose(); else setConfirmDiscard(true);
+  };
+  const pick = (next) => { setQty(next); setConfirmDiscard(false); };
+
+  const fromName = fromRep ? repName(fromRepId) : shortPlace(fromWarehouse?.name);
+  // The button names the move in a few words: "Move 6 boxes Main → Mrema".
+  const fromShort = fromRep ? repName(fromRepId) : buttonPlace(fromWarehouse?.name);
+  const toShort = direction === 'WAREHOUSE_TO_REP' ? repName(toRepId)
+    : direction === 'WAREHOUSE_TO_WAREHOUSE' ? buttonPlace(wwTarget?.name) : buttonPlace(backWarehouse?.name);
+  const label = items.length === 0 ? 'Move boxes'
+    : !fromShort ? 'Choose the rep first'
+      : !toShort ? (direction === 'WAREHOUSE_TO_REP' ? 'Choose the rep' : 'Choose where to')
+        : `Move ${formatNumber(boxes)} ${boxWord(boxes)} ${fromShort} → ${toShort}`;
+  // Out of a warehouse, once the other end is chosen: one line "Main Warehouse → Mrema" with Change.
+  const folded = !fromRep && !!fromWarehouse && (direction === 'WAREHOUSE_TO_REP' ? !!repOf(toRepId) : !!wwTarget);
+  const chooseDirection = (d) => { setDirection(d); setEditPlaces(false); };
+
+  const away = (w) => !!(w && usual && w.id !== usual.id);
+  const warehouseOptions = (list) => list.map((w) => ({ value: w.id, label: w.name, sub: w.region }));
+  const repOptions = reps.map((r) => ({ value: r.id, label: r.user?.name || r.code, sub: r.code }));
+  const directionOptions = more || fromRep ? [...DIRECTIONS, BACK] : DIRECTIONS;
 
   return (
-    <Modal open onClose={onClose} size="lg" title="New stock transfer"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={create.isPending} disabled={!valid} onClick={() => create.mutate()}>Dispatch</Button></>}>
-      <div className="space-y-4">
-        <Field label="Direction">
-          <Select value={direction} onChange={(e) => setDirection(e.target.value)}>
-            {Object.entries(DIR_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </Select>
-        </Field>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {needsFromWh && direction !== 'REP_TO_WAREHOUSE' && (
-            <Field label="From warehouse" required>
-              <Select value={fromWarehouseId} onChange={(e) => setFromWarehouseId(e.target.value)}>
-                <option value="">Select…</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </Select>
-            </Field>
-          )}
-          {direction === 'REP_TO_WAREHOUSE' && (
-            <Field label="From rep" required>
-              <Select value={fromRepId} onChange={(e) => setFromRepId(e.target.value)}>
-                <option value="">Select…</option>{reps.map((r) => <option key={r.id} value={r.id}>{r.user?.name} ({r.code})</option>)}
-              </Select>
-            </Field>
-          )}
-          {direction === 'WAREHOUSE_TO_REP' && (
-            <Field label="To rep" required>
-              <Select value={toRepId} onChange={(e) => setToRepId(e.target.value)}>
-                <option value="">Select…</option>{reps.map((r) => <option key={r.id} value={r.id}>{r.user?.name} ({r.code})</option>)}
-              </Select>
-            </Field>
-          )}
-          {needsToWh && (
-            <Field label="To warehouse" required>
-              <Select value={toWarehouseId} onChange={(e) => setToWarehouseId(e.target.value)}>
-                <option value="">Select…</option>{warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </Select>
-            </Field>
+    <Modal open onClose={requestClose} size="lg" title="New stock transfer"
+      footer={confirmDiscard ? (
+        <DiscardFooter what="transfer" detail={`${formatNumber(boxes)} ${boxWord(boxes)} picked will be lost.`} onDiscard={onClose} onKeep={() => setConfirmDiscard(false)} />
+      ) : (
+        <>
+          <div className="mr-auto min-w-0 flex-1 basis-0 text-sm">
+            {items.length === 0 ? <span className="text-muted">Tap + on what is moving</span> : (
+              <div className="truncate text-muted">{items.length} {items.length === 1 ? 'product' : 'products'}</div>
+            )}
+          </div>
+          <Button variant="secondary" className="hidden sm:inline-flex" onClick={requestClose}>Cancel</Button>
+          <Button data-picker-submit="" className="h-12 w-full text-base sm:h-auto sm:w-auto sm:text-sm" loading={create.isPending} disabled={!valid} onClick={submit}>
+            {label}
+          </Button>
+        </>
+      )}>
+      <div className="space-y-2.5 sm:space-y-4 max-sm:min-h-[calc(100dvh_-_17rem)]">
+        <div className="space-y-1.5">
+          <Segmented label="Direction" value={direction} onChange={chooseDirection} options={directionOptions} />
+          {!more && !fromRep && (
+            <MoreToggle open={false} onToggle={() => setMore(true)}>Other moves</MoreToggle>
           )}
         </div>
-        <ItemLines products={products} value={items} onChange={setItems} />
-        <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
+
+        {fromRep ? (
+          <div className="space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/[0.08]">
+            <Caution>{REP_WARNING}</Caution>
+            <Chips label="From rep" value={fromRepId} onChange={setFromRepId} options={repOptions} empty="No active reps" />
+          </div>
+        ) : folded ? (
+          <PlaceLine
+            parts={[
+              { label: 'From', kind: 'warehouse', name: shortPlace(fromWarehouse.name), sub: fromWarehouse.region, amber: away(fromWarehouse), title: fromWarehouse.name },
+              direction === 'WAREHOUSE_TO_REP'
+                ? { label: 'To rep', kind: 'rep', name: repName(toRepId), sub: repOf(toRepId)?.code }
+                : { label: 'To warehouse', kind: 'warehouse', name: shortPlace(wwTarget.name), sub: wwTarget.region, amber: away(wwTarget), title: wwTarget.name },
+            ]}
+            open={editPlaces}
+            onToggle={() => setEditPlaces((x) => !x)}
+            note={away(fromWarehouse) && <Caution action={<button type="button" onClick={() => setFromPick(usual.id)} className={changeBtn}>Use {usual.name}</button>}>Not the usual warehouse.</Caution>}
+          >
+            {active.length > 1 && (
+              <Chips label="From warehouse" value={fromWarehouseId} onChange={setFromPick} options={warehouseOptions(active)} />
+            )}
+            {direction === 'WAREHOUSE_TO_REP' ? (
+              <Chips label="To rep" value={toRepId} onChange={(id) => { setToRepId(id); setEditPlaces(false); }} options={repOptions} empty="No active reps" />
+            ) : (
+              <Chips label="To warehouse" value={wwTarget?.id || ''} onChange={(id) => { setWwTo(id); setEditPlaces(false); }} options={warehouseOptions(others)}
+                empty="There is no other active warehouse to move to." />
+            )}
+          </PlaceLine>
+        ) : (
+          <PlaceLine
+            parts={[{ label: 'From', kind: 'warehouse', name: fromWarehouse ? fromWarehouse.name : warehousesLoading ? '…' : 'No active warehouse', sub: fromWarehouse?.region, amber: away(fromWarehouse), empty: !fromWarehouse }]}
+            open={editFrom}
+            onToggle={active.length > 1 ? () => setEditFrom((x) => !x) : undefined}
+            note={away(fromWarehouse) && <Caution action={<button type="button" onClick={() => setFromPick(usual.id)} className={changeBtn}>Use {usual.name}</button>}>Not the usual warehouse.</Caution>}
+          >
+            <Chips label="From warehouse" value={fromWarehouseId} onChange={(id) => { setFromPick(id); setEditFrom(false); }} options={warehouseOptions(active)} />
+          </PlaceLine>
+        )}
+
+        {!folded && direction === 'WAREHOUSE_TO_REP' && (
+          <Chips label="To rep" value={toRepId} onChange={setToRepId} options={repOptions} empty="No active reps" />
+        )}
+        {!folded && direction === 'WAREHOUSE_TO_WAREHOUSE' && (
+          <Chips label="To warehouse" value={wwTarget?.id || ''} onChange={setWwTo} options={warehouseOptions(others)}
+            empty="There is no other active warehouse to move to." />
+        )}
+        {fromRep && (
+          <PlaceLine
+            parts={[{ label: 'Back into', kind: 'warehouse', name: backWarehouse ? backWarehouse.name : '…', sub: backWarehouse?.region, amber: away(backWarehouse), empty: !backWarehouse }]}
+            open={editBack}
+            onToggle={active.length > 1 ? () => setEditBack((x) => !x) : undefined}
+          >
+            <Chips label="Back into warehouse" value={backWarehouse?.id || ''} onChange={(id) => { setBackPick(id); setEditBack(false); }} options={warehouseOptions(active)} />
+          </PlaceLine>
+        )}
+
+        <ProductPicker rows={rows} value={qty} onChange={pick} cap stock={fromLoc ? stock : null} onlyHeld={fromRep}
+          locked={fromRep && !fromRepId ? 'Choose the rep first' : ''}
+          placeName={fromName || 'here'} loading={productsLoading} emptyText="No products yet." />
+
+        <Field label="Notes"><Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" /></Field>
       </div>
     </Modal>
   );
