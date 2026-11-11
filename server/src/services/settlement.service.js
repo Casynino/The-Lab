@@ -1069,9 +1069,12 @@ async function selfExtend(id, actor) {
   const newDeadline = dayjs(previous).add(SELF_EXTENSION_HOURS, 'hour').toDate();
 
   const takenAt = new Date();
-  const [updated] = await prisma.$transaction([
-    prisma.settlement.update({
-    where: { id },
+  // Claimed on the state it was read in (no extension yet, the same deadline and status), with its history
+  // row in the same commit: two taps at once used to both pass the checks above and both write, so the
+  // history held the 96 hours twice and "undo all" then took twice that back (audit #95, 11 Nov 2026).
+  const claimed = await prisma.$transaction(async (tx) => {
+    const claim = await tx.settlement.updateMany({
+    where: { id, selfExtendedAt: null, status: s.status, deadlineAt: s.deadlineAt },
     data: {
       deadlineAt: newDeadline,
       preExtensionDeadline: previous,
@@ -1088,9 +1091,9 @@ async function selfExtend(id, actor) {
       // Re-arm the 24h/6h/1h reminders against the new deadline.
       reminderStage: 0,
     },
-    include: INCLUDE_HISTORY,
-  }),
-    prisma.settlementDeadlineChange.create({
+  });
+    if (claim.count !== 1) return false;
+    await tx.settlementDeadlineChange.create({
       data: {
         settlementId: id,
         kind: 'SELF_EXTENSION',
@@ -1101,8 +1104,17 @@ async function selfExtend(id, actor) {
         byName: s.salesRep?.user?.name || null,
         createdAt: takenAt,
       },
-    }),
-  ]);
+    });
+    return true;
+  });
+  if (!claimed) {
+    const now = await prisma.settlement.findUnique({ where: { id }, select: { selfExtendedAt: true } });
+    throw ApiError.conflict(now?.selfExtendedAt
+      ? 'This order has already been extended — the extension can only be used once'
+      : 'This order changed while you were looking at it — open it again and check its deadline');
+  }
+  // Read after the commit, so the history on the reply includes this extension.
+  const updated = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY });
 
   const penalty = require('./penalty.service');
   const when = dayjs(newDeadline).utc().add(3, 'hour').format('D MMM YYYY, HH:mm');
@@ -1147,9 +1159,7 @@ async function selfExtend(id, actor) {
     }));
   } catch { /* WhatsApp is optional — never block the extension on it */ }
 
-  // Read again: the row above was written alongside this extension, so the
-  // history on the reply would otherwise be one change short.
-  return decorate(await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY }));
+  return decorate(updated);
 }
 
 // Extend (or set) the deadline for an open order. Admins use this when a rep
@@ -1180,9 +1190,11 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
 
   const changedAt = new Date();
   const shiftSeconds = Math.round((newDeadline - new Date(s.deadlineAt)) / 1000);
-  const [updated] = await prisma.$transaction([
-    prisma.settlement.update({
-    where: { id },
+  // Claimed on the deadline and status it was read with, with its history row in the same commit: a double
+  // submit used to write the change twice, and "undo all" then took the time back twice (audit #95).
+  const claimed = await prisma.$transaction(async (tx) => {
+    const claim = await tx.settlement.updateMany({
+    where: { id, status: s.status, deadlineAt: s.deadlineAt },
     data: {
       deadlineAt: newDeadline,
       status: newStatus,
@@ -1197,9 +1209,9 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
       // A fresh deadline is a fresh fine clock.
       penaltyFrom: null,
     },
-    include: INCLUDE_HISTORY,
-  }),
-    prisma.settlementDeadlineChange.create({
+  });
+    if (claim.count !== 1) return false;
+    await tx.settlementDeadlineChange.create({
       data: {
         settlementId: id,
         kind: 'ADMIN_EXTENSION',
@@ -1210,8 +1222,13 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
         byName: actor?.name || null,
         createdAt: changedAt,
       },
-    }),
-  ]);
+    });
+    return true;
+  });
+  if (!claimed) {
+    throw ApiError.conflict('This order changed while you were looking at it — open it again and check the deadline');
+  }
+  const updated = await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY });
 
   // Tell the rep — in-app AND (via the mirror) on their WhatsApp. The new
   // deadline sits in the TITLE so each extension is a distinct message
@@ -1230,7 +1247,7 @@ async function extendDeadline(id, { deadlineAt, additionalHours }, actor) {
     }).catch(() => {});
   }
 
-  return decorate(await prisma.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY }));
+  return decorate(updated);
 }
 
 // Take back time that was given by mistake — the last change, or every change

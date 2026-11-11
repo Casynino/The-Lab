@@ -144,6 +144,15 @@ const settlementSettleMany = {
   }),
 };
 
+// More time on an order: a new deadline, or hours to add. Checked here so a bad value is a clear answer
+// instead of an Invalid Date reaching the database (audit #126). Up to a year of hours at a time.
+const settlementExtendDeadline = {
+  body: z.object({
+    deadlineAt: z.string().datetime({ offset: true }).optional(),
+    additionalHours: z.number().positive().max(24 * 365).optional(),
+  }).refine((b) => b.deadlineAt || b.additionalHours, { message: 'Provide deadlineAt or additionalHours' }),
+};
+
 // --- Commissions -----------------------------------------------------------
 const withdrawRequest = { body: z.object({ amount: money, notes: z.string().max(500).optional() }) };
 const withdrawDecide = { body: z.object({ action: z.enum(['APPROVE', 'REJECT', 'PAY']) }) };
@@ -187,7 +196,7 @@ module.exports = {
   supplierCreate, supplierUpdate, supplierQuery,
   poCreate, poUpdate, poReceive, poQuery,
   stockRequestCreate, stockRequestUpdate, stockRequestApprove, stockRequestReject, stockRequestQuery,
-  settlementQuery, settlementSettle, settlementSettleBoxes, settlementSettleMany,
+  settlementQuery, settlementSettle, settlementSettleBoxes, settlementSettleMany, settlementExtendDeadline,
   withdrawRequest, withdrawDecide, withdrawalQuery,
   dailyReportSubmit, dailyReportQuery,
 };
