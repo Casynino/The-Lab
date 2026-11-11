@@ -190,10 +190,13 @@ test('daily message without a PDF (it failed to build) still carries the numbers
   assert.match(text, /Net Profit: TSh 1,730,000/);
 });
 
-test('the archive lists weekly and monthly by default; a daily report every day must not bury them', async () => {
+// Rule changed 11 Nov 2026 (Nino: "why only weekly and monthly — we should see the daily ones too"): by
+// default the archive lists EVERY report, with room for a year of dailies; a kind still narrows it.
+test('the archive lists every report by default, dailies included; a kind narrows it', async () => {
   const archive = require('../src/services/reportArchive.service');
   await archive.list({});
-  assert.deepEqual(prismaStub.lastArchiveQuery.where.type, { not: 'DAILY' });
+  assert.equal(prismaStub.lastArchiveQuery.where.type, undefined);
+  assert.ok(prismaStub.lastArchiveQuery.take >= 300, 'room for a year of daily reports');
   await archive.list({ type: 'DAILY' });
   assert.equal(prismaStub.lastArchiveQuery.where.type, 'DAILY');
 });
