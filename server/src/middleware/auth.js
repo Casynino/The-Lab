@@ -43,6 +43,11 @@ const authenticate = asyncHandler(async (req, _res, next) => {
   if (user.role.name === 'SALES_REP' && !user.salesRep) {
     throw ApiError.forbidden('This account has no sales-rep profile yet. Ask ZELab to finish setting it up.');
   }
+  // A rep suspended from his rep profile stops at once, on every request (audit #101). 401, like a
+  // deactivated login: the app then tries to renew, is refused too, and goes back to the sign-in page.
+  if (user.role.name === 'SALES_REP' && user.salesRep.isActive === false) {
+    throw ApiError.unauthorized('Your sales-rep account is suspended');
+  }
   // Reps on phones only — on every request, so a session cannot be carried to a computer or tablet.
   assertDeviceAllowed(user.role.name, req.headers, ApiError);
 

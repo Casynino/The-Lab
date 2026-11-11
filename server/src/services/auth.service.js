@@ -49,6 +49,22 @@ function assertRepProfile(user) {
   }
 }
 
+// A rep suspended from his rep profile (Sales reps > Suspend) is refused like a deactivated login. Only rep
+// accounts: the flag belongs to the rep profile, never to the owner or staff (audit #101, 11 Nov 2026).
+function repSuspended(user) {
+  return !!(user.role && user.role.name === 'SALES_REP' && user.salesRep && user.salesRep.isActive === false);
+}
+
+// An email with no account is still checked against a password hash of the same cost, made once, so it
+// takes as long to refuse as a wrong password and the answer time does not tell which emails exist (#131).
+let noAccountHash = null;
+async function passwordMatches(user, password) {
+  if (user) return bcrypt.compare(password, user.passwordHash);
+  if (!noAccountHash) noAccountHash = await bcrypt.hash('no account has this password', env.bcryptSaltRounds);
+  await bcrypt.compare(password, noAccountHash);
+  return false;
+}
+
 async function login(email, password, headers = {}) {
   const user = await prisma.user.findUnique({
     where: { email: email.toLowerCase().trim() },
@@ -59,15 +75,15 @@ async function login(email, password, headers = {}) {
     },
   });
 
-  // Constant-ish failure path: do not reveal whether the email exists.
-  if (!user) throw ApiError.unauthorized('Invalid email or password');
-  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated');
-
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  // The password first, for every email: a wrong one gets the same answer whether the account exists, is
+  // deactivated or suspended — those are told only to someone who knows the password (#131).
+  const valid = await passwordMatches(user, password);
   if (!valid) throw ApiError.unauthorized('Invalid email or password');
+  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated');
 
   // Only after the password is right, so the device rule never tells a stranger which emails are reps.
   assertRepProfile(user);
+  if (repSuspended(user)) throw ApiError.forbidden('Your sales-rep account is suspended. Ask ZELab to reactivate it.');
   assertDeviceAllowed(user.role.name, headers, ApiError);
 
   await prisma.user.update({
@@ -88,11 +104,12 @@ async function refresh(refreshToken, headers = {}) {
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.sub },
-    include: { role: { include: { permissions: true } }, salesRep: { select: { id: true } } },
+    include: { role: { include: { permissions: true } }, salesRep: { select: { id: true, isActive: true } } },
   });
   if (!user || !user.isActive) throw ApiError.unauthorized('Account not found or deactivated');
   if ((decoded.sv || 0) !== (user.sessionVersion || 0)) throw ApiError.unauthorized('Your session has ended. Please sign in again.');
   assertRepProfile(user);
+  if (repSuspended(user)) throw ApiError.unauthorized('Your sales-rep account is suspended');
   assertDeviceAllowed(user.role.name, headers, ApiError);
 
   return { tokens: issueTokens(user) };

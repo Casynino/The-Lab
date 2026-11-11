@@ -445,7 +445,8 @@ function ForgiveModal({ penalty, onClose }) {
 
 // Permanent fine transactions (Commission/Wallet history). Each row is a real
 // deduction record, like any other financial transaction.
-function FinesHistory({ admin }) {
+// canForgive: only the owner forgives (the server refuses staff), so staff see the fines without the button.
+function FinesHistory({ admin, canForgive = admin }) {
   const [forgiving, setForgiving] = useState(null);
   const [showForgiven, setShowForgiven] = useState(false);
   const [page, setPage] = useState(1);
@@ -523,7 +524,7 @@ function FinesHistory({ admin }) {
         <TD className="text-faint">{waived && p.waivedAt ? `${formatDateTime(p.appliedAt)} · forgiven ${formatDateTime(p.waivedAt)}` : formatDateTime(p.appliedAt)}</TD>
         {admin && (
           <TD>
-            {!waived && (
+            {!waived && canForgive && (
               <button
                 onClick={() => setForgiving(p)}
                 className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
@@ -921,7 +922,8 @@ function SectionTabs({ value, onChange, tabs }) {
 // Rates are added, never edited. A new rate must start in the future, which is
 // what guarantees a settled box can never be re-priced — so the form offers a
 // start date rather than an "edit" button, and says why.
-function CommissionRateSettings() {
+// canEdit: only the owner adds or removes a rate (the server refuses staff); staff see the rates only.
+function CommissionRateSettings({ canEdit }) {
   const qc = useQueryClient();
   const [brandId, setBrandId] = useState('');
   const [perBox, setPerBox] = useState('');
@@ -965,6 +967,7 @@ function CommissionRateSettings() {
   return (
     <Card className="mt-6">
       <CardHeader title="Commission rates" subtitle="What one settled box earns, per brand. Add a rate to change it from a future date." />
+      {canEdit && (
       <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
         <Field label="Brand" hint="Leave blank for all other brands">
           <Select value={brandId} onChange={(e) => setBrandId(e.target.value)}>
@@ -982,6 +985,7 @@ function CommissionRateSettings() {
           <Button className="w-full" loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>Save rate</Button>
         </div>
       </div>
+      )}
       <Table>
         <THead><TR><TH>Brand</TH><TH className="text-right">Per box</TH><TH>Starts</TH><TH>Note</TH><TH /></TR></THead>
         <TBody>
@@ -999,7 +1003,7 @@ function CommissionRateSettings() {
                 <TD className="text-faint">{r.note || '—'}</TD>
                 <TD>
                   {/* Only a rate that has not priced anything yet can be taken back. */}
-                  {future && (
+                  {canEdit && future && (
                     <Button variant="ghost" className="px-2 py-1 text-xs text-rose-600" onClick={() => remove.mutate(r.id)}>Remove</Button>
                   )}
                 </TD>
@@ -1017,7 +1021,8 @@ function CommissionRateSettings() {
 }
 
 // ── Admin: sales bonus ───────────────────────────────────────────────────────
-function BonusSettings() {
+// canEdit: only the owner sets rules and pays bonuses (the server refuses staff); staff see the figures only.
+function BonusSettings({ canEdit }) {
   const qc = useQueryClient();
   const [target, setTarget] = useState('');
   const [amount, setAmount] = useState('');
@@ -1075,6 +1080,7 @@ function BonusSettings() {
   return (
     <Card className="mt-6">
       <CardHeader title="Sales bonus" subtitle="Reach a sales target, earn a bonus. Kept entirely separate from box commission." />
+      {canEdit && (
       <div className="grid grid-cols-1 gap-3 border-b border-border p-4 sm:grid-cols-4">
         <Field label="Sales target" required><NumberInput min="0" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="10000000" /></Field>
         <Field label="Bonus amount" required><NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="500000" /></Field>
@@ -1090,6 +1096,7 @@ function BonusSettings() {
           )}
         </div>
       </div>
+      )}
 
       <Table>
         <THead><TR><TH>Target</TH><TH className="text-right">Bonus</TH><TH>Starts</TH><TH>Awards</TH><TH /></TR></THead>
@@ -1101,6 +1108,7 @@ function BonusSettings() {
               <TD className="text-muted">{formatDateTime(r.effectiveFrom)}</TD>
               <TD>{r._count?.awards ?? 0}</TD>
               <TD>
+                {canEdit && (
                 <div className="flex justify-end gap-1">
                   {/* Figures are only editable while nothing has been earned under them. */}
                   {(r._count?.awards ?? 0) === 0 && (
@@ -1110,6 +1118,7 @@ function BonusSettings() {
                     {r.isActive ? 'Switch off' : 'Switch on'}
                   </Button>
                 </div>
+                )}
               </TD>
             </TR>
           ))}
@@ -1144,7 +1153,7 @@ function BonusSettings() {
                     <div className="flex justify-end gap-1">
                       {/* Every tier they have passed can be paid — the rep may have
                           chosen to hold out, so the choice stays open here too. */}
-                      {(i.tiers || []).filter((t) => t.reached).map((t) => (
+                      {canEdit && (i.tiers || []).filter((t) => t.reached).map((t) => (
                         <Button
                           key={t.ruleId}
                           className="px-2 py-1 text-xs"
@@ -1437,6 +1446,9 @@ function RunSwitch({ value, onChange }) {
 
 function AdminView() {
   const qc = useQueryClient();
+  // Shown to staff too. Fines, deductions, rates and bonuses are the owner's (the server refuses staff), so
+  // staff see them without the buttons; withdrawals stay as they are.
+  const isAdmin = useAuth().user?.role === ROLES.ADMIN;
   const [deducting, setDeducting] = useState(false);
   const [tab, setTab] = useState('balances');
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
@@ -1500,6 +1512,7 @@ function AdminView() {
         <StatCard label="Total penalties" value={formatCurrency(summary.totals.penalties)} icon={AlertTriangle} tone="rose" />
       </div>
 
+      {isAdmin && (
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <Button variant="secondary" loading={applyPenalties.isPending} onClick={() => applyPenalties.mutate()}>
           <AlertTriangle className="h-4 w-4" /> Apply daily penalties
@@ -1508,6 +1521,7 @@ function AdminView() {
           <Coins className="h-4 w-4" /> Deduct commission
         </Button>
       </div>
+      )}
       {deducting && <DeductModal reps={summary?.items || []} onClose={() => setDeducting(false)} />}
       {openWd && (
         <WithdrawalDetail
@@ -1537,7 +1551,7 @@ function AdminView() {
 
       {tab === 'balances' && <BalancesTable items={summary.items} bonus={bonusRun?.items} />}
 
-      {tab === 'penalties' && <FinesHistory admin />}
+      {tab === 'penalties' && <FinesHistory admin canForgive={isAdmin} />}
 
       {tab === 'payouts' && (
       <Card className="mt-4">
@@ -1608,8 +1622,8 @@ function AdminView() {
 
       {tab === 'rules' && (
         <>
-          <CommissionRateSettings />
-          <BonusSettings />
+          <CommissionRateSettings canEdit={isAdmin} />
+          <BonusSettings canEdit={isAdmin} />
         </>
       )}
     </>

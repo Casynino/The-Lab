@@ -7,6 +7,8 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { formatCurrency, formatNumber, fromNow } from '@/lib/format';
 import RegionPicker from '@/components/RegionPicker';
 import { repRegions } from '@/lib/repRegions';
+import { useAuth } from '@/context/AuthContext';
+import { ROLES } from '@/lib/constants';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Button, Modal, Field, Select, Input, NumberInput, Pagination,
 } from '@/components/ui';
@@ -116,6 +118,8 @@ export default function SalesReps() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  // Making someone a rep is the owner's (the server refuses staff, and its account list is owner-only).
+  const isAdmin = useAuth().user?.role === ROLES.ADMIN;
 
   const { data, isLoading } = useQuery({
     queryKey: ['sales-reps', { page }],
@@ -155,7 +159,7 @@ export default function SalesReps() {
   return (
     <div>
       <PageHeader title="Sales Representatives" subtitle="Who is holding your stock, and who is late with it.">
-        <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>
+        {isAdmin && <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>}
       </PageHeader>
 
       {reps.length > 0 && (
@@ -180,7 +184,7 @@ export default function SalesReps() {
       {isLoading ? (
         <Card><PageSpinner /></Card>
       ) : !reps.length ? (
-        <Card><EmptyState title="No sales reps" icon={UserCog} action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>} /></Card>
+        <Card><EmptyState title="No sales reps" icon={UserCog} action={isAdmin && <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>} /></Card>
       ) : (
         <>
           {/* Four things per card and nothing else: who, where they stand,

@@ -197,6 +197,8 @@ export default function Products() {
 
 function ProductsCatalogue() {
   const qc = useQueryClient();
+  // Creating, editing and removing products is the owner's (the server refuses staff); staff see the list.
+  const isOwner = useAuth().role === ROLES.ADMIN;
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [brandId, setBrandId] = useState('');
@@ -222,7 +224,7 @@ function ProductsCatalogue() {
   return (
     <div>
       <PageHeader title="Products" subtitle="Catalog, pricing and multi-level packaging.">
-        <Button onClick={() => setModal({ open: true, editing: null })} disabled={!units.length}><Plus className="h-4 w-4" /> New product</Button>
+        {isOwner && <Button onClick={() => setModal({ open: true, editing: null })} disabled={!units.length}><Plus className="h-4 w-4" /> New product</Button>}
       </PageHeader>
 
       {/* What the catalogue holds, before the list of it. Counted over the
@@ -288,7 +290,7 @@ function ProductsCatalogue() {
             <EmptyState title="No products match" message="Nothing matches this search or filter. Try another, or clear it." icon={Package} />
           ) : (
             <EmptyState title="No products" message="Create your first product to start tracking stock." icon={Package}
-              action={<Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New product</Button>} />
+              action={isOwner && <Button onClick={() => setModal({ open: true, editing: null })}><Plus className="h-4 w-4" /> New product</Button>} />
           )
         ) : (
           <>
@@ -324,10 +326,10 @@ function ProductsCatalogue() {
                     </TD>
                     <TD><Badge className={p.isActive ? 'bg-emerald-500/15 text-emerald-300' : 'bg-white/[0.06] text-muted'}>{p.isActive ? 'Active' : 'Inactive'}</Badge></TD>
                     <TD>
-                      <div className="flex justify-end gap-1">
+                      <div className="flex justify-end gap-1">{isOwner && <>
                         <button title="Edit" className="cursor-pointer px-2 py-1 text-faint transition hover:text-brand-600" onClick={() => setModal({ open: true, editing: p })}><Pencil className="h-4 w-4" /></button>
                         <button title="Remove" className="cursor-pointer px-2 py-1 text-faint transition hover:text-rose-400" onClick={() => { if (confirm(`Remove ${p.name}?`)) del.mutate(p.id); }}><Trash2 className="h-4 w-4" /></button>
-                      </div>
+                      </>}</div>
                     </TD>
                   </TR>
                 ))}
