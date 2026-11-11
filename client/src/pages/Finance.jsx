@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { useProducts, useBrands } from '@/lib/hooks';
+import { useAuth } from '@/context/AuthContext';
+import { ROLES } from '@/lib/constants';
 import ReportsPage from '@/pages/Reports';
 import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
@@ -1111,6 +1113,8 @@ function Accounts({ onQuick }) {
   const [transferOpen, setTransferOpen] = useState(false);
   const [correctOpen, setCorrectOpen] = useState(false);
   const [viewing, setViewing] = useState(null); // account whose statement is open
+  // Transfers and balance corrections are the owner's (the server refuses staff); staff do not see them.
+  const isAdmin = useAuth().user?.role === ROLES.ADMIN;
   const { data: accounts = [], isLoading } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   if (isLoading) return <PageSpinner />;
   // Wallets hold the money; the Commission account holds a record of money the
@@ -1131,8 +1135,8 @@ function Accounts({ onQuick }) {
           <div className="hidden text-[11px] text-faint sm:block">What your accounts are holding right now.</div>
         </div>
         <div className="tab-row sm:flex sm:gap-2">
-          <Button variant="secondary" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-4 w-4" /> Transfer</Button>
-          <Button variant="secondary" onClick={() => setCorrectOpen(true)}><Scale className="h-4 w-4" /> Correct balance</Button>
+          {isAdmin && <Button variant="secondary" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-4 w-4" /> Transfer</Button>}
+          {isAdmin && <Button variant="secondary" onClick={() => setCorrectOpen(true)}><Scale className="h-4 w-4" /> Correct balance</Button>}
           <Button variant="secondary" onClick={() => onQuick('income')}><ArrowDownLeft className="h-4 w-4" /> Income</Button>
           <Button variant="secondary" onClick={() => onQuick('expense')}><ArrowUpRight className="h-4 w-4" /> Expense</Button>
           <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Account</Button>
@@ -2107,6 +2111,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
   const [payingBalance, setPayingBalance] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
   const [returning, setReturning] = useState(false);
+  const isAdmin = useAuth().user?.role === ROLES.ADMIN; // returning goods lowers a bill: owner only, as on the server
   const { data, isLoading } = useQuery({
     queryKey: ['finance', 'supplier', supplierId],
     queryFn: async () => unwrap(await api.get(`/finance/suppliers/${supplierId}`)).data,
@@ -2124,7 +2129,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
           <>
             <Button variant="secondary" onClick={onClose}>Close</Button>
             <Button variant="secondary" onClick={() => setPurchasing(true)}><Package className="h-4 w-4" /> New purchase</Button>
-            {data.totals.outstanding > 0 && (
+            {isAdmin && data.totals.outstanding > 0 && (
               <Button variant="secondary" onClick={() => setReturning(true)}><Undo2 className="h-4 w-4" /> Return goods</Button>
             )}
             {data.totals.outstanding > 0 && (
