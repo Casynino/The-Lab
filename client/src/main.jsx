@@ -40,9 +40,10 @@ window.addEventListener('vite:preloadError', (event) => {
 window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('chunkReloadAttempted'), 15000));
 
 // Back closes the window on top instead of leaving the page, and the app keeps each page's scroll place
-// itself. Both before the router starts: its history listener has to come after ours (lib/backToClose.js).
-installBackToClose();
+// itself. Both before the router starts: the entry needs its own key before the router reads it
+// (lib/scrollMemory.js), and the router's history listener has to come after ours (lib/backToClose.js).
 installScrollMemory();
+installBackToClose();
 
 // Start this address's page file now, alongside the session check, instead of
 // after it. The role in the stored token only picks WHICH file (the owner's

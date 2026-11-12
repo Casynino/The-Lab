@@ -22,7 +22,7 @@ import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { pageQueries, prefetchRoute, warmUp } from '@/lib/pageQueries';
 import { Modal, Button, Field, Input } from '@/components/ui';
 import { useBackToClose } from '@/lib/useBackToClose';
-import { remember, recall, returnTo } from '@/lib/scrollMemory';
+import { remember, arrive } from '@/lib/scrollMemory';
 
 /* A new page starts at the top; Back and Forward go back to where that page was (audit 12 Nov 2026,
    navigation-3). Keyed on the router's entry, so a tab or a filter written into the address with replace
@@ -31,8 +31,17 @@ function useScrollMemory() {
   const location = useLocation();
   const navType = useNavigationType();
   const at = useRef(null);
-  const path = useRef(null);
+  const from = useRef(null);
   useEffect(() => {
+    // The browser's own restore is off only while the app's pages are on screen: the sign-in page and
+    // /nino keep it (navigation-3b).
+    let was = null;
+    try {
+      was = window.history.scrollRestoration;
+      window.history.scrollRestoration = 'manual';
+    } catch {
+      /* an old browser: it keeps its own restore */
+    }
     let frame = 0;
     const onScroll = () => {
       if (frame) return;
@@ -47,15 +56,18 @@ function useScrollMemory() {
     return () => {
       window.removeEventListener('scroll', onScroll);
       window.cancelAnimationFrame(frame);
+      try {
+        if (was) window.history.scrollRestoration = was;
+      } catch {
+        /* as above */
+      }
     };
   }, []);
   useLayoutEffect(() => {
-    const before = path.current;
     at.current = location.key;
-    path.current = location.pathname;
-    if (navType === 'POP') return returnTo(recall(location.key) ?? 0);
-    if (location.pathname !== before) window.scrollTo(0, 0);
-    return undefined;
+    const stop = arrive({ key: location.key, pathname: location.pathname, navType, from: from.current });
+    from.current = { key: location.key, pathname: location.pathname };
+    return stop;
   }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 

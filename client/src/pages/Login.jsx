@@ -12,6 +12,7 @@ import { Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
 import { RESTRICTED_KEY } from '@/lib/api';
 import HowItWorksVideo from '@/components/HowItWorksVideo';
+import { useBackToClose } from '@/lib/useBackToClose';
 import './login.css';
 
 /**
@@ -159,6 +160,8 @@ function Gate({ children, defaultOpen = false }) {
     timer.current = window.setTimeout(() => { setOpen(false); setClosing(false); }, 160);
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // Phone/browser Back closes the card, like every other window, instead of leaving the site (navigation-1b).
+  useBackToClose(open, close, { guard: false });
 
   /* Open the card AND put the cursor in the email box, in the same tap. That is
      what makes the phone offer the saved login straight away — the suggestion

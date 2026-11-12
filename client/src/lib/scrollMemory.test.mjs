@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  remember, recall, restoreSpots, keptSpots, forgetSpotsForTests, returnTo,
+  remember, recall, restoreSpots, keptSpots, forgetSpotsForTests, returnTo, arrive, installScrollMemory, keyFirstEntry,
 } from './scrollMemory.js';
 
 test('a page entry keeps its own place; an unknown one has none', () => {
@@ -63,4 +63,74 @@ test('the person scrolling first wins', () => {
   p.win.height = 3000;
   assert.equal(p.frame(), false);
   assert.equal(p.win.scrollY, 200);
+});
+
+// History as a freshly loaded page has it: no state, or the state a reload keeps.
+function freshPage(state = null) {
+  const listeners = new Map();
+  const store = new Map();
+  return {
+    history: {
+      state,
+      replaceState(next) { this.state = JSON.parse(JSON.stringify(next)); },
+    },
+    sessionStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) },
+    addEventListener: (t, fn) => listeners.set(t, fn),
+    document: { addEventListener() {} },
+  };
+}
+
+test('two fresh loads in one tab never share a place; a reload keeps its own', () => {
+  forgetSpotsForTests();
+  const a = freshPage();
+  const b = freshPage({ idx: 0 });
+  installScrollMemory(a);
+  installScrollMemory(b);
+  assert.ok(a.history.state.key && b.history.state.key);
+  assert.notEqual(a.history.state.key, b.history.state.key);
+  assert.equal(b.history.state.idx, 0, 'whatever else the entry holds stays');
+  assert.equal(a.history.scrollRestoration, undefined, 'the browser restore is left to Layout');
+  const reload = freshPage({ key: 'kept1', idx: 3 });
+  installScrollMemory(reload);
+  assert.equal(reload.history.state.key, 'kept1');
+  const first = a.history.state.key;
+  keyFirstEntry(a);
+  assert.equal(a.history.state.key, first, 'keyed once');
+  // React Router's name for an unkeyed entry is never a place.
+  remember('default', 1200);
+  assert.equal(recall('default'), null);
+});
+
+function pageWindow(height = 3000) {
+  const p = growingPage(height);
+  p.win.document = { body: { style: {} } };
+  return p;
+}
+
+test('a page number written over the entry keeps its place for Back, without a scroll', () => {
+  forgetSpotsForTests();
+  const { win } = pageWindow();
+  arrive({ key: 'k1', pathname: '/sales', navType: 'POP', from: null }, win);
+  win.scrollTo(0, 480);
+  remember('k1', 480);
+  // Next page: /sales?page=2 replaces the entry, nobody scrolls.
+  arrive({ key: 'k2', pathname: '/sales', navType: 'REPLACE', from: { key: 'k1', pathname: '/sales' } }, win);
+  assert.equal(win.scrollY, 480, 'the same page does not jump');
+  assert.equal(recall('k2'), 480);
+  // Another page starts at the top.
+  arrive({ key: 'k3', pathname: '/customers', navType: 'PUSH', from: { key: 'k2', pathname: '/sales' } }, win);
+  assert.equal(win.scrollY, 0);
+  // Back: page 2, where it was.
+  arrive({ key: 'k2', pathname: '/sales', navType: 'POP', from: { key: 'k3', pathname: '/customers' } }, win);
+  assert.equal(win.scrollY, 480);
+});
+
+test('with the phone menu pinning the page, the last kept place is carried over', () => {
+  forgetSpotsForTests();
+  const { win } = pageWindow();
+  remember('k1', 640);
+  win.document.body.style.position = 'fixed';
+  win.scrollY = 0;
+  arrive({ key: 'k2', pathname: '/profile', navType: 'PUSH', from: { key: 'k1', pathname: '/profile' } }, win);
+  assert.equal(recall('k2'), 640);
 });

@@ -13,7 +13,8 @@ const MAX = 60;
 const spots = new Map();
 
 export function remember(key, y) {
-  if (!key || !Number.isFinite(y)) return;
+  // 'default' is React Router's name for an entry with no key of its own: never a place (keyFirstEntry).
+  if (!key || key === 'default' || !Number.isFinite(y)) return;
   spots.delete(key); // newest last, so the oldest go first
   spots.set(key, Math.max(0, Math.round(y)));
   while (spots.size > MAX) spots.delete(spots.keys().next().value);
@@ -38,13 +39,30 @@ export function forgetSpotsForTests() {
   spots.clear();
 }
 
+/*
+ * React Router calls the first entry of every freshly loaded page 'default' and never writes a real key into
+ * history.state, so every fresh load in a tab (a typed address, a bookmark, a link opened in the installed
+ * app, Back across pages without the browser's cache) would share one place (navigation-3). So the entry gets
+ * a key of its own before the router starts; the router reads it as location.key and a reload keeps it.
+ */
+export function keyFirstEntry(win = globalThis.window) {
+  try {
+    const state = win.history.state;
+    const kept = state && typeof state === 'object' ? state : {};
+    if (kept.key) return;
+    win.history.replaceState({ ...kept, key: Math.random().toString(36).slice(2, 10) }, '');
+  } catch {
+    /* no history to write to: the entry stays 'default', which keeps no place */
+  }
+}
+
+/*
+ * Keys the entry and loads the kept places. The browser's own restore is switched off only while the app's
+ * pages are on screen (Layout's useScrollMemory), so the sign-in page and /nino keep it (navigation-3b).
+ */
 export function installScrollMemory(win = globalThis.window) {
   if (!win?.history) return;
-  try {
-    win.history.scrollRestoration = 'manual';
-  } catch {
-    /* an old browser: it keeps its own restore, which is what we had */
-  }
+  keyFirstEntry(win);
   try {
     restoreSpots(win.sessionStorage.getItem(STORE));
   } catch {
@@ -61,6 +79,25 @@ export function installScrollMemory(win = globalThis.window) {
   win.document?.addEventListener('visibilitychange', () => {
     if (win.document.visibilityState === 'hidden') save();
   });
+}
+
+/**
+ * The router has landed on an entry. Back and Forward (POP) go to its kept place; a new page starts at the
+ * top; a new entry on the same page (a tab, chip or page number written into the address) stays where the
+ * page is and keeps that place at once, so Back to it comes here even if nobody scrolls (navigation-6).
+ * `from` is the entry before ({ key, pathname }), or null. Returns a stop function, or undefined.
+ */
+export function arrive({ key, pathname, navType, from }, win = globalThis.window) {
+  if (navType === 'POP') return returnTo(recall(key) ?? 0, win);
+  if (!from || pathname !== from.pathname) {
+    win.scrollTo(0, 0);
+    return undefined;
+  }
+  // The phone menu pins the page (position: fixed) and the window reads 0 meanwhile: use the last place.
+  const pinned = win.document?.body?.style?.position === 'fixed';
+  const y = pinned ? recall(from.key) : win.scrollY;
+  if (y != null) remember(key, y);
+  return undefined;
 }
 
 const STOPS = ['wheel', 'touchstart', 'pointerdown', 'keydown'];

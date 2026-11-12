@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { openLayer, closeLayer, isTopLayer } from './backToClose';
+import { watchSaves } from './busyLock';
 
 /**
  * While `open`, this window owns a history entry, so phone/browser Back closes it (lib/backToClose.js).
@@ -8,7 +10,8 @@ import { openLayer, closeLayer, isTopLayer } from './backToClose';
  * It also says whether this window is saving: a save (any react-query mutation) started while this window
  * was the one on top keeps it open until the server has answered. Its X, Escape, Back and the buttons in
  * its footer do nothing meanwhile (audit rep-app-10: a Withdraw closed mid-send still landed, with nothing
- * on screen to say so). `guard: false` for a menu or a panel that never saves.
+ * on screen to say so) - for 25 seconds at most, so a request stuck on a bad connection cannot trap the
+ * person (lib/busyLock.js). `guard: false` for a menu or a panel that never saves.
  */
 export function useBackToClose(open, onClose, { guard = true } = {}) {
   const closeRef = useRef(onClose);
@@ -22,18 +25,13 @@ export function useBackToClose(open, onClose, { guard = true } = {}) {
     const layer = openLayer({ close: () => closeRef.current?.(), busy: () => busyRef.current });
     let stop = () => {};
     if (guard) {
-      const mine = new Set();
-      stop = qc.getMutationCache().subscribe((event) => {
-        const m = event?.mutation;
-        if (!m) return;
-        if (event.type === 'added' && isTopLayer(layer)) mine.add(m);
-        if (!mine.has(m)) return;
-        if (event.type === 'removed') mine.delete(m);
-        const now = [...mine].some((x) => x.state.status === 'pending');
-        if (now !== busyRef.current) {
+      stop = watchSaves(qc.getMutationCache(), {
+        isOnTop: () => isTopLayer(layer),
+        onChange: (now) => {
           busyRef.current = now;
           setBusy(now);
-        }
+        },
+        onExpire: () => toast('Still sending — check before you try again', { duration: 6000 }),
       });
     }
     return () => {

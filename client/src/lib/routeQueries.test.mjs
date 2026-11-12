@@ -17,9 +17,12 @@ test('each person is sent ahead to what their own page asks for', () => {
   assert.deepEqual(names(routeQueries('/finance', '?tab=accounts', 'ADMIN')), ['financeAccounts', 'financeCategories', 'financeLatest']);
 });
 
-test('a rep card on Commissions reads ahead its own side sheet, for staff only', () => {
-  assert.deepEqual(routeQueries('/commissions', '?rep=cm9', 'ADMIN'), [['repSheetProfile', 'cm9'], ['repSheetWithdrawals', 'cm9'], ['repFines', 'cm9']]);
-  assert.deepEqual(names(routeQueries('/commissions', '?rep=cm9', 'WAREHOUSE_STAFF')), ['repSheetProfile', 'repSheetWithdrawals', 'repFines']);
+test('a rep card on Commissions reads ahead the board and its own side sheet, for staff only', () => {
+  const board = routeQueries('/commissions', '', 'ADMIN');
+  assert.deepEqual(routeQueries('/commissions', '?rep=cm9', 'ADMIN'), [...board, ['repSheetProfile', 'cm9'], ['repSheetWithdrawals', 'cm9'], ['repFines', 'cm9']]);
+  assert.deepEqual(names(routeQueries('/commissions', '?rep=cm9', 'WAREHOUSE_STAFF')).slice(-3), ['repSheetProfile', 'repSheetWithdrawals', 'repFines']);
+  // The same sheet over Finance's Commissions tab.
+  assert.deepEqual(names(routeQueries('/finance', '?tab=commissions&rep=cm9', 'ADMIN')).slice(2), names(routeQueries('/commissions', '?rep=cm9', 'ADMIN')));
   // A rep asking for someone else's sheet is sent to his own wallet's answers, never another rep's.
   assert.deepEqual(names(routeQueries('/commissions', '?rep=cm9', 'SALES_REP')), ['commissionsInsights', 'commissionsMine', 'withdrawalsMine', 'bonusMe']);
 });
@@ -36,6 +39,17 @@ test('nobody, or an unknown role, is sent nowhere', () => {
   assert.deepEqual(routeQueries('/', '', undefined), []);
   assert.deepEqual(routeQueries('/settlements', '', 'SOMETHING'), []);
   assert.deepEqual(warmPaths(null), []);
+});
+
+test('the page number and the chips in the address are read ahead, as the page reads them', () => {
+  assert.deepEqual(routeQueries('/sales', '?page=3&type=CREDIT&status=UNPAID', 'ADMIN'), [['sales', { page: 3, type: 'CREDIT', status: 'UNPAID' }]]);
+  assert.deepEqual(routeQueries('/sales', '?page=0&type=GIFT&status=nonsense', 'WAREHOUSE_STAFF'), [['sales', { page: 1, type: '', status: '' }]]);
+  assert.deepEqual(routeQueries('/settlements', '?page=2&status=PARTIAL', 'ADMIN')[2], ['settlements', { page: 2, status: 'PARTIAL' }]);
+  assert.deepEqual(routeQueries('/stock-requests', '?page=4&status=REJECTED', 'ADMIN'), [['stockRequestsWaiting'], ['stockRequests', { page: 4, status: 'REJECTED' }]]);
+  // Approved is not one of that page's chips.
+  assert.deepEqual(routeQueries('/stock-requests', '?status=APPROVED', 'ADMIN')[1], ['stockRequests', { page: 1, status: '' }]);
+  // A rep's own lists have no pages or chips in the address.
+  assert.deepEqual(routeQueries('/stock-requests', '?page=4', 'SALES_REP'), [['stockRequestsMine']]);
 });
 
 test('the address decides the tab and the chip, as the page does', () => {
