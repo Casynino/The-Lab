@@ -7,6 +7,7 @@ import { Plus, Search, X, CheckCircle, XCircle, Eye, Clock, CheckCircle2, Packag
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useOnce } from '@/lib/useOnce';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/hooks';
 import { ROLES } from '@/lib/constants';
@@ -75,13 +76,8 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
     queryFn: async () => unwrap(await api.get(`/returns/${returnId}`)).data,
   });
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['returns'] });
-    qc.invalidateQueries({ queryKey: ['return', returnId] });
-    qc.invalidateQueries({ queryKey: ['settlements'] });
-    qc.invalidateQueries({ queryKey: ['settlement'] });
-    qc.invalidateQueries({ queryKey: ['inventory'] });
-  };
+  // Boxes come back: Sales reps, the rep's profile and the Dashboard are asked again too (audit freshness-3).
+  const invalidate = () => refreshAfter(qc, 'repReturn');
 
   // One press goes through until it has an answer: a same-frame double tap sent two approvals and the
   // second showed "already decided" after a good approval (audit admin-ops-3).
@@ -657,7 +653,7 @@ export default function Returns() {
     mutationFn: (id) => api.post(`/returns/${id}/approve`),
     onSuccess: () => {
       toast.success('Return approved');
-      ['returns', 'settlements', 'settlement', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refreshAfter(qc, 'repReturn'); // Sales reps and the rep's profile too (audit freshness-3)
     },
     onError: (e) => toast.error(apiError(e)),
     onSettled: (_d, _e, id) => once.release(id),

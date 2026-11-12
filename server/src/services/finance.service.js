@@ -14,8 +14,8 @@ const ApiError = require('../utils/ApiError');
 const reports = require('./reports.service');
 const inventory = require('./inventory.service');
 const commission = require('./commission.service');
-const { nextDocNumber } = require('../utils/numbering');
-const { toNumber, round2, DB_MAX_AMOUNT } = require('../utils/money');
+const { nextDocNumber, withDocNumberRetry } = require('../utils/numbering');
+const { toNumber, round2, DB_MAX_AMOUNT, formatCurrency } = require('../utils/money');
 const { dayjs, resolveRange, eatDayBounds, EAT_OFFSET_H } = require('../utils/dates');
 
 // ── Money that never touches a business account ─────────────────────────────
@@ -127,26 +127,32 @@ function periodRange(period) {
 
 // --- Accounts --------------------------------------------------------------
 
-async function accountBalances() {
+// `client` and `accountId` let a balance correction read ONE account's balance inside its own transaction,
+// by the very same formula every screen shows (recordBalanceCorrection). Called bare, it lists them all.
+async function accountBalances({ client = prisma, accountId = null } = {}) {
   await ensureDefaults();
   // Balances = opening + post-epoch movements. Pre-epoch ledger rows are audit
   // history only; the accounts' openingBalance IS the truth at the epoch.
   const epoch = await reports.financeEpoch();
   const window = epoch ? { occurredAt: { gte: epoch } } : {};
+  const one = accountId ? { accountId } : {};
   const [accounts, grouped, offAccount] = await Promise.all([
-    prisma.businessAccount.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
-    prisma.financeTransaction.groupBy({
+    client.businessAccount.findMany({
+      where: { isActive: true, ...(accountId ? { id: accountId } : {}) },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    }),
+    client.financeTransaction.groupBy({
       by: ['accountId', 'direction'],
-      where: window,
+      where: { ...window, ...one },
       _sum: { amount: true },
     }),
     // The same rows again, narrowed to the ones that never touched an account
     // (see OFF_ACCOUNT_WHERE). Taken back off below, so a rep payout leaves the
     // record in the ledger and the balance where it was. Subtracting a second
     // whole population beats filtering the first: no NULL semantics involved.
-    prisma.financeTransaction.groupBy({
+    client.financeTransaction.groupBy({
       by: ['accountId', 'direction'],
-      where: { ...window, ...OFF_ACCOUNT_WHERE },
+      where: { ...window, ...one, ...OFF_ACCOUNT_WHERE },
       _sum: { amount: true },
     }),
   ]);
@@ -562,6 +568,54 @@ const recordOwnerMoney = ({ direction, ...data }, actor) => recordTransaction({
   type: direction === 'IN' ? 'OWNER_CONTRIBUTION' : 'OWNER_DRAWING',
   category: direction === 'IN' ? 'Owner contribution' : 'Owner drawing',
 }, actor, prisma, HAND_TYPED);
+
+// "Correct balance": the owner says what an account really holds, and the server writes the difference
+// from the balance as it is NOW, not from a figure the browser worked out earlier (audit freshness-1).
+// The browser used to send the difference itself, so anything that landed between its last read and
+// the write (a settlement approved, a payout, a second admin's correction) left the account at a figure
+// nobody typed. Here the account row is locked (FOR UPDATE, so two corrections queue up instead of both
+// reading the same balance), its balance is read by the same formula the screens use, and:
+//   expectedBalance — the balance the window showed; if the account no longer holds it, nothing is
+//                     written (409 with the new balance) and the owner checks again;
+//   targetBalance   — what it really holds; the ADJUSTMENT is target − live, and none at all if that is 0.
+// The old body ({ direction, amount }) still goes through recordTransaction as before.
+async function recordBalanceCorrection({ accountId, targetBalance, expectedBalance, brandId, description, notes, occurredAt }, actor) {
+  const target = round2(toNumber(targetBalance));
+  if (!Number.isFinite(target)) throw ApiError.badRequest('Type what the account really holds');
+  if (!accountId) throw ApiError.badRequest('Choose the account the money moved through');
+  return withDocNumberRetry(() => prisma.$transaction(async (tx) => {
+    // $queryRaw, not $executeRaw: it returns the locked row, which also says whether the account exists.
+    const locked = await tx.$queryRaw`SELECT id FROM "business_accounts" WHERE id = ${accountId} FOR UPDATE`;
+    if (!locked.length) throw ApiError.badRequest('Select a valid account');
+    const [acc] = await accountBalances({ client: tx, accountId });
+    if (!acc) throw ApiError.badRequest('Select a valid account');
+    const live = acc.balance;
+    if (expectedBalance != null && Math.abs(round2(toNumber(expectedBalance)) - live) >= 0.01) {
+      throw ApiError.conflict(
+        `${acc.name} changed to ${formatCurrency(live)} since you opened this window — nothing was recorded. Check what it really holds now.`,
+        { code: 'BALANCE_MOVED', balance: live },
+      );
+    }
+    const delta = round2(target - live);
+    if (delta === 0) throw ApiError.badRequest(`${acc.name} already holds ${formatCurrency(live)} — nothing to record`);
+    return recordTransaction(
+      {
+        accountId,
+        direction: delta > 0 ? 'IN' : 'OUT',
+        type: 'ADJUSTMENT',
+        amount: Math.abs(delta),
+        brandId: brandId || null,
+        category: 'Manual adjustment',
+        description: description || 'Manual balance adjustment',
+        notes: notes || `Corrected from ${formatCurrency(live)} to ${formatCurrency(target)}.`,
+        occurredAt,
+      },
+      actor,
+      tx,
+      { checkBrand: true }, // a brand-reserved account only takes its own brand's money (#79)
+    );
+  }));
+}
 
 const recordExpense = (data, actor) => recordTransaction({
   ...handTyped(data),
@@ -2275,6 +2329,7 @@ module.exports = {
   transferBetweenAccounts,
   recordCommissionPayment,
   recordOwnerMoney,
+  recordBalanceCorrection,
   listTransactions,
   updateTransaction,
   deleteTransaction,

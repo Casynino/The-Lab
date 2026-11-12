@@ -37,12 +37,19 @@ const moneyFields = {
 const financeMoney = { body: z.object(moneyFields) };
 // POST /finance/owner-money
 const financeOwnerMoney = { body: z.object({ ...moneyFields, direction }) };
+// A balance the owner typed or saw: a real number when sent, never '' read as 0; null or left out = not sent.
+const balance = z.union([z.number(), z.string().trim().min(1)]).pipe(z.coerce.number().finite()).optional().nullable();
 // POST /finance/adjustments
 const financeAdjustment = {
   body: z.object({
     accountId: ref,
     amount,
     direction,
+    // "Correct balance" sends what the account really holds and the balance it showed; the server works
+    // out the difference from the balance as it is when it writes (audit freshness-1). Both optional:
+    // { direction, amount } alone is recorded as before.
+    targetBalance: balance,
+    expectedBalance: balance,
     brandId: ref,
     description: text(500),
     notes: text(2000),

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { Plus, ShoppingCart, Eye, Wallet, TrendingUp, Boxes, Timer } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { refreshAfter } from '@/lib/afterWrite';
 import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useWarehouses, useSalesReps } from '@/lib/hooks';
@@ -85,8 +86,8 @@ function NewSaleModal({ open, onClose }) {
     },
     onSuccess: () => {
       toast.success('Sale recorded');
-      qc.invalidateQueries({ queryKey: ['sales'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      // Stock out and money in: Inventory and Finance are asked again too (audit freshness-2/4).
+      refreshAfter(qc, 'sale');
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),

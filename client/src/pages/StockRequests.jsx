@@ -12,6 +12,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useSearchParams } from 'react-router-dom';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useOnce } from '@/lib/useOnce';
+import { refreshAfter } from '@/lib/afterWrite';
 import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts } from '@/lib/hooks';
@@ -476,12 +477,9 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
   const [confirm, setConfirm] = useState(null); // 'reject' | 'cancel' while the second step is open
   const once = useOnce();
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['stock-requests'] });
-    qc.invalidateQueries({ queryKey: ['settlements'] });
-    qc.invalidateQueries({ queryKey: ['inventory'] });
-    qc.invalidateQueries({ queryKey: ['dashboard', 'me'] });
-  };
+  // Boxes leave the warehouse and an order opens: the Dashboards and Sales reps are asked again too
+  // (audit freshness-3).
+  const invalidate = () => refreshAfter(qc, 'stockRequest');
 
   const approve = useMutation({
     mutationFn: () => api.post(`/stock-requests/${request.id}/approve`, {
@@ -733,9 +731,7 @@ function PendingRequestApprovals({ onReview }) {
   });
   const pending = data?.data || [];
 
-  const refresh = () => {
-    ['stock-requests', 'settlements', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-  };
+  const refresh = () => refreshAfter(qc, 'stockRequest'); // Sales reps too (audit freshness-3)
   const once = useOnce();
   const [rejecting, setRejecting] = useState(null); // the request whose Reject step is open
   const approve = useMutation({

@@ -12,6 +12,7 @@ import {
 import api, { apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useOnce } from '@/lib/useOnce';
+import { refreshAfter } from '@/lib/afterWrite';
 import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
@@ -112,9 +113,9 @@ function PendingApprovals({ onReview }) {
     refetchInterval: LIVE,
   });
 
-  const refresh = () => {
-    ['settlements', 'commissions', 'dashboard', 'inventory'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-  };
+  // Approving moves money, stock, commission and the rep's figures: Finance, Sales reps and the rest are
+  // asked again too, not shown from before the approval (audit freshness-1/2/3).
+  const refresh = () => refreshAfter(qc, 'settlement');
   // Per row: one press goes through until it has an answer. A same-frame double tap sent two approvals
   // and the refused second one showed "already decided" after a good approval (audit admin-ops-3).
   const once = useOnce();

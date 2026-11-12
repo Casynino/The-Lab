@@ -7,6 +7,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useWarehouses, useBrands } from '@/lib/hooks';
 import { wentThrough } from '@/lib/once';
+import { refreshAfter } from '@/lib/afterWrite';
 import { PO_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatNumber, pluralizeUnit } from '@/lib/format';
 import { eatISODate } from '@/lib/tz';
@@ -416,7 +417,13 @@ function PurchaseOrders() {
     onError: (e) => { toast.error(apiError(e), { duration: 9000 }); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); },
   });
 
-  const afterReceive = () => { qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); };
+  // Stock in at a new cost: Inventory, the Dashboard's stock alerts and value, and Finance's suppliers too
+  // (audit freshness-4).
+  const afterReceive = () => {
+    qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+    qc.invalidateQueries({ queryKey: ['finance'] });
+    refreshAfter(qc, 'stock');
+  };
   const receive = useMutation({
     mutationFn: (id) => api.post(`/purchase-orders/${id}/receive`, {}),
     onSuccess: () => { toast.success('Received into warehouse'); afterReceive(); },

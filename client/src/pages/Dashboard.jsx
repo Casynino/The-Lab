@@ -31,6 +31,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import api, { apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber, formatPercent, formatDateTime } from '@/lib/format';
 import { TrendChart, BarChartCard, DonutChart, MonthBars } from '@/components/chartsLazy';
@@ -130,7 +131,7 @@ function ReviewWithdrawals({ items, onClose }) {
     mutationFn: ({ id, action }) => api.post(`/commissions/withdrawals/${id}/decide`, { action, fromOwnPocket: action === 'PAY' }),
     onSuccess: (_r, v) => {
       toast.success(v.action === 'PAY' ? 'Paid' : 'Rejected');
-      ['dashboard', 'commissions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refreshAfter(qc, 'payout'); // Finance's Commission paid and Sales reps too (audit freshness-2/3)
       onClose();
     },
     // A lost answer may still have gone through: reload so the list shows the real state.
