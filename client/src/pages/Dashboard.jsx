@@ -8,7 +8,6 @@ import {
   Boxes,
   Warehouse,
   Truck,
-  AlertTriangle,
   ArrowRight,
   Timer,
   CheckCircle2,
@@ -43,6 +42,7 @@ import {
   CardBody,
   PageSpinner,
   EmptyState,
+  LoadError,
   Badge,
   Button,
   Table,
@@ -514,7 +514,7 @@ export default function Dashboard() {
   const [reviewing, setReviewing] = useState(null); // pending commission requests
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.dashboardCommand(),
     refetchInterval: STEADY, // live business status
   });
@@ -529,7 +529,10 @@ export default function Dashboard() {
   });
 
   if (isLoading) return <PageSpinner label="Building your command center…" />;
-  if (isError || !data) return <EmptyState title="Couldn't load the dashboard" message="Please try again shortly." icon={AlertTriangle} />;
+  // Figures already on screen stay there when a refresh fails (the notice above the page says they are
+  // not fresh); only a dashboard that never arrived says it could not load.
+  if (isError && !data) return <LoadError what="the dashboard" onRetry={refetch} />;
+  if (!data) return <PageSpinner label="Building your command center…" />;
 
   const { accounts, totalFunds, today, week, month, brands, reps, attention, inventory, charts} = data;
   // The same three windows everywhere on this page: the same figures, the same

@@ -88,6 +88,16 @@ export function createChunkLoader(loaders) {
   };
 }
 
+/** Should a page file that failed to arrive reload the app (main.jsx)? Only
+ *  when someone is waiting on it (not a fetch ahead of a click), the device has
+ *  a connection (offline, a reload lands on the browser's own "No internet"
+ *  page and loses whatever was typed), and it has not just been tried. */
+export function shouldReloadForChunk({ aheadOnly, online, attempted }) {
+  if (aheadOnly) return false;
+  if (online === false) return false;
+  return !attempted;
+}
+
 /** A page file that could not be fetched — ours (tagged above) or any other
  *  import() inside a page (a tab's own file), in each browser's wording. */
 export function isPageLoadError(error) {
@@ -134,4 +144,16 @@ export function shouldWarm(connection) {
   if (!connection) return true;
   if (connection.saveData) return false;
   return !['slow-2g', '2g'].includes(connection.effectiveType);
+}
+
+// The sign-in page's moving film is 3.3 MB (the poster, ~40 KB, is the same
+// picture standing still). Only on a line that carries it without slowing the
+// sign-in and the first screen behind it: never with data saver, never on 2G,
+// nor on what the browser calls 3G (under ~0.7 Mbit/s, where 3.3 MB is most of
+// a minute of the whole line). A browser that does not say (iPhone) gets it;
+// Login.jsx still waits for the poster and a quiet moment first.
+export function shouldPlayFilm(connection) {
+  if (!connection) return true;
+  if (connection.saveData) return false;
+  return !['slow-2g', '2g', '3g'].includes(connection.effectiveType);
 }

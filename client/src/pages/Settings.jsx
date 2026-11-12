@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Save, Send, MessageCircle, Eye, EyeOff, Lock, RotateCw } from 'lucide-react';
 import dayjs from 'dayjs';
 import api, { unwrap, apiError } from '@/lib/api';
-import { PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, Input, Button, Select, Badge } from '@/components/ui';
+import { PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, LoadError, Input, Button, Select, Badge } from '@/components/ui';
 
 // Rearranged 11 Nov 2026 (Nino: "too many things — it should be well arranged"): two columns on a wide
 // screen, the alerts as a compact grid with plain dots, every setting under a plain name, the API key
@@ -86,7 +86,7 @@ function StatusChip({ row }) {
 function RecentMessages() {
   const qc = useQueryClient();
   const [all, setAll] = useState(false);
-  const { data: history, isLoading } = useQuery({
+  const { data: history, isLoading, isError, refetch } = useQuery({
     queryKey: ['whatsapp-history'],
     queryFn: async () => unwrap(await api.get('/settings/whatsapp/history?limit=25')).data,
     refetchInterval: SLOW,
@@ -125,7 +125,9 @@ function RecentMessages() {
         )}
       />
       <CardBody>
-        {isLoading ? <PageSpinner label="Loading…" /> : rows.length === 0 ? (
+        {isLoading ? <PageSpinner label="Loading…" /> : isError && !history ? (
+          <LoadError what="the messages" onRetry={refetch} />
+        ) : rows.length === 0 ? (
           <EmptyState icon={MessageCircle} title="Nothing sent yet" message="Messages appear here as things happen." />
         ) : (
           <>
@@ -156,7 +158,7 @@ function WhatsAppPanel({ settings }) {
   const save = useSettingSave();
   const settingMap = new Map((settings || []).map((s) => [s.key, s.value]));
 
-  const { data: types } = useQuery({
+  const { data: types, isError: typesFailed, refetch: retryTypes } = useQuery({
     queryKey: ['whatsapp-types'],
     queryFn: async () => unwrap(await api.get('/settings/whatsapp/types')).data,
   });
@@ -213,6 +215,7 @@ function WhatsAppPanel({ settings }) {
           </div>
           <div>
             <div className="mb-1 text-sm font-semibold text-foreground">What you receive</div>
+            {typesFailed && !types && <LoadError what="the alert list" onRetry={retryTypes} />}
             <div className="divide-y divide-white/[0.06]">
               {(types || []).map((t) => {
                 const key = `whatsapp.notify.${t.key}`;
@@ -330,12 +333,22 @@ function SettingRow({ setting }) {
 }
 
 export default function Settings() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => unwrap(await api.get('/settings')).data,
   });
 
   if (isLoading) return <PageSpinner />;
+  // Settings that never arrived are not "WhatsApp not set up, quiet hours off" — and the quiet-hours
+  // selects must not be live over values that are not there (audit admin-system-5).
+  if (isError && !data) {
+    return (
+      <div>
+        <PageHeader title="Settings" subtitle="Your alerts and how the business runs." />
+        <Card><LoadError what="the settings" onRetry={refetch} /></Card>
+      </div>
+    );
+  }
 
   const visible = (data || []).filter(
     (s) => !MANAGED_PREFIXES.some((p) => s.key.startsWith(p)) && !MANAGED_KEYS.includes(s.key),

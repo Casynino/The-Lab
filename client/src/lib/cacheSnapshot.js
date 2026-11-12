@@ -64,6 +64,24 @@ export function tokenClaims(token) {
 }
 
 /**
+ * The answer a query holds that is worth keeping, as a snapshot entry, or null.
+ * A query whose last ask FAILED (offline, a dropped line) still holds the last
+ * answer it got: that is exactly the one to keep, or putting the phone away in
+ * a dead spot would throw away the very figures it is showing.
+ */
+export function keptEntry(queryKey, state) {
+  if (!state || state.data === undefined || !state.dataUpdatedAt) return null;
+  if (state.status !== 'success' && state.status !== 'error') return null;
+  // Only when the line or the server fell over (no answer, or a 5xx). A refusal or "not found" is the
+  // server's real answer now: a deleted record must not keep coming back from this device.
+  if (state.status === 'error') {
+    const code = state.error?.response?.status;
+    if (code && code < 500) return null;
+  }
+  return { k: queryKey, d: state.data, t: state.dataUpdatedAt };
+}
+
+/**
  * The text to store, or null when it must not be stored: no sign-in, a build
  * we cannot name, or a sign-in that names somebody other than `user` (another
  * tab signed in as someone else — theirs is not ours to write).

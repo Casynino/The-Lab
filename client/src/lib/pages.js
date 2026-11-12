@@ -31,6 +31,12 @@ export const CHUNKS = {
   NotFound: () => import('@/pages/NotFound'),
   InvoiceGenerator: () => import('@/pages/InvoiceGenerator'),
   ProductLabel: () => import('@/pages/ProductLabel'),
+  // Inventory's tabs, each its own file. Through here, never a bare import(),
+  // so a fetch of one ahead of the click that fails is not taken for a real
+  // page open (main.jsx would reload the app under the person's typing).
+  Purchases: () => import('@/pages/Purchases'),
+  Transfers: () => import('@/pages/Transfers'),
+  Reorder: () => import('@/pages/Reorder'),
   // The chart library (recharts, the largest file in the app). The home
   // dashboard draws its figures first and its charts as this arrives.
   charts: () => import('@/components/charts'),

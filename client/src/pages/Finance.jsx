@@ -23,9 +23,10 @@ import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { eatISODate, eatDay } from '@/lib/tz';
 import { statementRows, poPayCap } from '@/lib/financeFigures';
+import { figuresAreLive } from '@/lib/freshness';
 import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button,
   Modal, Field, Input, NumberInput, Select, Textarea, Table, THead, TBody, TR, TH, TD, Pagination,
 } from '@/components/ui';
 
@@ -149,7 +150,7 @@ const invalidateFinance = (qc) => ['finance'].forEach((k) => qc.invalidateQuerie
 // how a correction ends up invisible. You say what the account really holds;
 // it records the difference as one adjustment, in the ledger, with your reason
 // on it. It never touches profit.
-function CorrectBalanceModal({ accounts, onClose }) {
+function CorrectBalanceModal({ accounts, live, onClose }) {
   const qc = useQueryClient();
   const usable = accounts.filter((a) => !a.isCommissionRecord);
   const [accountId, setAccountId] = useState(usable[0]?.id || '');
@@ -173,10 +174,13 @@ function CorrectBalanceModal({ accounts, onClose }) {
   });
 
   const valid = accountId && truth != null && Number.isFinite(truth) && delta !== 0;
+  // The difference is worked out from the balance on screen: never from one that is not the server's latest
+  // (put back from this device, or kept after a refresh that failed while this was open).
   return (
     <Modal open onClose={onClose} title="Correct a balance"
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>Record the correction</Button></>}>
+        <Button loading={save.isPending} disabled={!valid || !live} title={live ? undefined : 'Waiting for the latest balances'}
+          onClick={() => save.mutate()}>Record the correction</Button></>}>
       <div className="space-y-4">
         <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
           For when the app disagrees with the real account. Say what it actually holds and the difference is written
@@ -199,6 +203,7 @@ function CorrectBalanceModal({ accounts, onClose }) {
             against {account?.name}, bringing it to <b className="text-foreground">{formatCurrency(truth)}</b>.
           </p>
         )}
+        {!live && <p className="text-xs text-amber-300">Waiting for the latest balances before this can be recorded.</p>}
         <Field label="Why" hint="Worth a sentence — this is the record of why the figure moved.">
           <Input value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. cash drawn out and paid to reps as commission" />
@@ -518,11 +523,11 @@ const Op = ({ children, wide }) => <span className={`hidden self-center px-1 pt-
 
 function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.financeOverview(period),
     refetchInterval: STEADY,
   });
-  const { data: cf } = useQuery(pageQueries.financeCashflow('all'));
+  const { data: cf, isError: cfFailed, refetch: retryCf } = useQuery(pageQueries.financeCashflow('all'));
   // On a very wide screen the month chart grows a little so it does not look flat.
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1800px)').matches);
   useEffect(() => {
@@ -532,6 +537,8 @@ function Overview({ onNavigate, onOwnerMoney }) {
     mq.addEventListener?.('change', on);
     return () => mq.removeEventListener?.('change', on);
   }, []);
+  // A request that never came back is not a spinner for ever (audit pwa-brand-load-2).
+  if (isError && !data) return <LoadError what="the finance overview" onRetry={refetch} />;
   if (isLoading || !data) return <PageSpinner />;
   const flow = data.flow?.[period] || data.flow?.month || { moneyIn: 0, moneyOut: 0, net: 0 };
   const words = PERIOD_WORDS[period];
@@ -784,8 +791,10 @@ function Overview({ onNavigate, onOwnerMoney }) {
                 </div>
               </div>
             </>
+          ) : cfFailed && !cf ? (
+            <LoadError what="the monthly figures" onRetry={retryCf} />
           ) : (
-            <div className="flex h-[170px] items-center justify-center text-sm text-white/50">Fills in as months of activity add up.</div>
+            <div className="flex h-[170px] items-center justify-center text-sm text-white/50">{cf ? 'Fills in as months of activity add up.' : 'Loading…'}</div>
           )}
         </Panel>
 
@@ -1132,7 +1141,7 @@ function Money({ label, value, tone, big }) {
 // from an opening balance would drift the moment a page boundary hid a row.
 function AccountStatementModal({ account, onClose }) {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['finance', 'account-statement', account.id, page],
     queryFn: async () => unwrap(await api.get('/finance/transactions', {
       params: { accountId: account.id, page, limit: 25, sortBy: 'occurredAt', sortDir: 'desc' },
@@ -1198,7 +1207,7 @@ function AccountStatementModal({ account, onClose }) {
         </div>
         {account.notes && <p className="text-xs text-faint">{account.notes}</p>}
 
-        {isLoading ? <PageSpinner /> : !rows.length ? (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="this account's movements" onRetry={refetch} /> : !rows.length ? (
           <EmptyState title="Nothing has moved through this account yet" icon={Receipt} />
         ) : (
           <>
@@ -1417,11 +1426,17 @@ function Accounts({ onQuick, onNavigate }) {
   const mask = (s) => (hidden ? DOTS : s);
   // Transfers and balance corrections are the owner's (the server refuses staff); staff do not see them.
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
-  const { data: accounts = [], isLoading } = useQuery(pageQueries.financeAccounts());
+  const accountsQ = useQuery(pageQueries.financeAccounts());
+  const accounts = accountsQ.data || [];
   // The newest movements across every account (the Ledger's own list, first eight rows). Under the 'finance'
   // key, so recording income, an expense or a transfer refreshes it with everything else.
-  const { data: latest } = useQuery(pageQueries.financeLatest());
-  if (isLoading) return <PageSpinner />;
+  const { data: latest, isError: latestFailed, refetch: retryLatest } = useQuery(pageQueries.financeLatest());
+  if (accountsQ.isLoading) return <PageSpinner />;
+  // Accounts that never arrived are not "TSh 0, no account holds money": say so, and offer no Transfer or
+  // Correct balance over a list that is not there (audit pwa-brand-load-2).
+  if (accountsQ.isError && !accountsQ.data) return <LoadError what="the accounts" onRetry={accountsQ.refetch} />;
+  // Saved-on-this-device balances read as a success until the server answers: not live (lib/freshness.js).
+  const accountsLive = figuresAreLive(accountsQ);
   // Wallets hold the money; the Commission account holds a record of money the
   // owner paid out of his own hand. Adding a record into a cash total would
   // claim the business is holding cash it has never held.
@@ -1453,8 +1468,10 @@ function Accounts({ onQuick, onNavigate }) {
           <p className="mt-0.5 hidden text-[11px] text-white/50 sm:block">What your accounts are holding right now</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
-          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-3.5 w-3.5" /> Transfer</Button>}
-          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setCorrectOpen(true)}><Scale className="h-3.5 w-3.5" /> Correct balance</Button>}
+          {/* Both work from the balances on screen (a correction is the typed figure minus the balance shown), so
+              they wait for balances that have just come back, not ones kept from before a refresh that failed. */}
+          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={!accountsLive} title={accountsLive ? undefined : 'Waiting for the latest balances'} onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-3.5 w-3.5" /> Transfer</Button>}
+          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={!accountsLive} title={accountsLive ? undefined : 'Waiting for the latest balances'} onClick={() => setCorrectOpen(true)}><Scale className="h-3.5 w-3.5" /> Correct balance</Button>}
           <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onQuick('income')}><ArrowDownLeft className="h-3.5 w-3.5" /> Income</Button>
           <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onQuick('expense')}><ArrowUpRight className="h-3.5 w-3.5" /> Expense</Button>
           <Button className="px-3 py-1.5 text-xs" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" /> Account</Button>
@@ -1556,6 +1573,8 @@ function Accounts({ onQuick, onNavigate }) {
               );
             })}
           </ul>
+        ) : latestFailed && !latest ? (
+          <LoadError what="the latest movements" onRetry={retryLatest} />
         ) : (
           <p className="py-6 text-center text-sm text-white/50">{latest ? 'Nothing has moved through any account yet.' : 'Loading…'}</p>
         )}
@@ -1563,7 +1582,7 @@ function Accounts({ onQuick, onNavigate }) {
 
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
-      {correctOpen && <CorrectBalanceModal accounts={accounts} onClose={() => setCorrectOpen(false)} />}
+      {correctOpen && <CorrectBalanceModal accounts={accounts} live={accountsLive} onClose={() => setCorrectOpen(false)} />}
       {viewing && <AccountStatementModal account={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
@@ -1583,7 +1602,7 @@ function Ledger({ expensesOnly }) {
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: brands = [] } = useQuery({ queryKey: ['brands', 'all'], queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data });
   // Expenses are genuine expenses only (not every OUT): see pageQueries.financeTransactions.
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.financeTransactions({ page, account, type, brand, category, search, expensesOnly }),
     placeholderData: keepOnPageTurn({ account, type, brand, category, expensesOnly }),
   });
@@ -1682,7 +1701,7 @@ function Ledger({ expensesOnly }) {
           </div>
         )}
       </div>
-      {isLoading ? <PageSpinner /> : !rows.length ? (
+      {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what={expensesOnly ? 'the expenses' : 'the ledger'} onRetry={refetch} /> : !rows.length ? (
         <EmptyState title={expensesOnly ? 'No expenses yet' : 'No transactions yet'} message="Record income or expenses, or approve a settlement." icon={Receipt} />
       ) : (
         <>
@@ -1862,8 +1881,9 @@ const PROFIT_PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'Th
 
 function ProfitTab({ accounts = [] }) {
   const [period, setPeriod] = useState('all');
-  const { data, isLoading } = useQuery(pageQueries.profitOverview(period));
+  const { data, isLoading, isError, refetch } = useQuery(pageQueries.profitOverview(period));
   const { data: brandStockData } = useQuery(pageQueries.brandStock());
+  if (isError && !data) return <LoadError what="the profit figures" onRetry={refetch} />;
   if (isLoading || !data) return <PageSpinner />;
   const stockByBrand = new Map((brandStockData?.brands || []).map((b) => [b.brandId, b]));
   const t = data.totals;
@@ -2155,7 +2175,8 @@ function KindRows({ rows, total, colours, empty }) {
 
 function CashFlowTab() {
   const [period, setPeriod] = useState('month');
-  const { data, isLoading } = useQuery(pageQueries.financeCashflow(period));
+  const { data, isLoading, isError, refetch } = useQuery(pageQueries.financeCashflow(period));
+  if (isError && !data) return <LoadError what="the cash flow" onRetry={refetch} />;
   if (isLoading || !data) return <PageSpinner />;
 
   const inRows = (data.byType || []).filter((r) => r.direction === 'IN').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count, hex: TYPE_HEX[r.type] }));
@@ -2663,7 +2684,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
   const [purchasing, setPurchasing] = useState(false);
   const [returning, setReturning] = useState(false);
   const isAdmin = useAuth().user?.role === ROLES.ADMIN; // returning goods lowers a bill: owner only, as on the server
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['finance', 'supplier', supplierId],
     queryFn: async () => unwrap(await api.get(`/finance/suppliers/${supplierId}`)).data,
   });
@@ -2688,7 +2709,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
             )}
           </>
         )}>
-        {isLoading || !data ? <PageSpinner /> : (
+        {isError && !data ? <LoadError what="this supplier" onRetry={refetch} /> : isLoading || !data ? <PageSpinner /> : (
           <div className="space-y-5">
             {/* Identity */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
@@ -2846,8 +2867,11 @@ function ReturnGoodsModal({ supplier, outstanding, onClose, onDone }) {
 function SuppliersTab({ accounts }) {
   const [addOpen, setAddOpen] = useState(false);
   const [viewing, setViewing] = useState(null);
-  const { data: suppliers = [], isLoading } = useQuery(pageQueries.financeSuppliers());
-  if (isLoading) return <PageSpinner />;
+  const suppliersQ = useQuery(pageQueries.financeSuppliers());
+  const suppliers = suppliersQ.data || [];
+  if (suppliersQ.isLoading) return <PageSpinner />;
+  // Not "Still owed TSh 0, all settled" over a list that never came back (audit pwa-brand-load-2).
+  if (suppliersQ.isError && !suppliersQ.data) return <LoadError what="the suppliers" onRetry={suppliersQ.refetch} />;
   const totals = suppliers.reduce((s, x) => ({
     purchased: s.purchased + x.totalPurchased,
     returned: s.returned + (x.totalReturned || 0),

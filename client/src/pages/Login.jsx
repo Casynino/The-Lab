@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
 import { RESTRICTED_KEY } from '@/lib/api';
+import { shouldPlayFilm } from '@/lib/chunkLoader';
 import HowItWorksVideo from '@/components/HowItWorksVideo';
 import './login.css';
 
@@ -115,24 +116,61 @@ const FILM = {
 };
 
 function Film({ kind, className, onLoad }) {
+  const sourceRef = useRef(null);
+  const imgRef = useRef(null);
+  // The film is 3.3 MB. Taking it off the page did not stop its download: it ran on to the end under
+  // the rep's first screen after sign-in, slowing everything else on the line (audit pwa-brand-load-4).
+  // Clearing what it points at, in one go, is what makes the browser drop the request.
+  useEffect(() => {
+    if (kind !== 'film') return undefined;
+    const source = sourceRef.current;
+    const img = imgRef.current;
+    // Put the addresses back if a clean-up took them (React's StrictMode on localhost runs the clean-up
+    // once at mount, and React will not set them again): source first, so the browser picks by orientation.
+    if (source && !source.getAttribute('srcset')) source.setAttribute('srcset', FILM.film.portrait);
+    if (img && !img.getAttribute('src')) img.setAttribute('src', FILM.film.landscape);
+    return () => {
+      source?.removeAttribute('srcset');
+      img?.removeAttribute('src');
+    };
+  }, [kind]);
   return (
     <picture className={className}>
-      <source media="(orientation: portrait)" srcSet={FILM[kind].portrait} />
-      <img src={FILM[kind].landscape} alt="" width="1600" height="900" decoding="async"
-        fetchpriority={kind === 'poster' ? 'high' : undefined} onLoad={onLoad} />
+      <source ref={sourceRef} media="(orientation: portrait)" srcSet={FILM[kind].portrait} />
+      <img ref={imgRef} src={FILM[kind].landscape} alt="" width="1600" height="900" decoding="async"
+        fetchpriority={kind === 'poster' ? 'high' : 'low'} onLoad={onLoad} />
     </picture>
   );
 }
 
-function Scene() {
+function Scene({ hold = false }) {
+  const [posterIn, setPosterIn] = useState(false);
+  const [start, setStart] = useState(false);
   const [ready, setReady] = useState(false);
   const still = useReducedMotion();
+  // The poster first, always. The film only once the poster is on screen, the phone has a quiet moment,
+  // and the line can carry 3.3 MB (lib/chunkLoader.js shouldPlayFilm): never on data saver or a slow
+  // line, where the poster is the page (audit pwa-brand-load-4).
+  useEffect(() => {
+    if (still || !posterIn || start) return undefined;
+    if (!shouldPlayFilm(typeof navigator !== 'undefined' ? navigator.connection : null)) return undefined;
+    const go = () => setStart(true);
+    if (window.requestIdleCallback) {
+      const id = window.requestIdleCallback(go, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(go, 1500);
+    return () => window.clearTimeout(t);
+  }, [still, posterIn, start]);
+  // While the sign-in is on its way, a film still arriving is dropped so it does not hold the request
+  // up; one already playing stays. Leaving the page drops it too (Film's own clean-up).
+  const showFilm = start && !(hold && !ready);
   return (
     <div className="ls" aria-hidden="true">
-      <Film kind="poster" className="ls-film" />
+      <Film kind="poster" className="ls-film" onLoad={() => setPosterIn(true)} />
       {/* Somebody who has asked their phone to stop moving things gets the
           poster alone — it is a picture, not information. */}
-      {!still && <Film kind="film" className={`ls-film ls-moving${ready ? ' is-ready' : ''}`} onLoad={() => setReady(true)} />}
+      {showFilm && <Film kind="film" className={`ls-film ls-moving${ready ? ' is-ready' : ''}`} onLoad={() => setReady(true)} />}
       <div className="ls-vignette" />
     </div>
   );
@@ -320,7 +358,7 @@ export default function Login() {
      phone's clock on purpose. */
   return (
     <div data-login-scene className="relative isolate min-h-dvh overflow-x-hidden bg-[#070907] text-white">
-      <Scene />
+      <Scene hold={isSubmitting} />
 
       {/* One centred column at every size: the brand, one line, one button.
           ZELab, the port and the sea fill the rest of the glass, so the

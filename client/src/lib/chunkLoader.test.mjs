@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createChunkLoader, warmInTurn, shouldWarm, isPageLoadError } from './chunkLoader.js';
+import { createChunkLoader, warmInTurn, shouldWarm, isPageLoadError, shouldReloadForChunk, shouldPlayFilm } from './chunkLoader.js';
+
+test('the sign-in film plays only on a line that can carry it', () => {
+  assert.equal(shouldPlayFilm(null), true); // the browser does not say (iPhone): the poster-then-idle wait still applies
+  assert.equal(shouldPlayFilm({ effectiveType: '4g' }), true);
+  assert.equal(shouldPlayFilm({ effectiveType: '3g' }), false);
+  assert.equal(shouldPlayFilm({ effectiveType: '2g' }), false);
+  assert.equal(shouldPlayFilm({ effectiveType: 'slow-2g' }), false);
+  assert.equal(shouldPlayFilm({ effectiveType: '4g', saveData: true }), false);
+});
 
 // A loader whose fetch we finish by hand, counting how often it was asked.
 function manual() {
@@ -218,4 +227,15 @@ test('no fetch-ahead with data saver on or on a 2G line', () => {
   assert.equal(shouldWarm({ effectiveType: '2g' }), false);
   assert.equal(shouldWarm({ effectiveType: 'slow-2g' }), false);
   assert.equal(shouldWarm({ effectiveType: '4g', saveData: true }), false);
+});
+
+test('a page file that failed reloads the app only when someone waits on it, online, once', () => {
+  // Someone opened the page, the line is up, first try: reload (after a deploy the old file names are gone).
+  assert.equal(shouldReloadForChunk({ aheadOnly: false, online: true, attempted: false }), true);
+  // Only fetched ahead of a click: dropped, never a reload under what someone is typing.
+  assert.equal(shouldReloadForChunk({ aheadOnly: true, online: true, attempted: false }), false);
+  // No signal: a reload would land on the browser's own "No internet" page; the card shows instead.
+  assert.equal(shouldReloadForChunk({ aheadOnly: false, online: false, attempted: false }), false);
+  // Already reloaded once for this: show the card, never loop.
+  assert.equal(shouldReloadForChunk({ aheadOnly: false, online: true, attempted: true }), false);
 });

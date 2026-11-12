@@ -29,7 +29,7 @@ import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
 import { RED } from '@/lib/brand';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
-import { PageSpinner, Button } from '@/components/ui';
+import { PageSpinner, Button, LoadError } from '@/components/ui';
 import { repRegions, shortRegion } from '@/lib/repRegions';
 import CollapsibleList from '@/components/CollapsibleList';
 import WalletCard from '@/components/WalletCard';
@@ -518,7 +518,7 @@ function AdminProfile({ user, sub }) {
     // On a phone the section opens below the list: bring it into view.
     if (window.innerWidth < 1024) setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
-  const { data: cmd, isError: cmdError } = useQuery({
+  const { data: cmd, isError: cmdError, refetch: retryCmd } = useQuery({
     queryKey: ['dashboard', 'command'],
     queryFn: async () => unwrap(await api.get('/dashboard/command')).data,
     enabled: tab === 'overview',
@@ -582,7 +582,7 @@ function AdminProfile({ user, sub }) {
           // One of his pages — its title, its tools, its tables — in the profile's own finish (.lab-section).
           <div className="lab-section"><section.Page /></div>
         ) : !cmd ? (
-          cmdError ? <p className="px-1 text-sm text-muted">The business figures are not available right now.</p> : <PageSpinner />
+          cmdError ? <LoadError what="the business figures" onRetry={retryCmd} /> : <PageSpinner />
         ) : (
           <>
             <div className="grid gap-4 xl:grid-cols-2">
@@ -622,13 +622,13 @@ export default function Profile() {
   const navigate = useNavigate();
   const isRep = user?.role === ROLES.SALES_REP;
 
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: retryStats } = useQuery({
     queryKey: ['dashboard', 'me', 'stats'],
     queryFn: async () => unwrap(await api.get('/dashboard/me/stats')).data,
     enabled: isRep,
   });
 
-  const { data: c } = useQuery({
+  const { data: c, isError: walletFailed, refetch: retryWallet } = useQuery({
     queryKey: ['commissions', 'me'],
     queryFn: async () => unwrap(await api.get('/commissions/me')).data,
     enabled: isRep,
@@ -672,7 +672,7 @@ export default function Profile() {
 
       {isRep && (
         <>
-          {!c ? <PageSpinner /> : (
+          {walletFailed && !c ? <LoadError what="your wallet" onRetry={retryWallet} /> : !c ? <PageSpinner /> : (
             <WalletCard
               balance={formatCurrency(c.available)}
               negative={c.available < 0}
@@ -693,9 +693,11 @@ export default function Profile() {
 
           <section>
             <SectionTitle>Activity</SectionTitle>
-            {statsLoading ? <PageSpinner /> : statsError ? (
-              <p className="px-1 text-sm text-muted">The activity figures are not available right now.</p>
-            ) : (
+            {/* Never read stats while they are missing (audit pwa-brand-load-1: offline, a paused query had
+                no figures and no error, and reading one blacked out the whole app). */}
+            {statsLoading ? <PageSpinner /> : statsError && !stats ? (
+              <LoadError what="your activity figures" onRetry={retryStats} />
+            ) : !stats ? <PageSpinner /> : (
               <div className="grid grid-cols-2 gap-3">
                 <ActivityCard icon={ClipboardList} label="Active requests" value={formatNumber(stats.activeRequests)} />
                 <ActivityCard icon={CheckCircle2} label="Completed requests" value={formatNumber(stats.completedRequests)} />

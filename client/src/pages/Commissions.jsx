@@ -20,7 +20,7 @@ import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents, initials } from '@/lib/format';
 import { PayoutHistory, earnedOn } from '@/components/WithdrawalNote';
 import {
-  PageHeader, Card, CardHeader, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
+  PageHeader, Card, CardHeader, PageSpinner, EmptyState, LoadError, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import DoneReceipt from '@/components/DoneReceipt';
@@ -734,11 +734,16 @@ function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('overview');
-  const { data: insights } = useQuery(pageQueries.commissionsInsights());
-  const { data: c, isLoading } = useQuery(pageQueries.commissionsMine());
-  const { data: wd } = useQuery(pageQueries.withdrawalsMine());
-  const { data: bonusProgress } = useQuery(pageQueries.bonusMe());
+  const insightsQ = useQuery(pageQueries.commissionsInsights());
+  const insights = insightsQ.data;
+  const { data: c, isLoading, isError, refetch } = useQuery(pageQueries.commissionsMine());
+  const wdQ = useQuery(pageQueries.withdrawalsMine());
+  const wd = wdQ.data;
+  const bonusQ = useQuery(pageQueries.bonusMe());
+  const bonusProgress = bonusQ.data;
 
+  // A wallet that never arrived is not a spinner for ever (audit pwa-brand-load-2).
+  if (isError && !c) return <LoadError what="your wallet" onRetry={refetch} />;
   if (isLoading || !c) return <PageSpinner />;
 
   const hasPenalties = c.penalties > 0;
@@ -818,7 +823,9 @@ function RepView() {
 
       {tab === 'overview' && (
         <div className="mt-6 space-y-9">
-          {!insights ? (
+          {insightsQ.isError && !insights ? (
+            <LoadError what="your earnings" onRetry={insightsQ.refetch} />
+          ) : !insights ? (
             <PageSpinner />
           ) : (
             <>
@@ -832,9 +839,13 @@ function RepView() {
       )}
 
       {tab === 'bonus' && (
-        bonusProgress?.configured
-          ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
-          : <QuietEmpty icon={TrendingUp} title="No bonus running" text="Nothing to chase right now." />
+        bonusQ.isError && !bonusProgress
+          ? <LoadError what="your bonus" onRetry={bonusQ.refetch} />
+          : !bonusProgress
+            ? <PageSpinner />
+            : bonusProgress.configured
+              ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
+              : <QuietEmpty icon={TrendingUp} title="No bonus running" text="Nothing to chase right now." />
       )}
 
       {tab === 'withdrawals' && (
@@ -846,7 +857,11 @@ function RepView() {
           <section className="px-1">
             <h3 className="text-sm font-semibold text-foreground">My withdrawals</h3>
             <p className="mt-0.5 text-xs text-muted">Minimum {formatCurrency(c.minWithdrawal)}</p>
-            {!withdrawals.length ? (
+            {wdQ.isError && !wd ? (
+              <LoadError what="your withdrawals" onRetry={wdQ.refetch} />
+            ) : !wd ? (
+              <PageSpinner />
+            ) : !withdrawals.length ? (
               <p className="mt-4 text-sm text-muted">No withdrawals yet. Settle boxes and the first request will appear here.</p>
             ) : (
               <div className="mt-2"><PayoutHistory flat items={withdrawals} /></div>
@@ -1389,7 +1404,7 @@ function PaidTip({ active, payload, label }) {
 // Africa time. It waits for the 200-row list rather than drawing from the 30 newest and then changing.
 // The list is newest-requested first and capped at 200: when more exist and the oldest one loaded is still
 // inside the six months, older payouts in the window were not loaded, and the subtitle says so.
-function PayoutTrend({ items, loading, hasMore }) {
+function PayoutTrend({ items, loading, failed, onRetry, hasMore }) {
   const eatMonth = (d) => { const t = new Date(new Date(d).getTime() + 3 * 3600e3); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`; };
   const now = new Date(Date.now() + 3 * 3600e3);
   const windowStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1) - 3 * 3600e3;
@@ -1414,7 +1429,9 @@ function PayoutTrend({ items, loading, hasMore }) {
       <p className={clsx('mt-0.5 text-xs', capped ? 'text-amber-300' : 'text-muted')}>
         {capped ? `Last 6 months · latest ${formatNumber(items.length)} payouts` : 'Last 6 months'}
       </p>
-      {loading ? (
+      {failed ? (
+        <LoadError what="the payouts" onRetry={onRetry} />
+      ) : loading ? (
         <p className="my-auto py-10 text-center text-xs text-muted">Loading payouts…</p>
       ) : count === 0 ? (
         <p className="my-auto py-10 text-center text-xs text-muted">No payouts in the last 6 months.</p>
@@ -2016,8 +2033,8 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
-    ...(wdQ.isError ? [] : [{ key: 'payouts', label: 'Payouts', count: waiting }]),
-    ...(finesQ.isError ? [] : [{ key: 'fines', label: 'Fines', count: fineCounts?.applied }]),
+    ...(wdQ.isError && !wdQ.data ? [] : [{ key: 'payouts', label: 'Payouts', count: waiting }]),
+    ...(finesQ.isError && !finesQ.data ? [] : [{ key: 'fines', label: 'Fines', count: fineCounts?.applied }]),
   ];
   const current = tabs.some((t) => t.key === tab) ? tab : 'overview';
 
@@ -2147,7 +2164,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
 
         {current === 'payouts' && (
           <div className="mt-5 space-y-4">
-            <PayoutTrend items={withdrawals} loading={!wdQ.data} hasMore={wdQ.data?.meta?.hasMore} />
+            <PayoutTrend items={withdrawals} loading={!wdQ.data} failed={wdQ.isError && !wdQ.data} onRetry={wdQ.refetch} hasMore={wdQ.data?.meta?.hasMore} />
             {wdQ.data && (
               withdrawals.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">No withdrawal requests yet.</p>
@@ -2559,11 +2576,11 @@ function AdminView() {
   const [tab, setTab] = useState('balances');
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
   const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
-  const { data: summary, isLoading } = useQuery(pageQueries.commissionsSummary());
-  const { data: wd } = useQuery(pageQueries.withdrawalsAll());
+  const { data: summary, isLoading, isError, refetch } = useQuery(pageQueries.commissionsSummary());
+  const { data: wd, isError: wdFailed, refetch: retryWd } = useQuery(pageQueries.withdrawalsAll());
   // The "Paid out" bars need six months of payouts, more than the 30 newest the table lists. Same
   // endpoint, under the 'commissions' key, so every decision refreshes it with the rest.
-  const { data: wdTrend } = useQuery(pageQueries.withdrawalsTrend());
+  const { data: wdTrend, isError: trendFailed, refetch: retryTrend } = useQuery(pageQueries.withdrawalsTrend());
   // How reliably orders are settled, overall and per rep — the existing staff analytics. Optional: the
   // page draws without it.
   const { data: analytics } = useQuery({
@@ -2607,12 +2624,14 @@ function AdminView() {
     },
   });
 
+  // Balances that never arrived are not a spinner for ever (audit pwa-brand-load-2).
+  if (isError && !summary) return <LoadError what="the commissions" onRetry={refetch} />;
   if (isLoading || !summary) return <PageSpinner />;
   const items = summary.items || [];
   // Owner, 11 Nov 2026: "the cards here are big … the rep list should be up; the charts can be down a bit —
   // we will have many reps". The business wallet is one slim strip on every tab, and the Paid-out chart sits
   // under the reps (and under the payouts) instead of beside the wallet, so the list starts high on the screen.
-  const trend = <PayoutTrend items={wdTrend?.data} loading={!wdTrend} hasMore={wdTrend?.meta?.hasMore} />;
+  const trend = <PayoutTrend items={wdTrend?.data} loading={!wdTrend} failed={trendFailed && !wdTrend} onRetry={retryTrend} hasMore={wdTrend?.meta?.hasMore} />;
   const wallet = (
     <BusinessWallet
       totals={summary.totals}
@@ -2699,7 +2718,7 @@ function AdminView() {
                 ) : null}
               </div>
             </div>
-            {!wd?.data?.length ? <EmptyState title="No withdrawal requests" /> : (
+            {wdFailed && !wd ? <LoadError what="the withdrawal requests" onRetry={retryWd} /> : !wd ? <PageSpinner /> : !wd.data?.length ? <EmptyState title="No withdrawal requests" /> : (
               <>
                 {[
                   { key: 'waiting', label: 'Waiting for you', rows: wd.data.filter((w) => w.status === 'PENDING' || w.status === 'APPROVED') },

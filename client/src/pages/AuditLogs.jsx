@@ -8,7 +8,7 @@ import {
 import api, { unwrap } from '@/lib/api';
 import { useDebounce } from '@/lib/hooks';
 import { matchingCodes } from '@/lib/auditSearch';
-import { PageHeader, Card, EmptyState, SearchInput, Pagination } from '@/components/ui';
+import { PageHeader, Card, EmptyState, LoadError, SearchInput, Pagination } from '@/components/ui';
 
 // Rearranged 11 Nov 2026 (Nino: "it should be nice — and why does it take so long to load"): plain
 // sentences ("Nino updated a rep"), grouped by day, each kind of action with its own small icon, the time
@@ -112,7 +112,7 @@ export default function AuditLogs() {
   const [search, setSearch] = useState('');
   const debounced = useDebounce(search);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['audit-logs', { page, search: debounced }],
     // A person's name or email, the words on the screen ("signed in", "suspended", "a rep"), or a code or id.
     queryFn: async () => unwrap(await api.get('/audit-logs', { params: { page, limit: 25, ...searchParams(debounced) } })),
@@ -136,6 +136,8 @@ export default function AuditLogs() {
       </div>
       {isLoading ? (
         <Card><SkeletonRows /></Card>
+      ) : isError && !data ? (
+        <Card><LoadError what="the audit log" onRetry={refetch} /></Card>
       ) : !rows.length ? (
         <Card>
           {debounced.trim()

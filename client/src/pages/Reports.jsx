@@ -5,7 +5,7 @@ import { FileText, FileSpreadsheet } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/format';
 import {
-  PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, Select, Button,
+  PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, LoadError, Select, Button,
   Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import { TrendChart, BarChartCard } from '@/components/charts';
@@ -88,7 +88,7 @@ export default function Reports({ embedded = false }) {
   const active = TABS.find((t) => t.key === tab);
   const params = { period };
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['report', tab, period],
     queryFn: async () => unwrap(await api.get(active.path, { params })).data,
   });
@@ -119,7 +119,7 @@ export default function Reports({ embedded = false }) {
         ))}
       </div>
 
-      {isLoading || !data ? <PageSpinner /> : (
+      {isError && !data ? <LoadError what="this report" onRetry={refetch} /> : isLoading || !data ? <PageSpinner /> : (
         <div>
           {tab === 'sales' && <SalesReport data={data} />}
           {tab === 'profit' && <ProfitReport data={data} />}

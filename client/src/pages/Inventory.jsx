@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { lazyPart, warmPart, PageLoadBoundary } from '@/components/LazyPage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, PackageX } from 'lucide-react';
@@ -684,9 +685,10 @@ function ProductStockModal({ row, onClose }) {
 // pages next to it — movement, stock transfer, reorder — and remove them from the sidebar; keep the sidebar
 // clean"; "even PO … inside"). The tab is in the address (?tab=), so the old /purchases, /transfers and
 // /reorder links land on it.
-const Purchases = lazy(() => import('@/pages/Purchases'));
-const Transfers = lazy(() => import('@/pages/Transfers'));
-const Reorder = lazy(() => import('@/pages/Reorder'));
+// Through the app's page loader (lib/pages.js), so a failed fetch-ahead never reloads the app (audit pwa-brand-load-3).
+const Purchases = lazyPart('Purchases');
+const Transfers = lazyPart('Transfers');
+const Reorder = lazyPart('Reorder');
 const INVENTORY_TABS = [['balances', 'Stock balances'], ['movements', 'Movement ledger'], ['purchases', 'Purchases'], ['transfers', 'Transfers'], ['reorder', 'Reorder']];
 const INNER = { purchases: Purchases, transfers: Transfers, reorder: Reorder };
 
@@ -697,7 +699,8 @@ export default function Inventory() {
   const [modal, setModal] = useState(null); // 'receive' | 'adjust' | 'damage'
 
   // Fetch the inner pages' code while the owner reads the balances, so a tab click never waits for it.
-  useEffect(() => { import('@/pages/Purchases'); import('@/pages/Transfers'); import('@/pages/Reorder'); }, []);
+  // Only ahead of the click: one that fails on a weak line is dropped, and the tab asks again when opened.
+  useEffect(() => { warmPart('Purchases'); warmPart('Transfers'); warmPart('Reorder'); }, []);
 
   const tabs = (
     <div className="mb-5 flex flex-wrap gap-2">
@@ -715,7 +718,9 @@ export default function Inventory() {
     return (
       <div>
         {tabs}
-        <Suspense fallback={<PageSpinner />}><Inner /></Suspense>
+        <PageLoadBoundary what="this tab" resetKey={tab}>
+          <Suspense fallback={<PageSpinner />}><Inner /></Suspense>
+        </PageLoadBoundary>
       </div>
     );
   }

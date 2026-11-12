@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import api, { unwrap } from '@/lib/api';
 import { formatCurrency } from '@/lib/format';
-import { PageHeader, Card, PageSpinner, EmptyState } from '@/components/ui';
+import { PageHeader, Card, PageSpinner, EmptyState, LoadError } from '@/components/ui';
 
 // Rearranged 11 Nov 2026 (Nino: "it looks bad and is not well arranged"): the feed is grouped by day, every
 // line is in plain words (no CASH_SALE / TRANSFER_IN), amounts are shillings, a status is a small coloured
@@ -66,7 +66,7 @@ function dayLabel(d) {
 }
 
 export default function Activity() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['activity'],
     queryFn: async () => unwrap(await api.get('/activity', { params: { limit: 50 } })).data,
     refetchInterval: LIVE,
@@ -84,7 +84,9 @@ export default function Activity() {
   return (
     <div>
       <PageHeader title="Activity" subtitle="Everything happening across the business, as it happens." />
-      {isLoading ? <PageSpinner /> : !groups.length ? (
+      {isLoading ? <PageSpinner /> : isError && !data ? (
+        <Card><LoadError what="the activity" onRetry={refetch} /></Card>
+      ) : !groups.length ? (
         <Card><EmptyState title="No recent activity" icon={ActivityIcon} /></Card>
       ) : (
         <div className="space-y-6">
