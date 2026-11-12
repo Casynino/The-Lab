@@ -10,7 +10,7 @@ import { Plus, Pencil, Trash2, Package, X, TrendingDown, Boxes, Wallet, Check, C
 import api, { apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useBrands, useCategories, usePackagingUnits, useProducts, useDebounce } from '@/lib/hooks';
-import { formatCurrency, formatNumber, pluralizeUnit } from '@/lib/format';
+import { formatCurrency, formatNumber, pluralizeUnit, unitWord } from '@/lib/format';
 import { brandInName, closestProduct, setupFrom, usualCategory, setupParts, sameNameAs, otherKind, unitPlural } from '@/lib/productDefaults';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Select, Textarea,
@@ -515,9 +515,23 @@ function ProductsCatalogue() {
 
   const del = useMutation({
     mutationFn: (id) => api.delete(`/products/${id}`),
-    onSuccess: () => { toast.success('Product removed'); qc.invalidateQueries({ queryKey: ['products'] }); },
-    onError: (e) => toast.error(apiError(e)),
+    // The server says what happened: removed, or switched off because it has stock history, with where its
+    // boxes still are (audit reversals-stock-1). It used to say "Product removed" either way.
+    onSuccess: (r) => {
+      const d = r?.data?.data || {};
+      if (d.deactivated) toast(d.message || 'Switched off, not removed: it has stock history.', { duration: 9000 });
+      else toast.success(d.message || 'Product removed');
+      qc.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (e) => { toast.error(apiError(e), { duration: 8000 }); qc.invalidateQueries({ queryKey: ['products'] }); },
   });
+  // Said before the press, not only after it: a product with history is switched off, not deleted.
+  const askRemove = (p) => {
+    const stock = Number(p.onHandBase) > 0
+      ? ` ${formatNumber(p.onHandBase)} ${unitWord(p.onHandBase, p.baseUnitName || 'Box').toLowerCase()} ${Number(p.onHandBase) === 1 ? 'is' : 'are'} still in stock, so it will be switched off instead, and its records kept.`
+      : ' If it has stock history it is switched off instead, and its records kept.';
+    if (confirm(`Remove ${p.name}?${stock}`)) del.mutate(p.id);
+  };
 
   return (
     <div>
@@ -627,7 +641,7 @@ function ProductsCatalogue() {
                     <TD>
                       <div className="flex justify-end gap-1">{isOwner && <>
                         <button title="Edit" className="cursor-pointer px-2 py-1 text-faint transition hover:text-brand-600" onClick={() => setModal({ open: true, editing: p })}><Pencil className="h-4 w-4" /></button>
-                        <button title="Remove" className="cursor-pointer px-2 py-1 text-faint transition hover:text-rose-400" onClick={() => { if (confirm(`Remove ${p.name}?`)) del.mutate(p.id); }}><Trash2 className="h-4 w-4" /></button>
+                        <button title="Remove" className="cursor-pointer px-2 py-1 text-faint transition hover:text-rose-400" onClick={() => askRemove(p)}><Trash2 className="h-4 w-4" /></button>
                       </>}</div>
                     </TD>
                   </TR>
