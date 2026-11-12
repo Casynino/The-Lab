@@ -590,7 +590,7 @@ function ProductStockModal({ row, onClose }) {
   const withReps = row.totalBase - inStore;
 
   return (
-    <Modal open onClose={onClose} size="lg" title={row.name}
+    <Modal open onClose={onClose} size="xl" title={row.name}
       footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
       <div className="space-y-5">
         {/* What it is worth and how it splits, before the detail. */}

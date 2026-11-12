@@ -1404,10 +1404,12 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                           <span className="shrink-0">· {formatNumber(p.boxes)} {unitWord(p.boxes)}{p.method ? ` · ${p.method}` : ''}</span>
                         </div>
                       </div>
-                      <div className="flex shrink-0 gap-2">
-                        <Button variant="ghost" className="text-rose-500" disabled={approveSubmission.isPending} onClick={() => setRejectingSubmission(p)}>Reject</Button>
-                        <Button loading={approveSubmission.isPending && approveSubmission.variables === p.id} onClick={() => approveSubmission.mutate(p.id)}>
-                          <CheckCircle2 className="h-4 w-4" /> Approve settlement
+                      {/* On a phone the two share the row, 44 px tall and 12 px apart, like the Settlements strip, and the
+                          button reads "Approve" (the box above already says these are settlements) so it stays one line. */}
+                      <div className="flex w-full shrink-0 gap-3 sm:w-auto sm:gap-2">
+                        <Button variant="ghost" className="min-h-11 flex-1 text-rose-500 sm:min-h-0 sm:flex-none" disabled={approveSubmission.isPending} onClick={() => setRejectingSubmission(p)}>Reject</Button>
+                        <Button className="min-h-11 flex-1 sm:min-h-0 sm:flex-none" loading={approveSubmission.isPending && approveSubmission.variables === p.id} onClick={() => approveSubmission.mutate(p.id)}>
+                          <CheckCircle2 className="h-4 w-4" /> <span>Approve<span className="hidden sm:inline"> settlement</span></span>
                         </Button>
                       </div>
                     </div>

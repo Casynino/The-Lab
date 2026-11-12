@@ -10,7 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/hooks';
 import { ROLES } from '@/lib/constants';
 import { formatDate, formatDateTime, formatNumber, formatCurrency, unitWord } from '@/lib/format';
-import { timeLeftLabel } from '@/lib/labels';
+import { approvalLeftLabel } from '@/lib/labels';
 import {
   PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, Modal, Field, Select, Textarea,
   Pagination, Table, THead, TBody, TR, TH, TD,
@@ -564,7 +564,7 @@ function RepReturnsView({ all, isLoading, failed = false, onRetry, onNew, onView
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-sm font-semibold text-foreground">{r.returnNumber}</span>
-                        <span className={clsx('text-[13px] font-semibold', expiring ? 'text-rose-300' : 'text-amber-300')}>{timeLeftLabel(hoursLeft)}</span>
+                        <span className={clsx('text-[13px] font-semibold', expiring ? 'text-rose-300' : 'text-amber-300')}>{approvalLeftLabel(hoursLeft)}</span>
                       </div>
                       <p className="mt-2 text-[22px] font-bold leading-none tabular-nums text-amber-300">{formatNumber(boxes)} box{plural(boxes)}</p>
                       {names.length > 0 && (

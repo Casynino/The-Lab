@@ -17,6 +17,15 @@ export function timeLeftLabel(hours, empty = '—') {
   return `${Math.floor(h / 24)}d left`;
 }
 
+// Time left on ZELab's 24 h decision over a rep's return. The clock runs on ZELab, not on the rep, so it
+// never reads "due now" (that told the rep something was due from him): the last hour, and the moments
+// after the window ends before the expiry job runs, read "under 1h left". Rounded down like the rest.
+export function approvalLeftLabel(hours, empty = '—') {
+  if (hours == null || !Number.isFinite(Number(hours))) return empty;
+  const h = Number(hours);
+  return h < 1 ? 'under 1h left' : `${Math.floor(h)}h left`;
+}
+
 // A unit's name for more than one ("Box" -> "Boxes", "Carton" -> "Cartons").
 export function pluralizeUnit(unit = 'unit') {
   if (!unit) return 'units';

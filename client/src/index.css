@@ -687,6 +687,13 @@ body {
      phone (`hidden sm:table-cell`) stays hidden on the card. */
   .table-stack > table > tbody > tr > td:empty,
   .table-stack > table > tbody > tr > td.hidden { display: none; }
+  /* ...but only below the breakpoint that brings it back: on a wider screen the page has already hidden
+     the phone copy (a status under the order number is `sm:hidden`), so the cell is the only place
+     that figure is shown. Without this a tablet held upright lost Status on Stock requests. */
+  @media (min-width: 640px) { .table-stack > table > tbody > tr > td.hidden.sm\:table-cell:not(:empty) { display: block; } }
+  @media (min-width: 768px) { .table-stack > table > tbody > tr > td.hidden.md\:table-cell:not(:empty) { display: block; } }
+  @media (min-width: 1024px) { .table-stack > table > tbody > tr > td.hidden.lg\:table-cell:not(:empty) { display: block; } }
+  @media (min-width: 1280px) { .table-stack > table > tbody > tr > td.hidden.xl\:table-cell:not(:empty) { display: block; } }
 }
 /* The same, for a wide list in a box under 48rem. */
 @container (max-width: 47.99rem) {
@@ -728,4 +735,11 @@ body {
      phone (`hidden sm:table-cell`) stays hidden on the card. */
   .table-stack-wide > table > tbody > tr > td:empty,
   .table-stack-wide > table > tbody > tr > td.hidden { display: none; }
+  /* ...but only below the breakpoint that brings it back: on a wider screen the page has already hidden
+     the phone copy (a status under the order number is `sm:hidden`), so the cell is the only place
+     that figure is shown. Without this a tablet held upright lost Status on Stock requests. */
+  @media (min-width: 640px) { .table-stack-wide > table > tbody > tr > td.hidden.sm\:table-cell:not(:empty) { display: block; } }
+  @media (min-width: 768px) { .table-stack-wide > table > tbody > tr > td.hidden.md\:table-cell:not(:empty) { display: block; } }
+  @media (min-width: 1024px) { .table-stack-wide > table > tbody > tr > td.hidden.lg\:table-cell:not(:empty) { display: block; } }
+  @media (min-width: 1280px) { .table-stack-wide > table > tbody > tr > td.hidden.xl\:table-cell:not(:empty) { display: block; } }
 }

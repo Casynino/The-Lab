@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { timeLeftLabel, pluralizeUnit, unitWord, bonusTrack } from './labels.js';
+import { timeLeftLabel, approvalLeftLabel, pluralizeUnit, unitWord, bonusTrack } from './labels.js';
 
 test('time left is rounded down, never up to a day that is not there', () => {
   assert.equal(timeLeftLabel(86.87), '3d left'); // 3 days 14.9 h — it used to read "4d left"
@@ -77,4 +77,13 @@ test('no tiers, no track', () => {
   const zeroTop = bonusTrack({ configured: true, sales: 5, tiers: [{ target: 0, progress: 40 }] });
   assert.equal(zeroTop.barPct, 40);
   assert.deepEqual(zeroTop.markers, []);
+});
+
+test("a return's 24 h decision never reads 'due now' to the rep (the clock runs on ZELab)", () => {
+  assert.equal(approvalLeftLabel(24), '24h left');
+  assert.equal(approvalLeftLabel(5.9), '5h left'); // rounded down
+  assert.equal(approvalLeftLabel(1), '1h left');
+  assert.equal(approvalLeftLabel(0.6), 'under 1h left');
+  assert.equal(approvalLeftLabel(0), 'under 1h left'); // window over, expiry job not run yet
+  assert.equal(approvalLeftLabel(null), '—');
 });
