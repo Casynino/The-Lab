@@ -1028,8 +1028,9 @@ export default function SalesRepProfile() {
           {/* The same two bars the rep sees, so a conversation about their
               progress is had over identical numbers. */}
           <ProgressRows
-            commission={{ available: c.available, minWithdrawal: c.threshold }}
+            commission={{ available: c.available, minWithdrawal: c.threshold, penalties: c.penalties, eligible: c.eligible, emergency: c.emergency, pendingRequests: c.pendingRequests }}
             bonus={data.bonus}
+            forStaff
           />
           {/* A rep who is not on commission has no balance to read, no fines
               to carry and nothing to withdraw — so the panel says that instead

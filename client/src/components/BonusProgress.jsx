@@ -58,12 +58,14 @@ export default function BonusProgress({ p }) {
         <>
           <p className="mt-4 flex items-center justify-center gap-2 text-[13px] font-semibold text-emerald-300">
             <Trophy className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {formatCurrency(claimable.bonusAmount)} is ready to take
+            {formatCurrency(claimable.bonusAmount)} is yours
           </p>
+          {/* There is nothing for him to tap: ZELab pays a bonus (audit, 12 Nov 2026 — "You can take it
+              now" sent him looking for a button). */}
           <p className="mt-1 text-center text-xs leading-snug text-muted">
             {next
-              ? <>You can take it now, or keep selling for the next one. Taking a bonus starts your count again from zero.</>
-              : <>Taking it starts your count again from zero.</>}
+              ? <>Ask ZELab to pay it, or keep selling for the next one. Once a bonus is paid your count starts again from zero.</>
+              : <>Ask ZELab to pay it. Once it is paid your count starts again from zero.</>}
           </p>
         </>
       )}

@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { formatCurrency } from '@/lib/format';
-import { bonusTrack } from '@/lib/labels';
+import { formatCurrency, formatDateTime } from '@/lib/format';
+import { bonusRow, walletRow } from '@/lib/labels';
 
 // A rep is running at two things at once — a withdrawal minimum and a bonus
 // tier — and both ask the same question: how far along, how much is left, what
@@ -72,26 +72,34 @@ function Row({ label, pct, barPct, hint, reward, ready, readyLabel, markers = []
 }
 
 // The wallet and the bonus, one soft card each.
-export default function ProgressRows({ commission, bonus, onOpenCommission }) {
+// `forStaff`: the admin reading a rep's profile, who is the one that pays a reached bonus.
+export default function ProgressRows({ commission, bonus, onOpenCommission, forStaff = false }) {
   const rows = [];
 
-  if (commission && commission.minWithdrawal > 0) {
-    const avail = Math.max(0, commission.available || 0);
-    const min = commission.minWithdrawal;
-    const ready = avail >= min;
+  const w = commission ? walletRow(commission) : null;
+  if (w) {
+    // A withdrawal waiting to be paid is already out of the balance (the Wallet card calls it Pending),
+    // so it is named here too, or a rep who just asked for his money reads "TSh 0" (audit, 12 Nov 2026).
+    const pending = w.pending > 0
+      ? <span className="font-medium text-amber-300"> · {formatCurrency(w.pending)} pending</span>
+      : null;
     rows.push(
       <Row
         key="commission"
         label="Wallet"
-        pct={(avail / min) * 100}
+        pct={w.pct}
         // Ready: his balance, the money he can take out. Below the line: the minimum he is working towards.
         // Showing the minimum next to "Ready to withdraw" read as "I can withdraw TSh 250,000" (audit rep-app-4).
-        reward={ready ? avail : min}
-        ready={ready}
-        readyLabel="Ready to withdraw"
-        hint={avail / min >= 0.9
-          ? `Almost there — only ${formatCurrency(min - avail)} to go`
-          : `${formatCurrency(avail)} of ${formatCurrency(min)}`}
+        reward={w.ready ? w.avail : w.min}
+        ready={w.ready}
+        // A window the owner opened lets him withdraw under the minimum, until a set time (as the Wallet says).
+        readyLabel={<>{w.windowUntil ? `Withdrawal open until ${formatDateTime(w.windowUntil)}` : 'Ready to withdraw'}{pending}</>}
+        // Below zero (fines above earnings) the real balance, in rose, as on the Wallet — never "TSh 0".
+        hint={w.negative
+          ? <><span className="font-medium text-rose-300">{formatCurrency(w.balance)} · {w.fromFines ? 'overdue fines' : 'paid off by new commission'}</span>{pending}</>
+          : <>{w.avail / w.min >= 0.9
+            ? `Almost there — only ${formatCurrency(w.min - w.avail)} to go`
+            : `${formatCurrency(w.avail)} of ${formatCurrency(w.min)}`}{pending}</>}
         onClick={onOpenCommission}
       />,
     );
@@ -101,23 +109,24 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
   // mountain — "6,329,500 more" is discouraging where "3,670,500 of 10,000,000"
   // is the same fact told as ground covered — so the gap appears near the line,
   // which is exactly where it becomes the encouraging number.
-  const track = bonusTrack(bonus);
-  if (track) {
-    const { aim } = track;
-    const claimable = bonus.claimable;
+  // A reached bonus is shown as that bonus, whole (its amount, 100%), not the next tier's percentage and
+  // amount beside it; a rep cannot take it himself, so the line says who pays it (audit, 12 Nov 2026).
+  const b = bonusRow(bonus);
+  if (b) {
+    const { aim } = b;
     rows.push(
       <Row
         key="bonus"
         label="Sales bonus"
-        pct={track.pct}
-        barPct={track.barPct}
-        reward={aim.bonusAmount}
-        ready={Boolean(claimable)}
-        readyLabel={claimable ? `${formatCurrency(claimable.bonusAmount)} ready — or push on` : ''}
+        pct={b.pct}
+        barPct={b.barPct}
+        reward={b.reward}
+        ready={b.ready}
+        readyLabel={forStaff ? 'Reached — ready to pay' : 'Reached — ask ZELab to pay it, or push on'}
         hint={aim.progress >= 90
           ? `Almost there — only ${formatCurrency(aim.remaining)} to go`
           : `${formatCurrency(bonus.sales)} of ${formatCurrency(aim.target)}`}
-        markers={track.markers}
+        markers={b.markers}
         onClick={onOpenCommission}
       />,
     );
