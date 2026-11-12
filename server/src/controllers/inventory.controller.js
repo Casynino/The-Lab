@@ -9,6 +9,7 @@ const inventory = require('../services/inventory.service');
 const audit = require('../services/audit.service');
 const settlementSvc = require('../services/settlement.service');
 const { toNumber, round2 } = require('../utils/money');
+const { eatDayBounds } = require('../utils/dates');
 
 // A rep's boxes that an open order still owes come back through a Return on that order, never an
 // adjustment or a damage entry: either took them off the rep while the order went on owing them — and
@@ -276,9 +277,10 @@ const movements = asyncHandler(async (req, res) => {
   if (q.warehouseId) where.warehouseId = q.warehouseId;
   if (q.salesRepId) where.salesRepId = q.salesRepId;
   if (q.from || q.to) {
-    where.occurredAt = {};
-    if (q.from) where.occurredAt.gte = new Date(q.from);
-    if (q.to) where.occurredAt.lte = new Date(q.to);
+    // A bare day is a Dar es Salaam day, not UTC midnight (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: q.from, to: q.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.occurredAt = bounds;
   }
 
   const [items, total] = await Promise.all([

@@ -444,8 +444,10 @@ function Balances() {
                       <div className="mt-1 text-[11px] text-faint">{pluralizeUnit(r.baseUnitName)} on hand</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(r.value)}</div>
-                      <div className="text-[11px] text-faint">{formatCurrency(r.sellingPrice)} each</div>
+                      {/* The value is at COST (boxes x purchase price); the line under it is the selling
+                          price, so it says so instead of "each" (63 x 30,000 is not 882,000). */}
+                      <div className="text-sm font-bold tabular-nums text-foreground" title="Value at cost">{formatCurrency(r.value)}</div>
+                      <div className="text-[11px] text-faint">at cost · sells at {formatCurrency(r.sellingPrice)}</div>
                     </div>
                   </div>
 

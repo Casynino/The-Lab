@@ -1,5 +1,5 @@
 import { STEADY } from '@/lib/polling';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { Fragment, useState, useRef, useEffect, useMemo } from 'react';
 import ReportsArchive from '@/components/ReportsArchive';
 import ProductPicker, { MoreToggle, DiscardFooter } from '@/components/ProductPicker';
 import { pickerRows, lineCost, primaryWarehouse, shortPlace, buttonPlace } from '@/lib/stockPick';
@@ -22,6 +22,7 @@ import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { eatISODate, eatDay } from '@/lib/tz';
+import { statementRows, poPayCap } from '@/lib/financeFigures';
 import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
@@ -615,11 +616,14 @@ function Overview({ onNavigate, onOwnerMoney }) {
     ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
     ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
     // Only what needs a DECISION: the supplier is paid as the stock sells, so the whole invoice is not
-    // listed — only money genuinely payable now.
-    (cs?.setAside || 0) > 0 && {
+    // listed — only money genuinely payable now. The amount is what is DUE (the tile's figure), never
+    // setAside: setAside is only the part a brand wallet holds, so it followed the wallet balance and
+    // gave this screen two different "due" amounts.
+    dueNow > 0 && {
       icon: Factory,
       tone: 'text-rose-300 bg-rose-500/15',
-      text: `${formatCurrency(cs.setAside)} is due to ${cs.supplierLabel || 'your supplier'} for boxes already sold`,
+      text: `${formatCurrency(dueNow)} is due to ${supplierLabel} for boxes already sold`
+        + ((cs?.setAside || 0) > 0 && round2ui(cs.setAside) < dueNow ? ` (${formatCurrency(cs.setAside)} of it is in the brand wallets)` : ''),
       tab: 'suppliers',
     },
     ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
@@ -1145,12 +1149,12 @@ function AccountStatementModal({ account, onClose }) {
   // account — so the column is dropped rather than filled with zeroes.
   // Page 2 onwards starts below the rows on the pages before it (newerNet = their in minus out),
   // not at today's balance again.
-  let running = Math.round((account.balance - Number(data?.meta?.newerNet || 0)) * 100) / 100;
-  const withBalance = rows.map((t) => {
-    const after = running;
-    running = Math.round((after - (t.direction === 'IN' ? Number(t.amount) : -Number(t.amount))) * 100) / 100;
-    return { ...t, balanceAfter: after };
-  });
+  // Rows from before the books started (finance go-live) are listed as history but are in no balance:
+  // walking the balance back through them invented figures like -1,396,000 on 19 Jun (audit
+  // admin-money-3). They get no balance and sit under a "before the books started" line.
+  const epochAt = data?.meta?.epochAt || null;
+  const withBalance = statementRows(rows, account.balance, data?.meta?.newerNet, epochAt);
+  const firstBefore = withBalance.findIndex((t) => t.beforeBooks);
 
   const Icon = ACCOUNT_ICON[account.type] || Wallet;
   return (
@@ -1211,8 +1215,16 @@ function AccountStatementModal({ account, onClose }) {
                 </TR>
               </THead>
               <TBody>
-                {withBalance.map((t) => (
-                  <TR key={t.id}>
+                {withBalance.map((t, i) => (
+                  <Fragment key={t.id}>
+                  {i === firstBefore && !isRecord && (
+                    <TR>
+                      <TD colSpan={6} className="bg-white/[0.03] text-[11px] text-faint">
+                        Before the books started on {formatDate(epochAt)} — listed for the record, not in the balance or the totals above
+                      </TD>
+                    </TR>
+                  )}
+                  <TR>
                     <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                     <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                     {/* Wraps to two lines rather than pushing Balance past the window's edge (it ran 63 px over at 1440). */}
@@ -1234,10 +1246,14 @@ function AccountStatementModal({ account, onClose }) {
                         <TD className="text-right font-semibold tabular-nums text-rose-400">
                           {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
                         </TD>
-                        <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>
+                        <TD className="text-right font-bold tabular-nums text-foreground"
+                          title={t.beforeBooks ? 'Before the books started — not in the balance' : undefined}>
+                          {t.beforeBooks ? <span className="font-normal text-faint">—</span> : formatCurrency(t.balanceAfter)}
+                        </TD>
                       </>
                     )}
                   </TR>
+                  </Fragment>
                 ))}
               </TBody>
             </Table>
@@ -2178,7 +2194,8 @@ function CashFlowTab() {
   }[period];
   const day = (v) => eatDay(v, { day: 'numeric', month: 'short', year: 'numeric' });
   // One day ("Daily") is already in the title, so its range is not repeated under it.
-  const periodSub = !data.range ? 'everything recorded so far'
+  // The go-live date reads exactly as on the Overview (formatDate: "05 Jul 2026").
+  const periodSub = !data.range ? (data.epochAt ? `everything since ${formatDate(data.epochAt)}` : 'everything recorded so far')
     : day(data.range.start) === day(data.range.end) ? '' : `${day(data.range.start)} → ${day(data.range.end)}`;
   const ownerNet = data.ownerNet ?? 0;
   // Four terms run in one line from lg; the fifth (his own money) needs xl.
@@ -2343,10 +2360,12 @@ function AddSupplierModal({ onClose }) {
   );
 }
 
-function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
+function PaySupplierModal({ order, supplierOutstanding, accounts: all, onClose, onDone }) {
   const accounts = wallets(all);
   const [accountId, setAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
-  const [amount, setAmount] = useState(String(order.outstanding || ''));
+  // Never more than the PO still owes AND the supplier is owed overall (the server refuses the same).
+  const cap = poPayCap(order.outstanding, supplierOutstanding);
+  const [amount, setAmount] = useState(cap > 0 ? String(cap) : '');
   // Money that moved weeks ago belongs in the week it moved. Without this the
   // payment landed on the day it was typed, which put a September purchase's
   // cash into October and left both months wrong.
@@ -2360,15 +2379,19 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
     onError: (e) => toast.error(apiError(e)),
   });
   const amt = Number(amount);
-  const valid = accountId && amt > 0 && amt <= order.outstanding + 0.001;
+  const valid = accountId && amt > 0 && amt <= cap + 0.001;
   return (
     <Modal open onClose={onClose} title={`Pay supplier · ${order.poNumber}`}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={pay.isPending} disabled={!valid} onClick={() => pay.mutate()}><Wallet className="h-4 w-4" /> Record payment</Button></>}>
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-muted">
-          Order total {formatCurrency(order.totalCost)} · paid {formatCurrency(order.paid)} · <b className="text-rose-400">outstanding {formatCurrency(order.outstanding)}</b>
+          Order total {formatCurrency(order.totalCost)} · paid {formatCurrency(order.paid)}
+          {order.returned > 0 && <> · returned {formatCurrency(order.returned)}</>} · <b className="text-rose-400">outstanding {formatCurrency(order.outstanding)}</b>
+          {cap < order.outstanding && (
+            <div className="mt-1 text-xs text-faint">You owe the supplier {formatCurrency(Math.max(0, supplierOutstanding))} in all, so that is the most this payment can be.</div>
+          )}
         </div>
-        <Field label="Amount (TZS)" required error={amt > order.outstanding + 0.001 ? 'More than what is outstanding' : undefined}>
+        <Field label="Amount (TZS)" required error={amt > cap + 0.001 ? (cap < order.outstanding ? 'More than you owe this supplier' : 'More than what is outstanding') : undefined}>
           <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2706,10 +2729,15 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
                         <TD className="text-faint">{formatDate(o.receivedAt || o.createdAt)}</TD>
                         <TD>{formatNumber(o.boxes)}</TD>
                         <TD>{formatCurrency(o.totalCost)}</TD>
-                        <TD className="text-emerald-500">{formatCurrency(o.paid)}</TD>
+                        {/* Paid includes this PO's share of balance payments (oldest PO first), so the rows add
+                            up to the balance owed; goods returned come off the outstanding under it. */}
+                        <TD className="text-emerald-500">
+                          {formatCurrency(o.paid)}
+                          {o.returned > 0 && <div className="text-[11px] text-amber-300/80">{formatCurrency(o.returned)} returned</div>}
+                        </TD>
                         <TD className={o.outstanding > 0 ? 'font-semibold text-rose-400' : 'text-faint'}>{formatCurrency(o.outstanding)}</TD>
                         <TD>
-                          {o.outstanding > 0 && (
+                          {poPayCap(o.outstanding, data.totals.outstanding) > 0 && (
                             <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => setPaying(o)}>Pay PO</Button>
                           )}
                         </TD>
@@ -2717,6 +2745,14 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
                     ))}
                   </TBody>
                 </Table>
+              )}
+              {/* Paid or returned beyond every bill fits on no PO row; said here so the rows and this line
+                  make the balance owed (audit admin-money-1). */}
+              {data.orders.length > 0 && data.totals.notOnAnyPo > 0 && (
+                <p className="mt-2 text-xs text-muted">
+                  {formatCurrency(data.totals.notOnAnyPo)} of balance payments or returned goods goes beyond every bill, so it is on no PO above
+                  — that is why the balance owed is {formatCurrency(data.totals.outstanding)}.
+                </p>
               )}
             </div>
 
@@ -2737,7 +2773,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
           </div>
         )}
       </Modal>
-      {paying && <PaySupplierModal order={paying} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
+      {paying && <PaySupplierModal order={paying} supplierOutstanding={data?.totals?.outstanding} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
       {payingBalance && s && <PayBalanceModal supplier={s} outstanding={data.totals.outstanding} accounts={accounts} onClose={() => setPayingBalance(false)} onDone={refresh} />}
       {purchasing && s && <NewPurchaseModal supplier={s} accounts={accounts} onClose={() => setPurchasing(false)} onDone={refresh} />}
       {returning && s && <ReturnGoodsModal supplier={s} outstanding={data.totals.outstanding} onClose={() => setReturning(false)} onDone={refresh} />}

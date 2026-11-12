@@ -168,7 +168,7 @@ async function listProducts(filters, pagination) {
     ];
   }
 
-  const [items, total, onHand, inWarehouse] = await Promise.all([
+  const [items, total, onHand, inWarehouse, everyRow] = await Promise.all([
     prisma.product.findMany({
       where,
       include: PRODUCT_INCLUDE,
@@ -179,6 +179,10 @@ async function listProducts(filters, pagination) {
     prisma.product.count({ where }),
     inventory.productOnHand(prisma),
     inventory.warehouseOnHand(prisma),
+    // The summary cards count EVERY product the filter matches, not the page on screen (audit admin-ops-5).
+    filters.withSummary
+      ? prisma.product.findMany({ where, select: { id: true, sellingPrice: true, minStockLevel: true } })
+      : null,
   ]);
 
   const enriched = items.map((p) => {
@@ -194,7 +198,23 @@ async function listProducts(filters, pagination) {
     };
   });
 
-  return { items: enriched, total };
+  const summary = everyRow ? productsSummary(everyRow, onHand, inWarehouse) : undefined;
+  return { items: enriched, total, summary };
+}
+
+// Boxes on hand, their worth at selling price and how many products run low, over a list of products.
+// Same rules as the rows above (low = the warehouse shelf at or under the minimum). Pure (tested).
+function productsSummary(rows, onHand, inWarehouse) {
+  let boxes = 0;
+  let worth = 0;
+  let low = 0;
+  for (const p of rows) {
+    const n = onHand.get(p.id) || 0;
+    boxes += n;
+    worth += n * toNumber(p.sellingPrice);
+    if (p.minStockLevel > 0 && (inWarehouse.get(p.id) || 0) <= p.minStockLevel) low += 1;
+  }
+  return { onHandBase: boxes, worthAtSelling: Number(worth.toFixed(2)), lowCount: low };
 }
 
 async function getProduct(id) {
@@ -236,4 +256,5 @@ module.exports = {
   getProduct,
   deleteProduct,
   PRODUCT_INCLUDE,
+  productsSummary,
 };

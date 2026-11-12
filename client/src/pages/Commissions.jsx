@@ -13,6 +13,8 @@ import { Coins, Crown, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, S
 import SideSheet from '@/components/SideSheet';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
+import { wentThrough } from '@/lib/once';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents, initials } from '@/lib/format';
@@ -221,7 +223,8 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
       refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have paid it: reload so the row shows its real state (audit backend-integrity-5).
+    onError: (e) => { toast.error(apiError(e)); refresh(); },
   });
 
   // Reject asks once more before it goes: the rep is told at once that it was not approved.
@@ -321,7 +324,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
       toast.success(v.action === 'PAY' ? 'Paid — and recorded on the Commission account' : 'Request rejected');
       refresh();
     },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => { toast.error(apiError(e)); refresh(); },
   });
 
   if (!items.length) return null;
@@ -413,21 +416,28 @@ function PenaltyBreakdown({ breakdown }) {
 // Forgive one fine: keeps the record, returns the money to the rep's balance.
 function ForgiveModal({ penalty, onClose }) {
   const qc = useQueryClient();
+  const once = useOnce(); // a double tap sends one Forgive
   const [reason, setReason] = useState('');
+  const refresh = () => ['penalties', 'commissions', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const waive = useMutation({
     mutationFn: () => api.post(`/penalties/${penalty.id}/waive`, { reason: reason || undefined }),
     onSuccess: () => {
       toast.success(`Fine forgiven — ${formatCurrency(penalty.amount)} returned to ${penalty.salesRep?.user?.name || 'the rep'}`);
-      ['penalties', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = already forgiven (a retry after a lost answer): it is done, so the window closes on the real state.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e)); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
   return (
     <Modal open onClose={onClose} title="Forgive this fine?" footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={waive.isPending} onClick={() => waive.mutate()}>
+        <Button loading={waive.isPending} onClick={() => once.run(() => waive.mutate())}>
           <HeartHandshake className="h-4 w-4" /> Forgive — return {formatCurrency(penalty.amount)}
         </Button>
       </>
@@ -874,15 +884,23 @@ function DeductModal({ reps, onClose }) {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const rep = reps.find((r) => r.salesRepId === salesRepId);
+  const once = useOnce(); // a double tap sends one deduction
 
+  const refresh = () => ['commissions', 'penalties', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const deduct = useMutation({
     mutationFn: () => api.post('/penalties/adjust', { salesRepId, amount: Number(amount), reason }),
     onSuccess: () => {
       toast.success(`${formatCurrency(Number(amount))} deducted from ${rep?.name || 'the rep'}'s commission`);
-      ['commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = this same deduction was recorded a moment ago (a retry after a lost answer): close on the real
+    // balance instead of leaving the window open to be sent again with a changed reason.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e), { duration: 8000 }); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
 
   const valid = salesRepId && Number(amount) > 0 && reason.trim();
@@ -890,7 +908,7 @@ function DeductModal({ reps, onClose }) {
     <Modal open onClose={onClose} title="Deduct commission" footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={deduct.isPending} disabled={!valid} onClick={() => deduct.mutate()}>
+        <Button loading={deduct.isPending} disabled={!valid} onClick={() => once.run(() => deduct.mutate())}>
           Deduct {Number(amount) > 0 ? formatCurrency(Number(amount)) : ''}
         </Button>
       </>
@@ -1326,7 +1344,8 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
       </div>
 
       <dl className={clsx('mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4', wide ? 'lg:mt-0 lg:flex-1 lg:grid-cols-2 xl:grid-cols-4' : 'lg:grid-cols-2 2xl:grid-cols-4')}>
-        <Fig label="Earned · all time" value={formatCurrency(totals.earned)} />
+        {/* Every box settled since the first sale, so it starts before Finance's "All time" (05 Jul). */}
+        <Fig label="Earned · all time" value={formatCurrency(totals.earned)} sub="since the first sale" title="Every box settled since the very first sale, including those before the books started — Finance's All time starts on the go-live day" />
         <Fig label="Paid out" value={formatCurrency(totals.paid)} tone="text-emerald-300" />
         <Fig label="Fines" value={fines > 0 ? minusCurrency(fines) : formatCurrency(0)} tone={fines > 0 ? 'text-rose-300' : undefined} />
         <Fig
@@ -2580,7 +2599,12 @@ function AdminView() {
       qc.invalidateQueries({ queryKey: ['commissions'] });
       qc.invalidateQueries({ queryKey: ['finance'] });
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have paid it: reload so the row shows its real state (audit backend-integrity-5).
+    onError: (e) => {
+      toast.error(apiError(e));
+      qc.invalidateQueries({ queryKey: ['commissions'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+    },
   });
 
   if (isLoading || !summary) return <PageSpinner />;

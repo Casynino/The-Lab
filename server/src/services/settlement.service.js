@@ -1454,13 +1454,21 @@ function eatWeekStart(d) {
   return monday; // EAT wall-clock Monday 00:00, as a UTC-encoded date
 }
 
+// An open order that is overdue right now: stored as OVERDUE by the sweep, or still OPEN/PARTIAL with its
+// deadline gone by. Pure (tested).
+function isLateNow(o, now = Date.now()) {
+  if (o.status === 'OVERDUE') return true;
+  if (o.status !== 'OPEN' && o.status !== 'PARTIAL') return false;
+  return !!o.deadlineAt && new Date(o.deadlineAt).getTime() < now;
+}
+
 async function analytics() {
   const now = Date.now();
   const [orders, submissions, returns, fineAgg, expiryCount] = await Promise.all([
     prisma.settlement.findMany({
       select: {
         id: true, salesRepId: true, status: true, issuedAt: true, createdAt: true,
-        settledAt: true, selfExtendedAt: true,
+        settledAt: true, selfExtendedAt: true, deadlineAt: true,
         salesRep: { select: { code: true, user: { select: { name: true } } } },
       },
     }),
@@ -1491,7 +1499,10 @@ async function analytics() {
   const live = orders.filter((o) => o.status !== 'SETTLED');
   const isOnTime = (o) => hoursBetween(issuedAtOf(o), o.settledAt) <= windowHoursFor(o);
   const inside = decided.filter(isOnTime);
-  const currentlyLate = live.filter((o) => (now - new Date(issuedAtOf(o)).getTime()) / 3_600_000 > windowHoursFor(o)).length;
+  // Late NOW = past its real deadline, the same rule as the Overdue list (list(), status OVERDUE). Counting
+  // 72 h from issue ignored admin extensions and return pauses, so the panel said "Overdue 6" while no
+  // order was overdue (audit admin-money-5).
+  const currentlyLate = live.filter((o) => isLateNow(o, now)).length;
 
   // Weekly cohorts by ISSUE week — issuedAt never gets rewritten, so a cohort's
   // membership is stable forever. A cohort younger than the maximum contract
@@ -1605,6 +1616,7 @@ module.exports = {
   sendDueReminders,
   summary,
   analytics,
+  isLateNow,
   decorate,
   extendDeadline,
   undoDeadlineChange,

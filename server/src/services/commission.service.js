@@ -4,7 +4,7 @@ const prisma = require('../config/prisma');
 const ApiError = require('../utils/ApiError');
 const notification = require('./notification.service');
 const { penaltyBreakdownForRep } = require('./penalty.service');
-const { toNumber, round2, formatCurrency } = require('../utils/money');
+const { toNumber, round2, formatCurrency, MAX_COMMISSION_CHANGE } = require('../utils/money');
 
 // Commission settings:
 //   commission.amountPerThreshold  (default 250000 TZS) — the MINIMUM WITHDRAWAL,
@@ -731,6 +731,11 @@ async function decideWithdrawal(id, action, actor) {
   const t = transitions[action];
   if (!t) throw ApiError.badRequest('Unknown action');
   if (!t.from.includes(w.status)) {
+    // Already where this press wanted it (a retry after a lost answer): say the first one went through,
+    // not "Cannot pay a PAID request" (audit backend-integrity-5).
+    if (w.status === t.to) {
+      throw ApiError.conflict(`This withdrawal is already ${t.to === 'PAID' ? 'paid' : t.to.toLowerCase()} — your first press went through. Refresh to see it.`);
+    }
     throw ApiError.badRequest(`Cannot ${action.toLowerCase()} a ${w.status} request`);
   }
 
@@ -848,24 +853,58 @@ async function setEmergencyWindow({ salesRepId, open, reason }, actor) {
 // It accumulates rather than replaces: two corrections of 100,000 leave 200,000,
 // which is what "add" means to the person clicking it. Pass a negative amount
 // to take it back off, so a correction is always reversible by its opposite.
-async function adjustEarned({ salesRepId, amount, note }, actor) {
+// A correction identical to one made for the same rep within this window is taken as the same press sent
+// twice (a double tap, or a retry after a lost answer), not as a second correction.
+const CORRECTION_REPEAT_MS = 60_000;
+
+// `record(tx, row)` writes the audit row for this correction inside the same transaction (the controller
+// passes it). The audit row is also what a repeat is recognised by, so it must be written under the lock.
+async function adjustEarned({ salesRepId, amount, note }, actor, { record } = {}) {
   const amt = round2(toNumber(amount));
   if (!salesRepId) throw ApiError.badRequest('Which rep is this for?');
   if (!Number.isFinite(amt) || amt === 0) throw ApiError.badRequest('Enter an amount to add or take off');
+  if (Math.abs(amt) > MAX_COMMISSION_CHANGE) {
+    throw ApiError.badRequest(`That is more than ${formatCurrency(MAX_COMMISSION_CHANGE)} — check the number of zeros`);
+  }
   const rep = await prisma.salesRepresentative.findUnique({ where: { id: salesRepId } });
   if (!rep) throw ApiError.notFound('Sales rep not found');
+  const cleanNote = note ? String(note).trim().slice(0, 500) : null;
   // Added by the database, not read-then-written (audit #120): two corrections saved at the same moment
   // both read the same old figure, and the second write replaced the first instead of adding to it.
   // The note is only written when one is given, so it cannot put back a note another save just changed.
-  return prisma.salesRepresentative.update({
-    where: { id: salesRepId },
-    data: {
-      commissionAdjustment: { increment: amt },
-      ...(note ? { commissionAdjustmentNote: String(note).trim().slice(0, 500) } : {}),
-      commissionAdjustedAt: new Date(),
-    },
-    select: { id: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true },
-  });
+  //
+  // Sent twice = added once (audit backend-integrity-2): the rep's row is locked, the same correction
+  // (amount and note) recorded for him in the last minute is looked for in the audit log, and the
+  // change and its audit row are written in the same transaction. No schema change (D34).
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "sales_representatives" WHERE id = ${salesRepId} FOR UPDATE`;
+    const recent = await tx.auditLog.findMany({
+      where: {
+        entityType: 'SalesRepresentative', entityId: salesRepId,
+        createdAt: { gte: new Date(Date.now() - CORRECTION_REPEAT_MS) },
+      },
+      select: { newValues: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    const repeat = recent.some((a) => a.newValues && a.newValues.kind === 'COMMISSION_ADJUSTMENT'
+      && round2(toNumber(a.newValues.amount)) === amt
+      && (a.newValues.note || null) === (cleanNote || null));
+    if (repeat) {
+      throw ApiError.conflict(`This correction of ${formatCurrency(amt)} was already recorded a moment ago — it went through. To make the same correction again on purpose, wait a minute and send it again.`);
+    }
+    const row = await tx.salesRepresentative.update({
+      where: { id: salesRepId },
+      data: {
+        commissionAdjustment: { increment: amt },
+        ...(cleanNote ? { commissionAdjustmentNote: cleanNote } : {}),
+        commissionAdjustedAt: new Date(),
+      },
+      select: { id: true, commissionAdjustment: true, commissionAdjustmentNote: true, commissionAdjustedAt: true },
+    });
+    if (record) await record(tx, row, { amount: amt, note: cleanNote });
+    return row;
+  }, { maxWait: 10_000, timeout: 20_000 });
 }
 
 module.exports = {

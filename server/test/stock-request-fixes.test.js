@@ -140,6 +140,21 @@ test('approval refuses a product switched off since the request, and nothing is 
   assert.deepEqual(ok.calls.transfers[0].items.map((i) => i.productId), ['p1']);
 });
 
+// ── audit backend-integrity-7: an approval naming a line that is not on the request ──────────────────
+test('an approval naming a line from another request, or one line twice, is refused and nothing is issued', async () => {
+  const { svc, calls } = load({ request: pendingRequest() });
+  await assert.rejects(svc.approve('sr1', { id: 'admin' }, [{ itemId: 'line-of-another-request', quantityApproved: 1 }]),
+    (e) => e.statusCode === 400 && /not on the request/.test(e.message));
+  await assert.rejects(svc.approve('sr1', { id: 'admin' }, [{ itemId: 'i1', quantityApproved: 1 }, { itemId: 'i1', quantityApproved: 2 }]),
+    (e) => e.statusCode === 400 && /named twice/.test(e.message));
+  assert.equal(calls.transfers.length, 0);
+
+  // Its own lines still go through, at the amounts named.
+  const ok = load({ request: pendingRequest() });
+  await ok.svc.approve('sr1', { id: 'admin' }, [{ itemId: 'i1', quantityApproved: 1 }, { itemId: 'i2', quantityApproved: 2 }]);
+  assert.deepEqual(ok.calls.transfers[0].items.map((i) => [i.productId, i.quantity]), [['p1', 1], ['p2', 2]]);
+});
+
 // ── the same number at the same moment ───────────────────────────────────────────────────────────────
 test('a request that loses the race for its REQ number is run again and saved, once', async () => {
   const { svc, calls } = load({ createFails: ['requestNumber'] });

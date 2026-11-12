@@ -646,13 +646,22 @@ async function command() {
 
   // ── Brands: month P&L + stock split + top product ──
   const brandOf = new Map(products.map((p) => [p.id, p.brandId]));
-  const topByBrand = new Map();
-  for (const pr of profMonth.byProduct) {
-    const b = brandOf.get(pr.productId);
-    if (!b) continue;
-    const cur = topByBrand.get(b);
-    if (!cur || pr.revenue > cur.revenue) topByBrand.set(b, { name: pr.name, revenue: pr.revenue, boxes: pr.boxes });
-  }
+  // The best-selling product of each brand, for each window the card can show. It used to be the
+  // month's only, printed under Today and This week too, so one product "earned" more than its whole
+  // brand that day (audit admin-ops-1).
+  const topOf = (rows) => {
+    const top = new Map();
+    for (const pr of rows || []) {
+      const b = brandOf.get(pr.productId);
+      if (!b) continue;
+      const cur = top.get(b);
+      if (!cur || pr.revenue > cur.revenue) top.set(b, { name: pr.name, revenue: pr.revenue, boxes: pr.boxes });
+    }
+    return top;
+  };
+  const topByBrand = topOf(profMonth.byProduct);
+  const topToday = topOf(periods?.today?.byProduct);
+  const topWeek = topOf(periods?.week?.byProduct);
   const profBrand = new Map(profMonth.byBrand.map((b) => [b.brandId, b]));
   // The same brand, over each window. An owner asked to see today and the week
   // beside the month so he does not have to wait for month end to know where a
@@ -684,6 +693,9 @@ async function command() {
       warehouseBoxes: b.warehouseUnits,
       repBoxes: b.stockUnits - b.warehouseUnits,
       topProduct: topByBrand.get(b.brandId) || null,
+      topProductMonth: topByBrand.get(b.brandId) || null,
+      topProductToday: topToday.get(b.brandId) || null,
+      topProductWeek: topWeek.get(b.brandId) || null,
     };
   });
 

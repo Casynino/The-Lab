@@ -6,6 +6,7 @@ import { Wallet, Undo2, CheckCircle2, Clock, CalendarPlus, ShieldAlert, RotateCc
 import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
+import { useOnce } from '@/lib/useOnce';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDateTime, formatDate } from '@/lib/format';
 import {
@@ -122,7 +123,9 @@ function SettleOneModal({ order, onClose, onDone }) {
       setSent({ amount: value, boxes: Number(boxes), productName: line?.name });
       onDone();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have gone through: reload the order so the sheet shows what is left (audit
+    // backend-integrity-5), and the server's refusal of a retry says the boxes are already waiting.
+    onError: (e) => { toast.error(apiError(e)); onDone(); },
   });
 
   // Once it is sent the form is over: no footer buttons, nothing left to fill
@@ -303,7 +306,8 @@ function SettleManyModal({ order, onClose, onDone }) {
       setSent({ amount: total, boxes: totalBoxes, productName: chosen.length > 1 ? `${chosen.length} products` : chosen[0]?.name });
       onDone();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have gone through: reload the order (audit backend-integrity-5).
+    onError: (e) => { toast.error(apiError(e)); onDone(); },
   });
 
   if (sent) {
@@ -400,9 +404,12 @@ function RecordReturnModal({ order, onClose, onDone }) {
   const { data: warehouses = [] } = useWarehouses();
   const warehouseId = warehouses[0]?.id;
 
-  // Boxes already inside a pending return are LOCKED — only the rest can be
-  // put on a new return request.
-  const returnAvail = (l) => Math.max(0, l.remaining - (l.pendingReturn || 0));
+  // Boxes already inside a pending return are LOCKED, and boxes in a settlement waiting for ZELab are
+  // spoken for too — only the rest can be put on a new return request. The same rule as Settle, as
+  // Returns > New return and as the server (audit rep-app-1: it said "2 available" with both boxes
+  // waiting in a settlement, and the server refused).
+  const pendingSettle = pendingBoxesByProduct(order);
+  const returnAvail = (l) => settleAvail(order, l);
   const returnableLines = order.order.lines.filter((l) => returnAvail(l) > 0);
 
   // cart: { [productId]: qty }
@@ -438,7 +445,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
       });
     },
     onSuccess: () => { toast.success('Return sent'); onDone(); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => { toast.error(apiError(e)); onDone(); },
   });
 
   const footer = (
@@ -453,7 +460,11 @@ function RecordReturnModal({ order, onClose, onDone }) {
   return (
     <Modal open onClose={onClose} size="lg" title="Return boxes" footer={footer}>
       {returnableLines.length === 0 ? (
-        <p className="py-4 text-center text-sm text-muted">No boxes left to return on this order.</p>
+        <p className="py-4 text-center text-sm text-muted">
+          {Object.values(pendingSettle).some((n) => n > 0)
+            ? 'No boxes left to return — the rest are in a settlement waiting for ZELab.'
+            : 'No boxes left to return on this order.'}
+        </p>
       ) : (
         <StepperLines
           items={returnableLines.map((line) => ({
@@ -465,6 +476,7 @@ function RecordReturnModal({ order, onClose, onDone }) {
               <>
                 {formatNumber(returnAvail(line))} available
                 {(line.pendingReturn || 0) > 0 && <span className="text-amber-500"> · {formatNumber(line.pendingReturn)} locked</span>}
+                {(pendingSettle[line.productId] || 0) > 0 && <span className="text-amber-500"> · {formatNumber(pendingSettle[line.productId])} in a settlement</span>}
               </>
             ),
           }))}
@@ -1150,16 +1162,21 @@ export default function OrderDetailModal({ settlementId, onClose }) {
     onError: (e) => toast.error(apiError(e)),
   });
 
+  // One press per row goes through until it has an answer: a same-frame double tap sent two approvals
+  // (audit admin-ops-3).
+  const once = useOnce();
   const approveReturn = useMutation({
     mutationFn: (id) => api.post(`/returns/${id}/approve`),
     onSuccess: () => { toast.success('Return approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: (_d, _e, id) => once.release(`ret:${id}`),
   });
 
   const approveSubmission = useMutation({
     mutationFn: (id) => api.post(`/settlements/submissions/${id}/approve`),
     onSuccess: () => { toast.success('Settlement approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: (_d, _e, id) => once.release(`sub:${id}`),
   });
 
   const isOwnRep = user?.role === ROLES.SALES_REP && order?.salesRepId === user?.salesRepId;
@@ -1373,7 +1390,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                       </div>
                       <div className="flex shrink-0 gap-2">
                         <Button variant="ghost" className="text-rose-500" disabled={approveReturn.isPending} onClick={() => setRejectingReturn(r)}>Reject</Button>
-                        <Button loading={approveReturn.isPending && approveReturn.variables === r.id} onClick={() => approveReturn.mutate(r.id)}>
+                        <Button loading={approveReturn.isPending && approveReturn.variables === r.id} onClick={() => once.run(() => approveReturn.mutate(r.id), `ret:${r.id}`)}>
                           <CheckCircle2 className="h-4 w-4" /> Approve return
                         </Button>
                       </div>
@@ -1404,7 +1421,7 @@ export default function OrderDetailModal({ settlementId, onClose }) {
                       </div>
                       <div className="flex shrink-0 gap-2">
                         <Button variant="ghost" className="text-rose-500" disabled={approveSubmission.isPending} onClick={() => setRejectingSubmission(p)}>Reject</Button>
-                        <Button loading={approveSubmission.isPending && approveSubmission.variables === p.id} onClick={() => approveSubmission.mutate(p.id)}>
+                        <Button loading={approveSubmission.isPending && approveSubmission.variables === p.id} onClick={() => once.run(() => approveSubmission.mutate(p.id), `sub:${p.id}`)}>
                           <CheckCircle2 className="h-4 w-4" /> Approve settlement
                         </Button>
                       </div>

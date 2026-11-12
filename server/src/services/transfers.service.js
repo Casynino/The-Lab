@@ -6,6 +6,7 @@ const inventory = require('./inventory.service');
 const settlement = require('./settlement.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber } = require('../utils/money');
+const { eatDayBounds } = require('../utils/dates');
 
 const TRANSFER_INCLUDE = {
   items: { include: { product: true, packagingUnit: true } },
@@ -195,9 +196,10 @@ async function listTransfers(filters, pagination) {
   if (filters.fromWarehouseId) where.fromWarehouseId = filters.fromWarehouseId;
   if (filters.toRepId) where.toRepId = filters.toRepId;
   if (filters.from || filters.to) {
-    where.dispatchedAt = {};
-    if (filters.from) where.dispatchedAt.gte = new Date(filters.from);
-    if (filters.to) where.dispatchedAt.lte = new Date(filters.to);
+    // A bare day is a Dar es Salaam day, not UTC midnight (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: filters.from, to: filters.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.dispatchedAt = bounds;
   }
 
   const [items, total] = await Promise.all([

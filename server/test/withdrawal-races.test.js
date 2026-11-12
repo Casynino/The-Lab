@@ -53,7 +53,8 @@ test('PAY racing REJECT: exactly one wins', async () => {
 
 test('a decided request cannot be decided again', async () => {
   const { svc } = load({ status: 'PAID' });
-  await assert.rejects(svc.decideWithdrawal('w1', 'PAY', { id: 'a' }), (e) => e.statusCode === 400);
+  // Paying a paid request is a retry of the first press (audit backend-integrity-5): refused, and told so.
+  await assert.rejects(svc.decideWithdrawal('w1', 'PAY', { id: 'a' }), (e) => e.statusCode === 409 && /already paid/.test(e.message) && /went through/.test(e.message));
   await assert.rejects(svc.decideWithdrawal('w1', 'REJECT', { id: 'a' }), (e) => e.statusCode === 400);
 });
 

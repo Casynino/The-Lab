@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { Plus, Search, X, CheckCircle, XCircle, Eye, Clock, CheckCircle2, PackageOpen, PackageCheck } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/hooks';
 import { ROLES } from '@/lib/constants';
@@ -81,10 +82,14 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
     qc.invalidateQueries({ queryKey: ['inventory'] });
   };
 
+  // One press goes through until it has an answer: a same-frame double tap sent two approvals and the
+  // second showed "already decided" after a good approval (audit admin-ops-3).
+  const once = useOnce();
   const approve = useMutation({
     mutationFn: () => api.post(`/returns/${returnId}/approve`),
     onSuccess: () => { toast.success('Return approved'); invalidate(); onClose(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: once.done,
   });
 
   const pending = ret?.status === 'PENDING';
@@ -99,7 +104,7 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
           <>
             <Button variant="secondary" onClick={onClose}>Close</Button>
             {canDecide && pending && <Button variant="ghost" className="text-rose-500" onClick={() => setRejecting(true)}><XCircle className="h-4 w-4" /> Reject</Button>}
-            {canDecide && pending && <Button loading={approve.isPending} onClick={() => approve.mutate()}><CheckCircle className="h-4 w-4" /> Approve return</Button>}
+            {canDecide && pending && <Button loading={approve.isPending} onClick={() => once.run(() => approve.mutate())}><CheckCircle className="h-4 w-4" /> Approve return</Button>}
           </>
         )}>
         {isLoading || !ret ? <PageSpinner /> : (
@@ -417,7 +422,7 @@ function ReturnModal({ onClose }) {
 }
 
 // ── Pending row — same compact shape as "Pending settlement approvals" ───────
-function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve }) {
+function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve, onApprove }) {
   const totalBoxes = boxesOf(r);
   const totalValue = r.items.reduce((a, i) => a + i.quantity * Number(i.unitPrice || 0), 0);
   const busy = approve && approve.isPending && approve.variables === r.id;
@@ -459,7 +464,7 @@ function PendingReturnRow({ r, canDecide, onView, onReject, onCancel, approve })
         {canDecide && (
           <>
             <Button variant="ghost" className="text-rose-500" onClick={() => onReject(r.id)}>Reject</Button>
-            <Button loading={busy} onClick={() => approve.mutate(r.id)}><CheckCircle className="h-4 w-4" /> Approve</Button>
+            <Button loading={busy} onClick={() => (onApprove ? onApprove(r.id) : approve.mutate(r.id))}><CheckCircle className="h-4 w-4" /> Approve</Button>
           </>
         )}
       </div>
@@ -645,6 +650,8 @@ export default function Returns() {
     refetchInterval: LIVE,
   });
 
+  // Per row: one press goes through until it has an answer (audit admin-ops-3).
+  const once = useOnce();
   const approve = useMutation({
     mutationFn: (id) => api.post(`/returns/${id}/approve`),
     onSuccess: () => {
@@ -652,7 +659,9 @@ export default function Returns() {
       ['returns', 'settlements', 'settlement', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: (_d, _e, id) => once.release(id),
   });
+  const approveOnce = (id) => once.run(() => approve.mutate(id), id);
   const cancel = useMutation({
     mutationFn: (id) => api.post(`/returns/${id}/cancel`),
     onSuccess: () => {
@@ -856,7 +865,7 @@ export default function Returns() {
               <div className="divide-y divide-border">
                 {pending.map((r) => (
                   <PendingReturnRow key={r.id} r={r} canDecide={canDecide} onView={setViewingId} onReject={setRejectingId}
-                    onCancel={isRep ? (id) => cancel.mutate(id) : undefined} approve={approve} />
+                    onCancel={isRep ? (id) => cancel.mutate(id) : undefined} approve={approve} onApprove={approveOnce} />
                 ))}
               </div>
             </div>

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/format';
@@ -113,10 +114,14 @@ function PendingApprovals({ onReview }) {
   const refresh = () => {
     ['settlements', 'commissions', 'dashboard', 'inventory'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   };
+  // Per row: one press goes through until it has an answer. A same-frame double tap sent two approvals
+  // and the refused second one showed "already decided" after a good approval (audit admin-ops-3).
+  const once = useOnce();
   const approve = useMutation({
     mutationFn: (id) => api.post(`/settlements/submissions/${id}/approve`),
     onSuccess: () => { toast.success('Settlement approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: (_d, _e, id) => once.release(id),
   });
   // Reject asks first, with an optional reason the rep is told — the same box as on the order itself.
   // It used to reject on one tap, with no reason (audit, 11 Nov 2026).
@@ -151,7 +156,7 @@ function PendingApprovals({ onReview }) {
               </button>
               <div className="flex shrink-0 gap-2">
                 <Button variant="ghost" className="text-rose-500" disabled={approving} onClick={() => setRejecting(p)}>Reject</Button>
-                <Button loading={approving} onClick={() => approve.mutate(p.id)}>
+                <Button loading={approving} onClick={() => once.run(() => approve.mutate(p.id), p.id)}>
                   <CheckCircle2 className="h-4 w-4" /> Approve
                 </Button>
               </div>
