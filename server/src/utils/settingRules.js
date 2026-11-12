@@ -9,11 +9,12 @@
 // still get a sensible rule, so the stored value is a real figure when one is wired in.
 const RULES = {
   // Money: the least a rep can withdraw. It is the one figure here that moves money, so never 0 or below.
-  'commission.amountPerThreshold': { integer: true, min: 1, max: 100_000_000, what: 'The withdrawal minimum' },
-  'settlement.windowHours': { integer: true, min: 1, max: 720, what: 'The order window' },
-  'credit.defaultTermDays': { integer: true, min: 0, max: 365, what: 'The credit term' },
-  'reorder.coverDays': { integer: true, min: 1, max: 365, what: 'The days of stock to cover' },
-  'reorder.lookbackDays': { integer: true, min: 1, max: 365, what: 'The days of sales to look back at' },
+  // `example` is the figure shown when something else is typed: the usual value, so it reads right.
+  'commission.amountPerThreshold': { integer: true, min: 1, max: 100_000_000, what: 'The withdrawal minimum', example: '250,000' },
+  'settlement.windowHours': { integer: true, min: 1, max: 720, what: 'The order window', example: '72' },
+  'credit.defaultTermDays': { integer: true, min: 0, max: 365, what: 'The credit term', example: '30' },
+  'reorder.coverDays': { integer: true, min: 1, max: 365, what: 'The days of stock to cover', example: '30' },
+  'reorder.lookbackDays': { integer: true, min: 1, max: 365, what: 'The days of sales to look back at', example: '30' },
 };
 // Quiet hours: an hour of the day, or blank for off.
 const HOUR_KEYS = new Set(['whatsapp.quietFrom', 'whatsapp.quietTo']);
@@ -43,7 +44,9 @@ function checkSetting(key, value, type, badRequest) {
 
   const plain = raw.replace(/[\s,]/g, '');
   const what = rule?.what || 'This setting';
-  if (!FIGURE.test(plain) || !Number.isFinite(Number(plain))) throw badRequest(`${what} must be a number, for example 30.`);
+  if (!FIGURE.test(plain) || !Number.isFinite(Number(plain))) {
+    throw badRequest(rule?.example ? `${what} must be a number, for example ${rule.example}.` : `${what} must be a number.`);
+  }
   const n = Number(plain);
   if (rule) {
     if (rule.integer && !Number.isInteger(n)) throw badRequest(`${what} must be a whole number.`);

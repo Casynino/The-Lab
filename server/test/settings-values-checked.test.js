@@ -45,6 +45,17 @@ test('figures: a word, a minus, a fraction or a value out of range is refused wi
   assert.throws(() => check('reorder.coverDays', '', 'NUMBER'), /must be a number/);
 });
 
+test('the "must be a number" sentence gives an example that fits the setting, not 30 for money', () => {
+  assert.throws(() => check('commission.amountPerThreshold', 'abc', 'NUMBER'), { message: 'The withdrawal minimum must be a number, for example 250,000.' });
+  assert.throws(() => check('commission.amountPerThreshold', '1e6', 'NUMBER'), /for example 250,000\./);
+  assert.throws(() => check('settlement.windowHours', 'three days', 'NUMBER'), { message: 'The order window must be a number, for example 72.' });
+  assert.throws(() => check('reorder.coverDays', 'abc', 'NUMBER'), /for example 30\./);
+  // A NUMBER setting with no rule of its own gets no made-up example.
+  assert.throws(() => check('some.newNumber', 'ten', 'NUMBER'), { message: 'This setting must be a number.' });
+  // The example itself, as typed, is accepted.
+  assert.equal(check('commission.amountPerThreshold', '250,000', 'NUMBER'), '250000');
+});
+
 test('figures typed with commas or spaces are stored as plain digits', () => {
   assert.equal(check('commission.amountPerThreshold', '250,000', 'NUMBER'), '250000');
   assert.equal(check('commission.amountPerThreshold', ' 300 000 ', 'NUMBER'), '300000');
