@@ -8,6 +8,7 @@ const notification = require('./notification.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber } = require('../utils/money');
 const { eatDayBounds } = require('../utils/dates');
+const { rearmedReminderStage } = require('../utils/reminders');
 
 const RETURN_INCLUDE = {
   items: { include: { product: { include: { brand: { select: { name: true } } } }, packagingUnit: true } },
@@ -443,7 +444,7 @@ async function approveReturn(id, actor) {
 async function creditPausedHours(tx, settlementId, pauseStart, pauseEnd) {
   if (!settlementId) return null;
   await settlement.lockOrder(tx, settlementId);
-  const stl = await tx.settlement.findUnique({ where: { id: settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true, settlementNumber: true, selfExtendedAt: true, settledValue: true, returnedValue: true } });
+  const stl = await tx.settlement.findUnique({ where: { id: settlementId }, select: { status: true, deadlineAt: true, penaltyFrom: true, settlementNumber: true, selfExtendedAt: true, settledValue: true, returnedValue: true, reminderStage: true } });
   if (!stl || stl.status === 'SETTLED') return stl;
   const pauseMs = Math.max(0, new Date(pauseEnd).getTime() - new Date(pauseStart).getTime());
   if (pauseMs > 0) {
@@ -464,6 +465,9 @@ async function creditPausedHours(tx, settlementId, pauseStart, pauseEnd) {
         ...(stl.penaltyFrom
           ? { penaltyFrom: new Date(new Date(stl.penaltyFrom).getTime() + chargeablePause(stl.penaltyFrom, pauseStart, pauseEnd)) }
           : {}),
+        // The 24h/6h/1h reminders follow the new deadline, as they do after an extension: the stage stayed
+        // at "1 hour left" with a day to go, so the rep got no reminder before the new deadline.
+        reminderStage: rearmedReminderStage(stl.reminderStage, deadlineAt),
       },
     });
   }
