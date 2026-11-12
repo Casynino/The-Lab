@@ -30,7 +30,8 @@ const updateSupplier = asyncHandler(async (req, res) => {
 
 const removeSupplier = asyncHandler(async (req, res) => {
   const result = await purchase.removeSupplier(req.params.id);
-  await audit.record(req, { action: 'DELETE', entityType: 'Supplier', entityId: req.params.id });
+  // The log says what really happened: a supplier with history is switched off, not deleted.
+  await audit.record(req, { action: result.deactivated ? 'DEACTIVATE' : 'DELETE', entityType: 'Supplier', entityId: req.params.id });
   return ok(res, result);
 });
 

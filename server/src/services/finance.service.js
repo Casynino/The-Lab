@@ -287,6 +287,14 @@ async function updateAccount(id, data) {
   } else if (data.type === COMMISSION_TYPE) {
     throw ApiError.badRequest('Only the Commission account can be of that type.');
   }
+  // A brand settles to one active account, the rule createAccount keeps (audit money-flows-9): tagging a
+  // second account to a brand, or switching a second one back on, gave reps a choice of where to pay.
+  const brandAfter = data.brandId !== undefined ? (data.brandId || null) : existing.brandId;
+  const activeAfter = data.isActive !== undefined ? Boolean(data.isActive) : existing.isActive;
+  if (brandAfter && activeAfter && (brandAfter !== existing.brandId || !existing.isActive)) {
+    const taken = await prisma.businessAccount.findFirst({ where: { brandId: brandAfter, isActive: true, id: { not: id } } });
+    if (taken) throw ApiError.badRequest(`${taken.name} is already this brand's settlement account. A brand settles to one account, so reps see one option.`);
+  }
   const patch = {};
   ['name', 'type', 'notes'].forEach((k) => { if (data[k] !== undefined) patch[k] = data[k]; });
   if (data.brandId !== undefined) patch.brandId = data.brandId || null;
@@ -532,7 +540,17 @@ async function recordTransaction(data, actor, client = prisma, { checkBrand = fa
 const isStockPurchaseCategory = (c) => /stock\s*purchase/i.test(String(c || ''));
 // A hand-typed entry is never tied to a sale, an order, a supplier or a payout
 // (#79): those links decide where a row counts, and only the server makes them.
-const handTyped = ({ refType, refId, ...data }) => data; // eslint-disable-line no-unused-vars
+// A form's "+ New category…" choice is not a category (audit money-flows-6): an expense was saved and
+// listed under "__new". Such placeholders start with two underscores; no real category name does.
+function assertRealCategory(category) {
+  if (category != null && /^__/.test(String(category).trim())) {
+    throw ApiError.badRequest('Type a name for the new category, or pick one from the list.');
+  }
+}
+const handTyped = ({ refType, refId, ...data }) => { // eslint-disable-line no-unused-vars
+  assertRealCategory(data.category);
+  return data;
+};
 const HAND_TYPED = { checkBrand: true };
 
 // The owner's own money. A contribution is his personal cash entering the
@@ -800,6 +818,7 @@ async function listTransactions(filters, pagination) {
 async function updateTransaction(id, data) {
   const existing = await prisma.financeTransaction.findUnique({ where: { id } });
   if (!existing) throw ApiError.notFound('Transaction not found');
+  assertRealCategory(data.category);
   const patch = {};
   ['category', 'description', 'notes', 'accountId', 'reference', 'brandId'].forEach((k) => { if (data[k] !== undefined) patch[k] = data[k]; });
   if (data.amount !== undefined) {
