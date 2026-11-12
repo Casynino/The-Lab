@@ -50,3 +50,24 @@ export function figuresAreLive(q) {
   if (!q || !q.isSuccess) return false;
   return Boolean(q.isFetchedAfterMount || !q.isStale);
 }
+
+const cents = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * "Correct balance", worked out once more right before it is written (audit freshness-1). An answer
+ * within its fresh window still passes figuresAreLive, yet money may have moved since (a settlement
+ * approved, a payout, another tab), and the server records only the difference it is sent. So:
+ *   shown  — the balance the window showed when the owner typed what the account really holds;
+ *   live   — the balance the server gave a moment ago (null when the account is no longer listed);
+ *   target — what the owner says it really holds.
+ * If the two balances differ nothing may be written: 'moved', and the window shows the new difference
+ * to confirm. Otherwise 'write' with the adjustment that brings the account to `target`, or 'nothing'
+ * when it already holds that.
+ */
+export function correctionFrom({ shown, live, target }) {
+  if (live == null || !Number.isFinite(Number(live))) return { kind: 'gone' };
+  if (cents(live) !== cents(shown)) return { kind: 'moved', from: cents(shown), to: cents(live) };
+  const delta = cents(Number(target) - Number(live));
+  if (!Number.isFinite(delta) || delta === 0) return { kind: 'nothing' };
+  return { kind: 'write', direction: delta > 0 ? 'IN' : 'OUT', amount: Math.abs(delta), from: cents(live) };
+}

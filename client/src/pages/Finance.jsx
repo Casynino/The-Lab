@@ -23,7 +23,8 @@ import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { eatISODate, eatDay } from '@/lib/tz';
 import { statementRows, poPayCap } from '@/lib/financeFigures';
-import { figuresAreLive } from '@/lib/freshness';
+import { figuresAreLive, correctionFrom } from '@/lib/freshness';
+import { refreshAfter } from '@/lib/afterWrite';
 import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
   PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button,
@@ -150,32 +151,53 @@ const invalidateFinance = (qc) => ['finance'].forEach((k) => qc.invalidateQuerie
 // how a correction ends up invisible. You say what the account really holds;
 // it records the difference as one adjustment, in the ledger, with your reason
 // on it. It never touches profit.
-function CorrectBalanceModal({ accounts, live, onClose }) {
+function CorrectBalanceModal({ onClose }) {
   const qc = useQueryClient();
-  const usable = accounts.filter((a) => !a.isCommissionRecord);
+  // The balances are read again as the window opens, whatever the page holds: an answer under 30 s old
+  // counts as fresh, yet a settlement approved or a payout made in that time is not in it, and the server
+  // records only the difference it is sent (audit freshness-1). Record waits for this answer.
+  const accountsQ = useQuery({ ...pageQueries.financeAccounts(), refetchOnMount: 'always' });
+  const live = figuresAreLive(accountsQ) && !accountsQ.isFetching;
+  const usable = (accountsQ.data || []).filter((a) => !a.isCommissionRecord);
   const [accountId, setAccountId] = useState(usable[0]?.id || '');
   const [actual, setActual] = useState('');
   const [reason, setReason] = useState('');
+  const [moved, setMoved] = useState(null); // { name, from, to } when the balance changed under the window
   const account = usable.find((a) => a.id === accountId);
   const shown = Number(account?.balance || 0);
   const truth = actual === '' ? null : Number(actual);
   const delta = truth == null ? 0 : round2ui(truth - shown);
 
   const save = useMutation({
-    mutationFn: () => api.post('/finance/adjustments', {
-      accountId,
-      direction: delta >= 0 ? 'IN' : 'OUT',
-      amount: Math.abs(delta),
-      description: reason.trim() || 'Balance corrected to what the account really holds',
-      notes: `Corrected from ${formatCurrency(shown)} to ${formatCurrency(truth)}.`,
-    }),
+    // Asked once more right before writing, and written only if it is still the balance on screen. If
+    // money moved meanwhile nothing is sent: the window now shows the new balance and the new difference,
+    // and says so, for the owner to check and press again.
+    mutationFn: async () => {
+      const fresh = await qc.fetchQuery({ ...pageQueries.financeAccounts(), staleTime: 0 });
+      const now = (fresh || []).find((a) => a.id === accountId);
+      const plan = correctionFrom({ shown, live: now ? now.balance : null, target: truth });
+      if (plan.kind !== 'write') throw Object.assign(new Error('not written'), { plan, name: account?.name });
+      return api.post('/finance/adjustments', {
+        accountId,
+        direction: plan.direction,
+        amount: plan.amount,
+        description: reason.trim() || 'Balance corrected to what the account really holds',
+        notes: `Corrected from ${formatCurrency(plan.from)} to ${formatCurrency(truth)}.`,
+      });
+    },
     onSuccess: () => { toast.success('Balance corrected'); invalidateFinance(qc); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => {
+      const plan = e?.plan;
+      if (plan?.kind === 'moved') { setMoved({ name: e.name, from: plan.from, to: plan.to }); return; }
+      if (plan?.kind === 'nothing') { setMoved(null); toast.success(`${e.name} already holds ${formatCurrency(truth)} — nothing to record`); return; }
+      if (plan?.kind === 'gone') { toast.error('This account is no longer listed. Close this window and open it again.'); return; }
+      toast.error(apiError(e));
+    },
   });
 
   const valid = accountId && truth != null && Number.isFinite(truth) && delta !== 0;
   // The difference is worked out from the balance on screen: never from one that is not the server's latest
-  // (put back from this device, or kept after a refresh that failed while this was open).
+  // (put back from this device, kept after a refresh that failed, or read before money moved).
   return (
     <Modal open onClose={onClose} title="Correct a balance"
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -187,7 +209,7 @@ function CorrectBalanceModal({ accounts, live, onClose }) {
           into the ledger as one adjustment you can see and undo. It does not touch your profit.
         </p>
         <Field label="Which account" required>
-          <Select value={accountId} onChange={(e) => { setAccountId(e.target.value); setActual(''); }}>
+          <Select value={accountId} onChange={(e) => { setAccountId(e.target.value); setActual(''); setMoved(null); }}>
             {usable.map((a) => <option key={a.id} value={a.id}>{a.name} — {formatCurrency(a.balance)}</option>)}
           </Select>
         </Field>
@@ -203,7 +225,14 @@ function CorrectBalanceModal({ accounts, live, onClose }) {
             against {account?.name}, bringing it to <b className="text-foreground">{formatCurrency(truth)}</b>.
           </p>
         )}
-        {!live && <p className="text-xs text-amber-300">Waiting for the latest balances before this can be recorded.</p>}
+        {moved && (
+          <p role="alert" className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-200">
+            Nothing was recorded. {moved.name} changed from {formatCurrency(moved.from)} to {formatCurrency(moved.to)} while
+            this window was open — money came in or went out. Check what it really holds now; the difference above is
+            worked out from the new balance.
+          </p>
+        )}
+        {!live && !save.isPending && <p className="text-xs text-amber-300">Waiting for the latest balances before this can be recorded.</p>}
         <Field label="Why" hint="Worth a sentence — this is the record of why the figure moved.">
           <Input value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. cash drawn out and paid to reps as commission" />
@@ -1582,7 +1611,7 @@ function Accounts({ onQuick, onNavigate }) {
 
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
-      {correctOpen && <CorrectBalanceModal accounts={accounts} live={accountsLive} onClose={() => setCorrectOpen(false)} />}
+      {correctOpen && <CorrectBalanceModal onClose={() => setCorrectOpen(false)} />}
       {viewing && <AccountStatementModal account={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
@@ -2691,7 +2720,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
   });
   const refresh = () => {
     invalidateFinance(qc);
-    qc.invalidateQueries({ queryKey: ['inventory'] });
+    refreshAfter(qc, 'stock'); // a purchase received: the Dashboard's stock alerts too (audit freshness-4)
     qc.invalidateQueries({ queryKey: ['purchase-orders'] });
   };
   const s = data?.supplier;
