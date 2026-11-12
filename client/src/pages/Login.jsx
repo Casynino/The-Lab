@@ -13,6 +13,7 @@ import { InstallButton } from '@/components/InstallApp';
 import { RESTRICTED_KEY } from '@/lib/api';
 import { shouldPlayFilm } from '@/lib/chunkLoader';
 import HowItWorksVideo from '@/components/HowItWorksVideo';
+import { useBackToClose } from '@/lib/useBackToClose';
 import './login.css';
 
 /**
@@ -199,6 +200,8 @@ function Gate({ children, defaultOpen = false }) {
   useEffect(() => () => window.clearTimeout(timer.current), []);
   // A reason that arrives after the page is drawn (the session check on opening was refused) opens the card too.
   useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
+  // Phone/browser Back closes the card, like every other window, instead of leaving the site (navigation-1b).
+  useBackToClose(open, close, { guard: false });
 
   /* Open the card AND put the cursor in the email box, in the same tap. That is
      what makes the phone offer the saved login straight away — the suggestion
@@ -306,7 +309,9 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showPwd, setShowPwd] = useState(false);
-  const from = location.state?.from?.pathname || '/';
+  // Back to the whole address the person was sent here from, tab and filters included (navigation-8).
+  const back = location.state?.from;
+  const from = back?.pathname ? `${back.pathname}${back.search || ''}${back.hash || ''}` : '/';
   // A sales-rep account used on a computer or tablet (server rule): the reason stays on the page, not in a
   // toast that disappears — whether it came from this sign-in or from a session that was stopped.
   // Read, not consumed: the stopped-session path reloads the page, so a reader that removed the key lost

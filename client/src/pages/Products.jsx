@@ -477,7 +477,7 @@ export default function Products() {
       {/* The same pill tabs as Finance. */}
       <div className="mb-5 flex flex-wrap gap-2">
         {PRODUCT_TABS.map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setParams(k === 'catalogue' ? {} : { tab: k })}
+          <button key={k} type="button" onClick={() => setParams(k === 'catalogue' ? {} : { tab: k }, { replace: true })}
             aria-current={tab === k ? 'page' : undefined}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k
               ? 'bg-brand-500 text-white ring-brand-500'

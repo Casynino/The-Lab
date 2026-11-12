@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from 'recharts';
@@ -15,6 +15,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
 import { useOnce } from '@/lib/useOnce';
 import { wentThrough } from '@/lib/once';
+import { pickParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents, initials } from '@/lib/format';
@@ -44,6 +45,14 @@ function WithdrawModal({ commission, firstName, onClose }) {
   const [bank, setBank] = useState('');
   const [payName, setPayName] = useState('');
   const [done, setDone] = useState(null); // { amount, to }
+  // The window cannot be closed while the request is on its way (the shared Modal waits for it), so the
+  // receipt below is the confirmation. Only if the window is gone all the same (the page left under it)
+  // does a toast say it went through, so nobody sends it twice (audit rep-app-10).
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
   // The payout address, written as one line so it reads back plainly wherever
   // the notes are shown — the Payouts list, the ledger, the WhatsApp message.
   const payTo = via === 'mobile'
@@ -53,6 +62,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
   const req = useMutation({
     mutationFn: () => api.post('/commissions/withdrawals', { amount: Number(amount), notes: payTo }),
     onSuccess: () => {
+      if (!alive.current) toast.success('Withdrawal request sent');
       setDone({ amount: Number(amount), to: payTo });
       ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
@@ -730,10 +740,21 @@ function QuietEmpty({ icon: Icon, title, text }) {
   );
 }
 
+// The wallet's tabs are in the address (?tab=fines), so Back to the wallet comes back to the same tab and a
+// link can open one; changing tab replaces the address instead of adding a Back step (navigation-4).
+const REP_TABS = ['overview', 'bonus', 'withdrawals', 'fines', 'rules'];
+const ADMIN_TABS = ['balances', 'payouts', 'penalties', 'rules'];
+function useTabParam(name, keys, fallback) {
+  const [params, setParams] = useSearchParams();
+  const tab = pickParam(params, name, keys, fallback);
+  const setTab = (k) => setParams((p) => withParams(p, { [name]: k === fallback ? null : k }), { replace: true });
+  return [tab, setTab];
+}
+
 function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useTabParam('tab', REP_TABS, 'overview');
   const insightsQ = useQuery(pageQueries.commissionsInsights());
   const insights = insightsQ.data;
   const { data: c, isLoading, isError, refetch } = useQuery(pageQueries.commissionsMine());
@@ -1755,7 +1776,7 @@ const Avatar = ({ name, className }) => (
 // The small card (a row in one list on a phone). The whole of it is one button that opens the rep's view;
 // the switch above decides whether the facts tell this run or all time. Money never wraps or gets cut.
 // What a card's rep view asks for, started on a hover or touch of the card (see the Commissions case in
-// lib/routeQueries.js). Only a hint for the read-ahead: the address is never opened.
+// lib/routeQueries.js). The read-ahead hint names the rep the same way the open sheet's address does (?rep=).
 const sheetAhead = (i) => `/commissions?rep=${encodeURIComponent(i.salesRepId)}`;
 
 function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) {
@@ -2039,7 +2060,8 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
   const current = tabs.some((t) => t.key === tab) ? tab : 'overview';
 
   return (
-    <SideSheet onClose={onClose} labelledBy={titleId}>
+    // The sheet is in the page's address (?rep=), so Back is the router's: no entry of its own.
+    <SideSheet onClose={onClose} labelledBy={titleId} ownEntry={false}>
       <header className="flex shrink-0 items-start gap-3 border-b border-white/[0.07] px-4 py-3.5 sm:px-6 sm:py-4">
         <Avatar name={i.name} className="mt-0.5 h-10 w-10 text-base" />
         <div className="min-w-0 flex-1">
@@ -2290,7 +2312,25 @@ function RepBoard({ items, bonus, onTime, isAdmin }) {
   const [view, setView] = useState('run');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('earned');
-  const [openId, setOpenId] = useState(null);
+  // The open rep's view is in the address (?rep=<id>), opened as a step of its own: phone/browser Back closes
+  // it, Back from "Open full profile" comes back to it open, and a link can open it (navigation-4,
+  // responsive-9). Its X goes back over that step; a sheet opened from a link just drops ?rep.
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const openId = params.get('rep');
+  const leaving = useRef(false);
+  useEffect(() => { leaving.current = false; }, [openId]);
+  const setOpenId = (id) => {
+    if (id) {
+      setParams((p) => withParams(p, { rep: id }), { state: { repSheet: true } });
+      return;
+    }
+    if (leaving.current) return; // a second tap on X must not go back a second page
+    leaving.current = true;
+    if (location.state?.repSheet) navigate(-1);
+    else setParams((p) => withParams(p, { rep: null }), { replace: true });
+  };
   const [openWd, setOpenWd] = useState(null); // a payout opened from the rep's view
   const [forgiving, setForgiving] = useState(null); // a fine opened from the rep's view
   const runView = view === 'run';
@@ -2567,13 +2607,14 @@ function PaidByRep({ items, hasMore }) {
   );
 }
 
-function AdminView() {
+function AdminView({ embedded = false }) {
   const qc = useQueryClient();
   // Shown to staff too. Fines, deductions, rates and bonuses are the owner's (the server refuses staff), so
   // staff see them without the buttons; withdrawals stay as they are.
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
   const [deducting, setDeducting] = useState(false);
-  const [tab, setTab] = useState('balances');
+  // In the address like the rep's wallet; inside Finance ?tab= is Finance's own, so there it is ?section=.
+  const [tab, setTab] = useTabParam(embedded ? 'section' : 'tab', ADMIN_TABS, 'balances');
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
   const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
   const { data: summary, isLoading, isError, refetch } = useQuery(pageQueries.commissionsSummary());
@@ -2823,7 +2864,7 @@ export default function Commissions({ embedded = false }) {
       {!embedded && (
         <PageHeader title={isRep ? 'My wallet' : 'Commissions'} subtitle={isRep ? 'Your money, bonuses and withdrawals.' : 'Commission performance and withdrawal approvals.'} />
       )}
-      {isRep ? <RepView /> : <AdminView />}
+      {isRep ? <RepView /> : <AdminView embedded={embedded} />}
     </div>
   );
 }

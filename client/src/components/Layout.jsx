@@ -1,8 +1,8 @@
 import { LIVE, STEADY } from '@/lib/polling';
 import { InstallPrompt, InstallButton } from '@/components/InstallApp';
 import ConnectionNotice from '@/components/ConnectionNotice';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -22,6 +22,55 @@ import { initials, fromNow } from '@/lib/format';
 import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { pageQueries, prefetchRoute, warmUp } from '@/lib/pageQueries';
 import { Modal, Button, Field, Input } from '@/components/ui';
+import { useBackToClose } from '@/lib/useBackToClose';
+import { remember, arrive } from '@/lib/scrollMemory';
+
+/* A new page starts at the top; Back and Forward go back to where that page was (audit 12 Nov 2026,
+   navigation-3). Keyed on the router's entry, so a tab or a filter written into the address with replace
+   does not jump, and the windows' own history steps (lib/backToClose.js) never reach it at all. */
+function useScrollMemory() {
+  const location = useLocation();
+  const navType = useNavigationType();
+  const at = useRef(null);
+  const from = useRef(null);
+  useEffect(() => {
+    // The browser's own restore is off only while the app's pages are on screen: the sign-in page and
+    // /nino keep it (navigation-3b).
+    let was = null;
+    try {
+      was = window.history.scrollRestoration;
+      window.history.scrollRestoration = 'manual';
+    } catch {
+      /* an old browser: it keeps its own restore */
+    }
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        // The phone menu pins the page (position: fixed) and the window reads 0 meanwhile: not a place.
+        if (document.body.style.position === 'fixed') return;
+        remember(at.current, window.scrollY);
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.cancelAnimationFrame(frame);
+      try {
+        if (was) window.history.scrollRestoration = was;
+      } catch {
+        /* as above */
+      }
+    };
+  }, []);
+  useLayoutEffect(() => {
+    at.current = location.key;
+    const stop = arrive({ key: location.key, pathname: location.pathname, navType, from: from.current });
+    from.current = { key: location.key, pathname: location.pathname };
+    return stop;
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
+}
 
 const ICONS = {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
@@ -697,17 +746,28 @@ export default function Layout() {
      one of them. Every page in here already carries its own PageHeader. */
   const atHome = location.pathname === '/';
 
-  // The bell hangs off the banner, so leaving home takes its anchor with it.
-  useEffect(() => { setBellOpen(false); }, [location.pathname]);
+  // The bell hangs off the banner, so leaving home takes its anchor with it. The phone menu goes too: it
+  // used to stay open over the page Back had gone to, with that page still pinned under it (navigation-2).
+  useEffect(() => { setBellOpen(false); setDrawer(null); }, [location.pathname]);
+
+  useScrollMemory();
+  // Phone/browser Back closes the menu or the bell instead of leaving the page (lib/backToClose.js). Called
+  // before the menu pins the page below, so the page's own entry is left at its real scroll place.
+  useBackToClose(!!drawer, () => setDrawer(null), { guard: false });
+  useBackToClose(bellOpen, () => setBellOpen(false), { guard: false });
 
   /* While the drawer is open the page behind it must not move.
      Without this the page keeps scrolling under the panel, and on a phone
      that scroll collapses the browser's address bar — which the page sees as
      the viewport changing height, so it reflows mid-animation and the whole
-     screen jumps. The position is held and put back exactly. */
+     screen jumps. The position is held and put back exactly — unless the
+     menu was closed by going to another page, which starts at the top. */
+  const pathNow = useRef(location.pathname);
+  pathNow.current = location.pathname;
   useEffect(() => {
     if (!drawer) return undefined;
     const y = window.scrollY;
+    const openedOn = pathNow.current;
     const { body } = document;
     const was = {
       position: body.style.position, top: body.style.top,
@@ -719,7 +779,7 @@ export default function Layout() {
     body.style.overflow = 'hidden';
     return () => {
       Object.assign(body.style, was);
-      window.scrollTo(0, y);
+      window.scrollTo(0, pathNow.current === openedOn ? y : 0);
     };
   }, [drawer]);
 

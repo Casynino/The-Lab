@@ -514,7 +514,9 @@ function AdminProfile({ user, sub }) {
   const section = LAB_SECTIONS.find((s) => s.key === tab);
   const contentRef = useRef(null);
   const openSection = (key) => {
-    setParams(key === 'overview' ? {} : { tab: key });
+    // On a computer a section is a tab: replace, so it is not a Back step. On a phone it opens below the list
+    // like a page of its own, and Back returns to the list (navigation-10).
+    setParams(key === 'overview' ? {} : { tab: key }, { replace: window.innerWidth >= 1024 });
     // On a phone the section opens below the list: bring it into view.
     if (window.innerWidth < 1024) setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };

@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { Plus, ShoppingCart, Eye, Wallet, TrendingUp, Boxes, Timer } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useWarehouses, useSalesReps } from '@/lib/hooks';
 import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent } from '@/lib/format';
@@ -344,7 +345,7 @@ export default function Sales() {
     <div>
       <div className="mb-5 flex flex-wrap gap-2">
         {SALES_TABS.map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setParams(k === 'list' ? {} : { tab: k })}
+          <button key={k} type="button" onClick={() => setParams(k === 'list' ? {} : { tab: k }, { replace: true })}
             aria-current={tab === k ? 'page' : undefined}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
@@ -363,9 +364,14 @@ function SalesList() {
   // Staff record a sale in the quick window (walk-in, Dar es Salaam, every product with  −  qty  +);
   // the older window below stays for the rep path, unchanged.
   const isRep = user?.role === ROLES.SALES_REP;
-  const [page, setPage] = useState(1);
-  const [type, setType] = useState('');
-  const [status, setStatus] = useState('');
+  // Type, status and page are in the address, written with replace: Back from another page comes back to
+  // the same chips and page (navigation-6).
+  const [params, setParams] = useSearchParams();
+  const page = pageParam(params);
+  const type = pickParam(params, 'type', ['CASH', 'CREDIT']);
+  const status = pickParam(params, 'status', Object.keys(SALE_STATUS_META));
+  const setPage = (n) => setParams((p) => withParams(p, { page: n }), { replace: true });
+  const pickChip = (change) => setParams((p) => withParams(p, { ...change, page: null }), { replace: true });
   const [modalOpen, setModalOpen] = useState(false);
   const [detailId, setDetailId] = useState(null);
 
@@ -543,11 +549,11 @@ function SalesList() {
         <Card>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
             {typeChips.map((c) => (
-              <Chip key={c.value || 'all-types'} {...c} active={type === c.value} onClick={() => { setType(c.value); setPage(1); }} />
+              <Chip key={c.value || 'all-types'} {...c} active={type === c.value} onClick={() => pickChip({ type: c.value })} />
             ))}
             {typeChips.length > 0 && <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />}
             {statusChips.map((c) => (
-              <Chip key={c.value || 'all-statuses'} {...c} active={status === c.value} onClick={() => { setStatus(c.value); setPage(1); }} />
+              <Chip key={c.value || 'all-statuses'} {...c} active={status === c.value} onClick={() => pickChip({ status: c.value })} />
             ))}
           </div>
 
