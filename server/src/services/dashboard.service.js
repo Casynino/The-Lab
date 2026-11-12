@@ -625,8 +625,9 @@ async function command() {
       prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
       prisma.return.count({ where: { status: 'PENDING' } }),
     ]),
+    // Approved but not yet paid still waits for the owner's money (audit money-flows-7).
     prisma.commissionWithdrawal.findMany({
-      where: { status: 'PENDING' },
+      where: { status: { in: ['PENDING', 'APPROVED'] } },
       include: { salesRep: { select: { id: true, code: true, user: { select: { name: true } } } } },
       orderBy: { requestedAt: 'asc' },
     }),
@@ -788,6 +789,7 @@ async function command() {
           const bal = (commAll.items || []).find((c) => c.salesRepId === w.salesRepId);
           return {
             id: w.id,
+            status: w.status,
             salesRepId: w.salesRepId,
             repName: w.salesRep?.user?.name || w.salesRep?.code || 'Rep',
             repCode: w.salesRep?.code || null,

@@ -119,6 +119,8 @@ const HERO_DOT = ['bg-brand-400', 'bg-violet-400', 'bg-cyan-300', 'bg-amber-300'
 function ReviewWithdrawals({ items, onClose }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState(null);
+  // Reject asks once more, as it does on Commissions (audit money-flows-5): the rep is told at once.
+  const [rejecting, setRejecting] = useState(null);
 
   // One press, not two. Approving and then marking paid were separate steps for
   // a single decision, and there was never a case where he approved and did not
@@ -131,8 +133,9 @@ function ReviewWithdrawals({ items, onClose }) {
       ['dashboard', 'commissions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
-    onSettled: () => setBusy(null),
+    // A lost answer may still have gone through: reload so the list shows the real state.
+    onError: (e) => { toast.error(apiError(e)); ['dashboard', 'commissions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); },
+    onSettled: () => { setBusy(null); setRejecting(null); },
   });
 
   const run = (id, action) => { setBusy(`${id}:${action}`); decide.mutate({ id, action }); };
@@ -169,26 +172,54 @@ function ReviewWithdrawals({ items, onClose }) {
               <span className="ml-auto">{formatDateTime(w.requestedAt)}</span>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            {rejecting === w.id ? (
+              <div className="mt-3 space-y-3 rounded-xl bg-rose-500/[0.06] p-3 ring-1 ring-rose-500/20">
+                <p className="text-[13px] leading-snug text-foreground">
+                  Reject {w.repName || 'this rep'}&rsquo;s request for {formatCurrency(w.amount)}? They will be told it was not
+                  approved, and the amount goes back into their balance.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" disabled={!!busy} onClick={() => setRejecting(null)}
+                    className="flex h-11 items-center justify-center rounded-xl bg-elevated text-[13px] font-semibold text-foreground ring-1 ring-white/[0.07] transition active:scale-[0.97] disabled:opacity-60">
+                    Cancel
+                  </button>
+                  <button type="button" disabled={!!busy} onClick={() => run(w.id, 'REJECT')}
+                    className="flex h-11 items-center justify-center gap-2 rounded-xl bg-rose-600 text-[13px] font-bold text-white ring-1 ring-rose-600 transition active:scale-[0.97] disabled:opacity-60">
+                    {busy === `${w.id}:REJECT` ? 'Rejecting…' : 'Yes, reject'}
+                  </button>
+                </div>
+              </div>
+            ) : w.status === 'APPROVED' ? (
+              // Approved earlier through the API but not yet paid: it still waits for the money (audit money-flows-7).
               <button type="button" disabled={!!busy}
                 onClick={() => run(w.id, 'PAY')}
-                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-white ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
-                <ShieldCheck className="h-4 w-4" />
-                {busy === `${w.id}:PAY` ? 'Paying…' : 'Approve & pay'}
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-white ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
+                <Coins className="h-4 w-4" />
+                {busy === `${w.id}:PAY` ? 'Paying…' : 'Approved · mark paid'}
               </button>
-              <button type="button" disabled={!!busy}
-                onClick={() => run(w.id, 'REJECT')}
-                className="flex h-11 items-center justify-center gap-2 rounded-xl bg-elevated text-[13px] font-semibold text-foreground ring-1 ring-white/[0.07] transition active:scale-[0.97] disabled:opacity-60">
-                <X className="h-4 w-4 text-rose-400" />
-                Reject
-              </button>
-            </div>
+            ) : (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button type="button" disabled={!!busy}
+                  onClick={() => run(w.id, 'PAY')}
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-white ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
+                  <ShieldCheck className="h-4 w-4" />
+                  {busy === `${w.id}:PAY` ? 'Paying…' : 'Approve & pay'}
+                </button>
+                <button type="button" disabled={!!busy}
+                  onClick={() => setRejecting(w.id)}
+                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-elevated text-[13px] font-semibold text-foreground ring-1 ring-white/[0.07] transition active:scale-[0.97] disabled:opacity-60">
+                  <X className="h-4 w-4 text-rose-400" />
+                  Reject
+                </button>
+              </div>
+            )}
           </div>
         ))}
 
+        {/* The same words as the Commissions window (audit money-flows-5): this button marks it PAID. */}
         <p className="text-[11px] leading-snug text-faint">
-          Approving does not move any money — it clears the request so you can pay it. The amount stays held aside
-          from the rep&rsquo;s balance either way until you decide.
+          One press marks it paid from your own pocket, records it on the Commission account and tells the rep it
+          has been paid. Send the money first.
         </p>
       </div>
     </Modal>

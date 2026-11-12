@@ -1806,7 +1806,7 @@ async function overview(period = 'month', shared = {}) {
   const [
     flowRows, [expAgg, byCat], [allBrands, brandTxnRows, products],
     [poAgg, poCreditAgg, poPayAgg, wdAgg, pendingApprovals],
-    approvedWdAgg, ownerAllTime, lifetime, lifetimeExpAgg, debtAgg, suppliersForSplit, stockSpendRows,
+    ownerAllTime, lifetime, lifetimeExpAgg, debtAgg, suppliersForSplit, stockSpendRows,
   ] = await Promise.all([
     Promise.all(FLOW_PERIODS.map(flowFor)),
     Promise.all([
@@ -1850,16 +1850,10 @@ async function overview(period = 'month', shared = {}) {
           },
           _sum: { amount: true },
         }),
-        prisma.commissionWithdrawal.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
+        // Approved but not yet paid still waits for the owner's money (audit money-flows-7).
+        prisma.commissionWithdrawal.aggregate({ where: { status: { in: ['PENDING', 'APPROVED'] } }, _count: true, _sum: { amount: true } }),
         prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
       ]);
-    }),
-    // Approved but not yet paid. The rep's available balance already treats it
-    // as gone, and no payout has been recorded against it, so without this line
-    // the money the owner has promised a rep sits in no figure at all.
-    prisma.commissionWithdrawal.aggregate({
-      where: { status: 'APPROVED' },
-      _sum: { amount: true },
     }),
     // ALL TIME and epoch-clamped, from the same shared shape the period strip and
     // the cash-flow tab use (see "Where the profit actually IS" below).
@@ -1950,8 +1944,6 @@ async function overview(period = 'month', shared = {}) {
     };
   });
 
-  // Approved but not yet paid (read above, with the "needs you" figures).
-  const approvedUnpaidCommission = round2(toNumber(approvedWdAgg._sum.amount));
   // ── Where the profit actually IS ────────────────────────────────────────
   // The owner has taken nothing out: every shilling earned went back into
   // stock or to the supplier. "Profit" and "cash" are therefore different
@@ -2127,9 +2119,11 @@ async function overview(period = 'month', shared = {}) {
   // What the reps can actually take: withdrawable balances, requests in
   // flight, and requests already approved but not yet handed over. One figure,
   // used by the capital block and by `outstandingCommission` alike, so no two
-  // places on the page can quote a different debt to the same reps.
+  // places on the page can quote a different debt to the same reps. Requests approved but not yet paid
+  // are inside `requested` (commission withdrawalTotals counts them as waiting, audit money-flows-7), so
+  // they are not added a second time here.
   const repCommissionPayable = round2(
-    commSummary.totals.available + commSummary.totals.requested + approvedUnpaidCommission,
+    commSummary.totals.available + commSummary.totals.requested,
   );
   // ── The supplier split, ALL TIME ────────────────────────────────────────
   // A balance sheet answers "right now", so what the supplier is owed today
