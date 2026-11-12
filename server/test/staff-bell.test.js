@@ -69,3 +69,57 @@ test('the approvals staff can do are flagged; money alerts are not', () => {
     assert.equal(flagged(f), 0, `${f} must not copy alerts to staff`);
   }
 });
+
+// ── Low and out-of-stock alerts reach the staff bell too (review, 12 Nov 2026) ──────────────────────
+// Staff look after the stock. A LOW_STOCK alert is one owner row plus one row per active staff member,
+// and the unread check is per recipient, so one person's unread copy never blocks another's.
+function loadTable({ staff = [{ id: 's1' }, { id: 's2' }] } = {}) {
+  const rows = [];
+  const mirrored = [];
+  const match = (r, where) => Object.entries(where).every(([k, v]) => r[k] === v);
+  const prisma = {
+    notification: {
+      findFirst: async ({ where }) => rows.find((r) => match(r, where)) || null,
+      create: async ({ data }) => { const r = { id: `n${rows.length + 1}`, isRead: false, userId: null, ...data }; rows.push(r); return r; },
+    },
+    user: { findMany: async () => staff },
+  };
+  const f = require.resolve('../src/config/prisma');
+  require.cache[f] = { id: f, filename: f, loaded: true, exports: prisma };
+  const w = require.resolve('../src/services/whatsappNotify.service');
+  require.cache[w] = { id: w, filename: w, loaded: true, exports: { background: () => {}, mirrorToRep: async (userId) => { mirrored.push(userId); } } };
+  delete require.cache[require.resolve('../src/services/notification.service')];
+  return { svc: require('../src/services/notification.service'), rows, mirrored };
+}
+
+const low = { type: 'LOW_STOCK', severity: 'WARNING', title: 'Low stock: Pepa', message: 'Pepa has 2 box(es) remaining.', entityType: 'Product', entityId: 'p1' };
+
+test('a low-stock alert: one owner row and one row for each active staff member', async () => {
+  const { svc, rows } = loadTable();
+  await svc.stockAlert(low);
+  assert.deepEqual(rows.map((r) => r.userId), [null, 's1', 's2']);
+  assert.ok(rows.every((r) => r.title === low.title && r.entityId === 'p1'));
+});
+
+test('the unread check is per recipient: a staff copy never blocks the owner\'s alert, nor the other way round', async () => {
+  const { svc, rows } = loadTable();
+  await svc.stockAlert(low);
+  await svc.stockAlert(low); // all three still unread: nothing new
+  assert.equal(rows.length, 3);
+
+  rows[0].isRead = true; // the owner read his; the staff did not
+  await svc.stockAlert(low);
+  assert.deepEqual(rows.map((r) => r.userId), [null, 's1', 's2', null]);
+
+  rows[1].isRead = true; // s1 read his; the owner's new copy and s2's are unread
+  await svc.stockAlert(low);
+  assert.deepEqual(rows.map((r) => r.userId), [null, 's1', 's2', null, 's1']);
+});
+
+test('a scan passes the staff it loaded once, and no staff means the owner\'s row only', async () => {
+  const { svc, rows } = loadTable({ staff: [] });
+  await svc.stockAlert(low);
+  assert.deepEqual(rows.map((r) => r.userId), [null]);
+  await svc.stockAlert({ ...low, entityId: 'p2' }, ['s9']);
+  assert.deepEqual(rows.map((r) => r.userId), [null, null, 's9']);
+});

@@ -23,3 +23,19 @@ test('whatsappOn is true only with both the number and the key, and the key is n
   assert.equal(rep({ id: 'r1', phone: '0700 000 088', whatsappPhone: null, whatsappApiKey: null }).salesRep.whatsappOn, false);
   assert.equal(publicUser({ id: 'a', role: { name: 'ADMIN', permissions: [] }, salesRep: null }).salesRep, null);
 });
+
+// The owner's switch Settings > WhatsApp > "Sales rep alerts" off: nothing is sent to any rep, so even a rep
+// with his number and key must not be promised a WhatsApp (review, 12 Nov 2026).
+test('whatsappOn is false when rep alerts are switched off, even with the number and the key', () => {
+  const salesRep = { id: 'r1', whatsappPhone: '+255700000088', whatsappApiKey: 'secret-key' };
+  const user = { id: 'u1', name: 'Juma', role: { name: 'SALES_REP', permissions: [] }, salesRep };
+  assert.equal(publicUser(user, { repAlertsOn: false }).salesRep.whatsappOn, false);
+  assert.equal(publicUser(user, { repAlertsOn: true }).salesRep.whatsappOn, true);
+  assert.equal(publicUser(user, { repAlertsOn: false }).salesRep.whatsappApiKey, undefined);
+});
+
+test('the rep-alerts switch is the REP_ALERT setting the WhatsApp queue obeys', () => {
+  const wn = require('../src/services/whatsappNotify.service');
+  assert.equal(typeof wn.isEnabled, 'function');
+  assert.ok(wn.TYPES.REP_ALERT, 'REP_ALERT is a toggle in Settings > WhatsApp');
+});

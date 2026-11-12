@@ -67,10 +67,11 @@ async function create(data) {
 }
 
 // Create a notification only if an equivalent unread one does not already
-// exist (avoid spamming the same alert every run).
+// exist (avoid spamming the same alert every run). The check is per recipient (userId null = the owner's
+// copy): an unread staff copy of a stock alert must not stop the owner's, nor the other way round.
 async function createIfAbsent(data) {
   const existing = await prisma.notification.findFirst({
-    where: { type: data.type, entityId: data.entityId ?? null, isRead: false },
+    where: { type: data.type, entityId: data.entityId ?? null, isRead: false, userId: data.userId ?? null },
   });
   if (existing) return existing;
   const created = await create(data);
@@ -78,6 +79,25 @@ async function createIfAbsent(data) {
   if (data.userId) {
     const wa = require('./whatsappNotify.service');
     wa.background(wa.mirrorToRep(data.userId, data));
+  }
+  return created;
+}
+
+// Low and out-of-stock alerts: the owner's copy, plus one for each active warehouse-staff member, who
+// looks after the stock (audit staff-settings-2, 12 Nov 2026: his bell never got them). Each copy has its
+// own read state; a staff user is not a rep, so no WhatsApp follows his copy. `staffIds` lets a scan load
+// the staff once; a missed staff copy never undoes the owner's.
+async function activeStaffIds() {
+  const staff = await prisma.user.findMany({ where: { isActive: true, role: { name: STAFF_ROLE } }, select: { id: true } });
+  return staff.map((u) => u.id);
+}
+
+async function stockAlert(data, staffIds) {
+  const created = await createIfAbsent({ ...data, userId: null });
+  try {
+    for (const id of staffIds || (await activeStaffIds())) await createIfAbsent({ ...data, userId: id });
+  } catch {
+    // The owner's alert is already written.
   }
   return created;
 }
@@ -114,15 +134,17 @@ async function generateSystemAlerts() {
     });
   }
 
+  const staffIds = lowStock.length ? await activeStaffIds().catch(() => []) : [];
   for (const p of lowStock) {
-    await push({
+    await stockAlert({
       type: 'LOW_STOCK',
       severity: 'WARNING',
       title: `Low stock: ${p.name}`,
       message: `${p.name} is at ${p.onHand} ${p.baseUnitName}(s), at or below the minimum of ${p.minStockLevel}.`,
       entityType: 'Product',
       entityId: p.id,
-    });
+    }, staffIds);
+    created += 1;
   }
 
   if (debt.overdueAccounts > 0) {
@@ -220,24 +242,22 @@ async function checkProductLowStock(productId) {
     const onHand = agg._sum.baseQuantity || 0;
 
     if (onHand <= 0) {
-      await createIfAbsent({
+      await stockAlert({
         type: 'LOW_STOCK',
         severity: 'CRITICAL',
         title: `Out of stock: ${product.name}`,
         message: `${product.name} is OUT OF STOCK across all warehouses. Immediate restock required.`,
         entityType: 'Product',
         entityId: productId,
-        userId: null,
       });
     } else if (onHand <= product.minStockLevel) {
-      await createIfAbsent({
+      await stockAlert({
         type: 'LOW_STOCK',
         severity: 'WARNING',
         title: `Low stock: ${product.name}`,
         message: `${product.name} has ${onHand} ${product.baseUnitName}(s) remaining — below minimum of ${product.minStockLevel}. Restock needed.`,
         entityType: 'Product',
         entityId: productId,
-        userId: null,
       });
     }
   } catch {
@@ -252,6 +272,7 @@ module.exports = {
   markAllRead,
   create,
   createIfAbsent,
+  stockAlert,
   notifyAdmins,
   notifyUser,
   broadcast,

@@ -9,7 +9,9 @@ const notification = require('./notification.service');
 const { assertDeviceAllowed } = require('../utils/device');
 
 // Shape the user object returned to clients (never leak the password hash).
-function publicUser(user) {
+// `repAlertsOn` is the owner's switch Settings > WhatsApp > "Sales rep alerts" (whatsapp.notify.REP_ALERT):
+// when it is off no rep WhatsApp is sent, so no rep screen may promise one.
+function publicUser(user, { repAlertsOn = true } = {}) {
   return {
     id: user.id,
     name: user.name,
@@ -23,9 +25,14 @@ function publicUser(user) {
     warehouse: user.warehouse || null,
     salesRepId: user.salesRep ? user.salesRep.id : null,
     // never the rep's own WhatsApp API key: the app has no use for it. Only whether his WhatsApp alerts can
-    // arrive (number AND key set), so a screen never promises a WhatsApp that cannot come (audit, 12 Nov 2026).
+    // arrive (number AND key set, and rep alerts switched on), so a screen never promises a WhatsApp that
+    // cannot come (audit, 12 Nov 2026).
     salesRep: user.salesRep
-      ? { ...user.salesRep, whatsappApiKey: undefined, whatsappOn: Boolean(user.salesRep.whatsappPhone && user.salesRep.whatsappApiKey) }
+      ? {
+        ...user.salesRep,
+        whatsappApiKey: undefined,
+        whatsappOn: Boolean(user.salesRep.whatsappPhone && user.salesRep.whatsappApiKey && repAlertsOn),
+      }
       : null,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
@@ -42,6 +49,18 @@ function issueTokens(user) {
     refreshToken: signRefreshToken({ sub: user.id, sv }),
     expiresIn: env.jwt.expiresIn,
   };
+}
+
+// Whether the owner has rep WhatsApp alerts switched on. Read only for a rep (lazy require: the WhatsApp
+// service is not needed for the owner's or staff's sign-in). A failed read never stops a sign-in; it counts
+// as on, the same default the WhatsApp queue uses.
+async function repAlertsOnFor(user) {
+  if (!user || !user.salesRep) return true;
+  try {
+    return await require('./whatsappNotify.service').isEnabled('REP_ALERT');
+  } catch {
+    return true;
+  }
 }
 
 // A SALES_REP account with no rep profile would see nothing of its own and, through every "my" list, could
@@ -94,7 +113,7 @@ async function login(email, password, headers = {}) {
     data: { lastLoginAt: new Date() },
   });
 
-  return { user: publicUser(user), tokens: issueTokens(user) };
+  return { user: publicUser(user, { repAlertsOn: await repAlertsOnFor(user) }), tokens: issueTokens(user) };
 }
 
 async function refresh(refreshToken, headers = {}) {
@@ -128,7 +147,7 @@ async function me(userId) {
     },
   });
   if (!user) throw ApiError.notFound('User not found');
-  return publicUser(user);
+  return publicUser(user, { repAlertsOn: await repAlertsOnFor(user) });
 }
 
 const WRONG_CURRENT_PASSWORD = 'Current password is incorrect';

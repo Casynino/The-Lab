@@ -81,7 +81,9 @@ export default function ProgressRows({ commission, bonus, onOpenCommission, forS
     // A withdrawal waiting to be paid is already out of the balance (the Wallet card calls it Pending),
     // so it is named here too, or a rep who just asked for his money reads "TSh 0" (audit, 12 Nov 2026).
     const pending = w.pending > 0
-      ? <span className="font-medium text-amber-300"> · {formatCurrency(w.pending)} pending</span>
+      // One piece that never splits ('pending' was left alone on the next line at 390 px); the space before
+      // it stays outside, so the whole piece can still move to the next line.
+      ? <>{' '}<span className="whitespace-nowrap font-medium text-amber-300">· {formatCurrency(w.pending)} pending</span></>
       : null;
     rows.push(
       <Row
