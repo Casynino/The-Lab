@@ -385,6 +385,24 @@ ZELab`);
   assert.match(long, /\+\d+ more, see ZELab/);
 });
 
+// Audit, 12 Nov 2026: a request split between two cities listed the same product twice with nothing to
+// tell the lines apart. Each line now says its city, as on the owner's STOCK REQUEST; one city says none.
+test('STOCK REQUEST APPROVED (rep): a request split between cities says each line\'s city', () => {
+  const items = [
+    { name: 'Civlily Kubwa (Brown) – Na Filter', approved: 2, requested: 2, unit: 'Box', city: 'Arusha' },
+    { name: 'Civlily Ndogo (Brown) – Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Arusha' },
+    { name: 'Civlily Kubwa (Brown) – Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Dodoma' },
+    { name: 'OHIS Ndogo (Brown) – Na Filter', approved: 1, requested: 2, unit: 'Box', city: 'Dodoma' },
+  ];
+  const text = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'REQ-20261112-0007', order: 'STL-20261112-0018', deadline: at, items });
+  assert.match(text, /\n\(a\) Civlily Kubwa \(Brown\) – Na Filter: 2 Boxes · Arusha\n\(b\) Civlily Ndogo \(Brown\) – Na Filter: 1 Box · Arusha\n\(c\) Civlily Kubwa \(Brown\) – Na Filter: 1 Box · Dodoma\n\(d\) OHIS Ndogo \(Brown\) – Na Filter: 1 of 2 Boxes · Dodoma\n/);
+  // One city only (or old requests with no city): no city on the lines.
+  const one = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', items: items.map((i) => ({ ...i, city: 'Arusha' })) });
+  assert.doesNotMatch(one, /·/);
+  const none = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', items: items.map(({ city, ...i }) => i) });
+  assert.doesNotMatch(none, /·/);
+});
+
 // Audit, 11 Nov 2026: the admin changing a rep's pending request went out in the general wording, every
 // product on one line, and about 12 products passed CallMeBot's ~700 characters and lost the total.
 test('STOCK REQUEST CHANGED (rep): one line per product, and a long list never loses the total', () => {

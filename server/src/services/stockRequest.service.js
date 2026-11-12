@@ -506,6 +506,7 @@ async function approve(id, actor, approvals = []) {
     approved: i.quantityApproved ?? 0,
     requested: i.quantityRequested,
     unit: i.packagingUnit?.name || null,
+    city: i.region || null, // shown per line only when the request is split between cities
   }));
   const cut = issuedLines.some((l) => l.approved < l.requested);
   const order = settlement?.settlementNumber || null;

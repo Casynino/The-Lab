@@ -264,15 +264,18 @@ const rep = (title, ...parts) => doc(bold(title), ...parts, FOOT);
 
 // The approved request (audit, 11 Nov 2026: the rep was not told about a part-approval): Nino's sample,
 // plus the order it opened and its deadline, then one lettered line per product as on the owner's
-// STOCK REQUEST — a line cut by the admin reads "3 of 4 Boxes". A very long list drops products from the
-// end ("+2 more, see ZELab"), never the order or the deadline.
+// STOCK REQUEST — a line cut by the admin reads "3 of 4 Boxes". A request split between cities says each
+// line's city after its boxes (" · Arusha"), as the owner's STOCK REQUEST does, so the same product asked
+// for two cities is never two identical lines (audit, 12 Nov 2026). A very long list drops products from
+// the end ("+2 more, see ZELab"), never the order or the deadline.
 const stockRequestApproved = ({ request, order, deadline, items }) => {
   const list = Array.isArray(items) ? items : [];
   const short = (i) => Number(i.approved) < Number(i.requested);
   const cut = list.some(short);
+  const split = new Set(list.map((i) => i.city).filter(Boolean)).size > 1;
   const line = (i, k) => `(${letter(k)}) ${i.name}: ${short(i)
     ? `${Math.round(Number(i.approved) || 0)} of ${boxes(i.requested, i.unit)}`
-    : boxes(i.approved, i.unit)}`;
+    : boxes(i.approved, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`;
   const build = ({ shown }) => rep(
     'STOCK REQUEST APPROVED',
     lines(`Request: ${request}`, order && `Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`),

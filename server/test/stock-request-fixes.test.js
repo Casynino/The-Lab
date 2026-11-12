@@ -194,9 +194,20 @@ test('a part-approval tells the rep the order, the deadline and each line as app
   assert.equal(n.whatsapp.kind, 'STOCK_REQUEST_APPROVED');
   assert.equal(n.whatsapp.order, 'STL-20261111-0001');
   assert.deepEqual(n.whatsapp.items, [
-    { name: 'Civlily Pepa Ndogo (Brown)', approved: 3, requested: 4, unit: 'Box' },
-    { name: 'OHIS Pepa Kubwa (Brown)', approved: 2, requested: 2, unit: 'Box' },
+    { name: 'Civlily Pepa Ndogo (Brown)', approved: 3, requested: 4, unit: 'Box', city: null },
+    { name: 'OHIS Pepa Kubwa (Brown)', approved: 2, requested: 2, unit: 'Box', city: null },
   ]);
+});
+
+// Audit, 12 Nov 2026: a request split between two cities told the rep the same product twice with no city.
+test('an approved split request passes each line\'s city to the rep\'s WhatsApp', async () => {
+  const { svc, calls } = load({ request: pendingRequest({ items: [
+    { id: 'i1', productId: 'p1', packagingUnitId: 'box', quantityRequested: 2, unitPrice: 1000, region: 'Arusha' },
+    { id: 'i2', productId: 'p1', packagingUnitId: 'box', quantityRequested: 1, unitPrice: 1000, region: 'Dodoma' },
+  ] }) });
+  await svc.approve('sr1', { id: 'admin' }, []);
+  const n = calls.users[0];
+  assert.deepEqual(n.whatsapp.items.map((i) => i.city), ['Arusha', 'Dodoma']);
 });
 
 test('a reject reason is added under the rep\'s own note, not written over it', async () => {
