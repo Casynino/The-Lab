@@ -623,7 +623,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
       icon: Factory,
       tone: 'text-rose-300 bg-rose-500/15',
       text: `${formatCurrency(dueNow)} is due to ${supplierLabel} for boxes already sold`
-        + ((cs?.setAside || 0) > 0 && round2ui(cs.setAside) < dueNow ? ` (${formatCurrency(cs.setAside)} of it is in the wallet)` : ''),
+        + ((cs?.setAside || 0) > 0 && round2ui(cs.setAside) < dueNow ? ` (${formatCurrency(cs.setAside)} of it is in the brand wallets)` : ''),
       tab: 'suppliers',
     },
     ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
@@ -2194,7 +2194,8 @@ function CashFlowTab() {
   }[period];
   const day = (v) => eatDay(v, { day: 'numeric', month: 'short', year: 'numeric' });
   // One day ("Daily") is already in the title, so its range is not repeated under it.
-  const periodSub = !data.range ? (data.epochAt ? `everything since ${day(data.epochAt)}` : 'everything recorded so far')
+  // The go-live date reads exactly as on the Overview (formatDate: "05 Jul 2026").
+  const periodSub = !data.range ? (data.epochAt ? `everything since ${formatDate(data.epochAt)}` : 'everything recorded so far')
     : day(data.range.start) === day(data.range.end) ? '' : `${day(data.range.start)} → ${day(data.range.end)}`;
   const ownerNet = data.ownerNet ?? 0;
   // Four terms run in one line from lg; the fifth (his own money) needs xl.
@@ -2744,6 +2745,14 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
                     ))}
                   </TBody>
                 </Table>
+              )}
+              {/* Paid or returned beyond every bill fits on no PO row; said here so the rows and this line
+                  make the balance owed (audit admin-money-1). */}
+              {data.orders.length > 0 && data.totals.notOnAnyPo > 0 && (
+                <p className="mt-2 text-xs text-muted">
+                  {formatCurrency(data.totals.notOnAnyPo)} of balance payments or returned goods goes beyond every bill, so it is on no PO above
+                  — that is why the balance owed is {formatCurrency(data.totals.outstanding)}.
+                </p>
               )}
             </div>
 

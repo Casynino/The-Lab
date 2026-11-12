@@ -115,8 +115,9 @@ test('two Forgive presses at the same moment: one wins, the rep is told once, th
   assert.equal(results.find((r) => r.status === 'rejected').reason.statusCode, 409);
   assert.equal(rows[0].status, 'WAIVED');
   assert.equal(notified.filter((n) => n.whatsapp?.kind === 'FINE_FORGIVEN').length, 1);
-  // A later retry is refused as before.
-  await assert.rejects(svc.waivePenalty('f1', { id: 'admin' }), (e) => e.statusCode === 400 && /already been forgiven/.test(e.message));
+  // A later retry (after a lost answer) is the same 409, so the window closes on it instead of an error.
+  await assert.rejects(svc.waivePenalty('f1', { id: 'admin' }), (e) => e.statusCode === 409 && /already been forgiven/.test(e.message));
+  assert.equal(notified.filter((n) => n.whatsapp?.kind === 'FINE_FORGIVEN').length, 1);
 });
 
 // ── backend-integrity-2 / -4: commission corrections ─────────────────────────────────────────────────
@@ -250,6 +251,38 @@ test('Pay PO is refused once balance payments cover the bill, and never takes th
   await s.finance.paySupplier({ purchaseOrderId: 'b', accountId: 'acc', amount: 400 }, null);
   assert.equal(s.created.length, 1);
   assert.equal(s.created[0].amount, 400);
+});
+
+test('an overpaid supplier: Pay PO says he is owed nothing in all, and the money beyond the bills is shown', async () => {
+  // STG case: one 1,000 PO, 2,000 paid as balance payments. The row shows 0, the balance is −1,000, and
+  // the 1,000 beyond the bill sits on no PO row, so rows − notOnAnyPo = balance.
+  const po = { id: 'p1', poNumber: 'PO-1', status: 'RECEIVED', totalCost: 1000, receivedAt: new Date('2026-10-01'), createdAt: new Date('2026-10-01') };
+  let s = loadSupplier({ pos: [po], txns: [{ refType: 'Supplier', refId: 'sup1', amount: 2000, occurredAt: new Date() }] });
+  let d = await s.finance.supplierDetail('sup1');
+  assert.equal(d.orders[0].outstanding, 0);
+  assert.equal(d.totals.outstanding, -1000);
+  assert.equal(d.totals.notOnAnyPo, 1000);
+  assert.equal(d.orders.reduce((x, o) => x + o.outstanding, 0) - d.totals.notOnAnyPo, d.totals.outstanding);
+  await assert.rejects(s.finance.paySupplier({ purchaseOrderId: 'p1', accountId: 'acc', amount: 1 }, null),
+    (e) => e.statusCode === 400 && /You owe Bonge nothing in all — they have been paid TZS 1,000 more than the bills/.test(e.message));
+
+  // RS2 case: one PO paid 30,000 beyond its cost directly, another still shows 4,000 on its row. The
+  // supplier is owed nothing in all, so Pay PO on the second does not claim its bill is covered.
+  const a = { id: 'a', poNumber: 'PO-A', status: 'RECEIVED', totalCost: 10000, receivedAt: new Date('2026-10-01'), createdAt: new Date('2026-10-01') };
+  const b = { id: 'b', poNumber: 'PO-B', status: 'RECEIVED', totalCost: 4000, receivedAt: new Date('2026-10-02'), createdAt: new Date('2026-10-02') };
+  s = loadSupplier({ pos: [a, b], txns: [{ refType: 'PurchaseOrder', refId: 'a', amount: 40000, occurredAt: new Date() }] });
+  d = await s.finance.supplierDetail('sup1');
+  assert.equal(d.orders.find((o) => o.id === 'b').outstanding, 4000);
+  assert.equal(d.totals.outstanding, -26000);
+  assert.equal(d.totals.notOnAnyPo, 0); // the rows already add up: −30,000 + 4,000
+  await assert.rejects(s.finance.paySupplier({ purchaseOrderId: 'b', accountId: 'acc', amount: 1 }, null),
+    (e) => e.statusCode === 400 && /nothing in all — they have been paid TZS 26,000 more/.test(e.message));
+
+  // Owed exactly nothing in all, yet this PO's row shows an amount: the same "nothing in all" answer.
+  s = loadSupplier({ pos: [a, b], txns: [{ refType: 'PurchaseOrder', refId: 'a', amount: 14000, occurredAt: new Date() }] });
+  await assert.rejects(s.finance.paySupplier({ purchaseOrderId: 'b', accountId: 'acc' }, null),
+    (e) => e.statusCode === 400 && /You owe Bonge nothing in all — the payments already made cover every bill/.test(e.message));
+  assert.equal(s.created.length, 0);
 });
 
 // ── admin-money-5: Overdue on the settlement record ──────────────────────────────────────────────────

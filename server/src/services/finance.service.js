@@ -1400,6 +1400,11 @@ async function supplierDetail(id) {
     };
   });
   const purchased = round2(orders.reduce((x, o) => x + o.totalCost, 0));
+  const outstanding = round2(purchased - returned - paid);
+  // Balance payments or returned goods beyond every bill fit on no PO row, so the rows alone add up to
+  // more than the balance owed; this is that difference (STG: rows 0, balance −1,000, 1,000 here).
+  // Never below zero: a PO paid directly beyond its cost shows its own negative row instead.
+  const notOnAnyPo = Math.max(0, round2(orders.reduce((x, o) => x + o.outstanding, 0) - outstanding));
   const productsPurchased = [...new Set(orders.flatMap((o) => o.products))];
   return {
     supplier: { ...s, brandName: brand?.name || null },
@@ -1415,7 +1420,7 @@ async function supplierDetail(id) {
     credits: credits.map((c) => ({
       id: c.id, amount: toNumber(c.amount), reason: c.reason, occurredAt: c.occurredAt,
     })),
-    totals: { purchased, paid, returned, outstanding: round2(purchased - returned - paid) },
+    totals: { purchased, paid, returned, outstanding, notOnAnyPo },
   };
 }
 
@@ -1505,18 +1510,23 @@ async function paySupplier({ purchaseOrderId, accountId, amount, notes, occurred
   const owedOverall = detail.totals.outstanding;
   const remaining = Math.max(0, round2(Math.min(onOrder, owedOverall)));
   const amt = amount != null ? round2(toNumber(amount)) : remaining;
+  // Why nothing can be paid on it: the supplier is owed nothing in all (he may have been paid beyond the
+  // bills, even on another PO — then this PO's own row can still show an amount), or balance payments
+  // and returned goods cover this PO.
+  const supplierName = po.supplier?.name || 'this supplier';
+  const nothingLeft = () => ApiError.badRequest(
+    owedOverall < 0 ? `You owe ${supplierName} nothing in all — they have been paid TZS ${Math.abs(owedOverall).toLocaleString()} more than the bills`
+      : onOrder > 0 ? `You owe ${supplierName} nothing in all — the payments already made cover every bill`
+        : `Nothing is left to pay on ${po.poNumber} — balance payments and returned goods already cover it`,
+  );
   if (!(amt > 0)) {
-    if (amount == null && remaining <= 0) {
-      throw ApiError.badRequest(`Nothing is left to pay on ${po.poNumber} — balance payments and returned goods already cover it`);
-    }
+    if (amount == null && remaining <= 0) throw nothingLeft();
     throw ApiError.badRequest('Payment amount must be greater than zero');
   }
   if (amt > remaining + 0.001) {
-    if (remaining <= 0) {
-      throw ApiError.badRequest(`Nothing is left to pay on ${po.poNumber} — balance payments and returned goods already cover it`);
-    }
+    if (remaining <= 0) throw nothingLeft();
     if (owedOverall < onOrder) {
-      throw ApiError.badRequest(`You only owe ${po.supplier?.name || 'this supplier'} TZS ${owedOverall.toLocaleString()} in all`);
+      throw ApiError.badRequest(`You only owe ${supplierName} TZS ${owedOverall.toLocaleString()} in all`);
     }
     throw ApiError.badRequest(`Only TZS ${remaining.toLocaleString()} is outstanding on ${po.poNumber}`);
   }
