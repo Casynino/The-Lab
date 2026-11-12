@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { ChevronDown, Minus, Plus, Search, UserRound, Warehouse } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useProducts, useCustomers, useWarehouses } from '@/lib/hooks';
 import { formatCurrency, formatNumber } from '@/lib/format';
 import { Modal, Button, Select, NumberInput, Field } from '@/components/ui';
@@ -248,8 +249,8 @@ export default function QuickSale({ onClose }) {
     onSuccess: () => {
       saveLastWarehouse(warehouseId);
       toast.success('Sale recorded');
-      qc.invalidateQueries({ queryKey: ['sales'] });
-      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      // Stock out and money in: Inventory and Finance are asked again too (audit freshness-2/4).
+      refreshAfter(qc, 'sale');
       onClose();
     },
     // The server refused (most often: somebody else sold the last boxes) — reload the stock so the caps are true again.

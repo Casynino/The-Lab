@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { Plus, Ship, PackageCheck, Pencil, Trash2, Eye } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { keepOnPageTurn } from '@/lib/pageQueries';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { PO_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatNumber, pluralizeUnit } from '@/lib/format';
@@ -387,7 +388,14 @@ function PurchaseOrders() {
 
   const receive = useMutation({
     mutationFn: (id) => api.post(`/purchase-orders/${id}/receive`, {}),
-    onSuccess: () => { toast.success('Received into warehouse'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
+    // Stock in at a new cost: Inventory, the Dashboard's stock alerts and value, and Finance's suppliers too
+    // (audit freshness-4).
+    onSuccess: () => {
+      toast.success('Received into warehouse');
+      qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+      refreshAfter(qc, 'stock');
+    },
     onError: (e) => toast.error(apiError(e)),
   });
   const otw = data?.meta?.onTheWay;
