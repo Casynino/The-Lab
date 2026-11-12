@@ -5,11 +5,15 @@ const ApiError = require('../utils/ApiError');
 // reorder / credit / dashboard are lazy-required inside generateSystemAlerts()
 // to avoid circular deps (settlement → notification → dashboard → settlement).
 
-// Visibility rule: admins see every notification (broadcasts + targeted).
-// All other roles see only notifications explicitly addressed to them.
+// Visibility rule: admins see the admin notices (userId null) and every targeted one except those
+// addressed to warehouse staff — those are the staff's own copies of business alerts (below) and their
+// own notices, so the owner's bell does not show each alert once more per staff member, and the owner's
+// "mark all read" never clears a staff member's bell. All other roles see only notifications explicitly
+// addressed to them.
+const STAFF_ROLE = 'WAREHOUSE_STAFF';
 function visibilityWhere(user) {
   if (!user) return {};
-  if (user.role === 'ADMIN') return {};
+  if (user.role === 'ADMIN') return { OR: [{ userId: null }, { user: { role: { name: { not: STAFF_ROLE } } } }] };
   return { userId: user.id };
 }
 
@@ -37,11 +41,10 @@ async function unreadCount(user) {
 }
 
 async function markRead(id, user) {
-  const n = await prisma.notification.findUnique({ where: { id } });
-  // Only a notification the user can see (the visibility rule above): anyone else could clear
-  // another person's alert, or an admin broadcast, by its id. Not found, so ids are not confirmed.
-  const visible = n && (!user || user.role === 'ADMIN' || n.userId === user.id);
-  if (!visible) throw ApiError.notFound('Notification not found');
+  // Only a notification the user can see (the visibility rule above, the very same where): anyone else
+  // could clear another person's alert, or an admin broadcast, by its id. Not found, so ids are not confirmed.
+  const n = await prisma.notification.findFirst({ where: { id, ...visibilityWhere(user) }, select: { id: true } });
+  if (!n) throw ApiError.notFound('Notification not found');
   return prisma.notification.update({ where: { id }, data: { isRead: true, readAt: new Date() } });
 }
 
@@ -148,8 +151,23 @@ async function generateSystemAlerts() {
 }
 
 // Broadcast to all admins (userId = null means every admin sees it).
+// `forStaff: true` also puts a copy in every active warehouse-staff bell (audit staff-settings-2, 12 Nov
+// 2026: staff approve stock requests, returns and settlements, yet their bell was always empty). Each
+// staff member gets his own row, so reading it never touches the owner's copy or another's. Only the
+// callers of approvals staff can do today set it; money alerts (withdrawals, fines, bonuses) never do.
 async function notifyAdmins(data) {
-  return create({ ...data, userId: null });
+  const { forStaff, ...row } = data;
+  const created = await create({ ...row, userId: null });
+  if (forStaff) {
+    try {
+      const { whatsapp, dedupeSalt, ...plain } = row; // eslint-disable-line no-unused-vars
+      const staff = await prisma.user.findMany({ where: { isActive: true, role: { name: STAFF_ROLE } }, select: { id: true } });
+      if (staff.length) await prisma.notification.createMany({ data: staff.map((u) => ({ ...plain, userId: u.id })) });
+    } catch {
+      // The owner's notice is already written; a missed staff copy never undoes it.
+    }
+  }
+  return created;
 }
 
 // Announcement to a whole audience ('reps' | 'staff' | 'all'): one targeted

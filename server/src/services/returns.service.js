@@ -283,6 +283,7 @@ async function createReturn(payload, actor) {
       type: 'GENERAL',
       severity: 'INFO',
       title: 'Return approval required',
+      forStaff: true, // staff decide returns
       message: `${submitterName} submitted a return of ${totalBoxes} box(es): ${itemList}. Please verify and approve.`,
       entityType: 'Return',
       entityId: ret.id,
@@ -546,6 +547,7 @@ async function cancelReturn(id, actor, { asRep = false } = {}) {
       type: 'GENERAL',
       severity: 'INFO',
       title: 'Return request cancelled',
+      forStaff: true, // staff decide returns
       message: `${updated.salesRep?.user?.name || 'A rep'} cancelled return ${updated.returnNumber} — the boxes stay on their order.`,
       entityType: 'Return',
       entityId: id,
@@ -645,6 +647,7 @@ async function expireStaleReturns() {
       type: 'GENERAL',
       severity: 'WARNING',
       title: 'Return expired without a decision',
+      forStaff: true, // staff decide returns
       message: `Return ${ret.returnNumber} from ${ret.salesRep?.user?.name || 'a rep'} sat ${RETURN_WINDOW_HOURS}h without approval and was auto-cancelled. The boxes are back on the order.`,
       entityType: 'Return',
       entityId: ret.id,
