@@ -103,6 +103,8 @@ async function createProduct(payload, actor) {
 async function updateProduct(id, payload) {
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) throw ApiError.notFound('Product not found');
+  // Switching off is refused while a settlement of it waits for approval (audit reversals-stock-1).
+  if (payload.isActive === false && product.isActive) await assertNoPendingSettlements(product);
 
   const data = {};
   const fields = [
@@ -239,13 +241,105 @@ async function getProduct(id) {
   };
 }
 
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+async function repNames(ids) {
+  if (!ids.length) return new Map();
+  const reps = await prisma.salesRepresentative.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, code: true, user: { select: { name: true } } },
+  });
+  return new Map(reps.map((r) => [r.id, r.user?.name || r.code]));
+}
+
+// A switched-off product cannot be settled or approved, so switching it off while a rep's settlement of
+// it waits for approval strands money he has already sent (audit reversals-stock-1). Refused until
+// every one of them is approved or rejected.
+async function assertNoPendingSettlements(product) {
+  const rows = await prisma.settlementSubmission.findMany({
+    where: { productId: product.id, status: 'PENDING' },
+    select: { salesRepId: true },
+  });
+  if (!rows.length) return;
+  const who = [...(await repNames([...new Set(rows.map((r) => r.salesRepId))])).values()].join(', ');
+  const one = rows.length === 1;
+  throw ApiError.badRequest(
+    `${plural(rows.length, 'settlement', 'settlements')} of ${product.name} ${one ? 'is' : 'are'} waiting for approval${who ? ` (${who})` : ''}. `
+    + `A switched-off product cannot be approved, so approve or reject ${one ? 'it' : 'them'} first.`,
+  );
+}
+
+// Where a product's boxes are now: the warehouses together, and each rep who still holds some.
+async function holdings(productId) {
+  const [wh, reps] = await Promise.all([
+    prisma.inventoryTransaction.aggregate({ where: { productId, warehouseId: { not: null } }, _sum: { baseQuantity: true } }),
+    prisma.inventoryTransaction.groupBy({ by: ['salesRepId'], where: { productId, salesRepId: { not: null } }, _sum: { baseQuantity: true } }),
+  ]);
+  const held = reps.map((r) => ({ salesRepId: r.salesRepId, boxes: r._sum.baseQuantity || 0 })).filter((r) => r.boxes > 0);
+  const names = await repNames(held.map((h) => h.salesRepId));
+  return {
+    warehouse: Math.max(0, wh._sum.baseQuantity || 0),
+    reps: held.map((h) => ({ ...h, name: names.get(h.salesRepId) || 'a rep' })),
+  };
+}
+
+// Remove a product. Only one that nothing refers to is deleted. One with stock history is switched off
+// instead, and the answer says so and why, with the boxes still in stock (audit reversals-stock-1: it
+// said "Product removed" while 34 boxes, 5 of them with a rep, stayed in the books). One that was never
+// stocked but sits on a purchase order or a stock request is refused by name (audit reversals-stock-7:
+// it answered "Related record constraint failed (foreign key)").
 async function deleteProduct(id) {
-  const movements = await prisma.inventoryTransaction.count({ where: { productId: id } });
-  if (movements > 0) {
-    // Never destroy a product with ledger history; deactivate instead.
-    return prisma.product.update({ where: { id }, data: { isActive: false } });
+  const product = await prisma.product.findUnique({ where: { id } });
+  if (!product) throw ApiError.notFound('Product not found');
+  const where = { productId: id };
+  const [movements, sales, transfers, returns, counts, submissions, poLines, requestLines] = await Promise.all([
+    prisma.inventoryTransaction.count({ where }),
+    prisma.saleItem.count({ where }),
+    prisma.stockTransferItem.count({ where }),
+    prisma.returnItem.count({ where }),
+    prisma.stockCountItem.count({ where }),
+    prisma.settlementSubmission.count({ where }),
+    prisma.purchaseOrderItem.findMany({ where, select: { purchaseOrder: { select: { poNumber: true } } }, take: 20 }),
+    prisma.stockRequestItem.findMany({ where, select: { stockRequest: { select: { requestNumber: true } } }, take: 20 }),
+  ]);
+
+  if (movements + sales + transfers + returns + counts + submissions > 0) {
+    await assertNoPendingSettlements(product);
+    const updated = await prisma.product.update({ where: { id }, data: { isActive: false } });
+    const h = await holdings(id);
+    const repBoxes = h.reps.reduce((s, r) => s + r.boxes, 0);
+    const where_ = [
+      h.warehouse > 0 && `${h.warehouse} in the warehouse`,
+      repBoxes > 0 && `${repBoxes} with reps (${h.reps.map((r) => `${r.name} ${r.boxes}`).join(', ')})`,
+    ].filter(Boolean);
+    const unit = (product.baseUnitName || 'box').toLowerCase();
+    const message = `${product.name} was switched off, not removed: it has stock history, which stays in the records.`
+      + (where_.length
+        ? ` Still in stock: ${where_.join('; ')}. Switch it back on to settle, move or write off these ${unit === 'box' ? 'boxes' : `${unit}s`}.`
+        : ' It no longer shows for new orders.');
+    return { ...updated, deleted: false, deactivated: true, holdings: h, message };
   }
-  return prisma.product.delete({ where: { id } });
+
+  const orders = [...new Set(poLines.map((l) => l.purchaseOrder?.poNumber).filter(Boolean))];
+  const requests = [...new Set(requestLines.map((l) => l.stockRequest?.requestNumber).filter(Boolean))];
+  if (orders.length || requests.length) {
+    const on = [
+      orders.length && `purchase ${orders.length === 1 ? 'order' : 'orders'} ${orders.slice(0, 5).join(', ')}`,
+      requests.length && `stock ${requests.length === 1 ? 'request' : 'requests'} ${requests.slice(0, 5).join(', ')}`,
+    ].filter(Boolean).join(' and ');
+    throw ApiError.badRequest(
+      `${product.name} is on ${on}, so it cannot be removed. Take it off ${orders.length + requests.length === 1 ? 'that' : 'those'} first, or switch the product off in Edit.`,
+    );
+  }
+
+  try {
+    await prisma.product.delete({ where: { id } });
+  } catch (e) {
+    // Put on an order or a request between the check above and now.
+    if (e.code === 'P2003') throw ApiError.badRequest(`${product.name} is now used on another record, so it cannot be removed. Switch it off in Edit instead.`);
+    throw e;
+  }
+  return { id, name: product.name, deleted: true, deactivated: false, message: `${product.name} removed.` };
 }
 
 module.exports = {

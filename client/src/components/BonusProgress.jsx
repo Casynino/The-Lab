@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Trophy } from 'lucide-react';
-import { formatCurrency } from '@/lib/format';
+import { formatCurrency, formatDate } from '@/lib/format';
 import { RED } from '@/lib/brand';
 import { Ring } from '@/components/Ring';
 
@@ -10,6 +10,30 @@ import { Ring } from '@/components/Ring';
 // next one. The old extras — a big ring, bars, repeated percentages, a footnote — are gone; the bonus is
 // still paid on its own, as before.
 const GREEN = '#34d399';
+
+// The bonuses already paid to this rep (audit money-flows-10). Paying one starts the count again at 0%,
+// and before this list the app kept no trace of the payment — only the bell notice and the WhatsApp.
+// Plain rows on the page, like "My withdrawals".
+export function PaidBonuses({ items }) {
+  if (!items?.length) return null;
+  return (
+    <section className="mt-9 px-1">
+      <h3 className="text-sm font-semibold text-foreground">Paid to you</h3>
+      <p className="mt-0.5 text-xs text-muted">Each bonus paid started your sales count again from zero.</p>
+      <ul className="mt-2 divide-y divide-white/[0.06]">
+        {items.map((a) => (
+          <li key={a.id} className="flex items-baseline justify-between gap-3 py-2.5">
+            <span className="min-w-0">
+              <span className="block text-[13px] text-foreground">Paid {formatDate(a.paidAt)}</span>
+              {a.target > 0 && <span className="block text-[11px] text-faint">For selling {formatCurrency(a.target)}</span>}
+            </span>
+            <span className="shrink-0 whitespace-nowrap text-[14px] font-semibold tabular-nums text-emerald-300">{formatCurrency(a.amount)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 const RED_LATER = 'rgba(238, 49, 36, 0.5)';
 
 export default function BonusProgress({ p }) {

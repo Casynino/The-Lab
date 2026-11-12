@@ -40,6 +40,18 @@ export function unitWord(n, unit = 'box') {
 }
 
 // The rep's Sales bonus track on Home. The headline % is the way to the NEXT tier, but the notches
+// The fill on a bonus bar (Home and the admin rep card): the run's sales on the top tier's scale, held
+// just short of the lowest notch not reached. Each tier counts from its own start (audit money-flows-1),
+// so a tier added later can be unreached while the whole run is past its notch; the bar must never
+// show it as passed. With one shared start this is the plain sales / top.
+export function bonusFillPct(sales, tiers, top) {
+  if (!(top > 0)) return 0;
+  const raw = (Math.max(0, Number(sales) || 0) / top) * 100;
+  const caps = (tiers || []).filter((t) => !t.reached).map((t) => ((Number(t.target) || 0) / top) * 100 - 1);
+  return Math.max(0, Math.min(100, raw, ...caps));
+}
+
+// The rep's Sales bonus track on Home. The headline % is the way to the NEXT tier, but the notches
 // stand on the scale of the TOP tier, so the fill has to use that scale too — a bar drawn at 94% of
 // the way to 10M ran past the 10M notch (at 67% of 15M) that had not been reached (audit, 12 Nov 2026).
 export function bonusTrack(bonus) {
@@ -47,12 +59,11 @@ export function bonusTrack(bonus) {
   const tiers = bonus.tiers;
   const aim = bonus.next || tiers[tiers.length - 1];
   const top = Number(tiers[tiers.length - 1].target) || 0;
-  const sales = Math.max(0, Number(bonus.sales) || 0);
   const clamp = (v) => Math.max(0, Math.min(100, v));
   return {
     aim,
     pct: clamp(Number(aim.progress) || 0),
-    barPct: top > 0 ? clamp((sales / top) * 100) : clamp(Number(aim.progress) || 0),
+    barPct: top > 0 ? bonusFillPct(bonus.sales, tiers, top) : clamp(Number(aim.progress) || 0),
     markers: top > 0 ? tiers.map((t) => ({ at: clamp(((Number(t.target) || 0) / top) * 100), passed: Boolean(t.reached) })) : [],
   };
 }

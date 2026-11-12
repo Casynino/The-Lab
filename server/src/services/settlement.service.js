@@ -767,22 +767,31 @@ async function addStockToRep(salesRepId, payload, actor) {
 // for — settled (paid) or returned — before the request can be closed. Since
 // settled value + returned value = order value when no boxes remain, this also
 // guarantees the balance is fully cleared.
+//
+// Closed once (audit reversals-stock-6): under the order's lock, and only the press that actually turns
+// it SETTLED goes on to tell the owner and the rep. Three presses at once used to each close it again,
+// each rewriting settledAt and each sending an ORDER CLOSED WhatsApp. A second press is answered 409, which
+// the order window reads as "already closed".
 async function settle(id, actor, { notes } = {}) {
-  const s = await prisma.settlement.findUnique({ where: { id } });
-  if (!s) throw ApiError.notFound('Settlement not found');
-  if (s.status === 'SETTLED') throw ApiError.badRequest('This order is already settled');
+  const { s, updated } = await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, id);
+    const s = await tx.settlement.findUnique({ where: { id } });
+    if (!s) throw ApiError.notFound('Settlement not found');
+    if (s.status === 'SETTLED') throw ApiError.conflict('This order is already closed.');
 
-  const bd = await orderBreakdown(s);
-  if (bd.totals.remainingBoxes > 0) {
-    throw ApiError.badRequest(
-      `Cannot close yet — ${bd.totals.remainingBoxes} box(es) are still unaccounted. Every box must be settled or returned (outstanding ${formatCurrency(bd.totals.outstanding)}).`,
-    );
-  }
+    const bd = await orderBreakdown(s, tx);
+    if (bd.totals.remainingBoxes > 0) {
+      throw ApiError.badRequest(
+        `Cannot close yet — ${bd.totals.remainingBoxes} box(es) are still unaccounted. Every box must be settled or returned (outstanding ${formatCurrency(bd.totals.outstanding)}).`,
+      );
+    }
 
-  const updated = await prisma.settlement.update({
-    where: { id },
-    data: { status: 'SETTLED', settledAt: new Date(), notes: notes || s.notes },
-    include: INCLUDE_HISTORY,
+    const claimed = await tx.settlement.updateMany({
+      where: { id, status: { not: 'SETTLED' } },
+      data: { status: 'SETTLED', settledAt: new Date(), notes: notes || s.notes },
+    });
+    if (claimed.count !== 1) throw ApiError.conflict('This order is already closed.');
+    return { s, updated: await tx.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY }) };
   });
 
   notification.notifyAdmins({

@@ -6,7 +6,7 @@ import {
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
-import BonusProgress from '@/components/BonusProgress';
+import BonusProgress, { PaidBonuses } from '@/components/BonusProgress';
 import WalletCard from '@/components/WalletCard';
 import { EarningsCard, BrandCard, SettlementCard, TopProductsCard, PayoutsCard, Ring } from '@/components/RepCharts';
 import { Coins, Crown, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, ShieldCheck, Search, X, ChevronRight, ArrowUpDown } from 'lucide-react';
@@ -25,6 +25,7 @@ import {
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import DoneReceipt from '@/components/DoneReceipt';
+import { bonusFillPct } from '@/lib/labels';
 
 // Requesting a payout used to be a bare number field over a green strip, and it
 // ended in a four-word toast. It is the one moment in this app that is purely
@@ -204,6 +205,10 @@ function WithdrawModal({ commission, firstName, onClose }) {
 const rejectQuestion = (w) =>
   `Reject ${w.salesRep?.user?.name || 'this rep'}'s request for ${formatCurrency(w.amount)}? They will be told it was not approved, and the amount goes back into their balance.`;
 
+// Still waiting for the owner's money: asked, or approved but not yet paid (audit money-flows-7 — an
+// approved one dropped out of every "waiting" count while nothing had been handed over).
+const isWaiting = (w) => w.status === 'PENDING' || w.status === 'APPROVED';
+
 function RejectWithdrawalModal({ w, busy, onConfirm, onClose }) {
   return (
     <Modal open onClose={busy ? () => {} : onClose} title="Reject this request?" footer={
@@ -361,11 +366,20 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
                 <div className="mt-0.5 text-xs text-faint">{formatDateTime(w.requestedAt)}</div>
               </button>
               <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:gap-3">
-                <Button variant="ghost" className="text-rose-400 max-sm:min-h-11 max-sm:flex-1" disabled={busy}
-                  onClick={() => setRejecting(w)}>Reject</Button>
-                <Button className="max-sm:min-h-11 max-sm:flex-1" loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
-                  <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
-                </Button>
+                {/* An approved request can only be paid now (the server refuses Reject for it). */}
+                {w.status === 'APPROVED' ? (
+                  <Button className="max-sm:min-h-11 max-sm:flex-1" loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
+                    <Coins className="h-4 w-4" /> Approved · mark paid
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="ghost" className="text-rose-400 max-sm:min-h-11 max-sm:flex-1" disabled={busy}
+                      onClick={() => setRejecting(w)}>Reject</Button>
+                    <Button className="max-sm:min-h-11 max-sm:flex-1" loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
+                      <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           );
@@ -778,7 +792,7 @@ function RepView() {
     ? Math.max(0, Math.min(100, (Math.max(0, c.available) / c.minWithdrawal) * 100))
     : 0;
   const withdrawals = wd?.data || [];
-  const pendingCount = withdrawals.filter((w) => w.status === 'PENDING').length;
+  const pendingCount = withdrawals.filter(isWaiting).length;
   const firstName = user?.name?.split(' ')[0] || '';
   // The headline above answers "what is my balance". The note answers "where
   // has my request got to" — a different number and a different question, so it
@@ -864,9 +878,14 @@ function RepView() {
           ? <LoadError what="your bonus" onRetry={bonusQ.refetch} />
           : !bonusProgress
             ? <PageSpinner />
-            : bonusProgress.configured
-              ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
-              : <QuietEmpty icon={TrendingUp} title="No bonus running" text="Nothing to chase right now." />
+            : (
+              <>
+                {bonusProgress.configured
+                  ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
+                  : <QuietEmpty icon={TrendingUp} title="No bonus running" text="Nothing to chase right now." />}
+                <PaidBonuses items={bonusProgress.paidAwards} />
+              </>
+            )
       )}
 
       {tab === 'withdrawals' && (
@@ -1122,6 +1141,9 @@ function BonusSettings({ canEdit }) {
   const [from, setFrom] = useState('');
   // When set, the form edits that rule instead of creating another one.
   const [editingId, setEditingId] = useState(null);
+  // The bonus about to be paid: Pay asks first, with the rep and the amount read back (audit money-flows-4) —
+  // one tap used to pay at once, and a paid bonus cannot be taken back.
+  const [confirmPay, setConfirmPay] = useState(null);
 
   // datetime-local wants local wall time, not an ISO string with a zone.
   const toLocalInput = (d) => {
@@ -1166,7 +1188,9 @@ function BonusSettings({ canEdit }) {
   const pay = useMutation({
     mutationFn: ({ salesRepId, bonusRuleId }) => api.post('/commissions/bonus/pay', { salesRepId, bonusRuleId }),
     onSuccess: () => { toast.success('Bonus paid'); refresh(); },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have paid it: reload so the row shows what really happened.
+    onError: (e) => { toast.error(apiError(e)); refresh(); },
+    onSettled: () => setConfirmPay(null),
   });
 
   const valid = Number(target) > 0 && Number(amount) > 0;
@@ -1250,8 +1274,8 @@ function BonusSettings({ canEdit }) {
                         <Button
                           key={t.ruleId}
                           className="px-2 py-1 text-xs"
-                          loading={pay.isPending}
-                          onClick={() => pay.mutate({ salesRepId: i.salesRepId, bonusRuleId: t.ruleId })}
+                          disabled={pay.isPending}
+                          onClick={() => setConfirmPay({ salesRepId: i.salesRepId, name: i.name, bonusRuleId: t.ruleId, amount: t.bonusAmount, target: t.target })}
                         >
                           Pay {formatCurrency(t.bonusAmount)}
                         </Button>
@@ -1290,6 +1314,27 @@ function BonusSettings({ canEdit }) {
       >
         Paid on its own, never into the balance · editable until someone earns it.
       </p>
+      {confirmPay && (
+        <Modal open onClose={pay.isPending ? () => {} : () => setConfirmPay(null)} title="Pay this bonus?" footer={
+          <>
+            <Button variant="secondary" disabled={pay.isPending} onClick={() => setConfirmPay(null)}>Cancel</Button>
+            <Button loading={pay.isPending}
+              onClick={() => pay.mutate({ salesRepId: confirmPay.salesRepId, bonusRuleId: confirmPay.bonusRuleId })}>
+              Yes, pay {formatCurrency(confirmPay.amount)}
+            </Button>
+          </>
+        }>
+          <p className="text-[15px] font-semibold text-foreground">
+            {confirmPay.name} · <span className="tabular-nums text-emerald-300">{formatCurrency(confirmPay.amount)}</span>
+          </p>
+          <p className="mt-1 text-xs text-muted">For selling {formatCurrency(confirmPay.target)}</p>
+          <p className="mt-3 text-sm leading-snug text-foreground">
+            This marks the bonus paid and tells {confirmPay.name} it has been paid, so send the money first.
+            {' '}{confirmPay.name}&rsquo;s sales count then starts again from zero.
+          </p>
+          <p className="mt-2 text-xs text-faint">A paid bonus cannot be taken back.</p>
+        </Modal>
+      )}
     </Card>
   );
 }
@@ -1625,7 +1670,8 @@ function SettlementRecord({ a, className }) {
 function BonusBar({ b, sharedStart }) {
   const tiers = b.tiers || [];
   const top = tiers.reduce((m, t) => Math.max(m, Number(t.target) || 0), 0);
-  const pct = top > 0 ? clampPct((Number(b.sales) / top) * 100) : 0;
+  // Never past a notch not reached: a tier added later counts from its own start (audit money-flows-1).
+  const pct = bonusFillPct(b.sales, tiers, top);
   const won = b.claimable;
   const next = b.next;
   // Once one rep has been paid a bonus the runs diverge, and each card states its own start instead.
@@ -2050,7 +2096,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
   });
   const profile = profileQ.data;
   const withdrawals = wdQ.data?.data || [];
-  const waiting = withdrawals.filter((w) => w.status === 'PENDING').length;
+  const waiting = withdrawals.filter(isWaiting).length;
   const fineRows = finesQ.data?.data || [];
   const fineCounts = finesQ.data?.meta?.counts;
   // The two rings show only when they have something to draw (the same tests the rings make themselves).
@@ -2644,7 +2690,7 @@ function AdminView({ embedded = false }) {
   // Only fines still charged are worth a badge — counted by the SERVER over the whole table.
   const activeFines = penaltyData?.meta?.counts?.applied
     ?? (penaltyData?.data || []).filter((p) => p.status !== 'WAIVED').length;
-  const pendingWithdrawals = (wd?.data || []).filter((w) => w.status === 'PENDING').length;
+  const pendingWithdrawals = (wd?.data || []).filter(isWaiting).length;
 
   const applyPenalties = useMutation({
     mutationFn: () => api.post('/penalties/apply'),
@@ -2696,7 +2742,7 @@ function AdminView({ embedded = false }) {
       {/* A request waiting for the owner is the one thing here that needs a hand, so it comes first (it only
           shows while something is waiting). */}
       <PendingWithdrawalsStrip
-        items={(wd?.data || []).filter((w) => w.status === 'PENDING')}
+        items={(wd?.data || []).filter(isWaiting)}
         refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
         onOpen={setOpenWd}
       />

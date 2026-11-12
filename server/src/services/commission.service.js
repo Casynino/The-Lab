@@ -345,8 +345,11 @@ async function withdrawalTotals(salesRepId) {
     _sum: { amount: true },
   });
   const m = new Map(grouped.map((g) => [g.status, toNumber(g._sum.amount)]));
-  const paid = round2((m.get('APPROVED') || 0) + (m.get('PAID') || 0));
-  const pendingRequests = round2(m.get('PENDING') || 0);
+  // Approved but not yet paid is still waiting for the money (audit money-flows-7): it counted as paid
+  // here, so the rep's wallet and the totals said "paid out" before anything was handed over. Both
+  // buckets come off the available balance, so moving it changes no balance, only where it is shown.
+  const paid = round2(m.get('PAID') || 0);
+  const pendingRequests = round2((m.get('PENDING') || 0) + (m.get('APPROVED') || 0));
   return { paid, pendingRequests };
 }
 
@@ -355,9 +358,9 @@ async function withdrawalTotals(salesRepId) {
 // the run they are in now, which is what the owner reads the balances page for:
 // not a lifetime total, but "since I last paid him, how is he doing".
 //
-// The boundary is the LAST withdrawal that took money out. `withdrawalTotals`
-// counts APPROVED and PAID alike as paid, so the run boundary has to agree with
-// it, or the figures on the row would not add up. Ordered in memory rather than
+// The boundary is the LAST withdrawal that was decided for payment, APPROVED or PAID (an approval
+// closes the run, as it always has; `withdrawalTotals` shows an approved one as waiting until it is
+// paid). The run's brought-forward figure is derived from the balance, so the row still adds up. Ordered in memory rather than
 // by SQL because the moment is paidAt when there is one and the decision
 // otherwise, and no index can sort across two columns like that.
 async function lastPayoutFor(salesRepId) {

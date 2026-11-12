@@ -304,6 +304,9 @@ function AddAccountModal({ onClose }) {
   );
 }
 
+// The "+ New category…" choice in the expense form's list. Never sent as a category (audit money-flows-6).
+const NEW_CATEGORY = '__new';
+
 function MoneyModal({ mode, accounts: all, categories, onClose }) {
   const accounts = wallets(all);
   const qc = useQueryClient();
@@ -321,7 +324,9 @@ function MoneyModal({ mode, accounts: all, categories, onClose }) {
   const save = useMutation({
     mutationFn: async () => {
       let category = form.category;
-      if (isExpense && form.category === '__new' && form.newCategory.trim()) {
+      // "+ New category…" is a choice in the list, never a category name (audit money-flows-6).
+      if (isExpense && form.category === NEW_CATEGORY) {
+        if (!form.newCategory.trim()) throw new Error('Type a name for the new category, or pick one from the list.');
         await api.post('/finance/categories', { name: form.newCategory.trim() });
         category = form.newCategory.trim();
       }
@@ -333,9 +338,11 @@ function MoneyModal({ mode, accounts: all, categories, onClose }) {
       });
     },
     onSuccess: () => { toast.success(isExpense ? 'Expense recorded' : 'Income recorded'); invalidateFinance(qc); onClose(); },
+    // apiError words a dropped connection and keeps a plain Error's own message (the new-category check).
     onError: (e) => toast.error(apiError(e)),
   });
-  const valid = form.accountId && Number(form.amount) > 0 && (!isExpense || form.category);
+  const valid = form.accountId && Number(form.amount) > 0
+    && (!isExpense || (form.category && (form.category !== NEW_CATEGORY || form.newCategory.trim())));
   return (
     <Modal open onClose={onClose} title={isExpense ? 'Record expense' : 'Record income'}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>{isExpense ? 'Save expense' : 'Save income'}</Button></>}>
@@ -345,11 +352,11 @@ function MoneyModal({ mode, accounts: all, categories, onClose }) {
           <Field label="Category" required>
             <Select value={form.category} onChange={set('category')}>
               {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-              <option value="__new">+ New category…</option>
+              <option value={NEW_CATEGORY}>+ New category…</option>
             </Select>
           </Field>
         )}
-        {isExpense && form.category === '__new' && (
+        {isExpense && form.category === NEW_CATEGORY && (
           <Field label="New category name" required><Input value={form.newCategory} onChange={set('newCategory')} placeholder="e.g. Repairs" /></Field>
         )}
         {!isExpense && <Field label="Source"><Input value={form.category} onChange={set('category')} placeholder="e.g. Investment, refund" /></Field>}
@@ -2527,23 +2534,40 @@ function NewPurchaseModal({ supplier, accounts: all = [], onClose, onDone }) {
         const items = validLines.map((l) => (
           { productId: l.productId, packagingUnitId: l.packagingUnitId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) }
         ));
-        po = unwrap(await api.post('/purchase-orders', {
-          supplierId: supplier.id, currency: 'TZS', items,
-          shippingCost: Number(shippingCost) || 0, otherCost: Number(otherCost) || 0,
-          orderedAt: new Date(`${date}T12:00:00`).toISOString(), notes: notes.trim() || undefined,
-          // Paid as it was bought: the money leaves the account on the purchase
-          // date, not the day this was typed in.
-          payment: paidNow ? { accountId: payAccountId, amount: paying, occurredAt: date } : undefined,
-        })).data;
+        try {
+          po = unwrap(await api.post('/purchase-orders', {
+            supplierId: supplier.id, currency: 'TZS', items,
+            shippingCost: Number(shippingCost) || 0, otherCost: Number(otherCost) || 0,
+            orderedAt: new Date(`${date}T12:00:00`).toISOString(), notes: notes.trim() || undefined,
+            // Paid as it was bought: the money leaves the account on the purchase
+            // date, not the day this was typed in.
+            payment: paidNow ? { accountId: payAccountId, amount: paying, occurredAt: date } : undefined,
+          })).data;
+        } catch (e) {
+          // No answer at all: the purchase may have been saved. Say so, and refresh the supplier's history so
+          // it can be checked before saving again (audit reversals-stock-5).
+          if (!e?.response) {
+            onDone();
+            throw new Error(`No answer from the app, so this purchase may have been saved. Check ${supplier.name}'s purchase history before pressing Save again.`);
+          }
+          throw e;
+        }
         createdPo.current = po;
       }
       try {
         await api.post(`/purchase-orders/${po.id}/receive`, { actualArrival: new Date(`${date}T12:00:00`).toISOString() });
       } catch (e) {
-        // A receive that went through but whose answer was lost comes back as "already received".
+        // A receive that went through but whose answer was lost comes back as 409 "already received"; any
+        // other failure is checked against the order itself before the person is told it is not received
+        // (audit reversals-stock-5: a 400 "already received" was shown as "saved but not received yet").
         if (e?.response?.status !== 409) {
-          const err = new Error(`${po.poNumber} is saved but not received yet — ${apiError(e)} Press Save again to receive it.`);
-          throw err;
+          const now = await api.get(`/purchase-orders/${po.id}`).then((r) => unwrap(r).data).catch(() => null);
+          if (now?.status !== 'RECEIVED') {
+            onDone();
+            throw new Error(e?.response
+              ? `${po.poNumber} is saved but not received yet: ${apiError(e)} Press Save again to receive it.`
+              : `${po.poNumber} is saved, but the app did not answer whether it was received. Press Save again: it checks first, and receives it only if it is not in yet.`);
+          }
         }
       }
       return po;
@@ -2714,6 +2738,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
           <div className="space-y-5">
             {/* Identity */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+              {s.isActive === false && <Badge className="bg-white/[0.06] text-muted">Inactive</Badge>}
               {s.brandName && <Badge className="bg-white/[0.08] text-foreground">{s.brandName}</Badge>}
               {s.country && <span>{s.country}</span>}
               {s.contactName && <span>{s.contactName}</span>}
@@ -2792,6 +2817,21 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
                 </ul>
               )}
             </div>
+
+            {/* Goods sent back, each with its reason (audit money-flows-8: only the total showed). */}
+            {data.credits?.length > 0 && (
+              <div>
+                <div className="mb-2 text-sm font-semibold text-foreground">Goods returned</div>
+                <ul className="space-y-1 text-sm">
+                  {data.credits.map((c) => (
+                    <li key={c.id} className="flex justify-between gap-3 text-muted">
+                      <span className="min-w-0 break-words">{formatDate(c.occurredAt)} · {c.reason || 'Returned'}</span>
+                      <span className="shrink-0 font-semibold text-amber-300">{formatCurrency(c.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -2921,6 +2961,8 @@ function SuppliersTab({ accounts }) {
                 <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
                   <TD className="stack-full font-medium text-foreground">
                     {s.name}{s.contactName ? <span className="ml-1.5 text-xs text-faint">· {s.contactName}</span> : null}
+                    {/* A switched-off supplier keeps its row (its money stays explained), marked (money-flows-8). */}
+                    {s.isActive === false && <Badge className="ml-2 bg-white/[0.06] text-muted">Inactive</Badge>}
                     {/* Under xl the brand and the country are told here, not in two columns of their own: at 1024 px
                         those pushed Outstanding past the card's edge. */}
                     <div className="mt-0.5 text-xs font-normal text-faint xl:hidden">{[s.brandName, s.country].filter(Boolean).join(' · ') || '—'}</div>

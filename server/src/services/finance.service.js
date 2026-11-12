@@ -287,6 +287,14 @@ async function updateAccount(id, data) {
   } else if (data.type === COMMISSION_TYPE) {
     throw ApiError.badRequest('Only the Commission account can be of that type.');
   }
+  // A brand settles to one active account, the rule createAccount keeps (audit money-flows-9): tagging a
+  // second account to a brand, or switching a second one back on, gave reps a choice of where to pay.
+  const brandAfter = data.brandId !== undefined ? (data.brandId || null) : existing.brandId;
+  const activeAfter = data.isActive !== undefined ? Boolean(data.isActive) : existing.isActive;
+  if (brandAfter && activeAfter && (brandAfter !== existing.brandId || !existing.isActive)) {
+    const taken = await prisma.businessAccount.findFirst({ where: { brandId: brandAfter, isActive: true, id: { not: id } } });
+    if (taken) throw ApiError.badRequest(`${taken.name} is already this brand's settlement account. A brand settles to one account, so reps see one option.`);
+  }
   const patch = {};
   ['name', 'type', 'notes'].forEach((k) => { if (data[k] !== undefined) patch[k] = data[k]; });
   if (data.brandId !== undefined) patch.brandId = data.brandId || null;
@@ -532,7 +540,17 @@ async function recordTransaction(data, actor, client = prisma, { checkBrand = fa
 const isStockPurchaseCategory = (c) => /stock\s*purchase/i.test(String(c || ''));
 // A hand-typed entry is never tied to a sale, an order, a supplier or a payout
 // (#79): those links decide where a row counts, and only the server makes them.
-const handTyped = ({ refType, refId, ...data }) => data; // eslint-disable-line no-unused-vars
+// A form's "+ New category…" choice is not a category (audit money-flows-6): an expense was saved and
+// listed under "__new". Such placeholders start with two underscores; no real category name does.
+function assertRealCategory(category) {
+  if (category != null && /^__/.test(String(category).trim())) {
+    throw ApiError.badRequest('Type a name for the new category, or pick one from the list.');
+  }
+}
+const handTyped = ({ refType, refId, ...data }) => { // eslint-disable-line no-unused-vars
+  assertRealCategory(data.category);
+  return data;
+};
 const HAND_TYPED = { checkBrand: true };
 
 // The owner's own money. A contribution is his personal cash entering the
@@ -800,6 +818,7 @@ async function listTransactions(filters, pagination) {
 async function updateTransaction(id, data) {
   const existing = await prisma.financeTransaction.findUnique({ where: { id } });
   if (!existing) throw ApiError.notFound('Transaction not found');
+  assertRealCategory(data.category);
   const patch = {};
   ['category', 'description', 'notes', 'accountId', 'reference', 'brandId'].forEach((k) => { if (data[k] !== undefined) patch[k] = data[k]; });
   if (data.amount !== undefined) {
@@ -1806,7 +1825,7 @@ async function overview(period = 'month', shared = {}) {
   const [
     flowRows, [expAgg, byCat], [allBrands, brandTxnRows, products],
     [poAgg, poCreditAgg, poPayAgg, wdAgg, pendingApprovals],
-    approvedWdAgg, ownerAllTime, lifetime, lifetimeExpAgg, debtAgg, suppliersForSplit, stockSpendRows,
+    ownerAllTime, lifetime, lifetimeExpAgg, debtAgg, suppliersForSplit, stockSpendRows,
   ] = await Promise.all([
     Promise.all(FLOW_PERIODS.map(flowFor)),
     Promise.all([
@@ -1850,16 +1869,10 @@ async function overview(period = 'month', shared = {}) {
           },
           _sum: { amount: true },
         }),
-        prisma.commissionWithdrawal.aggregate({ where: { status: 'PENDING' }, _count: true, _sum: { amount: true } }),
+        // Approved but not yet paid still waits for the owner's money (audit money-flows-7).
+        prisma.commissionWithdrawal.aggregate({ where: { status: { in: ['PENDING', 'APPROVED'] } }, _count: true, _sum: { amount: true } }),
         prisma.settlementSubmission.count({ where: { status: 'PENDING' } }),
       ]);
-    }),
-    // Approved but not yet paid. The rep's available balance already treats it
-    // as gone, and no payout has been recorded against it, so without this line
-    // the money the owner has promised a rep sits in no figure at all.
-    prisma.commissionWithdrawal.aggregate({
-      where: { status: 'APPROVED' },
-      _sum: { amount: true },
     }),
     // ALL TIME and epoch-clamped, from the same shared shape the period strip and
     // the cash-flow tab use (see "Where the profit actually IS" below).
@@ -1950,8 +1963,6 @@ async function overview(period = 'month', shared = {}) {
     };
   });
 
-  // Approved but not yet paid (read above, with the "needs you" figures).
-  const approvedUnpaidCommission = round2(toNumber(approvedWdAgg._sum.amount));
   // ── Where the profit actually IS ────────────────────────────────────────
   // The owner has taken nothing out: every shilling earned went back into
   // stock or to the supplier. "Profit" and "cash" are therefore different
@@ -2127,9 +2138,11 @@ async function overview(period = 'month', shared = {}) {
   // What the reps can actually take: withdrawable balances, requests in
   // flight, and requests already approved but not yet handed over. One figure,
   // used by the capital block and by `outstandingCommission` alike, so no two
-  // places on the page can quote a different debt to the same reps.
+  // places on the page can quote a different debt to the same reps. Requests approved but not yet paid
+  // are inside `requested` (commission withdrawalTotals counts them as waiting, audit money-flows-7), so
+  // they are not added a second time here.
   const repCommissionPayable = round2(
-    commSummary.totals.available + commSummary.totals.requested + approvedUnpaidCommission,
+    commSummary.totals.available + commSummary.totals.requested,
   );
   // ── The supplier split, ALL TIME ────────────────────────────────────────
   // A balance sheet answers "right now", so what the supplier is owed today
