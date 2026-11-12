@@ -25,6 +25,7 @@ import {
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import DoneReceipt from '@/components/DoneReceipt';
+import { bonusFillPct } from '@/lib/labels';
 
 // Requesting a payout used to be a bare number field over a green strip, and it
 // ended in a four-word toast. It is the one moment in this app that is purely
@@ -1669,7 +1670,8 @@ function SettlementRecord({ a, className }) {
 function BonusBar({ b, sharedStart }) {
   const tiers = b.tiers || [];
   const top = tiers.reduce((m, t) => Math.max(m, Number(t.target) || 0), 0);
-  const pct = top > 0 ? clampPct((Number(b.sales) / top) * 100) : 0;
+  // Never past a notch not reached: a tier added later counts from its own start (audit money-flows-1).
+  const pct = bonusFillPct(b.sales, tiers, top);
   const won = b.claimable;
   const next = b.next;
   // Once one rep has been paid a bonus the runs diverge, and each card states its own start instead.

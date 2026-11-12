@@ -44,10 +44,11 @@ function db(tables = {}) {
 }
 
 const notified = [];
+const unlockedNotices = [];
 stub('../src/services/notification.service', {
   notifyUser: async (userId, data) => { notified.push({ userId, ...data }); },
   notifyAdmins: async () => {},
-  createIfAbsent: async () => {},
+  createIfAbsent: async (data) => { unlockedNotices.push(data); },
 });
 stub('../src/services/penalty.service', { penaltyBreakdownForRep: async () => ({ total: 0, breakdown: [] }) });
 
@@ -241,7 +242,9 @@ test('a tier added today does not count the selling done before it existed', asy
   assert.equal(t9.remaining, 9000000);
   assert.equal(t10.sales, 9500000, 'the old tier keeps its own count');
   assert.equal(p.claimable, null);
-  assert.equal(p.next.ruleId, 'new9m');
+  // The nearest tier to chase is the old 10M (500,000 to go), not the new 9M that starts from zero.
+  assert.equal(p.next.ruleId, 'old10m');
+  assert.equal(p.next.remaining, 500000);
   assert.equal(p.sales, 9500000, 'the run itself still starts at the oldest tier');
   assert.equal(new Date(p.cycleStart).getTime(), jul5.getTime());
 
@@ -291,6 +294,35 @@ test('after a payment every tier counts from the payment, and the payment is the
   assert.equal(p.tiers.find((t) => t.ruleId === 'late').sales, 0, 'a tier that starts after the payment counts from its start');
   assert.equal(new Date(p.cycleStart).getTime(), paidAt.getTime());
   assert.equal(new Date(p.lastPaidAt).getTime(), paidAt.getTime());
+});
+
+test('next is the nearest tier worth chasing, never a later-start tier far away or below one reached', async () => {
+  const today = new Date();
+  const { bonus } = loadBonus({
+    sales: [{ at: new Date('2026-08-01T10:00:00Z'), total: 9722500 }],
+    tiers: [
+      { id: 'new1m', salesTarget: 1000000, bonusAmount: 1000, effectiveFrom: today },
+      { id: 't9m', salesTarget: 9000000, bonusAmount: 2000, effectiveFrom: jul5 },
+      { id: 't10m', salesTarget: 10000000, bonusAmount: 500000, effectiveFrom: jul5 },
+      { id: 't15m', salesTarget: 15000000, bonusAmount: 1000000, effectiveFrom: jul5 },
+    ],
+  });
+  const p = await bonus.progressForRep('r1');
+  assert.equal(p.tiers.find((t) => t.ruleId === 'new1m').reached, false);
+  assert.equal(p.claimable.ruleId, 't9m');
+  assert.equal(p.next.ruleId, 't10m');
+  assert.equal(p.next.remaining, 277500);
+  assert.equal(p.target, 10000000, 'the bar follows the tier he is closest to');
+  assert.equal(p.remaining, 277500);
+
+  unlockedNotices.length = 0;
+  await bonus.checkAndAward('r1');
+  const notice = unlockedNotices.find((n) => n.whatsapp?.kind === 'BONUS_UNLOCKED');
+  assert.ok(notice, 'the rep is told he unlocked a bonus');
+  assert.equal(notice.whatsapp.target, 9000000);
+  assert.equal(notice.whatsapp.nextTarget, 10000000);
+  assert.equal(notice.whatsapp.nextBonus, 500000);
+  assert.match(notice.message, /Keep going and [^0-9]*10,000,000 earns/);
 });
 
 test('a rep sees the bonuses he has been paid, newest first, and only his own', async () => {

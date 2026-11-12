@@ -338,7 +338,8 @@ function MoneyModal({ mode, accounts: all, categories, onClose }) {
       });
     },
     onSuccess: () => { toast.success(isExpense ? 'Expense recorded' : 'Income recorded'); invalidateFinance(qc); onClose(); },
-    onError: (e) => toast.error(e?.response ? apiError(e) : e.message),
+    // apiError words a dropped connection and keeps a plain Error's own message (the new-category check).
+    onError: (e) => toast.error(apiError(e)),
   });
   const valid = form.accountId && Number(form.amount) > 0
     && (!isExpense || (form.category && (form.category !== NEW_CATEGORY || form.newCategory.trim())));

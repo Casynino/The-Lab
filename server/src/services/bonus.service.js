@@ -117,7 +117,12 @@ async function progressForRep(salesRepId) {
   const reached = shaped.filter((t) => t.reached);
   // The best one they could take right now, and the one still worth chasing.
   const claimable = reached.length ? reached[reached.length - 1] : null;
-  const next = shaped.find((t) => !t.reached) || null;
+  // Next = the nearest tier not reached that pays more than the one they can take now. With tiers on
+  // different starts the cheapest unreached target is not always the nearest: a tier added later can
+  // sit far ahead, or below one already reached (audit money-flows-1). With one shared start this is
+  // the same tier as before.
+  const ahead = shaped.filter((t) => !t.reached && (!claimable || t.bonusAmount > claimable.bonusAmount));
+  const next = ahead.length ? ahead.reduce((a, b) => (b.remaining < a.remaining ? b : a)) : null;
 
   // The bar tracks the next tier while one remains, then the top tier once every
   // target is behind them.
