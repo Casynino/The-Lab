@@ -277,8 +277,8 @@ export function Field({ label, error, required, children, hint }) {
 }
 
 // --- Badge ------------------------------------------------------------------
-export function Badge({ className, children }) {
-  return <span className={clsx('badge', className)}>{children}</span>;
+export function Badge({ className, children, title }) {
+  return <span className={clsx('badge', className)} title={title}>{children}</span>;
 }
 
 // ── Time left on a settlement contract ──────────────────────────────────────
