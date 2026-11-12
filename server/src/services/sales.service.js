@@ -6,7 +6,7 @@ const ApiError = require('../utils/ApiError');
 const inventory = require('./inventory.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { round2, toNumber, formatCurrency } = require('../utils/money');
-const { dayjs } = require('../utils/dates');
+const { dayjs, eatNow } = require('../utils/dates');
 const { DEFAULT_REGION, regionWhere } = require('../constants/regions');
 
 const SALE_INCLUDE = {
@@ -284,6 +284,8 @@ async function listSales(filters, pagination) {
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
   if (filters.customerId) where.customerId = filters.customerId;
   if (filters.warehouseId) where.warehouseId = filters.warehouseId;
+  // The sales a customer can bring boxes back from: counter sales (no rep, no order), not cancelled.
+  if (filters.refundable) where.AND = [...(where.AND || []), { salesRepId: null, settlementId: null, status: { not: 'CANCELLED' } }];
   // Dar es Salaam also finds the sales with no region, which are its own.
   const regionClause = regionWhere(filters.region);
   if (regionClause) where.AND = [...(where.AND || []), regionClause];
@@ -305,7 +307,8 @@ async function listSales(filters, pagination) {
       include: {
         customer: { select: { id: true, name: true, region: true } },
         salesRep: { include: { user: { select: { name: true } } } },
-        items: { select: { id: true } },
+        // baseQuantity: Returns > Customer return tells counter sales apart by their boxes.
+        items: { select: { id: true, baseQuantity: true } },
       },
       skip: pagination.skip,
       take: pagination.take,
@@ -367,75 +370,273 @@ async function getSale(id) {
 }
 
 // Cancel a sale, restoring stock to its source location via CORRECTION rows.
-async function cancelSale(id, actor, reason) {
-  return prisma.$transaction(async (tx) => {
-    const sale = await tx.sale.findUnique({
-      where: { id },
-      include: { items: true, creditSale: { include: { payments: true } } },
+// `opts` lets a customer's full return (refundSale) share this exact path: the same
+// claim, stock, credit, order and money reversal — only the movement is filed as the
+// CUSTOMER_RETURN it is, with its own words on the sale.
+async function cancelSaleTx(tx, id, actor, reason, opts = {}) {
+  const { stockType = 'CORRECTION', stockNote = null, notesLine = null } = opts;
+  const seen = await tx.sale.findUnique({ where: { id }, select: { id: true, status: true } });
+  if (!seen) throw ApiError.notFound('Sale not found');
+  if (seen.status === 'CANCELLED') throw ApiError.badRequest('Sale is already cancelled');
+  // Claim the cancel before anything moves (audit #41): two clicks used to both pass the check above
+  // and both put the stock back and both take the sale off its order. The second now waits, finds
+  // it cancelled and stops with nothing written.
+  const claimed = await tx.sale.updateMany({ where: { id, status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED' } });
+  if (claimed.count !== 1) throw ApiError.conflict('This sale was already cancelled.');
+  // Read the sale AFTER the claim (12 Nov 2026): a customer refund that finished while this waited has
+  // made the sale smaller, and only the boxes and money still on it may go back.
+  const sale = await tx.sale.findUnique({
+    where: { id },
+    include: { items: true, creditSale: { include: { payments: true } } },
+  });
+
+  const source = resolveSource({ salesRepId: sale.salesRepId, warehouseId: sale.warehouseId });
+
+  for (const item of sale.items) {
+    if (!item.quantity) continue; // a line the customer already brought back in full
+    await inventory.increaseStock(tx, {
+      productId: item.productId,
+      packagingUnitId: item.packagingUnitId,
+      quantity: item.quantity,
+      baseQuantity: item.baseQuantity,
+      type: stockType,
+      location: source,
+      referenceType: 'SALE',
+      referenceId: sale.id,
+      userId: actor ? actor.id : null,
+      unitCost: toNumber(item.unitCost),
+      notes: stockNote || `Reversal of cancelled sale ${sale.saleNumber}${reason ? ` — ${reason}` : ''}`,
     });
-    if (!sale) throw ApiError.notFound('Sale not found');
-    if (sale.status === 'CANCELLED') throw ApiError.badRequest('Sale is already cancelled');
-    // Claim the cancel before anything moves (audit #41): two clicks used to both pass the check above
-    // and both put the stock back and both take the sale off its order. The second now waits, finds
-    // it cancelled and stops with nothing written.
-    const claimed = await tx.sale.updateMany({ where: { id, status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED' } });
-    if (claimed.count !== 1) throw ApiError.conflict('This sale was already cancelled.');
+  }
 
-    const source = resolveSource({ salesRepId: sale.salesRepId, warehouseId: sale.warehouseId });
-
-    for (const item of sale.items) {
-      await inventory.increaseStock(tx, {
-        productId: item.productId,
-        packagingUnitId: item.packagingUnitId,
-        quantity: item.quantity,
-        baseQuantity: item.baseQuantity,
-        type: 'CORRECTION',
-        location: source,
-        referenceType: 'SALE',
-        referenceId: sale.id,
-        userId: actor ? actor.id : null,
-        unitCost: toNumber(item.unitCost),
-        notes: `Reversal of cancelled sale ${sale.saleNumber}${reason ? ` — ${reason}` : ''}`,
-      });
-    }
-
-    if (sale.creditSale) {
-      await tx.creditSale.update({
-        where: { id: sale.creditSale.id },
-        data: { status: 'WRITTEN_OFF', balance: 0 },
-      });
-    }
-
-    // Settlement-linked sale: the boxes go back to being OWED on the order —
-    // roll back the settled value, un-close the order if needed, and recompute
-    // its status. (Lazy require: settlement.service requires this module.)
-    if (sale.settlementId) {
-      // eslint-disable-next-line global-require
-      const settlementSvc = require('./settlement.service');
-      // Under the order's row lock, like every other change to an order's settled value.
-      await settlementSvc.lockOrder(tx, sale.settlementId);
-      const stl = await tx.settlement.findUnique({ where: { id: sale.settlementId } });
-      if (stl) {
-        const newSettled = Math.max(0, round2(toNumber(stl.settledValue) - toNumber(sale.total)));
-        await tx.settlement.update({
-          where: { id: sale.settlementId },
-          data: { settledValue: newSettled, settledAt: null },
-        });
-        await settlementSvc.recomputeStatus(tx, sale.settlementId);
-      }
-    }
-
-    // Reverse the money: remove the ledger income posted for this sale so the
-    // account gives the cash back. The backfill skips cancelled sales, so the
-    // row will never be re-created.
-    await tx.financeTransaction.deleteMany({ where: { refType: 'Sale', refId: sale.id, direction: 'IN' } });
-
-    return tx.sale.update({
-      where: { id: sale.id },
-      data: { status: 'CANCELLED', balanceDue: 0, notes: reason ? `${sale.notes || ''}\nCancelled: ${reason}`.trim() : sale.notes },
-      include: SALE_INCLUDE,
+  if (sale.creditSale) {
+    await tx.creditSale.update({
+      where: { id: sale.creditSale.id },
+      data: { status: 'WRITTEN_OFF', balance: 0 },
     });
+  }
+
+  // Settlement-linked sale: the boxes go back to being OWED on the order —
+  // roll back the settled value, un-close the order if needed, and recompute
+  // its status. (Lazy require: settlement.service requires this module.)
+  if (sale.settlementId) {
+    // eslint-disable-next-line global-require
+    const settlementSvc = require('./settlement.service');
+    // Under the order's row lock, like every other change to an order's settled value.
+    await settlementSvc.lockOrder(tx, sale.settlementId);
+    const stl = await tx.settlement.findUnique({ where: { id: sale.settlementId } });
+    if (stl) {
+      const newSettled = Math.max(0, round2(toNumber(stl.settledValue) - toNumber(sale.total)));
+      await tx.settlement.update({
+        where: { id: sale.settlementId },
+        data: { settledValue: newSettled, settledAt: null },
+      });
+      await settlementSvc.recomputeStatus(tx, sale.settlementId);
+    }
+  }
+
+  // Reverse the money: remove the ledger income posted for this sale so the
+  // account gives the cash back. The backfill skips cancelled sales, so the
+  // row will never be re-created.
+  await tx.financeTransaction.deleteMany({ where: { refType: 'Sale', refId: sale.id, direction: 'IN' } });
+
+  const line = notesLine || (reason ? `Cancelled: ${reason}` : null);
+  return tx.sale.update({
+    where: { id: sale.id },
+    data: { status: 'CANCELLED', balanceDue: 0, notes: line ? `${sale.notes || ''}\n${line}`.trim() : sale.notes },
+    include: SALE_INCLUDE,
   });
 }
 
-module.exports = { createSale, createSaleTx, listSales, getSale, cancelSale, resolveSaleRegion, SALE_INCLUDE };
+async function cancelSale(id, actor, reason) {
+  return prisma.$transaction((tx) => cancelSaleTx(tx, id, actor, reason));
+}
+
+// ── A customer brings boxes back from a counter sale: the sale and the money come out ──────────────
+// Owner, 12 Nov 2026: "Yes, refund: the sale and the money come out of Finance. Do this when the
+// customer returns — the money returns too, so the sale is cancelled."
+//   • every box back  -> exactly what Cancel does (same code), the boxes filed as a CUSTOMER_RETURN;
+//   • some boxes back -> the lines, the sale and its cost get smaller (maths: utils/saleRefund.js), the
+//     boxes go back into the sale's warehouse, and the cash going back is taken off the sale's own IN
+//     row(s) in the ledger, on the account the sale was paid into.
+// Why the IN row is reduced rather than an OUT row added: the ledger row of a sale MIRRORS the sale (it
+// cannot be edited or deleted by hand, Cancel deletes it, the backfill re-creates it from the sale). A
+// smaller sale with a smaller row keeps every screen on one figure — the sale's revenue on its day, the
+// money in on the same day, the account balance, and the Sales summary; an OUT row would leave the sale's
+// day showing money in that its revenue no longer has, and a later Cancel would give the money back twice.
+// The history is kept in words on the row (its notes), on the sale (its notes), in the CUSTOMER_RETURN
+// stock rows, and in the audit log.
+// One request per look at the sale: `version` is the sale's updatedAt as the window saw it. The claim
+// below moves it on, so a double tap, a second window or a Cancel at the same moment finds the sale
+// changed and stops with nothing written.
+const REP_SALE_REFUSED = "Rep sales are returned through the rep's order.";
+async function refundSale(id, { items, reason, version } = {}, actor) {
+  const { planRefund, RefundInputError } = require('../utils/saleRefund'); // eslint-disable-line global-require
+  return prisma.$transaction(async (tx) => {
+    const seen = await tx.sale.findUnique({
+      where: { id },
+      select: { id: true, status: true, salesRepId: true, settlementId: true, updatedAt: true },
+    });
+    if (!seen) throw ApiError.notFound('Sale not found');
+    if (seen.salesRepId || seen.settlementId) throw ApiError.badRequest(REP_SALE_REFUSED);
+    if (seen.status === 'CANCELLED') throw ApiError.badRequest('This sale is already cancelled — nothing on it is left to return.');
+    const when = version ? new Date(version) : null;
+    if (!when || Number.isNaN(when.getTime())) throw ApiError.badRequest('Open the sale again and retry.');
+
+    const claimed = await tx.sale.updateMany({
+      where: { id, status: { not: 'CANCELLED' }, updatedAt: when },
+      data: { updatedAt: new Date() },
+    });
+    if (claimed.count !== 1) {
+      throw ApiError.conflict('This sale changed a moment ago (a refund or a cancel was just saved). Close it and open it again.');
+    }
+
+    // Read under the claim: these are the figures the refund is worked out from.
+    const sale = await tx.sale.findUnique({
+      where: { id },
+      include: { items: { include: { product: { select: { name: true } } } }, creditSale: true },
+    });
+    let plan;
+    try {
+      plan = planRefund({
+        subtotal: toNumber(sale.subtotal),
+        discount: toNumber(sale.discount),
+        total: toNumber(sale.total),
+        amountPaid: toNumber(sale.amountPaid),
+        costTotal: toNumber(sale.costTotal),
+        items: sale.items.map((i) => ({
+          id: i.id,
+          productId: i.productId,
+          packagingUnitId: i.packagingUnitId,
+          quantity: i.quantity,
+          baseQuantity: i.baseQuantity,
+          lineTotal: toNumber(i.lineTotal),
+          lineDiscount: toNumber(i.lineDiscount),
+          unitCost: toNumber(i.unitCost),
+        })),
+      }, items);
+    } catch (e) {
+      if (e instanceof RefundInputError) throw ApiError.badRequest(e.message);
+      throw e;
+    }
+
+    const nameOf = new Map(sale.items.map((i) => [i.id, i.product?.name || 'Product']));
+    // quantity = in the line's own unit (what the window stepped); boxes = the warehouse's boxes it puts back.
+    const lines = plan.lines.map((l) => ({ saleItemId: l.saleItemId, product: nameOf.get(l.saleItemId), quantity: l.quantityBack, boxes: l.baseBack, value: l.valueBack }));
+    const before = {
+      subtotal: toNumber(sale.subtotal), discount: toNumber(sale.discount), total: toNumber(sale.total),
+      amountPaid: toNumber(sale.amountPaid), balanceDue: toNumber(sale.balanceDue), costTotal: toNumber(sale.costTotal), status: sale.status,
+    };
+    const boxWord = plan.boxesBack === 1 ? 'box' : 'boxes';
+    const said = reason ? `: ${reason}` : '';
+    const moneyRows = await tx.financeTransaction.findMany({
+      where: { refType: 'Sale', refId: id, direction: 'IN' },
+      orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+      include: { account: { select: { id: true, name: true } } },
+    });
+
+    if (plan.everything) {
+      const done = await cancelSaleTx(tx, id, actor, reason, {
+        stockType: 'CUSTOMER_RETURN',
+        stockNote: `Customer return — refunded (${sale.saleNumber}, every box back)`,
+        notesLine: `Customer returned every box — sale cancelled, ${formatCurrency(plan.cashBack)} refunded${said}`,
+      });
+      const ledger = moneyRows.map((r) => ({
+        txnNumber: r.txnNumber, account: r.account?.name || null, before: toNumber(r.amount), after: 0, taken: toNumber(r.amount), removed: true,
+      }));
+      return { sale: done, refund: { everything: true, saleNumber: sale.saleNumber, boxes: plan.boxesBack, lines, refundValue: plan.refundValue, cashBack: plan.cashBack, owedCleared: plan.owedCleared, ledger, before, after: { total: 0, amountPaid: 0, balanceDue: 0, status: 'CANCELLED' }, reason: reason || null } };
+    }
+
+    // A credit sale keeps a ledger of its own payments; only a whole return (above) may undo it.
+    if (sale.type === 'CREDIT' || sale.creditSale) {
+      throw ApiError.badRequest('A credit sale comes back whole: return every box on it, or cancel it.');
+    }
+    if (!sale.warehouseId) throw ApiError.badRequest("This sale's warehouse no longer exists, so its boxes have nowhere to go back to.");
+
+    for (const l of plan.lines) {
+      await tx.saleItem.update({ where: { id: l.saleItemId }, data: l.next });
+      await inventory.increaseStock(tx, {
+        productId: l.productId,
+        packagingUnitId: l.packagingUnitId,
+        quantity: l.quantityBack,
+        baseQuantity: l.baseBack,
+        type: 'CUSTOMER_RETURN',
+        location: { type: inventory.LOCATION.WAREHOUSE, warehouseId: sale.warehouseId },
+        referenceType: 'SALE',
+        referenceId: sale.id,
+        userId: actor ? actor.id : null,
+        unitCost: l.unitCost,
+        notes: `Customer return — refunded (${sale.saleNumber})`,
+      });
+    }
+
+    // The cash going back comes off the money this sale brought in, newest row first, never below zero.
+    // A row is kept (at a smaller amount) rather than deleted: its refId is what stops the backfill from
+    // re-creating the sale's income at the full figure.
+    let left = plan.cashBack;
+    const ledger = [];
+    const today = eatNow().format('D MMM YYYY'); // the business's day, not the server's
+    for (const r of moneyRows) {
+      if (left <= 0) break;
+      const amt = toNumber(r.amount);
+      const take = round2(Math.min(amt, left));
+      if (take <= 0) continue;
+      const after = round2(amt - take);
+      await tx.financeTransaction.update({
+        where: { id: r.id },
+        data: {
+          amount: after,
+          notes: `${r.notes ? `${r.notes}\n` : ''}Refund to customer ${today}: −${formatCurrency(take)} (${plan.boxesBack} ${boxWord} back)`,
+        },
+      });
+      ledger.push({ txnNumber: r.txnNumber, account: r.account?.name || null, before: amt, after, taken: take, removed: false });
+      left = round2(left - take);
+    }
+
+    const updated = await tx.sale.update({
+      where: { id },
+      data: {
+        ...plan.next,
+        notes: `${sale.notes || ''}\nCustomer returned ${plan.boxesBack} ${boxWord} — ${formatCurrency(plan.cashBack)} refunded${plan.owedCleared > 0 ? `, ${formatCurrency(plan.owedCleared)} off what is owed` : ''}${said}`.trim(),
+      },
+      include: SALE_INCLUDE,
+    });
+    return {
+      sale: updated,
+      refund: {
+        everything: false, saleNumber: sale.saleNumber, boxes: plan.boxesBack, lines,
+        refundValue: plan.refundValue, cashBack: plan.cashBack, owedCleared: plan.owedCleared,
+        // Money the sale says was paid that no ledger row carries (an old sale before the books began, or
+        // one whose income was never recorded) — nothing to take off, said rather than hidden.
+        notInLedger: left > 0 ? left : 0,
+        ledger, before, after: { ...plan.next }, reason: reason || null,
+      },
+    };
+  }, { timeout: 30000 });
+}
+
+// What the refund window needs besides the sale: the account(s) its money went into, and the refunds
+// already made on it (from the audit log, where each refund is recorded with its figures).
+async function saleMoneyAndRefunds(id) {
+  const [rows, logs] = await Promise.all([
+    prisma.financeTransaction.findMany({
+      where: { refType: 'Sale', refId: id, direction: 'IN' },
+      orderBy: { occurredAt: 'asc' },
+      select: { amount: true, account: { select: { id: true, name: true } } },
+    }),
+    prisma.auditLog.findMany({
+      where: { entityType: 'Sale', entityId: id, action: 'REFUND' },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true, newValues: true, user: { select: { name: true } } },
+    }),
+  ]);
+  return {
+    paidInto: rows.map((r) => ({ accountId: r.account?.id || null, account: r.account?.name || null, amount: toNumber(r.amount) })),
+    refunds: logs.map((l) => {
+      const v = l.newValues || {};
+      return { at: l.createdAt, by: l.user?.name || null, boxes: v.boxes || 0, cashBack: v.cashBack || 0, owedCleared: v.owedCleared || 0, everything: !!v.everything, lines: v.lines || [], reason: v.reason || null };
+    }),
+  };
+}
+
+module.exports = { createSale, createSaleTx, listSales, getSale, cancelSale, cancelSaleTx, refundSale, saleMoneyAndRefunds, resolveSaleRegion, SALE_INCLUDE, REP_SALE_REFUSED };

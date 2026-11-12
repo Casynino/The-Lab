@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
@@ -12,6 +12,8 @@ import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent
 import { ROLES, SALE_STATUS_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import QuickSale from '@/components/QuickSale';
+import SaleRefund from '@/components/SaleRefund';
+import { refundable } from '@/lib/saleRefund';
 import {
   PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Select, Input, NumberInput,
   Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
@@ -185,7 +187,13 @@ function SaleDetail({ id, onClose }) {
   const { user } = useAuth();
   const isAdmin = user?.role === ROLES.ADMIN;
   const [confirming, setConfirming] = useState(false);
+  const [refunding, setRefunding] = useState(false);
   const [reason, setReason] = useState('');
+  // On a phone the body may be scrolled down (to the refunds): bring the cancel question into view.
+  const confirmBox = useRef(null);
+  useEffect(() => {
+    if (confirming) confirmBox.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [confirming]);
   const { data, isLoading } = useQuery({
     queryKey: ['sale', id],
     queryFn: async () => unwrap(await api.get(`/sales/${id}`)).data,
@@ -206,6 +214,14 @@ function SaleDetail({ id, onClose }) {
   });
 
   const cancelled = data?.status === 'CANCELLED';
+  // A counter sale has two ways back (owner, 12 Nov 2026): the customer returned boxes (the money goes
+  // back to him), or the sale was recorded by mistake. A rep's sale keeps the one Cancel it had.
+  const counterSale = refundable(data);
+  const refunds = data?.refunds || [];
+  // The refund window takes this one's place while it is open, and this one comes back with the new figures.
+  if (refunding && data) {
+    return <SaleRefund saleId={id} onClose={() => setRefunding(false)} onDone={() => setRefunding(false)} />;
+  }
   return (
     // xl: at lg the six-column item table pushed "Profit / box" and "Line profit" out of sight.
     <Modal
@@ -215,11 +231,17 @@ function SaleDetail({ id, onClose }) {
       title={data ? `Sale ${data.saleNumber}` : 'Sale'}
       footer={data && isAdmin && !cancelled ? (
         confirming ? (
+          // Phone: the red answer first, full width, Keep sale under it (as the refund window's footer).
           <>
-            <Button variant="secondary" onClick={() => setConfirming(false)}>Keep sale</Button>
-            <Button variant="danger" loading={cancel.isPending} onClick={() => cancel.mutate()}>
+            <Button variant="secondary" className="max-sm:order-2 max-sm:h-12 max-sm:w-full" onClick={() => setConfirming(false)}>Keep sale</Button>
+            <Button variant="danger" className="max-sm:h-12 max-sm:w-full" loading={cancel.isPending} onClick={() => cancel.mutate()}>
               Yes, cancel {data.saleNumber}
             </Button>
+          </>
+        ) : counterSale ? (
+          <>
+            <Button variant="ghost" className="max-sm:order-2 max-sm:h-12 max-sm:w-full" onClick={() => setConfirming(true)}>Cancel — recorded by mistake</Button>
+            <Button className="max-sm:h-12 max-sm:w-full" onClick={() => setRefunding(true)}>Refund customer</Button>
           </>
         ) : (
           <Button variant="danger" onClick={() => setConfirming(true)}>Cancel this sale</Button>
@@ -234,12 +256,21 @@ function SaleDetail({ id, onClose }) {
             </div>
           )}
           {confirming && !cancelled && (
-            <div className="space-y-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-3">
+            <div ref={confirmBox} className="scroll-mt-2 space-y-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-3">
               <p className="text-sm font-medium text-rose-400">Cancel {data.saleNumber}?</p>
               <p className="text-xs text-muted">
                 {data.items.reduce((n2_, it) => n2_ + it.quantity, 0)} box(es) go back into stock and the{' '}
                 {formatCurrency(data.amountPaid)} it banked is removed from the account. Sales cannot be edited,
                 so record the sale again afterwards with the correct amount.
+                {counterSale && (
+                  <>
+                    {' '}If the customer brought boxes back, use{' '}
+                    <button type="button" className="font-medium text-foreground underline underline-offset-2 hover:text-white"
+                      onClick={() => { setConfirming(false); setRefunding(true); }}>
+                      Refund customer
+                    </button>{' '}instead.
+                  </>
+                )}
               </p>
               <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason (kept in the record)" />
             </div>
@@ -259,7 +290,7 @@ function SaleDetail({ id, onClose }) {
                 return (
                   <TR key={it.id}>
                     <TD className="font-medium text-foreground">{it.product.name}</TD>
-                    <TD>{it.quantity} {it.packagingUnit.name}</TD>
+                    <TD>{it.quantity > 0 ? `${it.quantity} ${it.packagingUnit.name}` : <span className="text-faint">All returned</span>}</TD>
                     <TD>{formatCurrency(it.unitPrice)}</TD>
                     <TD className="text-muted">{formatCurrency(it.unitCost)}</TD>
                     <TD>{formatCurrency(it.unitPrice - it.unitCost)}</TD>
@@ -276,6 +307,26 @@ function SaleDetail({ id, onClose }) {
             <div className="mt-1 flex justify-between"><span className="text-muted">Paid</span><span className="tabular-nums text-foreground">{formatCurrency(data.amountPaid)}</span></div>
             <div className="flex justify-between"><span className="text-muted">Balance</span><span className={`tabular-nums ${data.balanceDue > 0 ? 'font-semibold text-amber-300' : 'text-faint'}`}>{formatCurrency(data.balanceDue)}</span></div>
           </div>
+          {refunds.length > 0 && (
+            <div>
+              <div className="mb-1 font-medium text-foreground">Returned by the customer</div>
+              <ul className="space-y-1.5">
+                {refunds.map((r, i) => (
+                  <li key={i} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-muted">
+                    <span className="min-w-0">
+                      {formatDateTime(r.at)} · {formatNumber(r.boxes)} {r.boxes === 1 ? 'box' : 'boxes'}
+                      {r.lines?.length > 0 && <span className="text-faint"> ({r.lines.map((l) => `${l.boxes ?? l.quantity} ${l.product}`).join(', ')})</span>}
+                      {r.reason && <span className="text-faint"> — {r.reason}</span>}
+                    </span>
+                    <span className="tabular-nums">
+                      <span className="font-medium text-foreground">{formatCurrency(r.cashBack)}</span> refunded
+                      {r.owedCleared > 0 && <span className="text-amber-300"> · {formatCurrency(r.owedCleared)} off the debt</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {data.creditSale && (
             <div>
               <div className="mb-1 font-medium text-foreground">Payment history</div>

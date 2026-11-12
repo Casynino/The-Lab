@@ -3,11 +3,12 @@ import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
+import dayjs from 'dayjs';
 import { Plus, Search, X, CheckCircle, XCircle, Eye, Clock, CheckCircle2, PackageOpen, PackageCheck } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
-import { useProducts, useCustomers, useSalesReps, useWarehouses } from '@/lib/hooks';
+import { useProducts, useCustomers, useSalesReps, useWarehouses, useDebounce } from '@/lib/hooks';
 import { ROLES } from '@/lib/constants';
 import { formatDate, formatDateTime, formatNumber, formatCurrency } from '@/lib/format';
 import {
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui';
 import NumberedLines from '@/components/NumberedLines';
 import CollapsibleList from '@/components/CollapsibleList';
+import SaleRefund from '@/components/SaleRefund';
 
 function defaultPkg(product) {
   if (!product?.packagings?.length) return null;
@@ -158,10 +160,100 @@ function ReturnDetailModal({ returnId, canDecide, onClose }) {
 }
 
 // ── New return modal ──────────────────────────────────────────────────────────
+// ── Customer return: find the sale, then the refund window ──────────────────────
+// A customer's boxes come back WITH their money, from the sale they were bought on (owner, 12 Nov
+// 2026). This used to put boxes into stock with no sale and no money — stock from nothing while the
+// sale's income stayed. Now the sale is found here (number, customer or day; the latest counter sales
+// are listed) and opens the same window as Sales > a sale > Refund customer.
+const eatDayBounds = (day) => (day
+  ? { from: new Date(`${day}T00:00:00.000+03:00`).toISOString(), to: new Date(`${day}T23:59:59.999+03:00`).toISOString() }
+  : {});
+
+// "Today 07:36", "Yesterday 18:10", "11 Nov 14:05" (the year only when it is not this one) — short enough
+// to sit whole on a phone line, since most counter sales are Walk-in and the time is what tells them apart.
+function shortWhen(value) {
+  const d = dayjs(value);
+  const now = dayjs();
+  const t = d.format('HH:mm');
+  if (d.isSame(now, 'day')) return `Today ${t}`;
+  if (d.isSame(now.subtract(1, 'day'), 'day')) return `Yesterday ${t}`;
+  return `${d.format(d.isSame(now, 'year') ? 'D MMM' : 'D MMM YYYY')} ${t}`;
+}
+const baseBoxes = (s) => (s.items || []).reduce((n, i) => n + (Number(i.baseQuantity) || 0), 0);
+
+// The search lives in ReturnModal (search / setSearch, day / setDay), so it is still there when the
+// refund window's Back brings the user back to this list.
+function SaleFinder({ canRefund, onPick, search, setSearch, day, setDay }) {
+  const q = useDebounce(search.trim(), 300);
+  const sales = useQuery({
+    ...pageQueries.refundableSales({ q, ...eatDayBounds(day) }),
+    enabled: canRefund,
+    placeholderData: (prev) => prev,
+  });
+  if (!canRefund) {
+    return (
+      <p className="rounded-lg bg-white/[0.03] px-3 py-3 text-sm text-muted ring-1 ring-white/[0.08]">
+        A customer&rsquo;s boxes come back with their money, from the sale itself — only an admin can do that
+        (Sales → open the sale → Refund customer).
+      </p>
+    );
+  }
+  const rows = sales.data?.data || [];
+  const filtered = !!(q || day);
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted">
+        Pick the sale the boxes came from. The customer gets his money back, and the sale gets smaller
+        (or is cancelled if every box comes back).
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden="true" />
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus
+            placeholder="Sale number or customer" aria-label="Find the sale by number or customer" className="input pl-9" />
+        </div>
+        <input type="date" value={day} onChange={(e) => setDay(e.target.value)} aria-label="Day of the sale" className="input sm:w-44" />
+      </div>
+      <div className="text-xs text-muted">{filtered ? 'Matching counter sales' : 'Latest counter sales'}</div>
+      {sales.isLoading ? (
+        <div className="space-y-2">{[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded-xl bg-white/[0.04]" />)}</div>
+      ) : sales.isError ? (
+        <LoadError what="the sales" onRetry={() => sales.refetch()} />
+      ) : rows.length === 0 ? (
+        <p className="py-4 text-center text-sm text-muted">{filtered ? 'No counter sale matches.' : 'No counter sales yet.'}</p>
+      ) : (
+        <ul className="-mx-5 divide-y divide-white/[0.06] border-y border-white/[0.08] bg-white/[0.025] sm:mx-0 sm:overflow-hidden sm:rounded-xl sm:border-0 sm:ring-1 sm:ring-white/[0.08]">
+          {rows.map((s) => (
+            <li key={s.id}>
+              <button type="button" onClick={() => onPick(s.id)}
+                className="flex min-h-[56px] w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-white/[0.04] focus:outline-none focus-visible:bg-white/[0.06] sm:px-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium tabular-nums text-foreground">
+                    {shortWhen(s.soldAt)} · {formatNumber(baseBoxes(s))} {baseBoxes(s) === 1 ? 'box' : 'boxes'}
+                  </div>
+                  <div className="truncate text-xs text-muted">{s.saleNumber}{s.customer?.name ? ` · ${s.customer.name}` : ''}</div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(s.total)}</div>
+                  {Number(s.balanceDue) > 0 && <div className="text-[11px] tabular-nums text-amber-300">owes {formatCurrency(s.balanceDue)}</div>}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ReturnModal({ onClose }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const isRep = user?.role === ROLES.SALES_REP;
+  const isAdmin = user?.role === ROLES.ADMIN;
+  const [refundSaleId, setRefundSaleId] = useState(null);
+  const [saleSearch, setSaleSearch] = useState('');
+  const [saleDay, setSaleDay] = useState('');
   const { data: products = [] } = useProducts();
   // Customers and the rep list are only for staff (the server refuses the rep list to reps).
   const { data: customers = [] } = useCustomers({}, { enabled: !isRep });
@@ -279,7 +371,15 @@ function ReturnModal({ onClose }) {
     isRep ? true : type === 'SALES_RETURN' ? (salesRepId && warehouseId) : (salesRepId || warehouseId)
   );
 
-  const footer = (
+  // A customer return is a refund on the sale: the sale is picked here, then the refund window takes over.
+  const customerReturn = !isRep && type === 'CUSTOMER_RETURN';
+  if (refundSaleId) {
+    return <SaleRefund saleId={refundSaleId} onClose={() => setRefundSaleId(null)} onDone={() => onClose()} />;
+  }
+
+  const footer = customerReturn ? (
+    <Button variant="secondary" className="max-sm:h-12 max-sm:w-full" onClick={onClose}>Close</Button>
+  ) : (
     <div className="flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
       <button type="button" onClick={onClose}
         className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]">
@@ -292,7 +392,7 @@ function ReturnModal({ onClose }) {
   );
 
   return (
-    <Modal open onClose={onClose} size="lg" title="Return" footer={footer}>
+    <Modal open onClose={onClose} size="lg" title={customerReturn ? 'Customer return · find the sale' : 'Return'} footer={footer}>
       <div className="space-y-4">
         {/* Type toggle — staff only; reps always return to ZELab */}
         {!isRep && (
@@ -306,6 +406,12 @@ function ReturnModal({ onClose }) {
           </div>
         )}
 
+        {customerReturn && (
+          <SaleFinder canRefund={isAdmin} onPick={setRefundSaleId}
+            search={saleSearch} setSearch={setSaleSearch} day={saleDay} setDay={setSaleDay} />
+        )}
+
+        {!customerReturn && (<>
         {/* Pending-approval notice — a slim amber line down the side, no box */}
         <div className="border-l-2 border-amber-400/60 pl-3 text-xs leading-relaxed text-amber-300">
           {isRep
@@ -411,6 +517,7 @@ function ReturnModal({ onClose }) {
           <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. damaged in transit, customer over-ordered" />
         </Field>
+        </>)}
       </div>
     </Modal>
   );

@@ -329,7 +329,7 @@ async function backfillFromHistory() {
         ...(epoch ? { soldAt: { gte: epoch } } : {}),
       },
       select: {
-        id: true, saleNumber: true, total: true, soldAt: true, settlementId: true,
+        id: true, saleNumber: true, total: true, amountPaid: true, soldAt: true, settlementId: true,
         salesRep: { select: { user: { select: { name: true } } } },
       },
       orderBy: { soldAt: 'asc' },
@@ -361,6 +361,11 @@ async function backfillFromHistory() {
   for (const s of sales) {
     if (have.has(s.id)) continue;
     const fromSettlement = !!s.settlementId;
+    // A settled order's sale is money the rep handed over (its total). A counter sale banks what reached
+    // the till, the same figure recordSaleIncome posts when it is made: the total used to be backfilled
+    // here, so an unpaid counter sale showed money in that nobody handed over (12 Nov 2026).
+    const amount = round2(toNumber(fromSettlement ? s.total : s.amountPaid));
+    if (!(amount > 0)) continue;
     const txnNumber = await nextDocNumber(prisma.financeTransaction, 'txnNumber', 'FTX');
     const wallet = await walletFor(saleBrand(s.id));
     await prisma.financeTransaction.create({
@@ -369,7 +374,7 @@ async function backfillFromHistory() {
         accountId: wallet.id,
         direction: 'IN',
         type: fromSettlement ? 'SETTLEMENT' : 'WAREHOUSE_SALE',
-        amount: round2(toNumber(s.total)),
+        amount,
         brandId: saleBrand(s.id),
         category: fromSettlement ? 'Settlement received' : 'Warehouse sale',
         description: fromSettlement

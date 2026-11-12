@@ -52,6 +52,13 @@ export const pageQueries = {
     queryKey: ['sales', { page, type, status }],
     queryFn: listOf('/sales', { page, limit: 15, type: type || undefined, status: status || undefined }),
   }),
+  // One sale as it is now (with the accounts its money went into and its refunds, for staff).
+  sale: (id) => ({ queryKey: ['sale', id], queryFn: dataOf(`/sales/${id}`) }),
+  // Counter sales a customer can still bring boxes back from (Returns > Customer return).
+  refundableSales: ({ q, from, to }) => ({
+    queryKey: ['sales', 'refundable', { q, from, to }],
+    queryFn: listOf('/sales', { refundable: 'true', limit: 10, search: q || undefined, from, to }),
+  }),
   returnsSummary: () => ({ queryKey: ['returns', 'summary'], queryFn: dataOf('/returns/summary') }),
   returns: ({ type, page }) => ({
     queryKey: ['returns', { type, page }],

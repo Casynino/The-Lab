@@ -106,7 +106,9 @@ const get = asyncHandler(async (req, res) => {
   if (req.user.role === ROLES.SALES_REP && sale.salesRepId !== req.user.salesRepId) {
     throw ApiError.forbidden('This sale does not belong to you');
   }
-  return ok(res, sale);
+  if (req.user.role === ROLES.SALES_REP) return ok(res, sale);
+  // Staff also see where the money went and what came back (the refund window needs both).
+  return ok(res, { ...sale, ...(await salesService.saleMoneyAndRefunds(sale.id)) });
 });
 
 const cancel = asyncHandler(async (req, res) => {
@@ -115,4 +117,21 @@ const cancel = asyncHandler(async (req, res) => {
   return ok(res, sale);
 });
 
-module.exports = { create, list, get, cancel };
+// A customer brought boxes back (Sales > a sale > Refund customer, or Returns > Customer return).
+const refund = asyncHandler(async (req, res) => {
+  const { sale, refund: r } = await salesService.refundSale(req.params.id, req.body, req.user);
+  await audit.record(req, {
+    action: 'REFUND',
+    entityType: 'Sale',
+    entityId: req.params.id,
+    oldValues: r.before,
+    newValues: {
+      saleNumber: r.saleNumber, everything: r.everything, boxes: r.boxes, lines: r.lines,
+      refundValue: r.refundValue, cashBack: r.cashBack, owedCleared: r.owedCleared,
+      ledger: r.ledger, notInLedger: r.notInLedger || 0, after: r.after, reason: r.reason,
+    },
+  });
+  return ok(res, { ...sale, refund: r });
+});
+
+module.exports = { create, list, get, cancel, refund };

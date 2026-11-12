@@ -48,11 +48,23 @@ const saleQuery = {
     customerId: id.optional(),
     warehouseId: id.optional(),
     region: z.string().optional(),
+    // Counter sales a customer can still return boxes from (Returns > Customer return).
+    refundable: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
   }),
 };
 
 const cancelSale = {
   body: z.object({ reason: z.string().max(500).optional() }),
+};
+
+// A customer brings boxes back: which lines, how many of each (in the line's own unit), why, and the
+// sale's updatedAt as the window saw it — one refund per look, so a double tap cannot send two.
+const refundSale = {
+  body: z.object({
+    items: z.array(z.object({ saleItemId: id, quantity: z.number().int().positive() })).min(1, 'Pick at least one box').max(100),
+    reason: z.string().trim().max(500).optional(),
+    version: z.string().datetime(),
+  }),
 };
 
 const creditQuery = {
@@ -76,4 +88,4 @@ const creditPayment = {
   }),
 };
 
-module.exports = { saleCreate, saleQuery, cancelSale, creditQuery, creditPayment };
+module.exports = { saleCreate, saleQuery, cancelSale, refundSale, creditQuery, creditPayment };

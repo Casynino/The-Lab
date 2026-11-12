@@ -176,12 +176,12 @@ export function Segmented({ label, options, value, onChange }) {
 }
 
 // A few one-tap reasons over the text box. The text box is what the server gets.
-export function ReasonField({ value, onChange, chips = REASONS }) {
+export function ReasonField({ value, onChange, chips = REASONS, optional = false }) {
   const box = useRef(null);
   const active = reasonChip(value, chips);
   return (
     <div className="space-y-2">
-      <div className="text-xs text-muted">Reason <span className="text-rose-400">*</span></div>
+      <div className="text-xs text-muted">Reason {optional ? <span className="text-faint">(optional)</span> : <span className="text-rose-400">*</span>}</div>
       <div role="group" aria-label="Reason" className="flex flex-wrap gap-2">
         {chips.map((c) => (
           <button key={c} type="button" aria-pressed={active === c}

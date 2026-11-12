@@ -20,6 +20,7 @@ const ACTION = {
   DELETE: { verb: 'deleted', icon: Trash2, cls: 'bg-rose-500/15 text-rose-300' },
   DEACTIVATE: { verb: 'deactivated', icon: Power, cls: 'bg-rose-500/15 text-rose-300' },
   CANCEL: { verb: 'cancelled', icon: Ban, cls: 'bg-white/[0.07] text-white/60' },
+  REFUND: { verb: 'refunded boxes on', icon: Undo2, cls: 'bg-white/[0.07] text-white/60' },
   APPROVE: { verb: 'approved', icon: CheckCircle2, cls: 'bg-emerald-500/15 text-emerald-300' },
   REJECT: { verb: 'rejected', icon: XCircle, cls: 'bg-rose-500/15 text-rose-300' },
   PAY: { verb: 'paid', icon: HandCoins, cls: 'bg-emerald-500/15 text-emerald-300' },
