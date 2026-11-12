@@ -118,20 +118,46 @@ test('a deactivated rep still owed money stays in the totals; one owed nothing s
   assert.equal(s.totals.requested, 30000);
 });
 
+// ── money-flows-7: approved but not yet paid is still waiting ─────────────────────────────────────────
+test('an approved, unpaid withdrawal counts as waiting, not as paid, and the balance does not move', async () => {
+  const rows = [
+    { status: 'PAID', _sum: { amount: 100000 } },
+    { status: 'APPROVED', _sum: { amount: 50000 } },
+    { status: 'PENDING', _sum: { amount: 20000 } },
+  ];
+  stub('../src/config/prisma', db({
+    salesRepresentative: {
+      findMany: async () => [{ id: 'r1', code: 'A', isActive: true, user: { name: 'A' } }],
+      findUnique: async () => ({ withdrawalThreshold: null, commissionAdjustment: 300000, earnsCommission: true }),
+    },
+    commissionWithdrawal: { groupBy: async () => rows },
+  }));
+  const commission = fresh('../src/services/commission.service');
+  const c = await commission.computeForRep('r1');
+  assert.equal(c.paid, 100000, 'only money handed over is paid');
+  assert.equal(c.pendingRequests, 70000, 'asked + approved are both still waiting');
+  assert.equal(c.available, 300000 - 100000 - 70000, 'the balance is what it was');
+  const s = await commission.summaryAllReps();
+  assert.equal(s.totals.paid, 100000);
+  assert.equal(s.totals.requested, 70000);
+});
+
 // ── #119 bonus tiers ─────────────────────────────────────────────────────────────────────────────────
-function loadBonus({ sales = 250000 } = {}) {
+// `sales` is every settled sale the rep made, newest last; a figure alone is one sale on 1 Oct.
+function loadBonus({ sales = 250000, tiers, lastPaidAt = null } = {}) {
   const since = new Date('2026-10-01T00:00:00Z');
   const awards = [];
+  const sold = Array.isArray(sales) ? sales : [{ at: since, total: sales }];
   let n = 0;
   stub('../src/config/prisma', db({
     bonusRule: {
-      findMany: async () => [
+      findMany: async () => tiers || [
         { id: 't1', salesTarget: 100000, bonusAmount: 10000, effectiveFrom: since },
         { id: 't2', salesTarget: 200000, bonusAmount: 25000, effectiveFrom: since },
       ],
     },
     bonusAward: {
-      findFirst: async () => null, // nothing paid yet: the run starts at the rules
+      findFirst: async () => (lastPaidAt ? { paidAt: lastPaidAt } : null), // the last payment, if any
       create: async ({ data }) => {
         const clash = awards.find((a) => a.salesRepId === data.salesRepId && a.bonusRuleId === data.bonusRuleId
           && a.cycleStart.getTime() === data.cycleStart.getTime());
@@ -141,14 +167,19 @@ function loadBonus({ sales = 250000 } = {}) {
         await tick(); // the other payment gets in here
         return row;
       },
-      count: async ({ where }) => awards.filter((a) => a.salesRepId === where.salesRepId
-        && a.cycleStart.getTime() === where.cycleStart.getTime() && a.status === where.status && a.id !== where.id.not).length,
+      // Same run = paid after the payment the run started from.
+      count: async ({ where }) => awards.filter((a) => a.salesRepId === where.salesRepId && a.status === where.status
+        && a.id !== where.id.not && (!where.paidAt || a.paidAt > where.paidAt.gt)).length,
       delete: async ({ where }) => {
         const i = awards.findIndex((a) => a.id === where.id);
         return awards.splice(i, 1)[0];
       },
     },
-    sale: { aggregate: async () => ({ _sum: { total: sales } }) },
+    sale: {
+      aggregate: async ({ where }) => ({
+        _sum: { total: sold.filter((s) => s.at >= where.soldAt.gte).reduce((x, s) => x + s.total, 0) },
+      }),
+    },
     salesRepresentative: { findUnique: async () => ({ id: 'r1', user: { id: 'u1' } }) },
   }));
   notified.length = 0;
@@ -187,4 +218,95 @@ test('two different tiers paid at the same moment: never two bonuses in one run'
   assert.ok(refused.length >= 1);
   refused.forEach((r) => assert.equal(r.reason.statusCode, 409));
   assert.equal(notified.length, awards.length); // nobody is told about a payment that was taken back
+});
+
+// ── money-flows-1: a tier counts sales only from its own start ───────────────────────────────────────
+const jul5 = new Date('2026-07-05T09:36:54Z');
+const nov11 = new Date('2026-11-11T23:41:37Z');
+const repSales = [{ at: new Date('2026-08-01T10:00:00Z'), total: 9500000 }];
+
+test('a tier added today does not count the selling done before it existed', async () => {
+  const { bonus, awards } = loadBonus({
+    sales: repSales,
+    tiers: [
+      { id: 'new9m', salesTarget: 9000000, bonusAmount: 1000, effectiveFrom: nov11 },
+      { id: 'old10m', salesTarget: 10000000, bonusAmount: 500000, effectiveFrom: jul5 },
+    ],
+  });
+  const p = await bonus.progressForRep('r1');
+  const t9 = p.tiers.find((t) => t.ruleId === 'new9m');
+  const t10 = p.tiers.find((t) => t.ruleId === 'old10m');
+  assert.equal(t9.sales, 0, 'nothing was sold since the new tier started');
+  assert.equal(t9.reached, false);
+  assert.equal(t9.remaining, 9000000);
+  assert.equal(t10.sales, 9500000, 'the old tier keeps its own count');
+  assert.equal(p.claimable, null);
+  assert.equal(p.next.ruleId, 'new9m');
+  assert.equal(p.sales, 9500000, 'the run itself still starts at the oldest tier');
+  assert.equal(new Date(p.cycleStart).getTime(), jul5.getTime());
+
+  await assert.rejects(bonus.payTier({ salesRepId: 'r1', bonusRuleId: 'new9m' }, { id: 'admin' }),
+    (e) => e.statusCode === 400 && /short of/.test(e.message));
+  assert.equal(awards.length, 0);
+});
+
+test('sales after a tier starts count toward it, and the award records that tier\'s own count', async () => {
+  const { bonus, awards } = loadBonus({
+    sales: [...repSales, { at: new Date('2026-11-12T08:00:00Z'), total: 9100000 }],
+    tiers: [{ id: 'new9m', salesTarget: 9000000, bonusAmount: 1000, effectiveFrom: nov11 }],
+  });
+  const paid = await bonus.payTier({ salesRepId: 'r1', bonusRuleId: 'new9m' }, { id: 'admin' });
+  assert.equal(paid.qualifyingSales, 9100000);
+  assert.equal(new Date(paid.cycleStart).getTime(), nov11.getTime());
+  assert.equal(awards.length, 1);
+});
+
+test('tiers that start on the same day behave as before: one shared count', async () => {
+  const { bonus } = loadBonus({
+    sales: repSales,
+    tiers: [
+      { id: 'a', salesTarget: 5000000, bonusAmount: 100000, effectiveFrom: jul5 },
+      { id: 'b', salesTarget: 10000000, bonusAmount: 500000, effectiveFrom: jul5 },
+    ],
+  });
+  const p = await bonus.progressForRep('r1');
+  assert.deepEqual(p.tiers.map((t) => t.sales), [9500000, 9500000]);
+  assert.equal(p.claimable.ruleId, 'a');
+  assert.equal(p.next.ruleId, 'b');
+  assert.equal(p.next.remaining, 500000);
+});
+
+test('after a payment every tier counts from the payment, and the payment is the run boundary', async () => {
+  const paidAt = new Date('2026-09-01T00:00:00Z');
+  const { bonus } = loadBonus({
+    sales: [...repSales, { at: new Date('2026-10-01T00:00:00Z'), total: 3000000 }],
+    lastPaidAt: paidAt,
+    tiers: [
+      { id: 'a', salesTarget: 5000000, bonusAmount: 100000, effectiveFrom: jul5 },
+      { id: 'late', salesTarget: 1000000, bonusAmount: 50000, effectiveFrom: new Date('2026-10-15T00:00:00Z') },
+    ],
+  });
+  const p = await bonus.progressForRep('r1');
+  assert.equal(p.tiers.find((t) => t.ruleId === 'a').sales, 3000000);
+  assert.equal(p.tiers.find((t) => t.ruleId === 'late').sales, 0, 'a tier that starts after the payment counts from its start');
+  assert.equal(new Date(p.cycleStart).getTime(), paidAt.getTime());
+  assert.equal(new Date(p.lastPaidAt).getTime(), paidAt.getTime());
+});
+
+test('a rep sees the bonuses he has been paid, newest first, and only his own', async () => {
+  let asked;
+  stub('../src/config/prisma', db({
+    bonusAward: {
+      findMany: async (q) => {
+        asked = q;
+        return [{ id: 'b1', bonusAmount: '1000.00', paidAt: nov11, bonusRule: { salesTarget: '9000000.00' } }];
+      },
+    },
+  }));
+  const bonus = fresh('../src/services/bonus.service');
+  const rows = await bonus.paidAwardsForRep('r1');
+  assert.deepEqual(asked.where, { salesRepId: 'r1', status: 'PAID' });
+  assert.deepEqual(asked.orderBy, { paidAt: 'desc' });
+  assert.deepEqual(rows, [{ id: 'b1', amount: 1000, paidAt: nov11, target: 9000000 }]);
+  assert.deepEqual(await bonus.paidAwardsForRep(null), []);
 });

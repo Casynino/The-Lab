@@ -81,7 +81,14 @@ const deleteRate = asyncHandler(async (req, res) => {
 });
 
 // ── Sales bonus ──────────────────────────────────────────────────────────────
-const bonusMe = asyncHandler(async (req, res) => ok(res, await bonus.progressForRep(req.user.salesRepId)));
+// The run in progress plus the bonuses already paid to this rep (audit money-flows-10), only his own.
+const bonusMe = asyncHandler(async (req, res) => {
+  const [progress, paidAwards] = await Promise.all([
+    bonus.progressForRep(req.user.salesRepId),
+    bonus.paidAwardsForRep(req.user.salesRepId),
+  ]);
+  return ok(res, { ...progress, paidAwards });
+});
 const bonusSummary = asyncHandler(async (_req, res) => ok(res, await bonus.summaryAllReps()));
 const bonusRules = asyncHandler(async (_req, res) => ok(res, await bonus.listRules()));
 

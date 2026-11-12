@@ -116,7 +116,8 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
         readyLabel={claimable ? `${formatCurrency(claimable.bonusAmount)} ready — or push on` : ''}
         hint={aim.progress >= 90
           ? `Almost there — only ${formatCurrency(aim.remaining)} to go`
-          : `${formatCurrency(bonus.sales)} of ${formatCurrency(aim.target)}`}
+          // The tier's own count: a tier added later counts only from its start (audit money-flows-1).
+          : `${formatCurrency(aim.sales ?? bonus.sales)} of ${formatCurrency(aim.target)}`}
         markers={track.markers}
         onClick={onOpenCommission}
       />,

@@ -29,15 +29,30 @@ async function activeRule(at = new Date()) {
   return tiers[0] || null;
 }
 
-// When this rep's current run started. Taking a bonus ends the run and starts a
-// new one from the moment it was paid, so the counter goes back to zero and the
-// same tiers can be earned again.
-async function cycleStartFor(salesRepId, tiers) {
-  const lastPaid = await prisma.bonusAward.findFirst({
+// The last bonus this rep was paid, if any. Taking a bonus ends the run, so
+// nothing sold before this moment counts toward any tier again.
+async function lastPaidAward(salesRepId) {
+  return prisma.bonusAward.findFirst({
     where: { salesRepId, status: 'PAID' },
     orderBy: { paidAt: 'desc' },
     select: { paidAt: true },
   });
+}
+
+// Where one tier starts counting: its own start date, or the last payment if
+// that came later (audit money-flows-1). A tier added today counts sales from
+// today — it used to borrow the oldest tier's start, so reps could take a new
+// bonus at once for selling done before it existed.
+function tierStart(tier, lastPaidAt) {
+  const own = new Date(tier.effectiveFrom);
+  return lastPaidAt && new Date(lastPaidAt) > own ? new Date(lastPaidAt) : own;
+}
+
+// When this rep's current run started: the last payment, or the oldest tier in
+// play. Taking a bonus ends the run and starts a new one from the moment it was
+// paid, so the counter goes back to zero and the same tiers can be earned again.
+async function cycleStartFor(salesRepId, tiers) {
+  const lastPaid = await lastPaidAward(salesRepId);
   const ruleStart = tiers.length
     ? new Date(Math.min(...tiers.map((t) => new Date(t.effectiveFrom).getTime())))
     : new Date();
@@ -63,22 +78,39 @@ async function qualifyingSales(salesRepId, since) {
 
 // Where a rep stands in their current run. Safe to call for a rep with no tiers
 // configured — it simply reports there is nothing to chase.
+//
+// Each tier is measured on its own sales, counted from tierStart (audit money-flows-1); tiers that
+// start on the same day share one count. `sales` at the top stays the whole run (from the oldest tier
+// in play or the last payment), the figure the "sales this run" columns show.
 async function progressForRep(salesRepId) {
   const tiers = await activeTiers();
   if (!tiers.length) return { configured: false };
 
-  const cycleStart = await cycleStartFor(salesRepId, tiers);
-  const sales = await qualifyingSales(salesRepId, cycleStart);
+  const lastPaid = await lastPaidAward(salesRepId);
+  const lastPaidAt = lastPaid?.paidAt || null;
+  const starts = tiers.map((t) => tierStart(t, lastPaidAt));
+  const cycleStart = new Date(Math.min(...starts.map((d) => d.getTime())));
+  const salesFrom = new Map();
+  const salesSince = (d) => {
+    const k = d.getTime();
+    if (!salesFrom.has(k)) salesFrom.set(k, qualifyingSales(salesRepId, d));
+    return salesFrom.get(k);
+  };
+  const sales = await salesSince(cycleStart);
+  const tierSales = await Promise.all(starts.map(salesSince));
 
-  const shaped = tiers.map((t) => {
+  const shaped = tiers.map((t, i) => {
     const target = toNumber(t.salesTarget);
+    const own = tierSales[i];
     return {
       ruleId: t.id,
       target,
       bonusAmount: toNumber(t.bonusAmount),
-      reached: sales >= target,
-      progress: target > 0 ? Math.min(100, Math.round((sales / target) * 100)) : 0,
-      remaining: Math.max(0, round2(target - sales)),
+      since: starts[i],
+      sales: own,
+      reached: own >= target,
+      progress: target > 0 ? Math.min(100, Math.round((own / target) * 100)) : 0,
+      remaining: Math.max(0, round2(target - own)),
     };
   });
 
@@ -94,6 +126,7 @@ async function progressForRep(salesRepId) {
   return {
     configured: true,
     cycleStart,
+    lastPaidAt,
     sales,
     tiers: shaped,
     claimable,
@@ -117,7 +150,9 @@ async function checkAndAward(salesRepId) {
     where: { id: salesRepId },
     include: { user: { select: { id: true, name: true } } },
   });
-  const cycleKey = new Date(p.cycleStart).toISOString();
+  // The tier's own start (audit money-flows-1). For tiers that start with the run it is the run's start,
+  // so a notice already sent under the old key is not sent again.
+  const cycleKey = new Date(p.claimable.since || p.cycleStart).toISOString();
   const stretch = p.next
     ? ` Keep going and ${formatCurrency(p.next.target)} earns ${formatCurrency(p.next.bonusAmount)} instead — taking a bonus starts your count again from zero.`
     : '';
@@ -168,7 +203,7 @@ async function payTier({ salesRepId, bonusRuleId }, actor, notes) {
   }
   if (!tier.reached) {
     throw ApiError.badRequest(
-      `This rep is on ${formatCurrency(p.sales)} — ${formatCurrency(tier.remaining)} short of the ${formatCurrency(tier.target)} target.`,
+      `This rep is on ${formatCurrency(tier.sales)} — ${formatCurrency(tier.remaining)} short of the ${formatCurrency(tier.target)} target.`,
     );
   }
 
@@ -184,8 +219,9 @@ async function payTier({ salesRepId, bonusRuleId }, actor, notes) {
       data: {
         salesRepId,
         bonusRuleId: tier.ruleId,
-        cycleStart: p.cycleStart,
-        qualifyingSales: p.sales,
+        // The tier's own count: where it started and what was sold toward it (audit money-flows-1).
+        cycleStart: tier.since,
+        qualifyingSales: tier.sales,
         bonusAmount: tier.bonusAmount,
         status: 'PAID',
         paidAt: new Date(),
@@ -203,8 +239,15 @@ async function payTier({ salesRepId, bonusRuleId }, actor, notes) {
   // any other one in the same run and, if it finds one, takes itself back. Of two payments racing, at
   // least one always sees the other, so two can never both stand; at worst both step back and nothing
   // was paid, and the admin pays again.
+  // The run is everything paid after the last payment this one was measured from; tiers in one run can
+  // start on different days, so the run is told by the payment time, not by cycleStart.
   const others = await prisma.bonusAward.count({
-    where: { salesRepId, cycleStart: p.cycleStart, status: 'PAID', id: { not: award.id } },
+    where: {
+      salesRepId,
+      status: 'PAID',
+      id: { not: award.id },
+      ...(p.lastPaidAt ? { paidAt: { gt: new Date(p.lastPaidAt) } } : {}),
+    },
   });
   if (others > 0) {
     await prisma.bonusAward.delete({ where: { id: award.id } });
@@ -235,6 +278,24 @@ async function summaryAllReps() {
   const items = reps.map((rep, i) => ({ salesRepId: rep.id, code: rep.code, name: rep.user?.name || rep.code, ...progress[i] }));
   items.sort((a, b) => (b.sales || 0) - (a.sales || 0));
   return { items };
+}
+
+// The bonuses this rep has been paid, newest first, for the rep's own Bonus tab (audit money-flows-10):
+// once paid, the run starts again at 0% and the app kept no record of the payment.
+async function paidAwardsForRep(salesRepId, limit = 24) {
+  if (!salesRepId) return [];
+  const rows = await prisma.bonusAward.findMany({
+    where: { salesRepId, status: 'PAID' },
+    orderBy: { paidAt: 'desc' },
+    take: limit,
+    select: { id: true, bonusAmount: true, paidAt: true, bonusRule: { select: { salesTarget: true } } },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    amount: toNumber(r.bonusAmount),
+    paidAt: r.paidAt,
+    target: r.bonusRule ? toNumber(r.bonusRule.salesTarget) : null,
+  }));
 }
 
 // ── Rules (admin) ────────────────────────────────────────────────────────────
@@ -328,6 +389,7 @@ module.exports = {
   payTier,
   qualifyingSales,
   progressForRep,
+  paidAwardsForRep,
   checkAndAward,
   summaryAllReps,
   listRules,
