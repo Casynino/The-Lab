@@ -79,6 +79,8 @@ function StatusChip({ row }) {
     return <Badge className="bg-emerald-500/15 text-emerald-400">{row.attempts > 1 ? 'Sent · retried' : 'Sent'}</Badge>;
   }
   if (row.status === 'FAILED') return <Badge className="bg-red-500/15 text-red-600">Failed</Badge>;
+  // A warning still waiting when the moment it warned about passed ("minutes from its deadline"): not sent.
+  if (row.status === 'EXPIRED') return <Badge className="bg-white/[0.07] text-muted">Too late, not sent</Badge>;
   return <Badge className="bg-amber-500/15 text-amber-600">Pending</Badge>;
 }
 

@@ -262,44 +262,110 @@ async function queue(type, { priority, dedupeKey = null, refType = null, refId =
 // Only rows from the last FLUSH_WINDOW_HOURS are retried: older news is not sent.
 const FLUSH_WINDOW_HOURS = 48;
 const PRIORITY_RANK = { CRITICAL: 0, ACTION: 1, WARNING: 2, INFO: 3 };
+
+// A message that is only true until a moment. "An order is minutes from its deadline" is about one
+// deadline, kept in its dedupe key (deadlinewarn:<order>:<deadline ms>); once that moment has passed
+// the fine has started, or the order was given more time and is warned again before its new deadline.
+// Held by quiet hours or a failed try, it used to go out hours later, still saying "3 minutes left".
+function expiresAt(row) {
+  if (row.type !== 'DEADLINE_IMMINENT') return null;
+  const ms = Number(String(row.dedupeKey || '').split(':')[2]);
+  return Number.isFinite(ms) && ms > 0 ? new Date(ms) : null;
+}
+
+// Waiting messages that came too late to be true are closed as EXPIRED, never sent. Only the types
+// expiresAt() knows are read, so this stays a small query however long the queue is.
+async function expireStale(now) {
+  const waiting = await prisma.whatsAppNotification.findMany({
+    where: { status: 'PENDING', type: 'DEADLINE_IMMINENT' },
+    select: { id: true, type: true, dedupeKey: true },
+  });
+  const ids = waiting.filter((r) => { const at = expiresAt(r); return at && at.getTime() <= now; }).map((r) => r.id);
+  if (!ids.length) return 0;
+  const { count } = await prisma.whatsAppNotification.updateMany({
+    where: { id: { in: ids }, status: 'PENDING' },
+    data: { status: 'EXPIRED', lastError: 'Not sent: the deadline it warned about had already passed' },
+  });
+  return count;
+}
+
+// Messages sent to each recipient in the provider's 4-hour window, in one query (null = the owner).
+async function budgetUsedByRecipient() {
+  const groups = await prisma.whatsAppNotification.groupBy({
+    by: ['toPhone'],
+    where: { status: 'SENT', sentAt: { gt: new Date(Date.now() - 240 * 60 * 1000) } },
+    _count: { _all: true },
+  });
+  return new Map(groups.map((g) => [g.toPhone || null, g._count._all]));
+}
+
 let lastFlushAt = 0;
 async function flush({ throttleMs = 60000 } = {}) {
   const now = Date.now();
   if (now - lastFlushAt < throttleMs) return { retried: 0, throttled: true };
   lastFlushAt = now;
 
+  const expired = await expireStale(now);
   const quiet = await inQuietHours();
-  const candidates = await prisma.whatsAppNotification.findMany({
-    where: {
-      status: 'PENDING',
-      attempts: { lt: MAX_ATTEMPTS },
-      createdAt: { gt: new Date(now - FLUSH_WINDOW_HOURS * 3600 * 1000) },
-      // Anti-duplicate cool-down: an attempt may have actually been delivered
-      // even if it read as failed — never echo it within 10 minutes.
-      OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: new Date(now - 10 * 60 * 1000) } }],
-      ...(quiet ? { priority: 'CRITICAL' } : {}),
-    },
+  const waiting = {
+    status: 'PENDING',
+    attempts: { lt: MAX_ATTEMPTS },
+    createdAt: { gt: new Date(now - FLUSH_WINDOW_HOURS * 3600 * 1000) },
+    // Anti-duplicate cool-down: an attempt may have actually been delivered
+    // even if it read as failed — never echo it within 10 minutes.
+    OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: new Date(now - 10 * 60 * 1000) } }],
+  };
+  // The candidates are read so that held rows can never fill the window. They were the 50 oldest
+  // waiting rows, ranked only afterwards: one busy rep number with 50 INFO alerts over the provider
+  // budget filled it, every run sent nothing, and the warnings and other people's messages behind
+  // them waited for hours (final audit, 12 Nov 2026). Now the urgent rows (anything not INFO, never
+  // held by the budget) are read first, the most urgent first and oldest first within one priority;
+  // INFO rows only when fewer than two urgent rows are waiting, and only for recipients with budget
+  // left. Quiet hours hold everything but CRITICAL.
+  const urgent = await prisma.whatsAppNotification.findMany({
+    where: { ...waiting, priority: quiet ? 'CRITICAL' : { not: 'INFO' } },
     orderBy: { createdAt: 'asc' },
     take: 50,
   });
-  // The most urgent first (oldest first within one priority). An INFO row whose
-  // recipient has used up the provider budget would only be held again by
-  // deliver(), without an attempt, so it is passed over here: otherwise two held
-  // rows sat at the head of the queue on every run and the alerts behind them
-  // were never retried.
-  const cap = await providerBudgetCap();
-  const usedBy = new Map();
-  const heldByBudget = async (row) => {
-    if (!(cap > 0 && row.priority === 'INFO' && row.type !== 'TEST')) return false;
-    const to = row.toPhone || null;
-    if (!usedBy.has(to)) usedBy.set(to, await providerBudgetUsed(to));
-    return usedBy.get(to) >= cap;
-  };
-  const ranked = [...candidates].sort((a, b) => (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3));
-  const rows = [];
-  for (const row of ranked) {
-    if (rows.length >= 2) break;
-    if (!(await heldByBudget(row))) rows.push(row);
+  const rows = [...urgent]
+    .sort((a, b) => (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3))
+    .slice(0, 2);
+
+  if (rows.length < 2 && !quiet) {
+    const cap = await providerBudgetCap();
+    const used = cap > 0 ? await budgetUsedByRecipient() : new Map();
+    const held = [...used.entries()].filter(([, n]) => n >= cap).map(([to]) => to);
+    const heldPhones = held.filter(Boolean);
+    const ownerHeld = held.includes(null);
+    // A test message is never held by the budget (deliver() lets it through too).
+    const free = cap > 0 && held.length
+      ? {
+        OR: [
+          { type: 'TEST' },
+          ownerHeld
+            ? { AND: [{ toPhone: { not: null } }, ...(heldPhones.length ? [{ toPhone: { notIn: heldPhones } }] : [])] }
+            : { OR: [{ toPhone: null }, ...(heldPhones.length ? [{ toPhone: { notIn: heldPhones } }] : [])] },
+        ],
+      }
+      : {};
+    const info = await prisma.whatsAppNotification.findMany({
+      where: { AND: [waiting, { priority: 'INFO' }, free] },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    });
+    // Never pick more for one recipient than the budget it has left: deliver() would hold the extra
+    // one after an 8-second wait for nothing.
+    const left = new Map();
+    for (const row of info) {
+      if (rows.length >= 2) break;
+      const to = row.toPhone || null;
+      if (cap > 0 && row.type !== 'TEST') {
+        const remaining = left.has(to) ? left.get(to) : cap - (used.get(to) || 0);
+        if (remaining <= 0) continue;
+        left.set(to, remaining - 1);
+      }
+      rows.push(row);
+    }
   }
   let sent = 0;
   for (let i = 0; i < rows.length; i += 1) {
@@ -310,7 +376,7 @@ async function flush({ throttleMs = 60000 } = {}) {
     const attempted = r.attempts !== undefined;
     if (attempted && i < rows.length - 1) await new Promise((res) => setTimeout(res, 8000));
   }
-  return { retried: rows.length, sent };
+  return { retried: rows.length, sent, ...(expired ? { expired } : {}) };
 }
 
 // ── Event notifications ──────────────────────────────────────────────────────
