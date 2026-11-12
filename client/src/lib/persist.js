@@ -32,6 +32,20 @@ export function forgetCache() {
 }
 
 /**
+ * A screen stopped on an error and is about to be reloaded: the answer it
+ * choked on may be in the saved copy (a bad answer is still a "success"), and
+ * putting it back would crash the same screen again before it could ask the
+ * server (audit pwa-brand-load-1). Drop the copy and write nothing more from
+ * this page, not even on the way out. The copy is only a speed-up: the next
+ * open asks the server first, as it always did.
+ */
+export function forgetCacheAndStop() {
+  person = null;
+  if (timer) { window.clearTimeout(timer); timer = 0; }
+  forgetCache();
+}
+
+/**
  * On opening: if this device holds the last answers of the person the stored
  * sign-in names, put them in the app — every one marked out of date, so each
  * screen shows it at once and asks the server again — and return that person.

@@ -72,6 +72,12 @@ export function tokenClaims(token) {
 export function keptEntry(queryKey, state) {
   if (!state || state.data === undefined || !state.dataUpdatedAt) return null;
   if (state.status !== 'success' && state.status !== 'error') return null;
+  // Only when the line or the server fell over (no answer, or a 5xx). A refusal or "not found" is the
+  // server's real answer now: a deleted record must not keep coming back from this device.
+  if (state.status === 'error') {
+    const code = state.error?.response?.status;
+    if (code && code < 500) return null;
+  }
   return { k: queryKey, d: state.data, t: state.dataUpdatedAt };
 }
 

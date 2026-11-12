@@ -37,3 +37,16 @@ export function noticeKind({ online, since }) {
   if (since > 0) return 'stale';
   return null;
 }
+
+/**
+ * May money be moved on these figures? Only when the server gave them in this
+ * visit (the page asked since it opened, or an answer in memory is still
+ * within its fresh window). Figures put back from the copy saved on this device
+ * read as a success until the server answers, but they can be hours old — a
+ * balance correction worked out from one would write the wrong difference
+ * (audit pwa-brand-load-2). `q` is a useQuery result.
+ */
+export function figuresAreLive(q) {
+  if (!q || !q.isSuccess) return false;
+  return Boolean(q.isFetchedAfterMount || !q.isStale);
+}

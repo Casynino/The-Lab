@@ -13,6 +13,18 @@ test('the last good answer is kept even when the latest ask failed (offline); no
   assert.equal(keptEntry(k, undefined), null);
 });
 
+test('a failed refresh keeps the old answer only when the line or the server fell over', () => {
+  const k = ['sales', 'abc'];
+  const failed = (error) => ({ status: 'error', data: { a: 1 }, dataUpdatedAt: 50, error });
+  // No answer at all (no signal): kept.
+  assert.deepEqual(keptEntry(k, failed({ message: 'Network Error' })), { k, d: { a: 1 }, t: 50 });
+  // The server fell over: kept.
+  assert.deepEqual(keptEntry(k, failed({ response: { status: 503 } })), { k, d: { a: 1 }, t: 50 });
+  // The record is gone, or the server now refuses it: its real answer, so nothing is kept.
+  assert.equal(keptEntry(k, failed({ response: { status: 404 } })), null);
+  assert.equal(keptEntry(k, failed({ response: { status: 403 } })), null);
+});
+
 // A sign-in token as the server makes it (only the middle part is read here; the signature is the server's business).
 const b64url = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 const tokenFor = (sub, role, sv = 1) => `${b64url({ alg: 'HS256', typ: 'JWT' })}.${b64url({ sub, role, sv, typ: 'access' })}.signature`;

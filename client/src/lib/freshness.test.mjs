@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { staleSince, noticeKind } from './freshness.js';
+import { staleSince, noticeKind, figuresAreLive } from './freshness.js';
 
 const ok = (t) => ({ status: 'success', data: { rows: 1 }, dataUpdatedAt: t });
 const failedWithData = (t) => ({ status: 'error', data: { rows: 1 }, dataUpdatedAt: t });
@@ -33,4 +33,21 @@ test('offline wins over stale; online and fresh shows nothing', () => {
   assert.equal(noticeKind({ online: false, since: 300 }), 'offline');
   assert.equal(noticeKind({ online: true, since: 300 }), 'stale');
   assert.equal(noticeKind({ online: true, since: 0 }), null);
+});
+
+test('balances put back from the saved copy are not live until the server answers', () => {
+  // Restored and marked out of date, the page has not asked yet (or is still asking).
+  assert.equal(figuresAreLive({ isSuccess: true, isFetchedAfterMount: false, isStale: true }), false);
+  // The server answered since the page opened.
+  assert.equal(figuresAreLive({ isSuccess: true, isFetchedAfterMount: true, isStale: false }), true);
+  // ... and they stay usable once they age past the fresh window.
+  assert.equal(figuresAreLive({ isSuccess: true, isFetchedAfterMount: true, isStale: true }), true);
+  // An answer in memory from a moment ago (another tab of the page) is usable at once.
+  assert.equal(figuresAreLive({ isSuccess: true, isFetchedAfterMount: false, isStale: false }), true);
+});
+
+test('figures whose refresh failed, or that never came, are never live', () => {
+  assert.equal(figuresAreLive({ isSuccess: false, isError: true, isFetchedAfterMount: true, isStale: true }), false);
+  assert.equal(figuresAreLive({ isSuccess: false, isPending: true }), false);
+  assert.equal(figuresAreLive(undefined), false);
 });

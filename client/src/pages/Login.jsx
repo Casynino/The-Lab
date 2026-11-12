@@ -125,6 +125,10 @@ function Film({ kind, className, onLoad }) {
     if (kind !== 'film') return undefined;
     const source = sourceRef.current;
     const img = imgRef.current;
+    // Put the addresses back if a clean-up took them (React's StrictMode on localhost runs the clean-up
+    // once at mount, and React will not set them again): source first, so the browser picks by orientation.
+    if (source && !source.getAttribute('srcset')) source.setAttribute('srcset', FILM.film.portrait);
+    if (img && !img.getAttribute('src')) img.setAttribute('src', FILM.film.landscape);
     return () => {
       source?.removeAttribute('srcset');
       img?.removeAttribute('src');

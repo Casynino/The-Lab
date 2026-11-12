@@ -22,6 +22,7 @@ import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { eatISODate, eatDay } from '@/lib/tz';
+import { figuresAreLive } from '@/lib/freshness';
 import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
   PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button,
@@ -148,7 +149,7 @@ const invalidateFinance = (qc) => ['finance'].forEach((k) => qc.invalidateQuerie
 // how a correction ends up invisible. You say what the account really holds;
 // it records the difference as one adjustment, in the ledger, with your reason
 // on it. It never touches profit.
-function CorrectBalanceModal({ accounts, onClose }) {
+function CorrectBalanceModal({ accounts, live, onClose }) {
   const qc = useQueryClient();
   const usable = accounts.filter((a) => !a.isCommissionRecord);
   const [accountId, setAccountId] = useState(usable[0]?.id || '');
@@ -172,10 +173,13 @@ function CorrectBalanceModal({ accounts, onClose }) {
   });
 
   const valid = accountId && truth != null && Number.isFinite(truth) && delta !== 0;
+  // The difference is worked out from the balance on screen: never from one that is not the server's latest
+  // (put back from this device, or kept after a refresh that failed while this was open).
   return (
     <Modal open onClose={onClose} title="Correct a balance"
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>Record the correction</Button></>}>
+        <Button loading={save.isPending} disabled={!valid || !live} title={live ? undefined : 'Waiting for the latest balances'}
+          onClick={() => save.mutate()}>Record the correction</Button></>}>
       <div className="space-y-4">
         <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
           For when the app disagrees with the real account. Say what it actually holds and the difference is written
@@ -198,6 +202,7 @@ function CorrectBalanceModal({ accounts, onClose }) {
             against {account?.name}, bringing it to <b className="text-foreground">{formatCurrency(truth)}</b>.
           </p>
         )}
+        {!live && <p className="text-xs text-amber-300">Waiting for the latest balances before this can be recorded.</p>}
         <Field label="Why" hint="Worth a sentence — this is the record of why the figure moved.">
           <Input value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. cash drawn out and paid to reps as commission" />
@@ -1414,7 +1419,8 @@ function Accounts({ onQuick, onNavigate }) {
   // Accounts that never arrived are not "TSh 0, no account holds money": say so, and offer no Transfer or
   // Correct balance over a list that is not there (audit pwa-brand-load-2).
   if (accountsQ.isError && !accountsQ.data) return <LoadError what="the accounts" onRetry={accountsQ.refetch} />;
-  const accountsLive = accountsQ.isSuccess;
+  // Saved-on-this-device balances read as a success until the server answers: not live (lib/freshness.js).
+  const accountsLive = figuresAreLive(accountsQ);
   // Wallets hold the money; the Commission account holds a record of money the
   // owner paid out of his own hand. Adding a record into a cash total would
   // claim the business is holding cash it has never held.
@@ -1560,7 +1566,7 @@ function Accounts({ onQuick, onNavigate }) {
 
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
-      {correctOpen && <CorrectBalanceModal accounts={accounts} onClose={() => setCorrectOpen(false)} />}
+      {correctOpen && <CorrectBalanceModal accounts={accounts} live={accountsLive} onClose={() => setCorrectOpen(false)} />}
       {viewing && <AccountStatementModal account={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
