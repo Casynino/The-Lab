@@ -16,12 +16,13 @@ const at = new Date('2026-11-10T11:32:00Z'); // 14:32 in Tanzania
 
 // ── to the owner ─────────────────────────────────────────────────────────────
 test('STOCK REQUEST (one product): an arrow line, then the value', () => {
-  assert.equal(t.owner.stockRequest({ by: 'Asha Mwinyi', items: [{ name: 'Pepa King Size', qty: 20 }], total: 760000, when: at }),
+  assert.equal(t.owner.stockRequest({ by: 'Asha Mwinyi', items: [{ name: 'OHIS Ndogo (Brown) Bila Filter', qty: 20 }], total: 760000, when: at }),
 `*STOCK REQUEST*
 
 By: Asha Mwinyi
 
-(1) Pepa King Size: 20 Boxes
+OHIS
+(1) Ndogo (Brown) Bila Filter: 20 Boxes
 
 Total Value: TSh 760,000`);
 });
@@ -30,7 +31,7 @@ test('STOCK REQUEST with several products: one arrow line each, no numbers, then
   const n = (name, qty) => ({ name, qty });
   assert.equal(t.owner.stockRequest({
     by: 'Nyoya',
-    items: [n('OHIS Pepa Ndogo (Brown) – Bila Filter', 2), n('OHIS Pepa Ndogo (White) – Bila Filter', 3), n('OHIS Pepa Ndogo (Brown) – Na Filter', 2), n('OHIS Pepa Kubwa (Brown) – Na Filter', 2)],
+    items: [n('OHIS Ndogo (Brown) Bila Filter', 2), n('Civlily Ndogo (Brown) Bila Filter', 5), n('OHIS Ndogo (White) Bila Filter', 3), n('OHIS Ndogo (Brown) Na Filter', 2), n('OHIS Kubwa (Brown) Na Filter', 2)],
     total: 318000,
     when: new Date('2026-11-10T16:32:00Z'),
   }),
@@ -38,12 +39,16 @@ test('STOCK REQUEST with several products: one arrow line each, no numbers, then
 
 By: Nyoya
 
-(1) OHIS Pepa Ndogo (Brown) – Bila Filter: 2 Boxes
-(2) OHIS Pepa Ndogo (White) – Bila Filter: 3 Boxes
-(3) OHIS Pepa Ndogo (Brown) – Na Filter: 2 Boxes
-(4) OHIS Pepa Kubwa (Brown) – Na Filter: 2 Boxes
+OHIS
+(1) Ndogo (Brown) Bila Filter: 2 Boxes
+(2) Ndogo (White) Bila Filter: 3 Boxes
+(3) Ndogo (Brown) Na Filter: 2 Boxes
+(4) Kubwa (Brown) Na Filter: 2 Boxes
 
-Total Boxes: 9
+Civlily
+(5) Ndogo (Brown) Bila Filter: 5 Boxes
+
+Total Boxes: 14
 Total Value: TSh 318,000`);
 });
 
@@ -52,10 +57,10 @@ test('STOCK REQUEST: a very long request keeps its totals; products drop from th
   const text = t.owner.stockRequest({ by: 'Nyoya', items: many, total: 420000, when: at });
   assert.ok(text.length <= t.MAX_REPORT_CHARS, `${text.length} characters`);
   assert.match(text, /\+\d+ more, see ZELab\n\nTotal Boxes: 32\nTotal Value: TSh 420,000$/);
-  assert.ok(text.includes('(1) OHIS Pepa Ndogo (Colour 1) – Bila Filter: 2 Boxes'));
+  assert.ok(text.startsWith('*STOCK REQUEST*\n\nBy: Nyoya\n\nOHIS\n(1) Pepa Ndogo (Colour 1) – Bila Filter: 2 Boxes\n'));
   // a request that fits is untouched: every product shown
   const four = t.owner.stockRequest({ by: 'A', items: many.slice(0, 4), total: 1, when: at });
-  assert.ok(!four.includes('more, see ZELab') && four.includes('(4) OHIS Pepa Ndogo (Colour 4) – Bila Filter: 2 Boxes'));
+  assert.ok(!four.includes('more, see ZELab') && four.includes('(4) Pepa Ndogo (Colour 4) – Bila Filter: 2 Boxes'));
 });
 
 test('STOCK REQUEST: every product line starts (1)-, (2) — never a bare number; a carton counts as the boxes it holds', () => {
@@ -88,13 +93,14 @@ test('SETTLEMENT SUBMITTED without a payment method or a commission rule leaves 
 });
 
 test('RETURN REQUEST', () => {
-  assert.equal(t.owner.returnRequest({ by: 'Asha Mwinyi', order: 'STL-20261110-0001', items: [{ name: 'Pepa Roll', quantity: 4 }], reason: 'Damaged' }),
+  assert.equal(t.owner.returnRequest({ by: 'Asha Mwinyi', order: 'STL-20261110-0001', items: [{ name: 'Civlily Kubwa (Brown) Na Filter', quantity: 4 }], reason: 'Damaged' }),
 `*RETURN REQUEST*
 
 By: Asha Mwinyi
 Order: STL-20261110-0001
 
-(1) Pepa Roll: 4 Boxes
+Civlily
+(1) Kubwa (Brown) Na Filter: 4 Boxes
 
 Reason: Damaged`);
 });
@@ -445,9 +451,9 @@ test('STOCK REQUEST APPROVED (rep) with its order, deadline and a part-approval'
     order: 'STL-20261111-0001',
     deadline: at,
     items: [
-      { name: 'Civlily Pepa Ndogo (Brown)', approved: 3, requested: 4, unit: 'Box' },
-      { name: 'OHIS Pepa Kubwa (Brown)', approved: 2, requested: 2, unit: 'Box' },
-      { name: 'OHIS Pepa Ndogo (White)', approved: 0, requested: 1, unit: 'Carton' },
+      { name: 'Civlily Ndogo (Brown) Bila Filter', approved: 3, requested: 4, unit: 'Box' },
+      { name: 'OHIS Kubwa (Brown) Na Filter', approved: 2, requested: 2, unit: 'Box' },
+      { name: 'OHIS Ndogo (White) Bila Filter', approved: 0, requested: 1, unit: 'Carton' },
     ],
   }),
 `*STOCK REQUEST APPROVED*
@@ -456,9 +462,12 @@ Request: REQ-20261111-0001
 Order: STL-20261111-0001
 Deadline: 10 Nov 2026 | 14:32 EAT
 
-(1) Civlily Pepa Ndogo (Brown): 3 of 4 Boxes
-(2) OHIS Pepa Kubwa (Brown): 2 Boxes
-(3) OHIS Pepa Ndogo (White): 0 of 1 Carton
+OHIS
+(1) Ndogo (White) Bila Filter: 0 of 1 Carton
+(2) Kubwa (Brown) Na Filter: 2 Boxes
+
+Civlily
+(3) Ndogo (Brown) Bila Filter: 3 of 4 Boxes
 
 Your stock request has been approved and issued.
 Some products were approved in a smaller quantity than you asked for.
@@ -479,13 +488,13 @@ ZELab`);
 // tell the lines apart. Each line now says its city, as on the owner's STOCK REQUEST; one city says none.
 test('STOCK REQUEST APPROVED (rep): a request split between cities says each line\'s city', () => {
   const items = [
-    { name: 'Civlily Kubwa (Brown) – Na Filter', approved: 2, requested: 2, unit: 'Box', city: 'Arusha' },
-    { name: 'Civlily Ndogo (Brown) – Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Arusha' },
-    { name: 'Civlily Kubwa (Brown) – Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Dodoma' },
-    { name: 'OHIS Ndogo (Brown) – Na Filter', approved: 1, requested: 2, unit: 'Box', city: 'Dodoma' },
+    { name: 'Civlily Kubwa (Brown) Na Filter', approved: 2, requested: 2, unit: 'Box', city: 'Arusha' },
+    { name: 'Civlily Ndogo (Brown) Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Arusha' },
+    { name: 'Civlily Kubwa (Brown) Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Dodoma' },
+    { name: 'OHIS Ndogo (Brown) Na Filter', approved: 1, requested: 2, unit: 'Box', city: 'Dodoma' },
   ];
   const text = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'REQ-20261112-0007', order: 'STL-20261112-0018', deadline: at, items });
-  assert.match(text, /\n\(1\) Civlily Kubwa \(Brown\) – Na Filter: 2 Boxes · Arusha\n\(2\) Civlily Ndogo \(Brown\) – Na Filter: 1 Box · Arusha\n\(3\) Civlily Kubwa \(Brown\) – Na Filter: 1 Box · Dodoma\n\(4\) OHIS Ndogo \(Brown\) – Na Filter: 1 of 2 Boxes · Dodoma\n/);
+  assert.match(text, /\n\nOHIS\n\(1\) Ndogo \(Brown\) Na Filter: 1 of 2 Boxes · Dodoma\n\nCivlily\n\(2\) Ndogo \(Brown\) Na Filter: 1 Box · Arusha\n\(3\) Kubwa \(Brown\) Na Filter: 2 Boxes · Arusha\n\(4\) Kubwa \(Brown\) Na Filter: 1 Box · Dodoma\n/);
   // One city only (or old requests with no city): no city on the lines.
   const one = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', items: items.map((i) => ({ ...i, city: 'Arusha' })) });
   assert.doesNotMatch(one, /·/);
@@ -501,8 +510,8 @@ test('STOCK REQUEST CHANGED (rep): one line per product, and a long list never l
     request: 'REQ-20261111-0001',
     by: 'Doctor',
     items: [
-      { name: 'Civlily Pepa Ndogo (Brown)', quantity: 3, unit: 'Box' },
-      { name: 'OHIS Pepa Ndogo (White)', quantity: 1, unit: 'Carton' },
+      { name: 'Civlily Ndogo (Brown) Bila Filter', quantity: 3, unit: 'Box' },
+      { name: 'OHIS Ndogo (White) Bila Filter', quantity: 1, unit: 'Carton' },
     ],
     total: 8500,
   }),
@@ -511,8 +520,11 @@ test('STOCK REQUEST CHANGED (rep): one line per product, and a long list never l
 Request: REQ-20261111-0001
 Changed by: Doctor
 
-(1) Civlily Pepa Ndogo (Brown): 3 Boxes
-(2) OHIS Pepa Ndogo (White): 1 Carton
+OHIS
+(1) Ndogo (White) Bila Filter: 1 Carton
+
+Civlily
+(2) Ndogo (Brown) Bila Filter: 3 Boxes
 
 Total Value: TSh 8,500
 
@@ -679,7 +691,7 @@ Commission: TSh 5,000`);
 test('no WhatsApp text shows when it was sent, and list numbers are "(1) Name" without a dash', () => {
   const at = new Date('2026-11-12T12:23:00Z');
   const texts = [
-    t.owner.stockRequest({ by: 'Mrema', city: 'Arusha', items: [{ name: 'OHIS Ndogo (Brown) – Bila Filter', qty: 1 }, { name: 'OHIS Ndogo (White) – Bila Filter', qty: 1 }], total: 72000, when: at }),
+    t.owner.stockRequest({ by: 'Mrema', city: 'Arusha', items: [{ name: 'OHIS Ndogo (Brown) Bila Filter', qty: 1 }, { name: 'OHIS Ndogo (White) Bila Filter', qty: 1 }], total: 72000, when: at }),
     t.owner.settlementSubmitted({ by: 'Mrema', order: 'STL-1', product: 'OHIS Ndogo (Brown) – Bila Filter', boxes: 2, amount: 70000, method: 'M-Pesa', when: at }),
     t.owner.settlementSubmitted({ by: 'Mrema', order: 'STL-1', when: at, items: [{ product: 'A', boxes: 1 }, { product: 'B', boxes: 2 }], payments: [{ amount: 5, method: 'M-Pesa' }] }),
   ];
@@ -687,5 +699,53 @@ test('no WhatsApp text shows when it was sent, and list numbers are "(1) Name" w
     assert.ok(!/\b(Nov|2026|EAT)\b|\d{1,2}:\d{2}/.test(text), `no date or time:\n${text}`);
     assert.ok(!/\(\d+\)-/.test(text), `no dash after the number:\n${text}`);
   }
-  assert.equal(texts[0], '*STOCK REQUEST*\n\nBy: Mrema\nCity: Arusha\n\n(1) OHIS Ndogo (Brown) – Bila Filter: 1 Box\n(2) OHIS Ndogo (White) – Bila Filter: 1 Box\n\nTotal Boxes: 2\nTotal Value: TSh 72,000');
+  assert.equal(texts[0], '*STOCK REQUEST*\n\nBy: Mrema\nCity: Arusha\n\nOHIS\n(1) Ndogo (Brown) Bila Filter: 1 Box\n(2) Ndogo (White) Bila Filter: 1 Box\n\nTotal Boxes: 2\nTotal Value: TSh 72,000');
+});
+
+// Nino, 12 Nov 2026: "(3) OHIS Ndogo (Brown) Na Filter: 11 Boxes" ran onto two lines on his phone (about 43
+// characters fit). Lists now stand under their brand, written once, so every product is one short line.
+test('lists stand under their brand (OHIS, then Civlily) and every product line fits one phone line', () => {
+  const n = (name, qty) => ({ name, qty });
+  assert.equal(t.owner.stockRequest({
+    by: 'Mrema',
+    city: 'Arusha',
+    items: [n('OHIS Ndogo (Brown) Bila Filter', 1), n('OHIS Ndogo (White) Bila Filter', 1), n('OHIS Ndogo (Brown) Na Filter', 11),
+      n('OHIS Kubwa (Brown) Na Filter', 11), n('OHIS Kubwa (Brown) Bila Filter', 4), n('Civlily Ndogo (Brown) Bila Filter', 5)],
+    total: 1289000,
+  }),
+`*STOCK REQUEST*
+
+By: Mrema
+City: Arusha
+
+OHIS
+(1) Ndogo (Brown) Bila Filter: 1 Box
+(2) Ndogo (White) Bila Filter: 1 Box
+(3) Ndogo (Brown) Na Filter: 11 Boxes
+(4) Kubwa (Brown) Na Filter: 11 Boxes
+(5) Kubwa (Brown) Bila Filter: 4 Boxes
+
+Civlily
+(6) Ndogo (Brown) Bila Filter: 5 Boxes
+
+Total Boxes: 33
+Total Value: TSh 1,289,000`);
+  // Every product we sell, 99 boxes each, in one request: all shown, no line longer than 41 characters.
+  const all = ['OHIS Ndogo (Brown) Bila Filter', 'OHIS Ndogo (White) Bila Filter', 'OHIS Ndogo (Brown) Na Filter', 'OHIS Kubwa (Brown) Na Filter',
+    'OHIS Kubwa (Brown) Bila Filter', 'Civlily Ndogo (Brown) Bila Filter', 'Civlily Ndogo (White) Bila Filter', 'Civlily Ndogo (Brown) Na Filter',
+    'Civlily Kubwa (Brown) Bila Filter', 'Civlily Kubwa (White) Bila Filter', 'Civlily Kubwa (Brown) Na Filter', 'Civlily Kubwa (Mix) Na Filter',
+    'Civlily Ndogo (Mix) Bila Filter'];
+  const texts = [
+    t.owner.stockRequest({ by: 'Mrema', items: all.reverse().map((name) => n(name, 99)), total: 1 }),
+    t.owner.returnRequest({ by: 'Mrema', items: all.map((name) => ({ name, quantity: 99 })) }),
+    t.repText({ kind: 'STOCK_ISSUED', transfer: 'TRF-1', items: all.map((name) => ({ name, quantity: 99, unit: 'Box' })) }),
+  ];
+  for (const text of texts) {
+    assert.ok(!text.includes('more, see ZELab'), 'all 13 products shown');
+    assert.match(text, /\n\nOHIS\n\(1\) Ndogo \(Brown\) Bila Filter: 99 Boxes\n/);
+    assert.match(text, /\n\nCivlily\n\(6\) Ndogo \(Brown\) Bila Filter: 99 Boxes\n/);
+    const productLines = text.split('\n').filter((l) => /^\(\d+\) /.test(l));
+    assert.equal(productLines.length, 13);
+    for (const l of productLines) assert.ok(l.length <= 41, `too long for one phone line: "${l}"`);
+  }
 });

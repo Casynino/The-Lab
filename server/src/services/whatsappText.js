@@ -55,10 +55,47 @@ const bold = (s) => `*${s}*`;
 const lines = (...l) => l.filter((x) => x !== null && x !== undefined && x !== false && x !== '').join('\n');
 const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p !== false && p !== '').join('\n\n');
 
+// A list of products under their brand (Nino, 12 Nov 2026: "(3) OHIS Ndogo (Brown) Na Filter: 11 Boxes" ran onto
+// two lines on the phone). The brand stands once as a heading — OHIS first, then Civlily, then other brands A-Z —
+// and each product is ONE short line without it, numbered on through the whole message:
+//   OHIS
+//   (1) Ndogo (Brown) Bila Filter: 1 Box
+//   (2) Kubwa (Brown) Na Filter: 11 Boxes
+//
+//   Civlily
+//   (3) Ndogo (Brown) Bila Filter: 5 Boxes
+// The brand is the item's `brand`, else the first word of its name (every product is named "<Brand> …"); a
+// one-word name has no heading. `line(item, shortName, k)` writes a product line. Only the first `shown`
+// products are written; the rest are counted in a last "+N more, see ZELab" line.
+const brandOf = (i) => {
+  if (i && i.brand) return String(i.brand).trim();
+  const words = String((i && i.name) || '').trim().split(/\s+/);
+  return words.length > 1 ? words[0] : '';
+};
+const withoutBrand = (name, brand) => {
+  const n = String(name || '').trim();
+  return brand && n.toLowerCase().startsWith(`${brand.toLowerCase()} `) ? n.slice(brand.length).trim() : n;
+};
+function byBrand(items, line, shown = items.length) {
+  const sorted = items
+    .map((item, at) => ({ item, at, brand: brandOf(item) }))
+    .sort((a, b) => compareBrands(a.brand, b.brand) || compareProducts(a.item.name, b.item.name) || a.at - b.at);
+  const groups = [];
+  sorted.slice(0, shown).forEach((e, k) => {
+    const key = e.brand.toLowerCase();
+    let g = groups[groups.length - 1];
+    if (!g || g.key !== key) { g = { key, brand: e.brand, rows: [] }; groups.push(g); }
+    g.rows.push(line(e.item, withoutBrand(e.item.name, e.brand), k));
+  });
+  const more = shown < items.length && `+${items.length - shown} more, see ZELab`; // right under the last line
+  if (more && groups.length) groups[groups.length - 1].rows.push(more);
+  return doc(...groups.map((g) => lines(g.brand, ...g.rows)), !groups.length && more);
+}
+
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  // The products are numbered, one line each: "(1) Name: 2 Boxes", "(2) Name: 3 Boxes" — numbered, not
+  // The products are numbered under their brand (byBrand), one line each: "(1) Ndogo (Brown) Bila Filter: 2 Boxes" — numbered, not
   // numbers, so nothing in front of a name can be read as a number of boxes (Nino chose this on 11 Nov 2026
   // after trying "1-Name", "Product 1:" and arrows). Then, for several products, the box count of the whole
   // request (a carton counts as the boxes it holds: `boxes`), and the value.
@@ -77,7 +114,7 @@ const owner = {
       : `Total Value: ${money(total)}`;
     const build = ({ shown }) => doc(
       ...head,
-      lines(...items.slice(0, shown).map((i, k) => `${mark(k)}${i.name}: ${boxes(i.qty, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
+      items.length > 0 && byBrand(items, (i, name, k) => `${mark(k)}${name}: ${boxes(i.qty, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`, shown),
       tail,
     );
     const steps = [];
@@ -123,7 +160,7 @@ const owner = {
     return doc(
       bold('RETURN REQUEST'),
       lines(`By: ${by}`, order && `Order: ${order}`),
-      items.length > 0 && lines(...items.map((i, k) => `${mark(k)}${i.name}: ${boxes(i.quantity)}`)),
+      items.length > 0 && byBrand(items, (i, name, k) => `${mark(k)}${name}: ${boxes(i.quantity)}`),
       items.length > 1 && `Total Boxes: ${Math.round(total)}`,
       reason && `Reason: ${reason}`,
     );
@@ -294,13 +331,13 @@ const stockRequestApproved = ({ request, order, deadline, items }) => {
   const short = (i) => Number(i.approved) < Number(i.requested);
   const cut = list.some(short);
   const split = new Set(list.map((i) => i.city).filter(Boolean)).size > 1;
-  const line = (i, k) => `${mark(k)}${i.name}: ${short(i)
+  const line = (i, name, k) => `${mark(k)}${name}: ${short(i)
     ? `${Math.round(Number(i.approved) || 0)} of ${boxes(i.requested, i.unit)}`
     : boxes(i.approved, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`;
   const build = ({ shown }) => rep(
     'STOCK REQUEST APPROVED',
     lines(`Request: ${request}`, order && `Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`),
-    list.length > 0 && lines(...list.slice(0, shown).map(line), shown < list.length && `+${list.length - shown} more, see ZELab`),
+    list.length > 0 && byBrand(list, line, shown),
     lines('Your stock request has been approved and issued.', cut && 'Some products were approved in a smaller quantity than you asked for.'),
   );
   const steps = [];
@@ -313,11 +350,11 @@ const stockRequestApproved = ({ request, order, deadline, items }) => {
 // same shape as the approved request. A very long list drops products from the end, never the deadline.
 const stockIssued = ({ transfer, order, deadline, items }) => {
   const list = Array.isArray(items) ? items : [];
-  const line = (i, k) => `${mark(k)}${i.name}: ${boxes(i.quantity, i.unit)}`;
+  const line = (i, name, k) => `${mark(k)}${name}: ${boxes(i.quantity, i.unit)}`;
   const build = ({ shown }) => rep(
     'STOCK ISSUED',
     lines(transfer && `Transfer: ${transfer}`, order && `Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`),
-    list.length > 0 && lines(...list.slice(0, shown).map(line), shown < list.length && `+${list.length - shown} more, see ZELab`),
+    list.length > 0 && byBrand(list, line, shown),
     'Stock has been issued to you. Settle or return it before the deadline.',
   );
   const steps = [];
@@ -331,11 +368,11 @@ const stockIssued = ({ transfer, order, deadline, items }) => {
 // list drops products from the end ("+2 more, see ZELab"), never the total.
 const stockRequestChanged = ({ request, by, items, total }) => {
   const list = Array.isArray(items) ? items : [];
-  const line = (i, k) => `${mark(k)}${i.name}: ${boxes(i.quantity, i.unit)}`;
+  const line = (i, name, k) => `${mark(k)}${name}: ${boxes(i.quantity, i.unit)}`;
   const build = ({ shown }) => rep(
     'STOCK REQUEST CHANGED',
     lines(`Request: ${request}`, by && `Changed by: ${by}`),
-    list.length > 0 && lines(...list.slice(0, shown).map(line), shown < list.length && `+${list.length - shown} more, see ZELab`),
+    list.length > 0 && byBrand(list, line, shown),
     total != null && `Total Value: ${money(total)}`,
     'Your pending request has been changed. This is what it is now.',
   );

@@ -194,8 +194,11 @@ Transfer: TRF-20261111-0011
 Order: STL-20261111-0011
 Deadline: 14 Nov 2026 | 07:48 EAT
 
-(1) OHIS Pepa Ndogo (Brown): 3 Boxes
-(2) Civlily Pepa Kubwa (White): 1 Box
+OHIS
+(1) Pepa Ndogo (Brown): 3 Boxes
+
+Civlily
+(2) Pepa Kubwa (White): 1 Box
 
 Stock has been issued to you. Settle or return it before the deadline.
 
