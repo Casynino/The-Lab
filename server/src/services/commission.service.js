@@ -25,7 +25,10 @@ async function getRule() {
   });
   const map = new Map(rows.map((r) => [r.key, Number(r.value)]));
   const boxThreshold = map.get('commission.boxThreshold') || 50;
-  const amountPerThreshold = map.get('commission.amountPerThreshold') || 250000;
+  // Only a real figure above zero counts; anything else stored (blank, "250,000", 0, a minus) is the default,
+  // so a bad value can never remove the minimum (Settings now refuses such values; audit 11 Nov 2026).
+  const minSetting = map.get('commission.amountPerThreshold');
+  const amountPerThreshold = Number.isFinite(minSetting) && minSetting > 0 ? minSetting : 250000;
   // Pre-migration databases fall back to the old derivation, so the rate a rep
   // was earning does not jump the moment this ships.
   const perBox = map.get('commission.v1PerBox') || round2(amountPerThreshold / boxThreshold);

@@ -3,8 +3,9 @@
 // ── Rep daily reports and the account statement (repUI/finance audit, 11 Nov 2026) ─────────────────
 // 1. A daily report is filed under the Tanzanian day it was sent, whatever clock the server runs on:
 //    the server took its OWN local midnight, so on Tanzania time every report landed on yesterday's
-//    DATE, and on UTC (Vercel) the first three hours of each morning did. A second send only writes
-//    what was filled in (it used to null every earlier figure), and an empty report is refused.
+//    DATE, and on UTC (Vercel) the first three hours of each morning did. A blank field is not written,
+//    and an empty report is refused. A second report of the same kind the same day must say which one it
+//    changes (the app opens the first to edit); a blind second send is refused (rep-app-3).
 // 2. The statement's "balance after" column carries on from page to page: every page used to restart
 //    at today's balance. listTransactions now sends the in-minus-out of the rows on earlier pages.
 
@@ -17,7 +18,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 // ── In-memory Prisma ────────────────────────────────────────────────────────
-const upserts = [];
+const reports = new Map(); // `${rep}|${day}|${type}` -> row
+const writes = []; // { op: 'create' | 'update', data, id? }
+const keyOf = ({ salesRepId, reportDate, type }) => `${salesRepId}|${reportDate.toISOString()}|${type}`;
 const txns = [];
 const sortRows = (list, orderBy) => {
   const keys = (Array.isArray(orderBy) ? orderBy : [orderBy]).flatMap((o) => Object.entries(o));
@@ -34,7 +37,22 @@ const sortRows = (list, orderBy) => {
 const onAccount = (where) => txns.filter((t) => !where.accountId || t.accountId === where.accountId);
 const prismaStub = {
   dailyReport: {
-    upsert: async (args) => { upserts.push(args); return { id: 'dr1', ...args.create }; },
+    findUnique: async ({ where }) => {
+      const row = reports.get(keyOf(where.salesRepId_reportDate_type));
+      return row ? { ...row } : null;
+    },
+    create: async ({ data }) => {
+      writes.push({ op: 'create', data });
+      const row = { id: `dr${reports.size + 1}`, ...data };
+      reports.set(keyOf(data), row);
+      return row;
+    },
+    update: async ({ where, data }) => {
+      writes.push({ op: 'update', id: where.id, data });
+      const row = [...reports.values()].find((r) => r.id === where.id);
+      Object.assign(row, data);
+      return { ...row };
+    },
   },
   financeTransaction: {
     findMany: async ({ where, orderBy, skip = 0, take }) => {
@@ -60,35 +78,73 @@ const iso = (d) => d.toISOString();
 
 // ── 1. Daily reports ────────────────────────────────────────────────────────
 
+const fresh = () => { reports.clear(); writes.length = 0; };
+
 test('a report sent at 07:28 Tanzania time on 11 Nov is filed under 11 Nov, not 10 Nov', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-11T04:28:20Z') });
-  upserts.length = 0;
+  fresh();
   await dailyReport.submit('rep9', { type: 'OPENING', cashOnHand: 50000, customersToVisit: 6 });
-  assert.equal(iso(upserts[0].where.salesRepId_reportDate_type.reportDate), '2026-11-11T00:00:00.000Z');
+  assert.equal(iso(writes[0].data.reportDate), '2026-11-11T00:00:00.000Z');
 });
 
 test('just after midnight in Tanzania (still the 10th in UTC) the report is the 11th', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-10T22:15:00Z') }); // 01:15 EAT, 11 Nov
-  upserts.length = 0;
+  fresh();
   await dailyReport.submit('rep9', { type: 'CLOSING', salesAmount: 1000 });
-  assert.equal(iso(upserts[0].create.reportDate), '2026-11-11T00:00:00.000Z');
+  assert.equal(iso(writes[0].data.reportDate), '2026-11-11T00:00:00.000Z');
 });
 
 test('a date sent with the report is that calendar date', async () => {
-  upserts.length = 0;
+  fresh();
   await dailyReport.submit('rep9', { type: 'OPENING', reportDate: '2026-11-09', cashOnHand: 1 });
-  assert.equal(iso(upserts[0].create.reportDate), '2026-11-09T00:00:00.000Z');
+  assert.equal(iso(writes[0].data.reportDate), '2026-11-09T00:00:00.000Z');
   await assert.rejects(dailyReport.submit('rep9', { type: 'OPENING', reportDate: 'not-a-date', cashOnHand: 1 }), (e) => e.statusCode === 400);
 });
 
-test('sending again only writes what was filled in — the earlier figures are not wiped', async () => {
-  upserts.length = 0;
-  await dailyReport.submit('rep9', { type: 'OPENING', customersToVisit: 8, openingNote: '   ' });
-  assert.deepEqual(upserts[0].update, { customersToVisit: 8 });
-  assert.equal('cashOnHand' in upserts[0].update, false);
-  // A zero is a figure, not a blank.
-  await dailyReport.submit('rep9', { type: 'OPENING', cashOnHand: 0 });
-  assert.deepEqual(upserts[1].update, { cashOnHand: 0 });
+test('a blank field is not written; a zero is a figure', async () => {
+  fresh();
+  await dailyReport.submit('rep9', { type: 'OPENING', customersToVisit: 8, cashOnHand: 0, openingNote: '   ' });
+  assert.equal(writes[0].op, 'create');
+  assert.equal(writes[0].data.customersToVisit, 8);
+  assert.equal(writes[0].data.cashOnHand, 0);
+  assert.equal('openingNote' in writes[0].data, false);
+});
+
+// rep-app-3 (audit 11 Nov 2026): a second "Opening" the same day silently replaced the morning cash figure
+// and kept the rest, so the saved report mixed two submissions.
+test('a second report of the same kind the same day is refused unless it says it changes the first', async () => {
+  fresh();
+  await dailyReport.submit('rep9', { type: 'OPENING', cashOnHand: 70000, customersToVisit: 4, openingNote: 'Kariakoo' });
+  await assert.rejects(
+    dailyReport.submit('rep9', { type: 'OPENING', cashOnHand: 2 }),
+    (e) => e.statusCode === 409 && /already sent today's opening report/.test(e.message),
+  );
+  await assert.rejects(dailyReport.submit('rep9', { type: 'OPENING', cashOnHand: 2, replaces: 'someone-else' }), (e) => e.statusCode === 409);
+  assert.equal(writes.length, 1, 'the first report is untouched');
+  assert.equal(reports.get([...reports.keys()][0]).cashOnHand, 70000);
+  // the closing report is its own report
+  const { previous: none } = await dailyReport.submit('rep9', { type: 'CLOSING', salesAmount: 1000 });
+  assert.equal(none, null);
+});
+
+test('changing the first report: every field sent replaces it, null clears one, and what it held is returned', async () => {
+  fresh();
+  const { report: first } = await dailyReport.submit('rep9', { type: 'OPENING', cashOnHand: 70000, customersToVisit: 4, openingNote: 'Kariakoo' });
+  const { report, previous } = await dailyReport.submit('rep9', {
+    type: 'OPENING', replaces: first.id, cashOnHand: 65000, customersToVisit: null, openingNote: 'Kariakoo, then Mbezi',
+  });
+  assert.equal(writes[1].op, 'update');
+  assert.deepEqual(writes[1].data, { cashOnHand: 65000, customersToVisit: null, openingNote: 'Kariakoo, then Mbezi' });
+  assert.equal(report.cashOnHand, 65000);
+  assert.equal(report.customersToVisit, null);
+  assert.equal(previous.cashOnHand, 70000);
+  assert.equal(previous.customersToVisit, 4);
+  assert.equal(reports.size, 1, 'still one opening report that day');
+});
+
+test('the input check keeps `replaces`', () => {
+  const parsed = dailyReportSubmit.body.parse({ type: 'OPENING', replaces: 'cmwchp4ix01oy5y4g6y6kqy0t', cashOnHand: 1 });
+  assert.equal(parsed.replaces, 'cmwchp4ix01oy5y4g6y6kqy0t');
 });
 
 test('the list filter uses calendar dates, not the server\'s midnight', async () => {

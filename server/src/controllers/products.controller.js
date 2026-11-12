@@ -5,12 +5,15 @@ const { ok, created, paginated } = require('../utils/response');
 const { parsePagination } = require('../utils/pagination');
 const productsService = require('../services/products.service');
 const audit = require('../services/audit.service');
-const { forRole } = require('../utils/repView');
+const { forRole, productsForRole } = require('../utils/repView');
+
+const isRep = (req) => Boolean(req.user && req.user.role === 'SALES_REP');
 
 const list = asyncHandler(async (req, res) => {
   const q = req.validatedQuery || req.query;
   const pagination = parsePagination(q, {
-    allowedSortFields: ['name', 'sku', 'sellingPrice', 'purchasePrice', 'createdAt', 'updatedAt'],
+    // A rep cannot sort by cost either: the order alone would tell him what each product costs ZELab.
+    allowedSortFields: ['name', 'sku', 'sellingPrice', ...(isRep(req) ? [] : ['purchasePrice']), 'createdAt', 'updatedAt'],
     defaultSortBy: 'name',
     defaultSortDir: 'asc',
   });
@@ -18,12 +21,12 @@ const list = asyncHandler(async (req, res) => {
     { brandId: q.brandId, categoryId: q.categoryId, isActive: q.isActive, search: q.search },
     pagination,
   );
-  return paginated(res, forRole(req, items), { page: pagination.page, limit: pagination.limit, total });
+  return paginated(res, forRole(req, productsForRole(req, items)), { page: pagination.page, limit: pagination.limit, total });
 });
 
 const get = asyncHandler(async (req, res) => {
   const product = await productsService.getProduct(req.params.id);
-  return ok(res, forRole(req, product));
+  return ok(res, forRole(req, productsForRole(req, product)));
 });
 
 const create = asyncHandler(async (req, res) => {

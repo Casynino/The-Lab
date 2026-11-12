@@ -24,4 +24,20 @@ function stripCosts(value) {
 
 const forRole = (req, data) => (req.user && req.user.role === 'SALES_REP' ? stripCosts(data) : data);
 
-module.exports = { stripCosts, forRole, COST_KEYS };
+// What a sales rep must not see on a product (audit 11 Nov 2026, rep-app-2): how many boxes the
+// warehouses hold, the minimum and reorder levels, and which other reps hold boxes of it and how many.
+// Only the products answers carry these; a rep's own stock comes from his own endpoints, and the request
+// sheet learns what is in stock from /stock-requests/available-products.
+const PRODUCT_STOCK_KEYS = ['onHandBase', 'warehouseBase', 'lowStock', 'minStockLevel', 'reorderQuantity', 'warehouseBalances', 'repBalances'];
+
+function stripProductStock(product) {
+  if (Array.isArray(product)) return product.map(stripProductStock);
+  if (!product || typeof product !== 'object') return product;
+  const out = { ...product };
+  for (const k of PRODUCT_STOCK_KEYS) delete out[k];
+  return out;
+}
+
+const productsForRole = (req, data) => (req.user && req.user.role === 'SALES_REP' ? stripProductStock(data) : data);
+
+module.exports = { stripCosts, forRole, COST_KEYS, stripProductStock, productsForRole, PRODUCT_STOCK_KEYS };

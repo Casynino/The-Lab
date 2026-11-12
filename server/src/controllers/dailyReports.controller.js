@@ -10,7 +10,19 @@ const { ROLES } = require('../middleware/authorize');
 
 const submit = asyncHandler(async (req, res) => {
   if (!req.user.salesRepId) throw ApiError.forbidden('Only sales representatives submit daily reports');
-  const report = await dailyReport.submit(req.user.salesRepId, req.body);
+  const { report, previous } = await dailyReport.submit(req.user.salesRepId, req.body);
+  if (previous) {
+    // The rep changed the report he sent earlier today: what it said before stays in the audit log.
+    const fields = dailyReport.FIELDS.filter((k) => previous[k] !== report[k] && String(previous[k]) !== String(report[k]));
+    await audit.record(req, {
+      action: 'UPDATE',
+      entityType: 'DailyReport',
+      entityId: report.id,
+      oldValues: Object.fromEntries(fields.map((k) => [k, previous[k]])),
+      newValues: { type: report.type, ...Object.fromEntries(fields.map((k) => [k, report[k]])) },
+    });
+    return ok(res, report);
+  }
   await audit.record(req, { action: 'SUBMIT', entityType: 'DailyReport', entityId: report.id, newValues: { type: report.type } });
   return created(res, report);
 });

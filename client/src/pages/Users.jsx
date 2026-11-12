@@ -6,7 +6,7 @@ import { UserPlus, Pencil, Power, Trash2 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { keepOnPageTurn } from '@/lib/pageQueries';
 import { useWarehouses, useDebounce } from '@/lib/hooks';
-import { ROLE_LABELS } from '@/lib/constants';
+import { ROLE_LABELS, defaultUserRoleId } from '@/lib/constants';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateTime } from '@/lib/format';
 import RegionPicker from '@/components/RegionPicker';
@@ -15,13 +15,17 @@ import {
   SearchInput, Pagination, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
-function UserModal({ open, onClose, editing, roles, warehouses }) {
+function UserModal({ open, onClose, editing, roles, warehouses, me }) {
   const qc = useQueryClient();
   const isEdit = !!editing;
+  // Your own account: the role and the Active switch are not offered — the server refuses both, because an
+  // owner who demoted or switched off himself would lock everyone out of Users (audit 11 Nov 2026).
+  const isSelf = isEdit && editing.id === me?.id;
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm({
     defaultValues: editing
       ? { name: editing.name, email: editing.email, phone: editing.phone || '', roleId: editing.roleId, warehouseId: editing.warehouse?.id || '', isActive: editing.isActive }
-      : { name: '', email: '', password: '', phone: '', roleId: roles[0]?.id || '', warehouseId: '', isActive: true },
+      // A new account starts with no role, so one must be chosen (see defaultUserRoleId).
+      : { name: '', email: '', password: '', phone: '', roleId: defaultUserRoleId(), warehouseId: '', isActive: true },
   });
 
   // Not part of the react-hook-form values: it is a list, picked with chips.
@@ -34,6 +38,7 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
     mutationFn: (values) => {
       const payload = { ...values, warehouseId: values.warehouseId || null };
       if (!payload.password) delete payload.password;
+      if (isSelf) { delete payload.roleId; delete payload.isActive; }
       if (isEdit) return api.put(`/users/${editing.id}`, payload);
       if (isRep) payload.salesRep = { regions };
       delete payload.region;
@@ -74,8 +79,14 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
           <Input type="password" {...register('password', isEdit ? {} : { required: 'Password is required', minLength: { value: 8, message: 'Min 8 characters' } })} />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Role" required>
-            <Select {...register('roleId', { required: true })}>
+          <Field
+            label="Role"
+            required
+            error={errors.roleId?.message}
+            hint={isSelf ? 'Your own role cannot be changed.' : selectedRole?.name === 'ADMIN' ? 'Full owner powers: money, settings, users and the audit log.' : undefined}
+          >
+            <Select {...register('roleId', { required: 'Choose a role' })} disabled={isSelf}>
+              <option value="" disabled>Choose a role…</option>
               {roles.map((r) => <option key={r.id} value={r.id}>{ROLE_LABELS[r.name] || r.name}</option>)}
             </Select>
           </Field>
@@ -91,9 +102,11 @@ function UserModal({ open, onClose, editing, roles, warehouses }) {
             <RegionPicker value={regions} onChange={setRegions} />
           </Field>
         )}
-        <label className="flex items-center gap-2 text-sm text-foreground">
-          <input type="checkbox" {...register('isActive')} className="h-4 w-4 rounded border-slate-300" /> Active
-        </label>
+        {!isSelf && (
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input type="checkbox" {...register('isActive')} className="h-4 w-4 rounded border-slate-300" /> Active
+          </label>
+        )}
       </div>
     </Modal>
   );
@@ -230,7 +243,7 @@ export default function Users() {
         />
       )}
 
-      {modal.open && <UserModal open={modal.open} editing={modal.editing} roles={roles} warehouses={warehouses} onClose={() => setModal({ open: false, editing: null })} />}
+      {modal.open && <UserModal open={modal.open} editing={modal.editing} roles={roles} warehouses={warehouses} me={me} onClose={() => setModal({ open: false, editing: null })} />}
     </div>
   );
 }

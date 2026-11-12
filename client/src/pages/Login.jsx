@@ -159,6 +159,8 @@ function Gate({ children, defaultOpen = false }) {
     timer.current = window.setTimeout(() => { setOpen(false); setClosing(false); }, 160);
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // A reason that arrives after the page is drawn (the session check on opening was refused) opens the card too.
+  useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
 
   /* Open the card AND put the cursor in the email box, in the same tap. That is
      what makes the phone offer the saved login straight away — the suggestion
@@ -280,6 +282,14 @@ export default function Login() {
     defaultValues: { email: '', password: '' },
   });
 
+  // Opened at the sign-in page with a kept session that the server then refused (a rep suspended, an account
+  // switched off): the reason is written while this page is already on screen, so read it again once the
+  // check is over (audit 11 Nov 2026, auth-device-4).
+  useEffect(() => {
+    if (loading) return;
+    try { const s = sessionStorage.getItem(RESTRICTED_KEY); if (s) setRestricted(JSON.parse(s)); } catch { /* private window */ }
+  }, [loading]);
+
   if (!loading && isAuthenticated) return <Navigate to={from} replace />;
 
   const onSubmit = async (values) => {
@@ -291,6 +301,10 @@ export default function Login() {
       navigate(from, { replace: true });
     } else if (res.reason === 'DEVICE_RESTRICTED') {
       setRestricted({ message: res.message, hint: res.hint });
+    } else if (res.refusal) {
+      // The right password, but the account is suspended or switched off: said in the card and kept there,
+      // not in a toast that is gone in a few seconds. A wrong password stays a toast.
+      setRestricted({ message: res.refusal });
     } else {
       toast.error(res.message);
     }

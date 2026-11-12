@@ -43,7 +43,7 @@ stub('../src/config/prisma', {
 });
 stub('../src/services/notification.service', { notifyUser: async () => {}, notifyAdmins: async () => {} });
 const audits = [];
-stub('../src/services/audit.service', { record: async (_req, entry) => { audits.push(entry); }, log: async () => {} });
+stub('../src/services/audit.service', { record: async (req, entry) => { audits.push({ ...entry, by: req?.user?.id || null }); }, log: async () => {} });
 
 const auth = require('../src/services/auth.service');
 const tokens = require('../src/utils/tokens');
@@ -159,4 +159,6 @@ test('#102 wrong passwords still count: the 21st try in 15 minutes is refused as
   audits.length = 0;
   await withApp(async (login) => assert.equal((await login('owner@zelab.test', PASSWORD, COMPUTER)).status, 200));
   assert.deepEqual(audits.map((a) => a.action), ['LOGIN']);
+  // the person who signed in is the one who did it (admin-system-6: the log read "The system signed in")
+  assert.equal(audits[0].by, 'a1');
 });

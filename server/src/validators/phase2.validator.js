@@ -173,6 +173,8 @@ const dailyReportSubmit = {
   body: z.object({
     type: z.enum(['OPENING', 'CLOSING']),
     reportDate: dateStr,
+    // The report sent earlier the same day that this one changes (dailyReport.service submit).
+    replaces: id.optional(),
     cashOnHand: money.optional().nullable(),
     customersToVisit: z.number().int().min(0).optional().nullable(),
     openingNote: z.string().max(1000).optional().nullable(),

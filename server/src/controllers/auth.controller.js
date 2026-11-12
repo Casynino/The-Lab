@@ -29,7 +29,9 @@ const login = asyncHandler(async (req, res) => {
     await recordRefusedLogin(req, res, email, err);
     throw err;
   }
-  await auditService.record(req, {
+  // The person who signed in did it: there is no req.user yet at sign-in, so the row had no person, read
+  // "The system signed in" and was missed by a search for his name (audit 11 Nov 2026, admin-system-6).
+  await auditService.record({ headers: req.headers, ip: req.ip, socket: req.socket, user: { id: result.user.id } }, {
     action: 'LOGIN',
     entityType: 'User',
     entityId: result.user.id,
@@ -49,7 +51,24 @@ const me = asyncHandler(async (req, res) => {
 
 const changePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  const result = await authService.changePassword(req.user.id, currentPassword, newPassword);
+  let result;
+  try {
+    result = await authService.changePassword(req.user.id, currentPassword, newPassword);
+  } catch (err) {
+    // A wrong current password is a guess at the password by whoever holds this session: it is written
+    // down (never the password itself) and counted by the per-account limiter in auth.routes.js, which
+    // counts only these (audit 11 Nov 2026, auth-device-2).
+    if (err && err.statusCode === 400 && err.message === authService.WRONG_CURRENT_PASSWORD) {
+      res.locals.wrongPassword = true;
+      await auditService.record(req, {
+        action: 'CHANGE_PASSWORD_FAILED',
+        entityType: 'User',
+        entityId: req.user.id,
+        newValues: { reason: err.message },
+      });
+    }
+    throw err;
+  }
   await auditService.record(req, {
     action: 'CHANGE_PASSWORD',
     entityType: 'User',
