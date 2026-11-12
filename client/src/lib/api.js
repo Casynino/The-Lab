@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { queryClient } from '@/lib/queryClient';
 import { CACHE_KEY } from '@/lib/cacheSnapshot';
-import { renewsOn401, accountRefusal } from '@/lib/sessionCheck';
+import { renewsOn401, accountRefusal, renewalFailureEndsSession, SIGNED_OUT_MEANWHILE } from '@/lib/sessionCheck';
 
 const TOKEN_KEY = 'haostock.accessToken';
 // When this tab last reloaded itself to answer the host's security challenge.
@@ -92,7 +92,7 @@ api.interceptors.response.use(
           api.post('/auth/refresh', { refreshToken: tokenStore.getRefresh() }).then((r) => {
             // Signed out while this was on its way (another request was refused at the same moment, or
             // the person signed out): a late answer must not sign them back in.
-            if (!tokenStore.getRefresh()) throw new Error('Signed out');
+            if (!tokenStore.getRefresh()) throw new Error(SIGNED_OUT_MEANWHILE);
             const { accessToken, refreshToken } = r.data.data.tokens;
             tokenStore.set(accessToken, refreshToken);
             return accessToken;
@@ -103,6 +103,9 @@ api.interceptors.response.use(
         return api(original);
       } catch (e) {
         refreshing = null;
+        // No answer to the renewal (no signal, a server error, the host in the way): the keys stay and the
+        // call fails as a connection problem; opening the app asks again a little later (sessionCheck.js).
+        if (!renewalFailureEndsSession(e)) return Promise.reject(e);
         rememberRefusal(e);
         tokenStore.clear();
         if (!window.location.pathname.startsWith('/login')) window.location.assign('/login');

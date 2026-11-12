@@ -31,6 +31,18 @@ export function renewsOn401(url) {
 }
 
 /*
+  WHEN A FAILED RENEWAL ENDS THE SESSION (audit 11 Nov 2026, auth-device-3 rework).
+  Only when the server itself refused the 30-day key (expired, ended, account switched off or suspended), or
+  the person was signed out while the renewal was on its way. The renewal getting no answer (no signal, a
+  server error, the host's firewall, a Wi-Fi login page) is not a refusal: the keys are kept, so opening
+  the app in a dead spot waits and asks again (audit #116) instead of signing the rep out.
+*/
+export const SIGNED_OUT_MEANWHILE = 'Signed out';
+export function renewalFailureEndsSession(error) {
+  return error?.message === SIGNED_OUT_MEANWHILE || sessionRefused(error);
+}
+
+/*
   A REFUSAL THAT IS ABOUT THE ACCOUNT, NOT THE KEY (audit 11 Nov 2026, auth-device-4).
   A rep suspended, an account switched off or not set up: the person must read why on the sign-in page,
   not land there with no word (an open session) or see it pass in a toast (signing in). An expired or

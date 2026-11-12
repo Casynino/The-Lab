@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sessionRefused, retryDelay, renewsOn401, accountRefusal } from './sessionCheck.js';
+import { sessionRefused, retryDelay, renewsOn401, accountRefusal, renewalFailureEndsSession, SIGNED_OUT_MEANWHILE } from './sessionCheck.js';
 
 const answered = (status, data) => ({ response: { status, data } });
 const appSaid = (status, message) => answered(status, { success: false, error: { message, code: status } });
@@ -37,6 +37,26 @@ test('opening the app with an expired key renews it: /auth/me tries the renewal 
   // Not fooled by a longer address that only starts the same way.
   assert.equal(renewsOn401('/auth/login-history'), true);
   assert.equal(renewsOn401(undefined), true);
+});
+
+test('a renewal with no answer keeps the keys; only the server refusing it (or a sign-out meanwhile) ends the session', () => {
+  // Opening the app with an expired key in a dead spot (auth-device-3 rework): the 30-day key is kept.
+  assert.equal(renewalFailureEndsSession({ message: 'Network Error', code: 'ERR_NETWORK' }), false);
+  assert.equal(renewalFailureEndsSession({ code: 'ECONNABORTED', message: 'timeout of 0ms exceeded' }), false);
+  assert.equal(renewalFailureEndsSession(appSaid(500, 'Internal server error')), false);
+  assert.equal(renewalFailureEndsSession(answered(502, '<html>Bad gateway</html>')), false);
+  assert.equal(renewalFailureEndsSession(answered(403, '')), false); // the host's firewall challenge
+  assert.equal(renewalFailureEndsSession(answered(429, '')), false);
+  // A Wi-Fi login page answering 200 with HTML: reading the new keys fails, which is not a refusal either.
+  assert.equal(renewalFailureEndsSession(new TypeError("Cannot read properties of undefined (reading 'tokens')")), false);
+  assert.equal(renewalFailureEndsSession(undefined), false);
+  // The server said no to the 30-day key, or to the account: signed out.
+  assert.equal(renewalFailureEndsSession(appSaid(401, 'Invalid or expired refresh token')), true);
+  assert.equal(renewalFailureEndsSession(appSaid(401, 'Your session has ended. Please sign in again.')), true);
+  assert.equal(renewalFailureEndsSession(appSaid(401, 'Your sales-rep account is suspended. Ask ZELab to reactivate it.')), true);
+  assert.equal(renewalFailureEndsSession(answered(403, { success: false, error: { message: 'Access restricted', details: { reason: 'DEVICE_RESTRICTED' } } })), true);
+  // Signed out (another tab, or another call refused) while the renewal was on its way.
+  assert.equal(renewalFailureEndsSession(new Error(SIGNED_OUT_MEANWHILE)), true);
 });
 
 test('a refusal about the account is kept for the sign-in page; a key or password refusal is not', () => {
