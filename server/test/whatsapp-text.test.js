@@ -322,6 +322,25 @@ ZELab`);
   assert.match(t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage: 3 }), /^\*SETTLEMENT DEADLINE URGENT\*\n\nOrder: O\n\n/);
 });
 
+// Audit, 12 Nov 2026: no reminder said when the order is due or the fine that starts then.
+test('SETTLEMENT DEADLINE reminders give the deadline and the daily fine', () => {
+  assert.equal(t.repText({ kind: 'DEADLINE_NEAR', order: 'STL-20261112-0018', stage: 2, deadline: at, rate: 10000 }),
+`*SETTLEMENT FINAL REMINDER*
+
+Order: STL-20261112-0018
+Deadline: 10 Nov 2026 | 14:32 EAT
+Daily Fine After Deadline: TSh 10,000
+
+Your settlement deadline is very close. Settle or return your order now.
+
+ZELab`);
+  for (const stage of [1, 3]) {
+    const text = t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage, deadline: at, rate: 20000 });
+    assert.match(text, /\n\nOrder: O\nDeadline: 10 Nov 2026 \| 14:32 EAT\nDaily Fine After Deadline: TSh 20,000\n\n/);
+    assert.doesNotMatch(text, /auto-processed/);
+  }
+});
+
 test('LATE SETTLEMENT FINE (rep)', () => {
   assert.equal(t.repText({ kind: 'LATE_FINE', fine: 10000, order: 'STL-20261110-0001', days: 1 }),
 `*LATE SETTLEMENT FINE*

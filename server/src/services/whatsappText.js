@@ -346,10 +346,13 @@ const repTexts = {
     lines(reason && `Reason: ${reason}`, 'Please review and resubmit.'),
   ),
   ORDER_CLOSED: ({ order }) => rep('ORDER CLOSED', `Order: ${order}`, 'Fully settled. All boxes accounted for.'),
-  DEADLINE_NEAR: ({ order, stage = 1 }) => {
-    if (stage >= 3) return rep('SETTLEMENT DEADLINE URGENT', `Order: ${order}`, 'Your settlement deadline is almost reached. Settle or return your order immediately.');
-    if (stage === 2) return rep('SETTLEMENT FINAL REMINDER', `Order: ${order}`, 'Your settlement deadline is very close. Settle or return your order now.');
-    return rep('SETTLEMENT DEADLINE NEAR', `Order: ${order}`, 'Your settlement deadline is approaching. Please settle your order.');
+  // The deadline and the daily fine that starts at it ride under the order (audit, 12 Nov 2026: no
+  // reminder said when, or what happens then). Without them the text is Nino's sample as it was.
+  DEADLINE_NEAR: ({ order, stage = 1, deadline, rate }) => {
+    const head = lines(`Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`, rate != null && `Daily Fine After Deadline: ${money(rate)}`);
+    if (stage >= 3) return rep('SETTLEMENT DEADLINE URGENT', head, 'Your settlement deadline is almost reached. Settle or return your order immediately.');
+    if (stage === 2) return rep('SETTLEMENT FINAL REMINDER', head, 'Your settlement deadline is very close. Settle or return your order now.');
+    return rep('SETTLEMENT DEADLINE NEAR', head, 'Your settlement deadline is approaching. Please settle your order.');
   },
   LATE_FINE: ({ fine, order, days }) => rep('LATE SETTLEMENT FINE', `Fine Applied: ${money(fine)}`, lines(`Order: ${order}`, `Overdue: ${count(days, 'Day')}`)),
   FINE_FORGIVEN: ({ amount, order }) => rep('FINE FORGIVEN', lines(`Amount: ${money(amount)}`, order && `Order: ${order}`), 'Returned to your commission balance.'),
