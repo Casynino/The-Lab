@@ -190,8 +190,9 @@ function fitted(build, steps) {
 
 owner.dailyReport = (d) => {
   const build = ({ reps }) => doc(
-    // A missed report sent the next morning: its cash balance and stock are the morning's, so say so.
-    lines(bold('ZELAB — DAILY REPORT'), d.date, d.late && `Sent late: ${dateTime(d.late)} (cash and stock as at then)`),
+    // A missed report sent the next morning: its stock is the morning's, so say so. Its cash balance is the
+    // day's closing balance (the caller passes the period's end), whenever it is sent.
+    lines(bold('ZELAB — DAILY REPORT'), d.date, d.late && `Sent late: ${dateTime(d.late)} (stock as at then)`),
     lines(`Sales: ${money(d.sales)} (${boxes(d.boxesSold)})`, `Net Profit: ${money(d.netProfit)}`, `Expenses: ${money(d.expenses)}`),
     lines(`Cash In: ${money(d.cashIn)}`, `Cash Out: ${money(d.cashOut)}`, `Cash Balance: ${money(d.cashBalance)}`),
     `Orders: ${d.orders} | Settlements: ${d.settlements} | Returns: ${d.returns}`,

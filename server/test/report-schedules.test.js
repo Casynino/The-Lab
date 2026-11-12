@@ -442,7 +442,7 @@ test('daily: "Orders" are orders issued that day and "Returns" are returns accep
 
   // a late send says so under the date
   const text = daily.buildWhatsAppText(d, null, { late: new Date('2026-11-11T06:00:00Z') });
-  assert.match(text, /^\*ZELAB — DAILY REPORT\*\n10 November 2026\nSent late: 11 Nov 2026 \| 09:00 EAT \(cash and stock as at then\)\n/);
+  assert.match(text, /^\*ZELAB — DAILY REPORT\*\n10 November 2026\nSent late: 11 Nov 2026 \| 09:00 EAT \(stock as at then\)\n/);
   assert.ok(!daily.buildWhatsAppText(d, null).includes('Sent late'));
 });
 
