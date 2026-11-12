@@ -24,6 +24,7 @@
 
 const prisma = require('../config/prisma');
 const { dayjs } = require('../utils/dates');
+const ApiError = require('../utils/ApiError');
 const wt = require('./whatsappText');
 const { toNumber, round2 } = require('../utils/money');
 
@@ -642,6 +643,11 @@ async function scanStockAlerts() {
 // off, or has nowhere to go.
 async function dailySummary({ force = false } = {}) {
   if (!force) {
+    // Before 21:00 the day is not over: a run then sent and archived a part-day report under the day's
+    // key, so the real 21:00 report and the next morning's catch-up both skipped it as already sent
+    // (final audit, 12 Nov 2026). The weekly, monthly and yearly reports refuse the same way. A forced
+    // send (?force=1) is still a manual look at the day so far, under its own key.
+    if (nowEAT().hour() < 21) throw ApiError.badRequest('Today is not over yet: the daily report goes out at 21:00 (Tanzania time)');
     if (!(await isEnabled('DAILY_SUMMARY'))) return { queued: false, reason: 'disabled' };
     if (!(await getConfig()).configured) return { queued: false, reason: 'not-configured' };
     const sent = await prisma.whatsAppNotification.findFirst({ where: { dedupeKey: `daily:${dateEAT()}` }, select: { id: true } });

@@ -327,6 +327,22 @@ function loadWeekly({ existingKeys = [], lastWeeklySent = null } = {}) {
 }
 const keyOfWeek = (d) => `${d.isoWeekYear()}-W${String(d.isoWeek()).padStart(2, '0')}`;
 
+test('daily: before 21:00 Tanzania time the day is refused without building, archiving or taking its key; force still sends', async (t) => {
+  const sends = [];
+  stub('../src/services/dailyBusinessReport.service', { sendDailyReport: async (o) => { sends.push(o); return { queued: true }; } });
+  const { wa } = loadNotify({ settings: OWNER });
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-12T17:59:00Z') }); // 20:59 EAT
+  await assert.rejects(wa.dailySummary(), (e) => e.statusCode === 400 && /not over yet/.test(e.message));
+  assert.equal(sends.length, 0);
+  await wa.dailySummary({ force: true }); // a manual look at the day so far, under its own key
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0].force, true);
+  t.mock.timers.setTime(new Date('2026-11-12T18:00:00Z').getTime()); // 21:00 EAT, the scheduled run
+  await wa.dailySummary();
+  assert.equal(sends.length, 2);
+  assert.equal(sends[1].force, false);
+});
+
 test('weekly: a week still under way is refused unless forced (it used up the real report\'s key)', async () => {
   const { weekly, calls } = loadWeekly();
   const current = keyOfWeek(eatNow());
