@@ -7,6 +7,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { useOnce } from '@/lib/useOnce';
+import { wentThrough } from '@/lib/once';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDateTime, formatDate, unitWord } from '@/lib/format';
 import {
@@ -1160,7 +1161,11 @@ export default function OrderDetailModal({ settlementId, onClose }) {
   const settle = useMutation({
     mutationFn: () => api.post(`/settlements/${settlementId}/settle`, {}),
     onSuccess: () => { toast.success('Order closed'); refresh(); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
+    // 409: it is already closed — a second press, or a retry after a lost answer (audit reversals-stock-6).
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success('Order already closed'); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
   });
 
   // One press per row goes through until it has an answer: a same-frame double tap sent two approvals
