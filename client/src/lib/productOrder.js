@@ -16,20 +16,20 @@
 
 const CANONICAL = [
   // ── OHIS (main brand — shown first) ──
-  'OHIS Ndogo (Brown) - Bila Filter',
-  'OHIS Ndogo (White) - Bila Filter',
-  'OHIS Ndogo (Brown) - Na Filter',
-  'OHIS Kubwa (Brown) - Na Filter',
-  'OHIS Kubwa (Brown) - Bila Filter',
+  'OHIS Ndogo (Brown) Bila Filter',
+  'OHIS Ndogo (White) Bila Filter',
+  'OHIS Ndogo (Brown) Na Filter',
+  'OHIS Kubwa (Brown) Na Filter',
+  'OHIS Kubwa (Brown) Bila Filter',
   // ── Civlily ──
-  'Civlily Ndogo (Brown) - Bila Filter',
-  'Civlily Ndogo (White) - Bila Filter',
-  'Civlily Ndogo (Brown) - Na Filter',
-  'Civlily Kubwa (Brown) - Bila Filter',
-  'Civlily Kubwa (White) - Bila Filter',
-  'Civlily Kubwa (Brown) - Na Filter',
-  'Civlily Kubwa (Mix) - Na Filter',
-  'Civlily Ndogo (Mix) - Bila Filter',
+  'Civlily Ndogo (Brown) Bila Filter',
+  'Civlily Ndogo (White) Bila Filter',
+  'Civlily Ndogo (Brown) Na Filter',
+  'Civlily Kubwa (Brown) Bila Filter',
+  'Civlily Kubwa (White) Bila Filter',
+  'Civlily Kubwa (Brown) Na Filter',
+  'Civlily Kubwa (Mix) Na Filter',
+  'Civlily Ndogo (Mix) Bila Filter',
 ];
 
 // Normalize a name so en/em dashes, double spaces and case don't affect matching.
@@ -38,8 +38,7 @@ function normalizeName(s) {
     .toLowerCase()
     .replace(/\bpepa\s+/g, '') // the old long names had "Pepa" in them
     .replace(/\(mix colou?rs\)/g, '(mix)')
-    .replace(/[‒–—―]/g, '-') // figure/en/em/horizontal dash → hyphen
-    .replace(/-+/g, '-')
+    .replace(/\s+[-‒–—―]+\s+/g, ' ') // "(Brown) – Bila Filter" (the old names) = "(Brown) Bila Filter" (12 Nov 2026)
     .replace(/\s+/g, ' ')
     .trim();
 }

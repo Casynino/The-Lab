@@ -2,26 +2,26 @@
 
 // The fixed product order, the same as the client's src/lib/productOrder.js (keep the two lists in step).
 // OHIS first (the main brand), then Civlily; within a brand the curated order, never alphabetical.
-// Matching is by name, normalised so dash / space / case variants and the old long names
+// Matching is by name, normalised so dash / space / case variants (names lost their dash on 12 Nov 2026) and the old long names
 // ("OHIS Pepa Ndogo …", "(Mix Colors)") match today's short ones. A product not in the list sorts after
 // the listed ones, alphabetically.
 
 const CANONICAL = [
   // ── OHIS ──
-  'OHIS Ndogo (Brown) - Bila Filter',
-  'OHIS Ndogo (White) - Bila Filter',
-  'OHIS Ndogo (Brown) - Na Filter',
-  'OHIS Kubwa (Brown) - Na Filter',
-  'OHIS Kubwa (Brown) - Bila Filter',
+  'OHIS Ndogo (Brown) Bila Filter',
+  'OHIS Ndogo (White) Bila Filter',
+  'OHIS Ndogo (Brown) Na Filter',
+  'OHIS Kubwa (Brown) Na Filter',
+  'OHIS Kubwa (Brown) Bila Filter',
   // ── Civlily ──
-  'Civlily Ndogo (Brown) - Bila Filter',
-  'Civlily Ndogo (White) - Bila Filter',
-  'Civlily Ndogo (Brown) - Na Filter',
-  'Civlily Kubwa (Brown) - Bila Filter',
-  'Civlily Kubwa (White) - Bila Filter',
-  'Civlily Kubwa (Brown) - Na Filter',
-  'Civlily Kubwa (Mix) - Na Filter',
-  'Civlily Ndogo (Mix) - Bila Filter',
+  'Civlily Ndogo (Brown) Bila Filter',
+  'Civlily Ndogo (White) Bila Filter',
+  'Civlily Ndogo (Brown) Na Filter',
+  'Civlily Kubwa (Brown) Bila Filter',
+  'Civlily Kubwa (White) Bila Filter',
+  'Civlily Kubwa (Brown) Na Filter',
+  'Civlily Kubwa (Mix) Na Filter',
+  'Civlily Ndogo (Mix) Bila Filter',
 ];
 
 function normalizeName(s) {
@@ -29,8 +29,7 @@ function normalizeName(s) {
     .toLowerCase()
     .replace(/\bpepa\s+/g, '')
     .replace(/\(mix colou?rs\)/g, '(mix)')
-    .replace(/[‒–—―]/g, '-')
-    .replace(/-+/g, '-')
+    .replace(/\s+[-‒–—―]+\s+/g, ' ') // "(Brown) – Bila Filter" (the old names) = "(Brown) Bila Filter"
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -337,7 +337,7 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
         <Field label="Product name" required error={errors.name?.message}>
           <Input maxLength={200} autoFocus={!isEdit} autoComplete="off" aria-invalid={!!errors.name} enterKeyHint={keyHint(0)}
             className={errors.name ? BAD : undefined}
-            placeholder={isEdit ? undefined : 'e.g. Civlily Kubwa (Mix) - Bila Filter'}
+            placeholder={isEdit ? undefined : 'e.g. Civlily Kubwa (Mix) Na Filter'}
             {...register('name', { validate: (v) => String(v || '').trim() !== '' || 'Enter the product name' })} />
           {twin && !errors.name && (
             <p className="mt-1 text-xs text-amber-300">There is already a product called {twin.name}.{twinBlocks ? ' Give this one its own name.' : ''}</p>

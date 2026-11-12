@@ -49,9 +49,14 @@ const packagingInput = z.object({
   isActive: z.boolean().optional(),
 });
 
+// Product names carry no dash (owner, 12 Nov 2026): "OHIS Ndogo (Brown) Bila Filter". A dash typed with
+// spaces around it ("(Brown) – Bila Filter") becomes one space; a hyphen inside a word stays.
+const productName = z.string().trim().min(1).max(200)
+  .transform((s) => s.replace(/\s+[-‒–—―]+\s+/g, ' ').replace(/\s{2,}/g, ' ').trim());
+
 const productCreate = {
   body: z.object({
-    name: z.string().trim().min(1).max(200),
+    name: productName,
     sku: z.string().trim().min(1).max(60).optional(),
     barcode: z.string().trim().max(60).optional().nullable(),
     description: z.string().trim().max(1000).optional().nullable(),
@@ -70,7 +75,7 @@ const productCreate = {
 
 const productUpdate = {
   body: z.object({
-    name: z.string().trim().min(1).max(200).optional(),
+    name: productName.optional(),
     barcode: z.string().trim().max(60).optional().nullable(),
     description: z.string().trim().max(1000).optional().nullable(),
     imageUrl: z.string().url().max(500).optional().nullable(),
