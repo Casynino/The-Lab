@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { motion, useReducedMotion } from 'motion/react';
+import { useBackToClose } from '@/lib/useBackToClose';
 
 // A panel that slides in from the right over the page (Nino, 11 Nov 2026: "we should be able to open these
 // cards inside and see the good views"). Full screen on a phone, a wide side sheet from 640 px up. It keeps
@@ -10,13 +11,20 @@ import { motion, useReducedMotion } from 'motion/react';
 // A window opened from inside the sheet (a payout, a fine) is rendered AFTER the sheet, so it sits on top,
 // takes Escape and Tab first, and the sheet waits until it is gone: the sheet only acts while it is the last
 // open dialog on the page.
+//
+// Phone/browser Back closes it (lib/backToClose.js), unless the page keeps the sheet in its own address
+// (`ownEntry={false}`, e.g. Commissions' ?rep=): then Back is already the router's. While a save started
+// from it is on its way, Escape and a tap outside wait for the answer.
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export default function SideSheet({ onClose, labelledBy, children, className }) {
+export default function SideSheet({ onClose, labelledBy, children, className, ownEntry = true }) {
   const panel = useRef(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  const busy = useBackToClose(ownEntry, onClose);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const closeRef = useRef(null);
+  closeRef.current = () => { if (!busyRef.current) onClose?.(); };
   const still = useReducedMotion();
 
   useEffect(() => {

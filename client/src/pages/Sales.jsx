@@ -1,14 +1,16 @@
-import { useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useMemo, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { lazyPart, warmPart, PageLoadBoundary } from '@/components/LazyPage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { Plus, ShoppingCart, Eye, Wallet, TrendingUp, Boxes, Timer } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useWarehouses, useSalesReps } from '@/lib/hooks';
-import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent, unitWord } from '@/lib/format';
 import { ROLES, SALE_STATUS_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import QuickSale from '@/components/QuickSale';
@@ -282,7 +284,7 @@ function SaleDetail({ id, onClose }) {
             <div><span className="text-muted">Date</span><div className="font-medium">{formatDateTime(data.soldAt)}</div></div>
           </div>
           {/* Per-item profit trace: sell/box vs cost/box (captured at sale time) */}
-          <Table>
+          <Table stack>
             <THead><TR><TH>Item</TH><TH>Qty</TH><TH>Sell / box</TH><TH>Cost / box</TH><TH>Profit / box</TH><TH>Line profit</TH></TR></THead>
             <TBody>
               {data.items.map((it) => {
@@ -290,7 +292,7 @@ function SaleDetail({ id, onClose }) {
                 return (
                   <TR key={it.id}>
                     <TD className="font-medium text-foreground">{it.product.name}</TD>
-                    <TD>{it.quantity > 0 ? `${it.quantity} ${it.packagingUnit.name}` : <span className="text-faint">All returned</span>}</TD>
+                    <TD>{it.quantity > 0 ? `${formatNumber(it.quantity)} ${unitWord(it.quantity, it.packagingUnit.name)}` : <span className="text-faint">All returned</span>}</TD>
                     <TD>{formatCurrency(it.unitPrice)}</TD>
                     <TD className="text-muted">{formatCurrency(it.unitCost)}</TD>
                     <TD>{formatCurrency(it.unitPrice - it.unitCost)}</TD>
@@ -380,24 +382,30 @@ function Chip({ active, tone, label, count, onClick }) {
 // The invoice maker lives inside Sales for staff (Nino, 11 Nov 2026: "this should be in the Sales page,
 // inside, not on the sidebar"). Reps keep their own Invoice page (they have no Sales page). The tab is in
 // the address (?tab=invoice), so the old /invoice-generator link lands on it.
-const InvoiceGenerator = lazy(() => import('@/pages/InvoiceGenerator'));
+// Through the app's page loader (lib/pages.js), so a failed fetch-ahead never reloads the app (audit pwa-brand-load-3).
+const InvoiceGenerator = lazyPart('InvoiceGenerator');
 const SALES_TABS = [['list', 'Sales'], ['invoice', 'Invoice']];
 
 export default function Sales() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') === 'invoice' ? 'invoice' : 'list';
-  // Fetch the invoice maker's code while the list is open, so the tab opens at once.
-  useEffect(() => { import('@/pages/InvoiceGenerator'); }, []);
+  // Fetch the invoice maker's code while the list is open, so the tab opens at once. Only ahead of the
+  // click: one that fails on a weak line is dropped, and the tab asks again when opened.
+  useEffect(() => { warmPart('InvoiceGenerator'); }, []);
   return (
     <div>
       <div className="mb-5 flex flex-wrap gap-2">
         {SALES_TABS.map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setParams(k === 'list' ? {} : { tab: k })}
+          <button key={k} type="button" onClick={() => setParams(k === 'list' ? {} : { tab: k }, { replace: true })}
             aria-current={tab === k ? 'page' : undefined}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>
-      {tab === 'invoice' ? <Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense> : <SalesList />}
+      {tab === 'invoice' ? (
+        <PageLoadBoundary what="this tab" resetKey={tab}>
+          <Suspense fallback={<PageSpinner />}><InvoiceGenerator /></Suspense>
+        </PageLoadBoundary>
+      ) : <SalesList />}
     </div>
   );
 }
@@ -407,9 +415,14 @@ function SalesList() {
   // Staff record a sale in the quick window (walk-in, Dar es Salaam, every product with  −  qty  +);
   // the older window below stays for the rep path, unchanged.
   const isRep = user?.role === ROLES.SALES_REP;
-  const [page, setPage] = useState(1);
-  const [type, setType] = useState('');
-  const [status, setStatus] = useState('');
+  // Type, status and page are in the address, written with replace: Back from another page comes back to
+  // the same chips and page (navigation-6).
+  const [params, setParams] = useSearchParams();
+  const page = pageParam(params);
+  const type = pickParam(params, 'type', ['CASH', 'CREDIT']);
+  const status = pickParam(params, 'status', Object.keys(SALE_STATUS_META));
+  const setPage = (n) => setParams((p) => withParams(p, { page: n }), { replace: true });
+  const pickChip = (change) => setParams((p) => withParams(p, { ...change, page: null }), { replace: true });
   const [modalOpen, setModalOpen] = useState(false);
   const [detailId, setDetailId] = useState(null);
 
@@ -437,9 +450,12 @@ function SalesList() {
 
   // Chip counts are taken over the OTHER filter, so they hold still as you
   // click through them instead of collapsing onto whatever is selected.
+  // No count at all until the figures are here: a chip reading 0 over a load that failed (or has not
+  // come back yet) says "none" when nobody knows (audit pwa-brand-load-2).
+  const counted = sum?.byStatus != null;
   const statusChips = [
-    { value: '', label: 'All statuses', tone: 'slate', count: Object.values(sum?.byStatus || {}).reduce((a, b) => a + b, 0) },
-    ...STATUS_ORDER.map((k) => ({ value: k, label: SALE_STATUS_META[k].label, tone: STATUS_TONE[k], count: sum?.byStatus?.[k] ?? 0 })),
+    { value: '', label: 'All statuses', tone: 'slate', count: counted ? Object.values(sum.byStatus).reduce((a, b) => a + b, 0) : null },
+    ...STATUS_ORDER.map((k) => ({ value: k, label: SALE_STATUS_META[k].label, tone: STATUS_TONE[k], count: counted ? sum.byStatus[k] ?? 0 : null })),
   ];
   // The business sells for cash. A type row only appears once a second type
   // actually exists — offering a choice of one is how the old page looked.
@@ -584,11 +600,11 @@ function SalesList() {
         <Card>
           <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
             {typeChips.map((c) => (
-              <Chip key={c.value || 'all-types'} {...c} active={type === c.value} onClick={() => { setType(c.value); setPage(1); }} />
+              <Chip key={c.value || 'all-types'} {...c} active={type === c.value} onClick={() => pickChip({ type: c.value })} />
             ))}
             {typeChips.length > 0 && <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />}
             {statusChips.map((c) => (
-              <Chip key={c.value || 'all-statuses'} {...c} active={status === c.value} onClick={() => { setStatus(c.value); setPage(1); }} />
+              <Chip key={c.value || 'all-statuses'} {...c} active={status === c.value} onClick={() => pickChip({ status: c.value })} />
             ))}
           </div>
 
@@ -601,7 +617,7 @@ function SalesList() {
             />
           ) : (
             <>
-              <Table>
+              <Table stack="wide">
                 <THead>
                   <TR>
                     <TH>Sale</TH><TH>Customer</TH><TH>Rep</TH><TH>Type</TH>

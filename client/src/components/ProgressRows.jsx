@@ -1,12 +1,15 @@
 import clsx from 'clsx';
 import { formatCurrency } from '@/lib/format';
+import { bonusTrack } from '@/lib/labels';
 
 // A rep is running at two things at once — a withdrawal minimum and a bonus
 // tier — and both ask the same question: how far along, how much is left, what
 // it unlocks. One row type answers it for both, so they read as a pair rather
 // than two unrelated widgets competing for the same screen.
-function Row({ label, pct, hint, reward, ready, readyLabel, markers = [], onClick }) {
+// `pct` is the headline; `barPct` (when given) is the fill, for a track whose notches use another scale.
+function Row({ label, pct, barPct, hint, reward, ready, readyLabel, markers = [], onClick }) {
   const width = Math.max(0, Math.min(100, pct || 0));
+  const fill = barPct == null ? width : Math.max(0, Math.min(100, barPct));
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
@@ -36,7 +39,7 @@ function Row({ label, pct, hint, reward, ready, readyLabel, markers = [], onClic
                 ? 'bg-gradient-to-r from-emerald-500 to-emerald-300'
                 : 'bg-gradient-to-r from-brand-600 to-brand-400',
             )}
-            style={{ width: `${width}%` }}
+            style={{ width: `${fill}%` }}
           />
         </div>
         {/* A notch per bonus tier, so the next milestone is visible on the track
@@ -54,7 +57,8 @@ function Row({ label, pct, hint, reward, ready, readyLabel, markers = [], onClic
       </div>
 
       <div className="mt-1.5 flex items-baseline justify-between gap-3">
-        <p className="truncate text-[11px] leading-none text-muted">
+        {/* It may carry a figure ("TSh 150,000 ready — or push on"), so it wraps rather than cutting it. */}
+        <p className="min-w-0 text-[11px] leading-tight text-muted">
           {ready ? <span className="font-semibold text-emerald-400">{readyLabel}</span> : hint}
         </p>
         {reward != null && (
@@ -80,7 +84,9 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
         key="commission"
         label="Wallet"
         pct={(avail / min) * 100}
-        reward={min}
+        // Ready: his balance, the money he can take out. Below the line: the minimum he is working towards.
+        // Showing the minimum next to "Ready to withdraw" read as "I can withdraw TSh 250,000" (audit rep-app-4).
+        reward={ready ? avail : min}
         ready={ready}
         readyLabel="Ready to withdraw"
         hint={avail / min >= 0.9
@@ -95,22 +101,23 @@ export default function ProgressRows({ commission, bonus, onOpenCommission }) {
   // mountain — "6,329,500 more" is discouraging where "3,670,500 of 10,000,000"
   // is the same fact told as ground covered — so the gap appears near the line,
   // which is exactly where it becomes the encouraging number.
-  if (bonus?.configured && bonus.tiers?.length) {
-    const aim = bonus.next || bonus.tiers[bonus.tiers.length - 1];
-    const top = bonus.tiers[bonus.tiers.length - 1].target;
+  const track = bonusTrack(bonus);
+  if (track) {
+    const { aim } = track;
     const claimable = bonus.claimable;
     rows.push(
       <Row
         key="bonus"
         label="Sales bonus"
-        pct={aim.progress}
+        pct={track.pct}
+        barPct={track.barPct}
         reward={aim.bonusAmount}
         ready={Boolean(claimable)}
         readyLabel={claimable ? `${formatCurrency(claimable.bonusAmount)} ready — or push on` : ''}
         hint={aim.progress >= 90
           ? `Almost there — only ${formatCurrency(aim.remaining)} to go`
           : `${formatCurrency(bonus.sales)} of ${formatCurrency(aim.target)}`}
-        markers={top > 0 ? bonus.tiers.map((t) => ({ at: (t.target / top) * 100, passed: t.reached })) : []}
+        markers={track.markers}
         onClick={onOpenCommission}
       />,
     );

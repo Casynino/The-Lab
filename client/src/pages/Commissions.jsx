@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from 'recharts';
@@ -13,12 +13,15 @@ import { Coins, Crown, TrendingUp, AlertTriangle, ShieldAlert, HeartHandshake, S
 import SideSheet from '@/components/SideSheet';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
+import { wentThrough } from '@/lib/once';
+import { pickParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents, initials } from '@/lib/format';
 import { PayoutHistory, earnedOn } from '@/components/WithdrawalNote';
 import {
-  PageHeader, Card, CardHeader, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
+  PageHeader, Card, CardHeader, PageSpinner, EmptyState, LoadError, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
   Pagination, Select, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 import DoneReceipt from '@/components/DoneReceipt';
@@ -42,6 +45,14 @@ function WithdrawModal({ commission, firstName, onClose }) {
   const [bank, setBank] = useState('');
   const [payName, setPayName] = useState('');
   const [done, setDone] = useState(null); // { amount, to }
+  // The window cannot be closed while the request is on its way (the shared Modal waits for it), so the
+  // receipt below is the confirmation. Only if the window is gone all the same (the page left under it)
+  // does a toast say it went through, so nobody sends it twice (audit rep-app-10).
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
   // The payout address, written as one line so it reads back plainly wherever
   // the notes are shown — the Payouts list, the ledger, the WhatsApp message.
   const payTo = via === 'mobile'
@@ -51,6 +62,7 @@ function WithdrawModal({ commission, firstName, onClose }) {
   const req = useMutation({
     mutationFn: () => api.post('/commissions/withdrawals', { amount: Number(amount), notes: payTo }),
     onSuccess: () => {
+      if (!alive.current) toast.success('Withdrawal request sent');
       setDone({ amount: Number(amount), to: payTo });
       ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
     },
@@ -221,7 +233,8 @@ function WithdrawalDetail({ w, balance, onClose, refresh }) {
       refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have paid it: reload so the row shows its real state (audit backend-integrity-5).
+    onError: (e) => { toast.error(apiError(e)); refresh(); },
   });
 
   // Reject asks once more before it goes: the rep is told at once that it was not approved.
@@ -321,7 +334,7 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
       toast.success(v.action === 'PAY' ? 'Paid — and recorded on the Commission account' : 'Request rejected');
       refresh();
     },
-    onError: (e) => toast.error(apiError(e)),
+    onError: (e) => { toast.error(apiError(e)); refresh(); },
   });
 
   if (!items.length) return null;
@@ -347,10 +360,10 @@ function PendingWithdrawalsStrip({ items, refresh, onOpen }) {
                 {w.notes && <div className="mt-0.5 font-mono text-xs text-amber-300">{w.notes}</div>}
                 <div className="mt-0.5 text-xs text-faint">{formatDateTime(w.requestedAt)}</div>
               </button>
-              <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:justify-end">
-                <Button variant="ghost" className="text-rose-400" disabled={busy}
+              <div className="flex shrink-0 gap-2 max-sm:w-full max-sm:gap-3">
+                <Button variant="ghost" className="text-rose-400 max-sm:min-h-11 max-sm:flex-1" disabled={busy}
                   onClick={() => setRejecting(w)}>Reject</Button>
-                <Button loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
+                <Button className="max-sm:min-h-11 max-sm:flex-1" loading={busy} onClick={() => decide.mutate({ id: w.id, action: 'PAY' })}>
                   <ShieldCheck className="h-4 w-4" /> Approve &amp; pay
                 </Button>
               </div>
@@ -413,21 +426,28 @@ function PenaltyBreakdown({ breakdown }) {
 // Forgive one fine: keeps the record, returns the money to the rep's balance.
 function ForgiveModal({ penalty, onClose }) {
   const qc = useQueryClient();
+  const once = useOnce(); // a double tap sends one Forgive
   const [reason, setReason] = useState('');
+  const refresh = () => ['penalties', 'commissions', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const waive = useMutation({
     mutationFn: () => api.post(`/penalties/${penalty.id}/waive`, { reason: reason || undefined }),
     onSuccess: () => {
       toast.success(`Fine forgiven — ${formatCurrency(penalty.amount)} returned to ${penalty.salesRep?.user?.name || 'the rep'}`);
-      ['penalties', 'commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = already forgiven (a retry after a lost answer): it is done, so the window closes on the real state.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e)); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
   return (
     <Modal open onClose={onClose} title="Forgive this fine?" footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={waive.isPending} onClick={() => waive.mutate()}>
+        <Button loading={waive.isPending} onClick={() => once.run(() => waive.mutate())}>
           <HeartHandshake className="h-4 w-4" /> Forgive — return {formatCurrency(penalty.amount)}
         </Button>
       </>
@@ -561,7 +581,7 @@ function FinesHistory({ admin, canForgive = admin }) {
             {!waived && canForgive && (
               <button
                 onClick={() => setForgiving(p)}
-                className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
+                className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 sm:min-h-0 sm:px-2.5"
               >
                 <HeartHandshake className="h-3.5 w-3.5" /> Forgive
               </button>
@@ -720,15 +740,31 @@ function QuietEmpty({ icon: Icon, title, text }) {
   );
 }
 
+// The wallet's tabs are in the address (?tab=fines), so Back to the wallet comes back to the same tab and a
+// link can open one; changing tab replaces the address instead of adding a Back step (navigation-4).
+const REP_TABS = ['overview', 'bonus', 'withdrawals', 'fines', 'rules'];
+const ADMIN_TABS = ['balances', 'payouts', 'penalties', 'rules'];
+function useTabParam(name, keys, fallback) {
+  const [params, setParams] = useSearchParams();
+  const tab = pickParam(params, name, keys, fallback);
+  const setTab = (k) => setParams((p) => withParams(p, { [name]: k === fallback ? null : k }), { replace: true });
+  return [tab, setTab];
+}
+
 function RepView() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState('overview');
-  const { data: insights } = useQuery(pageQueries.commissionsInsights());
-  const { data: c, isLoading } = useQuery(pageQueries.commissionsMine());
-  const { data: wd } = useQuery(pageQueries.withdrawalsMine());
-  const { data: bonusProgress } = useQuery(pageQueries.bonusMe());
+  const [tab, setTab] = useTabParam('tab', REP_TABS, 'overview');
+  const insightsQ = useQuery(pageQueries.commissionsInsights());
+  const insights = insightsQ.data;
+  const { data: c, isLoading, isError, refetch } = useQuery(pageQueries.commissionsMine());
+  const wdQ = useQuery(pageQueries.withdrawalsMine());
+  const wd = wdQ.data;
+  const bonusQ = useQuery(pageQueries.bonusMe());
+  const bonusProgress = bonusQ.data;
 
+  // A wallet that never arrived is not a spinner for ever (audit pwa-brand-load-2).
+  if (isError && !c) return <LoadError what="your wallet" onRetry={refetch} />;
   if (isLoading || !c) return <PageSpinner />;
 
   const hasPenalties = c.penalties > 0;
@@ -808,7 +844,9 @@ function RepView() {
 
       {tab === 'overview' && (
         <div className="mt-6 space-y-9">
-          {!insights ? (
+          {insightsQ.isError && !insights ? (
+            <LoadError what="your earnings" onRetry={insightsQ.refetch} />
+          ) : !insights ? (
             <PageSpinner />
           ) : (
             <>
@@ -822,9 +860,13 @@ function RepView() {
       )}
 
       {tab === 'bonus' && (
-        bonusProgress?.configured
-          ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
-          : <QuietEmpty icon={TrendingUp} title="No bonus running" text="Nothing to chase right now." />
+        bonusQ.isError && !bonusProgress
+          ? <LoadError what="your bonus" onRetry={bonusQ.refetch} />
+          : !bonusProgress
+            ? <PageSpinner />
+            : bonusProgress.configured
+              ? <div className="mt-4"><BonusProgress p={bonusProgress} /></div>
+              : <QuietEmpty icon={TrendingUp} title="No bonus running" text="Nothing to chase right now." />
       )}
 
       {tab === 'withdrawals' && (
@@ -836,7 +878,11 @@ function RepView() {
           <section className="px-1">
             <h3 className="text-sm font-semibold text-foreground">My withdrawals</h3>
             <p className="mt-0.5 text-xs text-muted">Minimum {formatCurrency(c.minWithdrawal)}</p>
-            {!withdrawals.length ? (
+            {wdQ.isError && !wd ? (
+              <LoadError what="your withdrawals" onRetry={wdQ.refetch} />
+            ) : !wd ? (
+              <PageSpinner />
+            ) : !withdrawals.length ? (
               <p className="mt-4 text-sm text-muted">No withdrawals yet. Settle boxes and the first request will appear here.</p>
             ) : (
               <div className="mt-2"><PayoutHistory flat items={withdrawals} /></div>
@@ -874,15 +920,23 @@ function DeductModal({ reps, onClose }) {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const rep = reps.find((r) => r.salesRepId === salesRepId);
+  const once = useOnce(); // a double tap sends one deduction
 
+  const refresh = () => ['commissions', 'penalties', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const deduct = useMutation({
     mutationFn: () => api.post('/penalties/adjust', { salesRepId, amount: Number(amount), reason }),
     onSuccess: () => {
       toast.success(`${formatCurrency(Number(amount))} deducted from ${rep?.name || 'the rep'}'s commission`);
-      ['commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = this same deduction was recorded a moment ago (a retry after a lost answer): close on the real
+    // balance instead of leaving the window open to be sent again with a changed reason.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e), { duration: 8000 }); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
 
   const valid = salesRepId && Number(amount) > 0 && reason.trim();
@@ -890,7 +944,7 @@ function DeductModal({ reps, onClose }) {
     <Modal open onClose={onClose} title="Deduct commission" footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={deduct.isPending} disabled={!valid} onClick={() => deduct.mutate()}>
+        <Button loading={deduct.isPending} disabled={!valid} onClick={() => once.run(() => deduct.mutate())}>
           Deduct {Number(amount) > 0 ? formatCurrency(Number(amount)) : ''}
         </Button>
       </>
@@ -938,7 +992,7 @@ function SectionTabs({ value, onChange, tabs }) {
             onClick={() => onChange(t.key)}
             className={clsx(
               // 44px tall to hit on a phone, though only the words and the line show.
-              'relative -mb-px flex min-h-[44px] shrink-0 items-center whitespace-nowrap text-[13px] font-medium transition-colors sm:text-sm',
+              'relative -mb-px flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center whitespace-nowrap text-[13px] font-medium transition-colors sm:text-sm',
               on
                 ? 'text-foreground after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:rounded-full after:bg-brand-500'
                 : 'text-muted hover:text-foreground',
@@ -1289,7 +1343,7 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
         <path d="M-10 218 C 120 140, 250 108, 380 156" fill="none" stroke="rgba(255,255,255,.04)" strokeWidth="1" />
       </svg>
       <div className={clsx(wide && 'lg:w-[22rem] lg:shrink-0')}>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
             <p className="text-xs font-medium text-white/60">Available to withdraw</p>
             {/* "Total pending" was earned − paid, which still contained fines the reps will never receive — this
@@ -1302,7 +1356,7 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
             </p>
           </div>
           {overdrawn.length > 0 && (
-            <dl className="shrink-0 pt-0.5 text-right">
+            <dl className="ml-auto shrink-0 pt-0.5 text-right">
               <Fig
                 label="Overdrawn"
                 value={minusCurrency(overdrawnSum)}
@@ -1326,7 +1380,8 @@ function BusinessWallet({ totals, items = [], wide = false, isAdmin, applying, o
       </div>
 
       <dl className={clsx('mt-5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4', wide ? 'lg:mt-0 lg:flex-1 lg:grid-cols-2 xl:grid-cols-4' : 'lg:grid-cols-2 2xl:grid-cols-4')}>
-        <Fig label="Earned · all time" value={formatCurrency(totals.earned)} />
+        {/* Every box settled since the first sale, so it starts before Finance's "All time" (05 Jul). */}
+        <Fig label="Earned · all time" value={formatCurrency(totals.earned)} sub="since the first sale" title="Every box settled since the very first sale, including those before the books started — Finance's All time starts on the go-live day" />
         <Fig label="Paid out" value={formatCurrency(totals.paid)} tone="text-emerald-300" />
         <Fig label="Fines" value={fines > 0 ? minusCurrency(fines) : formatCurrency(0)} tone={fines > 0 ? 'text-rose-300' : undefined} />
         <Fig
@@ -1370,7 +1425,7 @@ function PaidTip({ active, payload, label }) {
 // Africa time. It waits for the 200-row list rather than drawing from the 30 newest and then changing.
 // The list is newest-requested first and capped at 200: when more exist and the oldest one loaded is still
 // inside the six months, older payouts in the window were not loaded, and the subtitle says so.
-function PayoutTrend({ items, loading, hasMore }) {
+function PayoutTrend({ items, loading, failed, onRetry, hasMore }) {
   const eatMonth = (d) => { const t = new Date(new Date(d).getTime() + 3 * 3600e3); return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}`; };
   const now = new Date(Date.now() + 3 * 3600e3);
   const windowStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1) - 3 * 3600e3;
@@ -1395,7 +1450,9 @@ function PayoutTrend({ items, loading, hasMore }) {
       <p className={clsx('mt-0.5 text-xs', capped ? 'text-amber-300' : 'text-muted')}>
         {capped ? `Last 6 months · latest ${formatNumber(items.length)} payouts` : 'Last 6 months'}
       </p>
-      {loading ? (
+      {failed ? (
+        <LoadError what="the payouts" onRetry={onRetry} />
+      ) : loading ? (
         <p className="my-auto py-10 text-center text-xs text-muted">Loading payouts…</p>
       ) : count === 0 ? (
         <p className="my-auto py-10 text-center text-xs text-muted">No payouts in the last 6 months.</p>
@@ -1687,9 +1744,10 @@ function MinNote({ i, request = true }) {
     : <span className="whitespace-nowrap text-[11px] text-muted" title={`To the ${formatCurrency(min)} minimum`}>{formatCurrency(min - avail)} to go</span>;
 }
 
-// The facts line of a card: boxes, fines, then the bonus (this run) or what he earned (all time). It is
-// one line high on every card: a fact that does not fit drops whole to a hidden second line, so a figure
-// is never cut and every card in a row stays the same height. Boxes and fines come first, so they stay.
+// The facts line of a card: boxes, fines, then the bonus (this run) or what he earned (all time). A fact
+// that does not fit moves whole to a second line; none is ever hidden. It used to be one line high with the
+// rest cut off, and on a phone that line was 35-105 px wide, so "−TSh 120,000 fines" and the bonus % were
+// silently gone (audit, 12 Nov 2026). Cards in a row still end level: the grid stretches them.
 function repFacts(i, runView, bonus) {
   const run = i.run || {};
   const fines = runView ? (Number(run.penalties) || 0) : (Number(i.penalties) || 0);
@@ -1719,11 +1777,11 @@ const Avatar = ({ name, className }) => (
 // The small card (a row in one list on a phone). The whole of it is one button that opens the rep's view;
 // the switch above decides whether the facts tell this run or all time. Money never wraps or gets cut.
 // What a card's rep view asks for, started on a hover or touch of the card (see the Commissions case in
-// lib/routeQueries.js). Only a hint for the read-ahead: the address is never opened.
+// lib/routeQueries.js). The read-ahead hint names the rep the same way the open sheet's address does (?rep=).
 const sheetAhead = (i) => `/commissions?rep=${encodeURIComponent(i.salesRepId)}`;
 
 function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) {
-  const { avail, min, show, ready, pct } = minState(i);
+  const { offCommission, avail, min, show, ready, pct } = minState(i);
   const ownMin = show && usualMin != null && min !== usualMin;
   const requested = Number(i.pendingRequests) || 0;
   const facts = repFacts(i, runView, bonus);
@@ -1745,10 +1803,11 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
     </span>
   );
   const factLine = (
-    <span className="flex h-[15px] min-w-0 flex-1 flex-wrap gap-x-3 overflow-hidden text-[11px] leading-[15px] text-muted">
+    <span className="flex min-w-0 flex-1 flex-wrap gap-x-3 gap-y-0.5 text-[11px] leading-[15px] text-muted">
       {facts.map((f) => <span key={f.key} className="whitespace-nowrap">{f}</span>)}
     </span>
   );
+  const hasOnTime = Boolean(onTime && onTime.decided > 0);
   const minTag = ownMin && <span className="shrink-0 whitespace-nowrap text-[10px] leading-none tabular-nums text-faint">min {formatCurrency(min)}</span>;
   const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white/50';
 
@@ -1761,12 +1820,16 @@ function RepTile({ i, runView, leads, bonus, usualMin, onTime, onOpen, phone }) 
             {name}
             {amount('text-[17px]')}
           </span>
-          <span className="mt-1 flex h-5 items-center gap-2.5">
-            <OnTimeChip onTime={onTime} />
-            {factLine}
-            <MinNote i={i} />
-          </span>
-          {(bar || minTag) && <span className="mt-1 flex h-2 items-center gap-2">{bar}{minTag}</span>}
+          {/* The facts get the row's whole width (they shared it with the chip and the note, and lost);
+              the on-time chip, the note and the bar follow on their own line. */}
+          <span className="mt-1 flex">{factLine}</span>
+          {(hasOnTime || requested > 0 || offCommission || show || minTag) && (
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <OnTimeChip onTime={onTime} />
+              <MinNote i={i} />
+              {bar}{minTag}
+            </span>
+          )}
         </span>
         <ChevronRight className="h-4 w-4 shrink-0 text-faint" aria-hidden="true" />
       </button>
@@ -1997,13 +2060,14 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
-    ...(wdQ.isError ? [] : [{ key: 'payouts', label: 'Payouts', count: waiting }]),
-    ...(finesQ.isError ? [] : [{ key: 'fines', label: 'Fines', count: fineCounts?.applied }]),
+    ...(wdQ.isError && !wdQ.data ? [] : [{ key: 'payouts', label: 'Payouts', count: waiting }]),
+    ...(finesQ.isError && !finesQ.data ? [] : [{ key: 'fines', label: 'Fines', count: fineCounts?.applied }]),
   ];
   const current = tabs.some((t) => t.key === tab) ? tab : 'overview';
 
   return (
-    <SideSheet onClose={onClose} labelledBy={titleId}>
+    // The sheet is in the page's address (?rep=), so Back is the router's: no entry of its own.
+    <SideSheet onClose={onClose} labelledBy={titleId} ownEntry={false}>
       <header className="flex shrink-0 items-start gap-3 border-b border-white/[0.07] px-4 py-3.5 sm:px-6 sm:py-4">
         <Avatar name={i.name} className="mt-0.5 h-10 w-10 text-base" />
         <div className="min-w-0 flex-1">
@@ -2014,7 +2078,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
           <p className="mt-0.5 truncate text-xs text-faint">{[i.code, runSince(i)].filter(Boolean).join(' · ')}</p>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <OnTimeChip onTime={onTime} />
-            <Link to={`/reps/${id}`} className="inline-flex items-center gap-1 text-xs font-medium text-muted transition hover:text-foreground">
+            <Link to={`/reps/${id}`} className="-my-3 inline-flex min-h-11 items-center gap-1 text-xs font-medium text-muted transition hover:text-foreground sm:my-0 sm:min-h-0">
               Open full profile <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -2128,7 +2192,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
 
         {current === 'payouts' && (
           <div className="mt-5 space-y-4">
-            <PayoutTrend items={withdrawals} loading={!wdQ.data} hasMore={wdQ.data?.meta?.hasMore} />
+            <PayoutTrend items={withdrawals} loading={!wdQ.data} failed={wdQ.isError && !wdQ.data} onRetry={wdQ.refetch} hasMore={wdQ.data?.meta?.hasMore} />
             {wdQ.data && (
               withdrawals.length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted">No withdrawal requests yet.</p>
@@ -2203,7 +2267,7 @@ function RepSheet({ i, bonus, onTime, leads, isAdmin, onClose, onOpenWithdrawal,
                           <button
                             type="button"
                             onClick={() => onForgive({ ...p, salesRep: p.salesRep || { user: { name: i.name } } })}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
+                            className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 sm:min-h-0 sm:px-2.5"
                           >
                             <HeartHandshake className="h-3.5 w-3.5" /> Forgive
                           </button>
@@ -2254,7 +2318,25 @@ function RepBoard({ items, bonus, onTime, isAdmin }) {
   const [view, setView] = useState('run');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState('earned');
-  const [openId, setOpenId] = useState(null);
+  // The open rep's view is in the address (?rep=<id>), opened as a step of its own: phone/browser Back closes
+  // it, Back from "Open full profile" comes back to it open, and a link can open it (navigation-4,
+  // responsive-9). Its X goes back over that step; a sheet opened from a link just drops ?rep.
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const openId = params.get('rep');
+  const leaving = useRef(false);
+  useEffect(() => { leaving.current = false; }, [openId]);
+  const setOpenId = (id) => {
+    if (id) {
+      setParams((p) => withParams(p, { rep: id }), { state: { repSheet: true } });
+      return;
+    }
+    if (leaving.current) return; // a second tap on X must not go back a second page
+    leaving.current = true;
+    if (location.state?.repSheet) navigate(-1);
+    else setParams((p) => withParams(p, { rep: null }), { replace: true });
+  };
   const [openWd, setOpenWd] = useState(null); // a payout opened from the rep's view
   const [forgiving, setForgiving] = useState(null); // a fine opened from the rep's view
   const runView = view === 'run';
@@ -2434,7 +2516,8 @@ function FinesByRep({ items }) {
     <section className="card mt-5 p-5">
       <h3 className="text-sm font-semibold text-foreground">Fines by rep</h3>
       <p className="mt-0.5 text-xs text-muted">Still reducing a balance</p>
-      <ul className="mt-4 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+      {/* Columns as the reps need them: two reps fill the card instead of leaving its last third empty. */}
+      <ul className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(16rem,1fr))] gap-x-8 gap-y-3">
         {rows.map((i) => (
           <li key={i.salesRepId}>
             <div className="flex items-baseline justify-between gap-3 text-[13px]">
@@ -2531,20 +2614,21 @@ function PaidByRep({ items, hasMore }) {
   );
 }
 
-function AdminView() {
+function AdminView({ embedded = false }) {
   const qc = useQueryClient();
   // Shown to staff too. Fines, deductions, rates and bonuses are the owner's (the server refuses staff), so
   // staff see them without the buttons; withdrawals stay as they are.
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
   const [deducting, setDeducting] = useState(false);
-  const [tab, setTab] = useState('balances');
+  // In the address like the rep's wallet; inside Finance ?tab= is Finance's own, so there it is ?section=.
+  const [tab, setTab] = useTabParam(embedded ? 'section' : 'tab', ADMIN_TABS, 'balances');
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
   const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
-  const { data: summary, isLoading } = useQuery(pageQueries.commissionsSummary());
-  const { data: wd } = useQuery(pageQueries.withdrawalsAll());
+  const { data: summary, isLoading, isError, refetch } = useQuery(pageQueries.commissionsSummary());
+  const { data: wd, isError: wdFailed, refetch: retryWd } = useQuery(pageQueries.withdrawalsAll());
   // The "Paid out" bars need six months of payouts, more than the 30 newest the table lists. Same
   // endpoint, under the 'commissions' key, so every decision refreshes it with the rest.
-  const { data: wdTrend } = useQuery(pageQueries.withdrawalsTrend());
+  const { data: wdTrend, isError: trendFailed, refetch: retryTrend } = useQuery(pageQueries.withdrawalsTrend());
   // How reliably orders are settled, overall and per rep — the existing staff analytics. Optional: the
   // page draws without it.
   const { data: analytics } = useQuery({
@@ -2580,15 +2664,22 @@ function AdminView() {
       qc.invalidateQueries({ queryKey: ['commissions'] });
       qc.invalidateQueries({ queryKey: ['finance'] });
     },
-    onError: (e) => toast.error(apiError(e)),
+    // A lost answer may still have paid it: reload so the row shows its real state (audit backend-integrity-5).
+    onError: (e) => {
+      toast.error(apiError(e));
+      qc.invalidateQueries({ queryKey: ['commissions'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+    },
   });
 
+  // Balances that never arrived are not a spinner for ever (audit pwa-brand-load-2).
+  if (isError && !summary) return <LoadError what="the commissions" onRetry={refetch} />;
   if (isLoading || !summary) return <PageSpinner />;
   const items = summary.items || [];
   // Owner, 11 Nov 2026: "the cards here are big … the rep list should be up; the charts can be down a bit —
   // we will have many reps". The business wallet is one slim strip on every tab, and the Paid-out chart sits
   // under the reps (and under the payouts) instead of beside the wallet, so the list starts high on the screen.
-  const trend = <PayoutTrend items={wdTrend?.data} loading={!wdTrend} hasMore={wdTrend?.meta?.hasMore} />;
+  const trend = <PayoutTrend items={wdTrend?.data} loading={!wdTrend} failed={trendFailed && !wdTrend} onRetry={retryTrend} hasMore={wdTrend?.meta?.hasMore} />;
   const wallet = (
     <BusinessWallet
       totals={summary.totals}
@@ -2675,7 +2766,7 @@ function AdminView() {
                 ) : null}
               </div>
             </div>
-            {!wd?.data?.length ? <EmptyState title="No withdrawal requests" /> : (
+            {wdFailed && !wd ? <LoadError what="the withdrawal requests" onRetry={retryWd} /> : !wd ? <PageSpinner /> : !wd.data?.length ? <EmptyState title="No withdrawal requests" /> : (
               <>
                 {[
                   { key: 'waiting', label: 'Waiting for you', rows: wd.data.filter((w) => w.status === 'PENDING' || w.status === 'APPROVED') },
@@ -2706,7 +2797,7 @@ function AdminView() {
                                   <span className={clsx('shrink-0 rounded-full px-1.5 text-[10px] font-medium leading-4', meta?.cls)}>{meta?.label}</span>
                                 </span>
                                 {/* Where to send it — amber only while the money still has to be sent. */}
-                                <span className={clsx('block truncate text-[11px] leading-4', open ? 'text-amber-300' : 'text-faint')} title={w.notes || undefined}>
+                                <span className={clsx('block break-words text-[11px] leading-4 sm:truncate', open ? 'text-amber-300' : 'text-faint')} title={w.notes || undefined}>
                                   {w.notes || formatDateTime(w.requestedAt)}
                                 </span>
                               </span>
@@ -2716,19 +2807,21 @@ function AdminView() {
                               </span>
                             </button>
                             {open && (
-                              <div className="flex w-full shrink-0 justify-end gap-1 sm:w-auto">
+                              // On a phone the buttons share the row's width, 44 px tall and 12 px apart: Pay records
+                              // the payout at once, so a thumb must not reach it on its way to Reject.
+                              <div className="flex w-full shrink-0 justify-end gap-3 sm:w-auto sm:gap-1">
                                 {/* Busy while a decision is on its way (audit #19): a second tap used to send a second PAY.
                                     The server now refuses it too; this keeps the button from inviting it. */}
                                 {w.status === 'PENDING' && <>
-                                  <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Approve & pay" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                                  <Button className="min-h-11 flex-1 whitespace-nowrap px-3 py-1 text-[13px] sm:min-h-0 sm:flex-none sm:px-2 sm:text-xs" aria-label="Approve & pay" loading={decide.isPending && decide.variables?.id === w.id && decide.variables?.action === 'PAY'} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
                                     <span className="sm:hidden">Pay</span><span className="hidden sm:inline">Approve &amp; pay</span>
                                   </Button>
-                                  <Button variant="ghost" className="px-2 py-1 text-xs text-rose-400" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
+                                  <Button variant="ghost" className="min-h-11 flex-1 px-3 py-1 text-[13px] text-rose-400 ring-1 ring-inset ring-rose-400/25 sm:min-h-0 sm:flex-none sm:px-2 sm:text-xs sm:ring-0" disabled={decide.isPending} onClick={() => setRejectingWd(w)}>Reject</Button>
                                 </>}
                                 {w.status === 'APPROVED' && (
                                   // One button, because there is only one truth: rep commission comes out of the owner's
                                   // own pocket, for both brands. The payout's own sheet says "from my pocket" in full.
-                                  <Button className="whitespace-nowrap px-2 py-1 text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
+                                  <Button className="min-h-11 flex-1 whitespace-nowrap px-3 py-1 text-[13px] sm:min-h-0 sm:flex-none sm:px-2 sm:text-xs" aria-label="Mark paid — from my pocket" loading={decide.isPending && decide.variables?.id === w.id} disabled={decide.isPending} onClick={() => decide.mutate({ id: w.id, action: 'PAY', fromOwnPocket: true })}>
                                     Mark paid<span className="hidden sm:inline"> — from my pocket</span>
                                   </Button>
                                 )}
@@ -2780,7 +2873,7 @@ export default function Commissions({ embedded = false }) {
       {!embedded && (
         <PageHeader title={isRep ? 'My wallet' : 'Commissions'} subtitle={isRep ? 'Your money, bonuses and withdrawals.' : 'Commission performance and withdrawal approvals.'} />
       )}
-      {isRep ? <RepView /> : <AdminView />}
+      {isRep ? <RepView /> : <AdminView embedded={embedded} />}
     </div>
   );
 }

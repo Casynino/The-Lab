@@ -11,9 +11,11 @@ import {
 } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
+import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime, formatNumber, unitWord } from '@/lib/format';
 import OrderDetailModal, { RejectSubmissionModal } from '@/components/OrderDetail';
 import ActiveOrderCard from '@/components/ActiveOrderCard';
 import CollapsibleList from '@/components/CollapsibleList';
@@ -113,10 +115,14 @@ function PendingApprovals({ onReview }) {
   const refresh = () => {
     ['settlements', 'commissions', 'dashboard', 'inventory'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   };
+  // Per row: one press goes through until it has an answer. A same-frame double tap sent two approvals
+  // and the refused second one showed "already decided" after a good approval (audit admin-ops-3).
+  const once = useOnce();
   const approve = useMutation({
     mutationFn: (id) => api.post(`/settlements/submissions/${id}/approve`),
     onSuccess: () => { toast.success('Settlement approved'); refresh(); },
     onError: (e) => toast.error(apiError(e)),
+    onSettled: (_d, _e, id) => once.release(id),
   });
   // Reject asks first, with an optional reason the rep is told — the same box as on the order itself.
   // It used to reject on one tap, with no reason (audit, 11 Nov 2026).
@@ -146,12 +152,14 @@ function PendingApprovals({ onReview }) {
               <button onClick={() => onReview(p.settlementId)} className="min-w-0 flex-1 text-left">
                 <div className="text-sm font-semibold text-foreground">{p.salesRep} · {formatCurrency(p.amount)}</div>
                 <div className="mt-0.5 text-xs text-faint">
-                  {p.boxes} box(es) {p.productName} · {p.settlementNumber}{p.method ? ` · ${p.method}` : ''} · {formatDateTime(p.submittedAt)}
+                  {formatNumber(p.boxes)} {unitWord(p.boxes)} {p.productName} · {p.settlementNumber}{p.method ? ` · ${p.method}` : ''} · {formatDateTime(p.submittedAt)}
                 </div>
               </button>
-              <div className="flex shrink-0 gap-2">
-                <Button variant="ghost" className="text-rose-500" disabled={approving} onClick={() => setRejecting(p)}>Reject</Button>
-                <Button loading={approving} onClick={() => approve.mutate(p.id)}>
+              {/* On a phone the two decisions are full-size and apart (44 px, audit 12 Nov 2026): a near miss
+                  on Reject used to land on Approve. */}
+              <div className="flex w-full shrink-0 gap-3 sm:w-auto sm:gap-2">
+                <Button variant="ghost" className="min-h-11 flex-1 text-rose-500 sm:min-h-0 sm:flex-none" disabled={approving} onClick={() => setRejecting(p)}>Reject</Button>
+                <Button className="min-h-11 flex-1 sm:min-h-0 sm:flex-none" loading={approving} onClick={() => once.run(() => approve.mutate(p.id), p.id)}>
                   <CheckCircle2 className="h-4 w-4" /> Approve
                 </Button>
               </div>
@@ -200,13 +208,13 @@ function FilterChip({ label, count, active, tone, onClick }) {
 }
 
 function StaffSettlements({ viewing, setViewing }) {
-  const [page, setPage] = useState(1);
-  // A link can open the page on one chip (the Dashboard's "orders past the deadline" opens Overdue).
-  const [params] = useSearchParams();
-  const [status, setStatus] = useState(() => {
-    const asked = params.get('status');
-    return ['OPEN', 'PARTIAL', 'OVERDUE', 'SETTLED'].includes(asked) ? asked : '';
-  });
+  // The chip and the page are in the address (?status=SETTLED&page=3), written with replace: Back from an
+  // order's page comes back to the same list, a reload keeps it, and the Dashboard's "orders past the
+  // deadline" link (?status=OVERDUE) and the chips always agree (navigation-6, navigation-11).
+  const [params, setParams] = useSearchParams();
+  const status = pickParam(params, 'status', ['OPEN', 'PARTIAL', 'OVERDUE', 'SETTLED']);
+  const page = pageParam(params);
+  const setPage = (n) => setParams((p) => withParams(p, { page: n }), { replace: true });
 
   const { data: summary } = useQuery({
     ...pageQueries.settlementsSummary(),
@@ -218,7 +226,7 @@ function StaffSettlements({ viewing, setViewing }) {
     placeholderData: keepOnPageTurn({ status }),
   });
 
-  const pick = (next) => { setStatus(next); setPage(1); };
+  const pick = (next) => setParams((p) => withParams(p, { status: next, page: null }), { replace: true });
 
   const b = summary?.boxes || { issued: 0, settled: 0, returned: 0, remaining: 0 };
   const sc = summary?.statusCounts || {};
@@ -310,7 +318,7 @@ function StaffSettlements({ viewing, setViewing }) {
           <EmptyState title="No orders here" message="Orders open automatically when stock is issued to a rep." icon={Timer} />
         ) : (
           <>
-            <Table>
+            <Table stack="wide">
               <THead>
                 <TR>
                   <TH>Order</TH><TH>Rep</TH>

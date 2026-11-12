@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useRef, useId, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useId, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { lazyPart, PageLoadBoundary } from '@/components/LazyPage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES } from '@/lib/constants';
@@ -461,7 +462,8 @@ function ProductModal({ open, onClose, editing, brands, categories, units }) {
 
 // The Pepa product label — the page a carton's QR code opens — belongs with the products (Nino, 11 Nov
 // 2026: "the Label should go inside the Products page"). Loaded only when its tab is opened.
-const ProductLabel = lazy(() => import('@/pages/ProductLabel'));
+// Through the app's page loader (lib/pages.js), like every page file (audit pwa-brand-load-3).
+const ProductLabel = lazyPart('ProductLabel');
 const PRODUCT_TABS = [['catalogue', 'Products'], ['label', 'Label']];
 
 export default function Products() {
@@ -475,14 +477,18 @@ export default function Products() {
       {/* The same pill tabs as Finance. */}
       <div className="mb-5 flex flex-wrap gap-2">
         {PRODUCT_TABS.map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setParams(k === 'catalogue' ? {} : { tab: k })}
+          <button key={k} type="button" onClick={() => setParams(k === 'catalogue' ? {} : { tab: k }, { replace: true })}
             aria-current={tab === k ? 'page' : undefined}
             className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k
               ? 'bg-brand-500 text-white ring-brand-500'
               : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
         ))}
       </div>
-      {tab === 'label' ? <Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense> : <ProductsCatalogue />}
+      {tab === 'label' ? (
+        <PageLoadBoundary what="this tab" resetKey={tab}>
+          <Suspense fallback={<PageSpinner />}><ProductLabel /></Suspense>
+        </PageLoadBoundary>
+      ) : <ProductsCatalogue />}
     </div>
   );
 }
@@ -519,14 +525,15 @@ function ProductsCatalogue() {
         {isOwner && <Button onClick={() => setModal({ open: true, editing: null })} disabled={!units.length}><Plus className="h-4 w-4" /> New product</Button>}
       </PageHeader>
 
-      {/* What the catalogue holds, before the list of it. Counted over the
-          rows on screen, and the low-stock card only lights up when there is
-          something to act on. */}
+      {/* What the catalogue holds, before the list of it. Counted by the server over every product the
+          filters match (meta.summary), not just the page on screen, and the low-stock card only lights up
+          when there is something to act on. An older server without the summary falls back to the rows. */}
       {(() => {
         const rows = data?.data || [];
-        const onHand = rows.reduce((n, p) => n + (p.onHandBase || 0), 0);
-        const lowCount = rows.filter((p) => p.lowStock).length;
-        const value = rows.reduce((n, p) => n + (p.onHandBase || 0) * Number(p.sellingPrice || 0), 0);
+        const sum = data?.meta?.summary;
+        const onHand = sum ? sum.onHandBase : rows.reduce((n, p) => n + (p.onHandBase || 0), 0);
+        const lowCount = sum ? sum.lowCount : rows.filter((p) => p.lowStock).length;
+        const value = sum ? sum.worthAtSelling : rows.reduce((n, p) => n + (p.onHandBase || 0) * Number(p.sellingPrice || 0), 0);
         const cards = [
           { label: 'Products', value: formatNumber(data?.meta?.total ?? rows.length), icon: Package, sub: 'in the catalogue',
             ring: 'ring-brand-500/25', glow: 'from-brand-500/[0.12]', chip: 'bg-brand-500/15 text-brand-600', num: 'text-brand-600' },
@@ -586,12 +593,12 @@ function ProductsCatalogue() {
           )
         ) : (
           <>
-            <Table>
+            <Table stack="wide">
               <THead><TR><TH>Product</TH><TH>Brand</TH><TH>Packaging</TH><TH>Pack price</TH><TH>On hand</TH><TH>Status</TH><TH /></TR></THead>
               <TBody>
                 {data.data.map((p) => (
                   <TR key={p.id}>
-                    <TD className="min-w-[12rem] whitespace-normal">
+                    <TD className="stack-full min-w-[12rem] whitespace-normal">
                       <div className="font-medium text-foreground">{p.name}</div>
                       <div className="text-xs text-faint">{p.sku}</div>
                     </TD>

@@ -1,7 +1,8 @@
 import { LIVE, STEADY } from '@/lib/polling';
 import { InstallPrompt, InstallButton } from '@/components/InstallApp';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import ConnectionNotice from '@/components/ConnectionNotice';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation, useNavigationType } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -21,6 +22,55 @@ import { initials, fromNow } from '@/lib/format';
 import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { pageQueries, prefetchRoute, warmUp } from '@/lib/pageQueries';
 import { Modal, Button, Field, Input } from '@/components/ui';
+import { useBackToClose } from '@/lib/useBackToClose';
+import { remember, arrive } from '@/lib/scrollMemory';
+
+/* A new page starts at the top; Back and Forward go back to where that page was (audit 12 Nov 2026,
+   navigation-3). Keyed on the router's entry, so a tab or a filter written into the address with replace
+   does not jump, and the windows' own history steps (lib/backToClose.js) never reach it at all. */
+function useScrollMemory() {
+  const location = useLocation();
+  const navType = useNavigationType();
+  const at = useRef(null);
+  const from = useRef(null);
+  useEffect(() => {
+    // The browser's own restore is off only while the app's pages are on screen: the sign-in page and
+    // /nino keep it (navigation-3b).
+    let was = null;
+    try {
+      was = window.history.scrollRestoration;
+      window.history.scrollRestoration = 'manual';
+    } catch {
+      /* an old browser: it keeps its own restore */
+    }
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = 0;
+        // The phone menu pins the page (position: fixed) and the window reads 0 meanwhile: not a place.
+        if (document.body.style.position === 'fixed') return;
+        remember(at.current, window.scrollY);
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.cancelAnimationFrame(frame);
+      try {
+        if (was) window.history.scrollRestoration = was;
+      } catch {
+        /* as above */
+      }
+    };
+  }, []);
+  useLayoutEffect(() => {
+    at.current = location.key;
+    const stop = arrive({ key: location.key, pathname: location.pathname, navType, from: from.current });
+    from.current = { key: location.key, pathname: location.pathname };
+    return stop;
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
+}
 
 const ICONS = {
   LayoutDashboard, Package, Boxes, Truck, ShoppingCart, Users, HandCoins, Undo2,
@@ -197,7 +247,7 @@ function GlassSidebar({
             'relative flex items-center rounded-lg',
             FOCUS,
             sheet
-              ? clsx('px-2 text-[12px]', child ? 'min-h-7 gap-2 py-1' : 'min-h-8 gap-2.5 py-1.5')
+              ? clsx('px-2 text-[12px]', child ? 'min-h-10 gap-2 py-1' : 'min-h-11 gap-2.5 py-1.5')
               : clsx('gap-3 text-[13px]', child ? 'px-3 py-1.5' : 'px-3 py-2'),
             active ? 'glass-active font-medium g-strong' : 'glass-row g-text g-hover',
           )}
@@ -307,7 +357,7 @@ function GlassSidebar({
                   className={clsx(
                     'glass-row g-hover flex w-full items-center rounded-lg text-left font-medium',
                     FOCUS,
-                    sheet ? 'min-h-8 gap-2.5 px-2.5 py-1.5 text-[12.5px]' : 'gap-3 px-3 py-2 text-[13px]',
+                    sheet ? 'min-h-11 gap-2.5 px-2.5 py-1.5 text-[12.5px]' : 'gap-3 px-3 py-2 text-[13px]',
                     here ? 'g-strong' : 'g-text',
                   )}
                 >
@@ -571,7 +621,7 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
             Notifications
             {unread > 0 && <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{unread}</span>}
           </span>
-          {unread > 0 && <button onClick={onReadAll} className="cursor-pointer text-xs text-brand-600 hover:underline">Mark all read</button>}
+          {unread > 0 && <button onClick={onReadAll} className="tap-phone cursor-pointer text-xs text-brand-600 hover:underline">Mark all read</button>}
         </div>
         {notes.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted">You're all caught up.</div>
@@ -585,13 +635,13 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
                   <div className="mt-0.5 line-clamp-2 text-xs text-muted">{n.message}</div>
                   <div className="mt-1 text-[10px] text-faint">{fromNow(n.createdAt)}</div>
                 </div>
-                {!n.isRead && <button onClick={() => onReadOne(n.id)} className="shrink-0 cursor-pointer text-[10px] text-brand-600 hover:underline">Read</button>}
+                {!n.isRead && <button onClick={() => onReadOne(n.id)} className="tap-phone shrink-0 cursor-pointer px-1 text-[10px] text-brand-600 hover:underline">Read</button>}
               </li>
             ))}
           </ul>
         )}
         <div className="border-t border-white/[0.07] p-2.5 text-center">
-          <button onClick={onViewAll} className="cursor-pointer text-sm text-brand-600 hover:underline">View all notifications →</button>
+          <button onClick={onViewAll} className="tap-phone cursor-pointer text-sm text-brand-600 hover:underline">View all notifications →</button>
         </div>
       </div>
     </>
@@ -633,7 +683,7 @@ function ChangePasswordModal({ onClose }) {
         <Field label="Current password" required>
           <div className="relative">
             <Input type={showCurrent ? 'text' : 'password'} value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
-            <button type="button" onClick={() => setShowCurrent((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+            <button type="button" onClick={() => setShowCurrent((v) => !v)} className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
               {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
@@ -641,7 +691,7 @@ function ChangePasswordModal({ onClose }) {
         <Field label="New password" required hint="Minimum 8 characters">
           <div className="relative">
             <Input type={showNext ? 'text' : 'password'} value={next} onChange={(e) => setNext(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
-            <button type="button" onClick={() => setShowNext((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+            <button type="button" onClick={() => setShowNext((v) => !v)} className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
               {showNext ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
@@ -696,17 +746,28 @@ export default function Layout() {
      one of them. Every page in here already carries its own PageHeader. */
   const atHome = location.pathname === '/';
 
-  // The bell hangs off the banner, so leaving home takes its anchor with it.
-  useEffect(() => { setBellOpen(false); }, [location.pathname]);
+  // The bell hangs off the banner, so leaving home takes its anchor with it. The phone menu goes too: it
+  // used to stay open over the page Back had gone to, with that page still pinned under it (navigation-2).
+  useEffect(() => { setBellOpen(false); setDrawer(null); }, [location.pathname]);
+
+  useScrollMemory();
+  // Phone/browser Back closes the menu or the bell instead of leaving the page (lib/backToClose.js). Called
+  // before the menu pins the page below, so the page's own entry is left at its real scroll place.
+  useBackToClose(!!drawer, () => setDrawer(null), { guard: false });
+  useBackToClose(bellOpen, () => setBellOpen(false), { guard: false });
 
   /* While the drawer is open the page behind it must not move.
      Without this the page keeps scrolling under the panel, and on a phone
      that scroll collapses the browser's address bar — which the page sees as
      the viewport changing height, so it reflows mid-animation and the whole
-     screen jumps. The position is held and put back exactly. */
+     screen jumps. The position is held and put back exactly — unless the
+     menu was closed by going to another page, which starts at the top. */
+  const pathNow = useRef(location.pathname);
+  pathNow.current = location.pathname;
   useEffect(() => {
     if (!drawer) return undefined;
     const y = window.scrollY;
+    const openedOn = pathNow.current;
     const { body } = document;
     const was = {
       position: body.style.position, top: body.style.top,
@@ -718,7 +779,7 @@ export default function Layout() {
     body.style.overflow = 'hidden';
     return () => {
       Object.assign(body.style, was);
-      window.scrollTo(0, y);
+      window.scrollTo(0, pathNow.current === openedOn ? y : 0);
     };
   }, [drawer]);
 
@@ -925,6 +986,8 @@ export default function Layout() {
                     onViewAll={() => { setBellOpen(false); navigate('/notifications'); }} />
                 )}
               </div>
+              {/* No signal, or figures kept from before a refresh failed: said once, above the page. */}
+              <ConnectionNotice />
               <motion.div
                 key={location.pathname}
                 initial={{ opacity: 0, y: 8 }}

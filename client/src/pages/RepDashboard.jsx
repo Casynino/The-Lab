@@ -11,17 +11,12 @@ import { pageQueries } from '@/lib/pageQueries';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatNumber, formatDateTime } from '@/lib/format';
 import ProgressRows from '@/components/ProgressRows';
+import { timeLeftLabel } from '@/lib/labels';
 import { SETTLEMENT_STATUS_META } from '@/lib/constants';
 import OrderDetailModal from '@/components/OrderDetail';
 import ActiveOrderCard from '@/components/ActiveOrderCard';
 import { PageSpinner, EmptyState, LoadError, Badge } from '@/components/ui';
 
-function hoursLabel(h) {
-  if (h == null) return '—';
-  if (h < 0) return `${Math.abs(Math.round(h))}h overdue`;
-  if (h < 24) return `${Math.round(h)}h left`;
-  return `${Math.round(h / 24)}d left`;
-}
 
 // ── Standard dash card ───────────────────────────────────────────────────────
 
@@ -152,7 +147,7 @@ export default function RepDashboard() {
               <button
                 type="button"
                 onClick={() => navigate('/settlements')}
-                className="px-1 pt-1 text-[13px] font-semibold text-brand-600 transition hover:text-brand-500"
+                className="tap-phone px-1 pt-1 text-[13px] font-semibold text-brand-600 transition hover:text-brand-500"
               >
                 See all {orders.length} orders
               </button>
@@ -194,7 +189,7 @@ export default function RepDashboard() {
                       <td className="px-4 py-3">
                         <div className="text-muted">{formatDateTime(o.deadlineAt)}</div>
                         <div className={clsx('text-xs', overdue ? 'text-rose-400' : approaching ? 'text-amber-400' : 'text-faint')}>
-                          {hoursLabel(o.hoursRemaining)}
+                          {timeLeftLabel(o.hoursRemaining)}
                         </div>
                       </td>
                       <td className="px-4 py-3">

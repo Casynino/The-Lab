@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 import { Save, Send, MessageCircle, Eye, EyeOff, Lock, RotateCw } from 'lucide-react';
 import dayjs from 'dayjs';
 import api, { unwrap, apiError } from '@/lib/api';
-import { PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, Input, Button, Select, Badge } from '@/components/ui';
+import { PageHeader, Card, CardHeader, CardBody, PageSpinner, EmptyState, LoadError, Input, Button, Select, Badge } from '@/components/ui';
 
 // Rearranged 11 Nov 2026 (Nino: "too many things — it should be well arranged"): two columns on a wide
 // screen, the alerts as a compact grid with plain dots, every setting under a plain name, the API key
@@ -16,25 +16,32 @@ const PRIORITY_DOT = { INFO: 'bg-emerald-400', ACTION: 'bg-amber-300', WARNING: 
 const Dot = ({ priority }) => <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[priority] || PRIORITY_DOT.INFO}`} aria-hidden="true" />;
 
 // Plain words for the keys the business actually uses. Anything not listed shows its key and description.
+// `unused`: saved in the settings table but read by nothing in the app yet (audit 11 Nov 2026, admin-system-4:
+// "Order window 72 hours" could be edited and "Saved" with no effect — the window is fixed in the app). Shown
+// read-only and marked "Not used yet", so nobody believes a change here did something. Wiring one in is a
+// business decision, not a settings edit.
+// `locked`: in use, but not to be changed here (each says why).
 const SETTING_INFO = {
-  'settlement.windowHours': { label: 'Order window', unit: 'hours', help: 'How long a rep has to settle an order.' },
-  'credit.defaultTermDays': { label: 'Credit term', unit: 'days', help: 'Days a customer has to pay a credit sale.' },
-  'reorder.coverDays': { label: 'Reorder: stock to cover', unit: 'days', help: 'How many days of sales a reorder should cover.' },
-  'reorder.lookbackDays': { label: 'Reorder: sales to look back at', unit: 'days', help: 'Days of past sales used to plan a reorder.' },
-  'commission.amountPerThreshold': { label: 'Commission: least a rep can withdraw', unit: 'TSh' },
-  'commission.v1PerBox': { label: 'Commission per box (older orders)', unit: 'TSh' },
-  'business.name': { label: 'Business name' },
-  'business.country': { label: 'Country' },
-  'business.currency': { label: 'Currency' },
+  'settlement.windowHours': { label: 'Order window', unit: 'hours', unused: true, help: 'The app uses a fixed 72-hour window; this value is not read.' },
+  'credit.defaultTermDays': { label: 'Credit term', unit: 'days', unused: true, help: 'Days a customer has to pay a credit sale. Not read by the app yet.' },
+  'reorder.coverDays': { label: 'Reorder: stock to cover', unit: 'days', unused: true, help: 'The Reorder tab uses its own 30 days; this value is not read.' },
+  'reorder.lookbackDays': { label: 'Reorder: sales to look back at', unit: 'days', unused: true, help: 'The Reorder tab uses its own setting; this value is not read.' },
+  'commission.amountPerThreshold': { label: 'Commission: least a rep can withdraw', unit: 'TSh', help: 'A whole amount above 0. A rep with his own minimum keeps his.' },
+  // The server refuses any change: orders were issued and paid on it.
+  'commission.v1PerBox': { label: 'Commission per box (older orders)', unit: 'TSh', locked: true, help: 'What one box earned before 1 Aug 2026. Fixed: orders were paid on it.' },
+  'business.name': { label: 'Business name', unused: true },
+  'business.country': { label: 'Country', unused: true },
+  'business.currency': { label: 'Currency', unused: true },
   'whatsapp.phone': { label: 'Your WhatsApp number', help: 'Where the business alerts and reports are sent.' },
   'whatsapp.apikey': { label: 'CallMeBot key', help: 'The key CallMeBot gave this number.', secret: true },
   // Changing it would move every balance and report — shown, not edited here.
-  'finance.epochAt': { label: 'Finance start', help: 'Money is counted from this moment (go-live).', locked: true },
+  'finance.epochAt': { label: 'Finance start', help: 'Money is counted from this moment (go-live).', locked: true, date: true },
 };
+// The ones that do something first; the "Not used yet" ones after them.
 const SETTING_ORDER = [
-  'settlement.windowHours', 'credit.defaultTermDays', 'commission.amountPerThreshold', 'commission.v1PerBox',
-  'reorder.coverDays', 'reorder.lookbackDays', 'whatsapp.phone', 'whatsapp.apikey',
-  'business.name', 'business.country', 'business.currency', 'finance.epochAt',
+  'commission.amountPerThreshold', 'commission.v1PerBox', 'whatsapp.phone', 'whatsapp.apikey', 'finance.epochAt',
+  'settlement.windowHours', 'credit.defaultTermDays', 'reorder.coverDays', 'reorder.lookbackDays',
+  'business.name', 'business.country', 'business.currency',
 ];
 
 // Settings the WhatsApp panel manages itself — hidden from the raw list below.
@@ -79,7 +86,7 @@ function StatusChip({ row }) {
 function RecentMessages() {
   const qc = useQueryClient();
   const [all, setAll] = useState(false);
-  const { data: history, isLoading } = useQuery({
+  const { data: history, isLoading, isError, refetch } = useQuery({
     queryKey: ['whatsapp-history'],
     queryFn: async () => unwrap(await api.get('/settings/whatsapp/history?limit=25')).data,
     refetchInterval: SLOW,
@@ -118,7 +125,9 @@ function RecentMessages() {
         )}
       />
       <CardBody>
-        {isLoading ? <PageSpinner label="Loading…" /> : rows.length === 0 ? (
+        {isLoading ? <PageSpinner label="Loading…" /> : isError && !history ? (
+          <LoadError what="the messages" onRetry={refetch} />
+        ) : rows.length === 0 ? (
           <EmptyState icon={MessageCircle} title="Nothing sent yet" message="Messages appear here as things happen." />
         ) : (
           <>
@@ -149,7 +158,7 @@ function WhatsAppPanel({ settings }) {
   const save = useSettingSave();
   const settingMap = new Map((settings || []).map((s) => [s.key, s.value]));
 
-  const { data: types } = useQuery({
+  const { data: types, isError: typesFailed, refetch: retryTypes } = useQuery({
     queryKey: ['whatsapp-types'],
     queryFn: async () => unwrap(await api.get('/settings/whatsapp/types')).data,
   });
@@ -206,6 +215,7 @@ function WhatsAppPanel({ settings }) {
           </div>
           <div>
             <div className="mb-1 text-sm font-semibold text-foreground">What you receive</div>
+            {typesFailed && !types && <LoadError what="the alert list" onRetry={retryTypes} />}
             <div className="divide-y divide-white/[0.06]">
               {(types || []).map((t) => {
                 const key = `whatsapp.notify.${t.key}`;
@@ -287,10 +297,13 @@ function SettingRow({ setting }) {
         <span className="text-sm font-medium text-foreground">{label}</span>
         {info.unit && <span className="text-[11px] text-faint">{info.unit}</span>}
       </div>
-      {info.locked ? (
-        <div className="flex items-center gap-2 rounded-lg bg-black/25 px-3 py-2 text-sm text-white/80 ring-1 ring-inset ring-white/10">
-          <Lock className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden="true" />
-          {dayjs(setting.value).isValid() ? dayjs(setting.value).format('D MMM YYYY, HH:mm') : setting.value}
+      {info.locked || info.unused ? (
+        <div className={`flex items-center gap-2 rounded-lg bg-black/25 px-3 py-2 text-sm ring-1 ring-inset ring-white/10 ${info.unused ? 'text-white/55' : 'text-white/80'}`}>
+          {info.locked && <Lock className="h-3.5 w-3.5 shrink-0 text-faint" aria-hidden="true" />}
+          <span className="min-w-0 flex-1 truncate">
+            {info.date && dayjs(setting.value).isValid() ? dayjs(setting.value).format('D MMM YYYY, HH:mm') : setting.value}
+          </span>
+          {info.unused && <span className="shrink-0 whitespace-nowrap text-[11px] text-white/45">Not used yet</span>}
         </div>
       ) : (
         <div className="flex items-center gap-2">
@@ -304,7 +317,7 @@ function SettingRow({ setting }) {
             />
             {info.secret && (
               <button type="button" onClick={() => setShow((v) => !v)} aria-label={show ? 'Hide' : 'Show'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+                className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
                 {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             )}
@@ -320,12 +333,22 @@ function SettingRow({ setting }) {
 }
 
 export default function Settings() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settings'],
     queryFn: async () => unwrap(await api.get('/settings')).data,
   });
 
   if (isLoading) return <PageSpinner />;
+  // Settings that never arrived are not "WhatsApp not set up, quiet hours off" — and the quiet-hours
+  // selects must not be live over values that are not there (audit admin-system-5).
+  if (isError && !data) {
+    return (
+      <div>
+        <PageHeader title="Settings" subtitle="Your alerts and how the business runs." />
+        <Card><LoadError what="the settings" onRetry={refetch} /></Card>
+      </div>
+    );
+  }
 
   const visible = (data || []).filter(
     (s) => !MANAGED_PREFIXES.some((p) => s.key.startsWith(p)) && !MANAGED_KEYS.includes(s.key),

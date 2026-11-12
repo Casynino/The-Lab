@@ -83,7 +83,7 @@ export default function Notifications() {
             type="button"
             disabled={markAll.isPending}
             onClick={() => markAll.mutate()}
-            className="flex items-center gap-1.5 pb-0.5 text-[13px] font-semibold text-brand-600 transition hover:text-brand-500 disabled:opacity-50"
+            className="tap-phone flex items-center gap-1.5 pb-0.5 text-[13px] font-semibold text-brand-600 transition hover:text-brand-500 disabled:opacity-50"
           >
             <CheckCheck className="h-4 w-4" /> Mark all read
           </button>

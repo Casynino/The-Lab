@@ -41,4 +41,11 @@ function formatCurrency(value) {
   }
 }
 
-module.exports = { toNumber, round2, toDecimal, sum, formatCurrency };
+// The largest amount a money column (Decimal(14,2)) can hold. A bigger one reached Prisma and came back
+// as a 500 with the database's error text (audit backend-integrity-4); it is refused as a 400 instead.
+const DB_MAX_AMOUNT = 999_999_999_999.99;
+// A hand-made commission deduction or correction above this is a typo (extra zeros), not a real figure:
+// every commission ever earned is a few million shillings. Change here if the business ever needs more.
+const MAX_COMMISSION_CHANGE = 100_000_000;
+
+module.exports = { toNumber, round2, toDecimal, sum, formatCurrency, DB_MAX_AMOUNT, MAX_COMMISSION_CHANGE };

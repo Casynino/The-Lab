@@ -15,8 +15,8 @@ const reports = require('./reports.service');
 const inventory = require('./inventory.service');
 const commission = require('./commission.service');
 const { nextDocNumber } = require('../utils/numbering');
-const { toNumber, round2 } = require('../utils/money');
-const { dayjs, resolveRange, EAT_OFFSET_H } = require('../utils/dates');
+const { toNumber, round2, DB_MAX_AMOUNT } = require('../utils/money');
+const { dayjs, resolveRange, eatDayBounds, EAT_OFFSET_H } = require('../utils/dates');
 
 // ── Money that never touches a business account ─────────────────────────────
 // The owner pays every rep in physical cash out of his own hand: "no business
@@ -419,22 +419,26 @@ async function backfillFromHistory() {
   for (const w of paidWithdrawals) {
     if (haveW.has(w.id)) continue;
     if (!commAcc) break;
-    const txnNumber = await nextDocNumber(prisma.financeTransaction, 'txnNumber', 'FTX');
-    await prisma.financeTransaction.create({
-      data: {
-        txnNumber,
-        accountId: commAcc.id,
-        direction: 'OUT',
-        type: 'COMMISSION_PAYMENT',
-        amount: round2(toNumber(w.amount)),
-        category: 'Commission Payments',
-        description: `Commission paid${w.salesRep?.user?.name ? ` — ${w.salesRep.user.name}` : ''}`,
-        refType: 'CommissionWithdrawal',
-        refId: w.id,
-        occurredAt: w.paidAt || w.decidedAt || w.createdAt,
-      },
-    });
-    paymentsCreated++;
+    // Checked again under the withdrawal's lock: the admin's own write (or another rebuild) may have
+    // landed since `haveW` was read (audit backend-integrity-1).
+    const { created } = await writePayoutRowOnce(w.id, async (tx) => {
+      const txnNumber = await nextDocNumber(tx.financeTransaction, 'txnNumber', 'FTX');
+      return tx.financeTransaction.create({
+        data: {
+          txnNumber,
+          accountId: commAcc.id,
+          direction: 'OUT',
+          type: 'COMMISSION_PAYMENT',
+          amount: round2(toNumber(w.amount)),
+          category: 'Commission Payments',
+          description: `Commission paid${w.salesRep?.user?.name ? ` — ${w.salesRep.user.name}` : ''}`,
+          refType: 'CommissionWithdrawal',
+          refId: w.id,
+          occurredAt: w.paidAt || w.decidedAt || w.createdAt,
+        },
+      });
+    }).catch(() => ({ created: false }));
+    if (created) paymentsCreated++;
   }
 
   return { incomeCreated, paymentsCreated, brandTagged };
@@ -485,6 +489,8 @@ function resolveOccurredAt(v) {
 async function recordTransaction(data, actor, client = prisma, { checkBrand = false } = {}) {
   const amount = round2(toNumber(data.amount));
   if (!(amount > 0)) throw ApiError.badRequest('Amount must be greater than zero');
+  // Bigger than the money column holds: a clean refusal, not a 500 with the database's error text.
+  if (amount > DB_MAX_AMOUNT) throw ApiError.badRequest('That amount is too large — check the number of zeros');
   // Said plainly: without it Prisma answered "Invalid database query".
   if (!data.accountId) throw ApiError.badRequest('Choose the account the money moved through');
   const account = await client.businessAccount.findUnique({ where: { id: data.accountId } });
@@ -592,6 +598,24 @@ async function recordSaleIncome({ saleId, saleNumber, amount, fromSettlement, wh
 }
 
 // Automatic money-out when a commission withdrawal is paid.
+// Write a payout's ledger row at most once. The withdrawal row is locked first (FOR UPDATE), then the
+// check for an existing COMMISSION_PAYMENT row and the write run in the same transaction. Approve & pay
+// and a Finance page read (the self-heal rebuild) used to both see "missing" in the same few
+// milliseconds and both write, so one 20,000 payout was booked twice and "Paid reps from your pocket"
+// went up by 20,000 for good (audit backend-integrity-1). No schema change: the lock serialises them,
+// so the second one finds the first one's row and writes nothing. Returns { row, created }.
+async function writePayoutRowOnce(withdrawalId, makeData) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "commission_withdrawals" WHERE id = ${withdrawalId} FOR UPDATE`;
+    const existing = await tx.financeTransaction.findFirst({
+      where: { type: 'COMMISSION_PAYMENT', refType: 'CommissionWithdrawal', refId: withdrawalId },
+    });
+    if (existing) return { row: existing, created: false };
+    const row = await makeData(tx);
+    return { row, created: !!row };
+  });
+}
+
 async function recordCommissionPayment({ amount, who, reference, refId, occurredAt, fromOwnPocket }, actor) {
   try {
     const amt = round2(toNumber(amount));
@@ -621,7 +645,7 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
     // treats it as account movement: OFF_ACCOUNT_WHERE takes it back out of
     // every balance, and NON_TRADE_TYPES keeps it out of money in/out. What he
     // lays out is an investment the business owes him — see ownerFigures().
-    return await recordTransaction(
+    const write = (client) => recordTransaction(
       {
         accountId: acc.id,
         direction: 'OUT',
@@ -635,7 +659,12 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
         occurredAt,
       },
       actor,
+      client,
     );
+    // Tied to a withdrawal: written under that withdrawal's lock, so a rebuild running at the same
+    // moment cannot write it a second time.
+    if (refId) return (await writePayoutRowOnce(refId, write)).row;
+    return await write(prisma);
   } catch (e) {
     return null;
   }
@@ -660,9 +689,10 @@ async function listTransactions(filters, pagination) {
   }
   if (filters.brandId) where.brandId = filters.brandId === 'none' ? null : filters.brandId;
   if (filters.from || filters.to) {
-    where.occurredAt = {};
-    if (filters.from) where.occurredAt.gte = new Date(filters.from);
-    if (filters.to) where.occurredAt.lte = new Date(filters.to);
+    // A day is a Dar es Salaam day (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: filters.from, to: filters.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.occurredAt = bounds;
   }
   if (filters.minAmount != null || filters.maxAmount != null) {
     where.amount = {};
@@ -711,11 +741,13 @@ async function listTransactions(filters, pagination) {
     // without them every page restarted at today's balance. Same filter, same order, just the
     // rows before this page.
     filters.accountId && pagination.skip > 0
-      ? prisma.financeTransaction.findMany({ where, select: { amount: true, direction: true }, take: pagination.skip, orderBy })
+      ? prisma.financeTransaction.findMany({ where, select: { amount: true, direction: true, occurredAt: true }, take: pagination.skip, orderBy })
       : [],
   ]);
-  // In minus out over every row newer than this page.
-  const newerNet = round2(newerRows.reduce((s, t) => s + (t.direction === 'IN' ? 1 : -1) * toNumber(t.amount), 0));
+  // In minus out over every row newer than this page. Rows before go-live are not in the balance, so
+  // they never move it here either.
+  const inBooks = (t) => !epoch || new Date(t.occurredAt) >= epoch;
+  const newerNet = round2(newerRows.filter(inBooks).reduce((s, t) => s + (t.direction === 'IN' ? 1 : -1) * toNumber(t.amount), 0));
   const brandName = new Map(brands.map((b) => [b.id, b.name]));
   const fromPocket = round2(toNumber(offOutAgg._sum.amount));
   const sumIn = round2(toNumber(inAgg._sum.amount) - toNumber(offInAgg._sum.amount));
@@ -759,6 +791,9 @@ async function listTransactions(filters, pagination) {
     }),
     total,
     newerNet,
+    // Go-live. Rows before it stay listed (history) but are in no balance or total, so a statement
+    // marks them instead of walking its balance through them (audit admin-money-3).
+    epochAt: epoch || null,
     // `fromPocket` is reported beside in/out, never inside them.
     sums: { in: sumIn, out: sumOut, net: round2(sumIn - sumOut), fromPocket },
     byCategory: byCatRows
@@ -779,6 +814,7 @@ async function updateTransaction(id, data) {
       throw ApiError.badRequest('This amount comes from a sale and cannot be edited here. Recall/cancel the sale instead.');
     }
     patch.amount = round2(toNumber(data.amount));
+    if (patch.amount > DB_MAX_AMOUNT) throw ApiError.badRequest('That amount is too large — check the number of zeros');
   }
   // The edit form sends only a DAY. Saving the same day used to restamp the row with the time of the
   // edit (#77); a different day keeps the row's own time of day. A full timestamp is taken as given.
@@ -1124,6 +1160,8 @@ async function cashflow(opts = {}) {
   return {
     period: opts.from || opts.to ? 'custom' : opts.period || 'all',
     range: range ? { start: range.start, end: range.end } : null,
+    // With no range the figures start at go-live, not at the first record: say so on screen.
+    epochAt: epoch || null,
     openingBalance,
     ...inPeriod,
     // Contributions in, drawings out, and the net of the two — the part of his
@@ -1280,6 +1318,33 @@ async function supplierSummaries() {
   });
 }
 
+// Share a supplier's balance payments, then his returned goods, over his POs, oldest first. Each PO
+// takes only what is still open on it after its own PO payments. Pure (tested). Returns
+// Map(poId -> { paid, returned, outstanding }), where paid = the PO's own payments + its share of the
+// balance payments. A PO paid directly beyond its cost keeps its negative outstanding (shown, not hidden).
+function spreadOverOrders(orders, { balancePaid = 0, returned = 0 } = {}) {
+  let pay = round2(balancePaid);
+  let back = round2(returned);
+  const out = new Map();
+  const oldestFirst = [...orders].sort((a, b) => new Date(a.at) - new Date(b.at) || String(a.id).localeCompare(String(b.id)));
+  for (const o of oldestFirst) {
+    const total = round2(o.totalCost);
+    const direct = round2(o.paidDirect);
+    let open = Math.max(0, round2(total - direct));
+    const fromPay = Math.min(open, pay);
+    pay = round2(pay - fromPay);
+    open = round2(open - fromPay);
+    const fromBack = Math.min(open, back);
+    back = round2(back - fromBack);
+    out.set(o.id, {
+      paid: round2(direct + fromPay),
+      returned: round2(fromBack),
+      outstanding: round2(total - direct - fromPay - fromBack),
+    });
+  }
+  return out;
+}
+
 // One supplier's full accounts-payable profile: purchases, payments (both
 // PO-level and supplier-level), products supplied, balances and last activity.
 async function supplierDetail(id) {
@@ -1313,24 +1378,38 @@ async function supplierDetail(id) {
     orderBy: { occurredAt: 'desc' },
   });
   const paidByPo = new Map();
+  let balancePaid = 0;
   txns.forEach((t) => {
     if (t.refType === 'PurchaseOrder') paidByPo.set(t.refId, (paidByPo.get(t.refId) || 0) + toNumber(t.amount));
+    else balancePaid += toNumber(t.amount);
   });
+  const paid = round2(txns.reduce((x, t) => x + toNumber(t.amount), 0));
+  const returned = round2(credits.reduce((x, c) => x + toNumber(c.amount), 0));
 
+  // Balance payments and goods returned belong to the supplier, not to one PO. Spread over the POs,
+  // oldest first, each PO row says what is really still owed on it, and the rows add up to the
+  // balance owed. Without this every PO showed its full cost as outstanding with a Pay PO button
+  // (Bonge: 22,942,000 offered while 12,000,000 was owed) and could be paid twice (audit admin-money-1).
+  const spread = spreadOverOrders(
+    pos.map((p) => ({ id: p.id, totalCost: toNumber(p.totalCost), paidDirect: paidByPo.get(p.id) || 0, at: p.receivedAt || p.createdAt })),
+    { balancePaid, returned },
+  );
   const orders = pos.map((p) => {
-    const total = toNumber(p.totalCost);
-    const paid = round2(paidByPo.get(p.id) || 0);
+    const f = spread.get(p.id);
     return {
       id: p.id, poNumber: p.poNumber, status: p.status,
-      totalCost: round2(total), paid, outstanding: round2(total - paid),
+      totalCost: round2(toNumber(p.totalCost)), paid: f.paid, returned: f.returned, outstanding: f.outstanding,
       boxes: p.items.reduce((n, it) => n + it.quantity, 0),
       products: [...new Set(p.items.map((it) => it.product?.name).filter(Boolean))],
       receivedAt: p.receivedAt, createdAt: p.createdAt,
     };
   });
   const purchased = round2(orders.reduce((x, o) => x + o.totalCost, 0));
-  const paid = round2(txns.reduce((x, t) => x + toNumber(t.amount), 0));
-  const returned = round2(credits.reduce((x, c) => x + toNumber(c.amount), 0));
+  const outstanding = round2(purchased - returned - paid);
+  // Balance payments or returned goods beyond every bill fit on no PO row, so the rows alone add up to
+  // more than the balance owed; this is that difference (STG: rows 0, balance −1,000, 1,000 here).
+  // Never below zero: a PO paid directly beyond its cost shows its own negative row instead.
+  const notOnAnyPo = Math.max(0, round2(orders.reduce((x, o) => x + o.outstanding, 0) - outstanding));
   const productsPurchased = [...new Set(orders.flatMap((o) => o.products))];
   return {
     supplier: { ...s, brandName: brand?.name || null },
@@ -1346,7 +1425,7 @@ async function supplierDetail(id) {
     credits: credits.map((c) => ({
       id: c.id, amount: toNumber(c.amount), reason: c.reason, occurredAt: c.occurredAt,
     })),
-    totals: { purchased, paid, returned, outstanding: round2(purchased - returned - paid) },
+    totals: { purchased, paid, returned, outstanding, notOnAnyPo },
   };
 }
 
@@ -1425,15 +1504,35 @@ async function paySupplier({ purchaseOrderId, accountId, amount, notes, occurred
   });
   if (!po) throw ApiError.notFound('Purchase order not found');
   if (po.status === 'CANCELLED') throw ApiError.badRequest('This purchase order is cancelled');
-  const paidAgg = await prisma.financeTransaction.aggregate({
-    where: { refType: 'PurchaseOrder', refId: po.id, direction: 'OUT' },
-    _sum: { amount: true },
-  });
-  const alreadyPaid = toNumber(paidAgg._sum.amount);
-  const remaining = round2(toNumber(po.totalCost) - alreadyPaid);
+  // What is left on this PO counts the supplier's balance payments and returned goods too (shared over
+  // his POs, oldest first), and a PO payment can never take the supplier past what he is owed
+  // overall — the same cap as Pay supplier. Before, only this PO's own payments were counted, so a
+  // bill already paid as a balance payment could be paid again (audit admin-money-1).
+  // Which POs count as owed (ordered vs received) is unchanged here: that is decision D8.
+  const detail = await supplierDetail(po.supplierId);
+  const row = detail.orders.find((o) => o.id === po.id);
+  const onOrder = row ? row.outstanding : 0;
+  const owedOverall = detail.totals.outstanding;
+  const remaining = Math.max(0, round2(Math.min(onOrder, owedOverall)));
   const amt = amount != null ? round2(toNumber(amount)) : remaining;
-  if (!(amt > 0)) throw ApiError.badRequest('Payment amount must be greater than zero');
+  // Why nothing can be paid on it: the supplier is owed nothing in all (he may have been paid beyond the
+  // bills, even on another PO — then this PO's own row can still show an amount), or balance payments
+  // and returned goods cover this PO.
+  const supplierName = po.supplier?.name || 'this supplier';
+  const nothingLeft = () => ApiError.badRequest(
+    owedOverall < 0 ? `You owe ${supplierName} nothing in all — they have been paid TZS ${Math.abs(owedOverall).toLocaleString()} more than the bills`
+      : onOrder > 0 ? `You owe ${supplierName} nothing in all — the payments already made cover every bill`
+        : `Nothing is left to pay on ${po.poNumber} — balance payments and returned goods already cover it`,
+  );
+  if (!(amt > 0)) {
+    if (amount == null && remaining <= 0) throw nothingLeft();
+    throw ApiError.badRequest('Payment amount must be greater than zero');
+  }
   if (amt > remaining + 0.001) {
+    if (remaining <= 0) throw nothingLeft();
+    if (owedOverall < onOrder) {
+      throw ApiError.badRequest(`You only owe ${supplierName} TZS ${owedOverall.toLocaleString()} in all`);
+    }
     throw ApiError.badRequest(`Only TZS ${remaining.toLocaleString()} is outstanding on ${po.poNumber}`);
   }
   return recordTransaction(
@@ -2103,6 +2202,9 @@ async function overview(period = 'month', shared = {}) {
 
   return {
     period,
+    // The go-live moment the figures count from, so "All time" can say where it starts
+    // (the Profit tab already does). Sales before it are not in these figures.
+    epochAt: epoch || null,
     cashPosition,
     accounts,
     flow,
@@ -2181,6 +2283,7 @@ module.exports = {
   report,
   supplierSummaries,
   supplierDetail,
+  spreadOverOrders,
   recordSupplierCredit,
   paySupplier,
   paySupplierBalance,

@@ -7,6 +7,7 @@ const settlement = require('./settlement.service');
 const notification = require('./notification.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber } = require('../utils/money');
+const { eatDayBounds } = require('../utils/dates');
 
 const RETURN_INCLUDE = {
   items: { include: { product: { include: { brand: { select: { name: true } } } }, packagingUnit: true } },
@@ -123,6 +124,20 @@ async function openOrderAvailability(client, salesRepId) {
 
 // ── Create (PENDING — no inventory moves yet) ─────────────────────────────────
 
+// The refusal when more boxes are sent back than are still on the rep's open orders. It used to say "your
+// open orders … you can't" to everybody, so ZELab staff returning for a rep were addressed as the rep (audit,
+// 12 Nov 2026). Only the rep himself is "you"; staff read "the rep's".
+function overReturnMessage(productName, boxes, actor, salesRepId, repName) {
+  const own = Boolean(actor?.salesRepId) && actor.salesRepId === salesRepId;
+  const count = `${boxes} ${boxes === 1 ? 'box is' : 'boxes are'}`;
+  if (own) return `${productName}: only ${count} still unaccounted on your open orders — you can't return more than that.`;
+  // Staff returning for a rep read his name (backend-integrity-6); without one, "the rep's".
+  if (repName) {
+    return `${productName}: ${repName} has only ${boxes} ${boxes === 1 ? 'box' : 'boxes'} still unaccounted on his open orders — no more than that can be returned.`;
+  }
+  return `${productName}: only ${count} still unaccounted on the rep's open orders — no more than that can be returned.`;
+}
+
 async function createReturn(payload, actor) {
   const { type, customerId, salesRepId, settlementId, warehouseId, items, reason, notes, processedAt } = payload;
 
@@ -235,10 +250,15 @@ async function createReturn(payload, actor) {
         }
         if (leftBase > 0) {
           const name = productMap.get(l.productId)?.name || 'This product';
-          const onOrders = l.baseQuantity - leftBase;
-          throw ApiError.badRequest(
-            `${name}: only ${Math.floor(onOrders / perUnit)} box(es) are still unaccounted on your open orders — you can't return more than that.`,
-          );
+          const boxes = Math.floor((l.baseQuantity - leftBase) / perUnit);
+          // The rep reads "your open orders"; staff returning boxes for him read his name (audit 11 Nov 2026,
+          // backend-integrity-6: the owner was told "your open orders" about another person's orders).
+          let repName = null;
+          if (!(actor && actor.salesRepId === salesRepId)) {
+            const rep = await tx.salesRepresentative.findUnique({ where: { id: salesRepId }, select: { code: true, user: { select: { name: true } } } });
+            repName = rep?.user?.name || rep?.code || null;
+          }
+          throw ApiError.badRequest(overReturnMessage(name, boxes, actor, salesRepId, repName));
         }
       }
 
@@ -641,9 +661,10 @@ async function listReturns(filters, pagination) {
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
   if (filters.warehouseId) where.warehouseId = filters.warehouseId;
   if (filters.from || filters.to) {
-    where.processedAt = {};
-    if (filters.from) where.processedAt.gte = new Date(filters.from);
-    if (filters.to) where.processedAt.lte = new Date(filters.to);
+    // A bare day is a Dar es Salaam day, not UTC midnight (audit backend-integrity-8).
+    const bounds = eatDayBounds({ from: filters.from, to: filters.to });
+    if (!bounds) throw ApiError.badRequest('Use dates like 2026-11-11 for from and to');
+    where.processedAt = bounds;
   }
 
   const [items, total] = await Promise.all([
@@ -722,6 +743,7 @@ async function returnsSummary(filters = {}) {
 }
 
 module.exports = {
+  overReturnMessage,
   cancelReturn,
   expireStaleReturns,
   returnsSummary, createReturn, approveReturn, rejectReturn, listReturns, getReturn, RETURN_INCLUDE };

@@ -1,12 +1,13 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { lazyPart, warmPart, PageLoadBoundary } from '@/components/LazyPage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, PackageX } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useWarehouses, useSalesReps, useDebounce } from '@/lib/hooks';
-import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, sharePercents } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, unitWord, sharePercents } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
 import { MOVEMENT_META } from '@/lib/constants';
 import ProductPicker, {
@@ -444,8 +445,10 @@ function Balances() {
                       <div className="mt-1 text-[11px] text-faint">{pluralizeUnit(r.baseUnitName)} on hand</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-bold tabular-nums text-foreground">{formatCurrency(r.value)}</div>
-                      <div className="text-[11px] text-faint">{formatCurrency(r.sellingPrice)} each</div>
+                      {/* The value is at COST (boxes x purchase price); the line under it is the selling
+                          price, so it says so instead of "each" (63 x 30,000 is not 882,000). */}
+                      <div className="text-sm font-bold tabular-nums text-foreground" title="Value at cost">{formatCurrency(r.value)}</div>
+                      <div className="text-[11px] text-faint">at cost · sells at {formatCurrency(r.sellingPrice)}</div>
                     </div>
                   </div>
 
@@ -537,7 +540,7 @@ function Movements() {
       </div>
       {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the movements" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No movements" /> : (
         <>
-          <Table>
+          <Table stack="wide">
             <THead><TR><TH>When</TH><TH>Type</TH><TH>Product</TH><TH>Qty</TH><TH>Base Δ</TH><TH>Location</TH><TH>By</TH></TR></THead>
             <TBody>
               {data.data.map((m) => {
@@ -546,8 +549,8 @@ function Movements() {
                   <TR key={m.id}>
                     <TD className="text-muted">{formatDateTime(m.occurredAt)}</TD>
                     <TD><Badge className={meta.cls}>{meta.label}</Badge></TD>
-                    <TD className="max-w-[200px] truncate">{m.product?.name}</TD>
-                    <TD>{m.quantity} {m.packagingUnit?.name}</TD>
+                    <TD className="stack-full max-w-[200px] truncate">{m.product?.name}</TD>
+                    <TD>{formatNumber(m.quantity)} {m.packagingUnit?.name ? unitWord(m.quantity, m.packagingUnit.name) : ''}</TD>
                     <TD className={m.baseQuantity < 0 ? 'text-rose-600' : 'text-emerald-600'}>{m.baseQuantity > 0 ? '+' : ''}{formatNumber(m.baseQuantity)}</TD>
                     <TD>{m.locationType === 'WAREHOUSE' ? m.warehouse?.name : m.salesRep?.user?.name}</TD>
                     <TD>{m.user?.name || '—'}</TD>
@@ -590,7 +593,7 @@ function ProductStockModal({ row, onClose }) {
   const withReps = row.totalBase - inStore;
 
   return (
-    <Modal open onClose={onClose} size="lg" title={row.name}
+    <Modal open onClose={onClose} size="xl" title={row.name}
       footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
       <div className="space-y-5">
         {/* What it is worth and how it splits, before the detail. */}
@@ -648,7 +651,7 @@ function ProductStockModal({ row, onClose }) {
             <EmptyState title="No movement recorded for this product yet" icon={Boxes} />
           ) : (
             <>
-              <Table>
+              <Table stack>
                 <THead><TR><TH>When</TH><TH>What happened</TH><TH className="text-right">Change</TH><TH>Where</TH><TH>By</TH></TR></THead>
                 <TBody>
                   {data.data.map((m) => {
@@ -682,9 +685,10 @@ function ProductStockModal({ row, onClose }) {
 // pages next to it — movement, stock transfer, reorder — and remove them from the sidebar; keep the sidebar
 // clean"; "even PO … inside"). The tab is in the address (?tab=), so the old /purchases, /transfers and
 // /reorder links land on it.
-const Purchases = lazy(() => import('@/pages/Purchases'));
-const Transfers = lazy(() => import('@/pages/Transfers'));
-const Reorder = lazy(() => import('@/pages/Reorder'));
+// Through the app's page loader (lib/pages.js), so a failed fetch-ahead never reloads the app (audit pwa-brand-load-3).
+const Purchases = lazyPart('Purchases');
+const Transfers = lazyPart('Transfers');
+const Reorder = lazyPart('Reorder');
 const INVENTORY_TABS = [['balances', 'Stock balances'], ['movements', 'Movement ledger'], ['purchases', 'Purchases'], ['transfers', 'Transfers'], ['reorder', 'Reorder']];
 const INNER = { purchases: Purchases, transfers: Transfers, reorder: Reorder };
 
@@ -695,12 +699,13 @@ export default function Inventory() {
   const [modal, setModal] = useState(null); // 'receive' | 'adjust' | 'damage'
 
   // Fetch the inner pages' code while the owner reads the balances, so a tab click never waits for it.
-  useEffect(() => { import('@/pages/Purchases'); import('@/pages/Transfers'); import('@/pages/Reorder'); }, []);
+  // Only ahead of the click: one that fails on a weak line is dropped, and the tab asks again when opened.
+  useEffect(() => { warmPart('Purchases'); warmPart('Transfers'); warmPart('Reorder'); }, []);
 
   const tabs = (
     <div className="mb-5 flex flex-wrap gap-2">
       {INVENTORY_TABS.map(([k, label]) => (
-        <button key={k} type="button" onClick={() => setParams(k === 'balances' ? {} : { tab: k })}
+        <button key={k} type="button" onClick={() => setParams(k === 'balances' ? {} : { tab: k }, { replace: true })}
           aria-current={tab === k ? 'page' : undefined}
           className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold ring-1 transition duration-200 ${tab === k ? 'bg-brand-500 text-white ring-brand-500' : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>{label}</button>
       ))}
@@ -713,7 +718,9 @@ export default function Inventory() {
     return (
       <div>
         {tabs}
-        <Suspense fallback={<PageSpinner />}><Inner /></Suspense>
+        <PageLoadBoundary what="this tab" resetKey={tab}>
+          <Suspense fallback={<PageSpinner />}><Inner /></Suspense>
+        </PageLoadBoundary>
       </div>
     );
   }

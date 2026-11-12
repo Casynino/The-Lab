@@ -1,5 +1,5 @@
 import { STEADY } from '@/lib/polling';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { Fragment, useState, useRef, useEffect, useMemo } from 'react';
 import ReportsArchive from '@/components/ReportsArchive';
 import ProductPicker, { MoreToggle, DiscardFooter } from '@/components/ProductPicker';
 import { pickerRows, lineCost, primaryWarehouse, shortPlace, buttonPlace } from '@/lib/stockPick';
@@ -22,9 +22,11 @@ import CommissionsPage from '@/pages/Commissions';
 import clsx from 'clsx';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, sharePercents } from '@/lib/format';
 import { eatISODate, eatDay } from '@/lib/tz';
+import { statementRows, poPayCap } from '@/lib/financeFigures';
+import { figuresAreLive } from '@/lib/freshness';
 import { DonutChart, BarChartCard, TrendChart, BarsWithLine } from '@/components/charts';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button,
   Modal, Field, Input, NumberInput, Select, Textarea, Table, THead, TBody, TR, TH, TD, Pagination,
 } from '@/components/ui';
 
@@ -148,7 +150,7 @@ const invalidateFinance = (qc) => ['finance'].forEach((k) => qc.invalidateQuerie
 // how a correction ends up invisible. You say what the account really holds;
 // it records the difference as one adjustment, in the ledger, with your reason
 // on it. It never touches profit.
-function CorrectBalanceModal({ accounts, onClose }) {
+function CorrectBalanceModal({ accounts, live, onClose }) {
   const qc = useQueryClient();
   const usable = accounts.filter((a) => !a.isCommissionRecord);
   const [accountId, setAccountId] = useState(usable[0]?.id || '');
@@ -172,10 +174,13 @@ function CorrectBalanceModal({ accounts, onClose }) {
   });
 
   const valid = accountId && truth != null && Number.isFinite(truth) && delta !== 0;
+  // The difference is worked out from the balance on screen: never from one that is not the server's latest
+  // (put back from this device, or kept after a refresh that failed while this was open).
   return (
     <Modal open onClose={onClose} title="Correct a balance"
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={save.isPending} disabled={!valid} onClick={() => save.mutate()}>Record the correction</Button></>}>
+        <Button loading={save.isPending} disabled={!valid || !live} title={live ? undefined : 'Waiting for the latest balances'}
+          onClick={() => save.mutate()}>Record the correction</Button></>}>
       <div className="space-y-4">
         <p className="rounded-lg border border-border bg-elevated px-3 py-2 text-xs text-muted">
           For when the app disagrees with the real account. Say what it actually holds and the difference is written
@@ -198,6 +203,7 @@ function CorrectBalanceModal({ accounts, onClose }) {
             against {account?.name}, bringing it to <b className="text-foreground">{formatCurrency(truth)}</b>.
           </p>
         )}
+        {!live && <p className="text-xs text-amber-300">Waiting for the latest balances before this can be recorded.</p>}
         <Field label="Why" hint="Worth a sentence — this is the record of why the figure moved.">
           <Input value={reason} onChange={(e) => setReason(e.target.value)}
             placeholder="e.g. cash drawn out and paid to reps as commission" />
@@ -517,11 +523,11 @@ const Op = ({ children, wide }) => <span className={`hidden self-center px-1 pt-
 
 function Overview({ onNavigate, onOwnerMoney }) {
   const [period, setPeriod] = usePeriod();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.financeOverview(period),
     refetchInterval: STEADY,
   });
-  const { data: cf } = useQuery(pageQueries.financeCashflow('all'));
+  const { data: cf, isError: cfFailed, refetch: retryCf } = useQuery(pageQueries.financeCashflow('all'));
   // On a very wide screen the month chart grows a little so it does not look flat.
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(min-width: 1800px)').matches);
   useEffect(() => {
@@ -531,6 +537,8 @@ function Overview({ onNavigate, onOwnerMoney }) {
     mq.addEventListener?.('change', on);
     return () => mq.removeEventListener?.('change', on);
   }, []);
+  // A request that never came back is not a spinner for ever (audit pwa-brand-load-2).
+  if (isError && !data) return <LoadError what="the finance overview" onRetry={refetch} />;
   if (isLoading || !data) return <PageSpinner />;
   const flow = data.flow?.[period] || data.flow?.month || { moneyIn: 0, moneyOut: 0, net: 0 };
   const words = PERIOD_WORDS[period];
@@ -615,11 +623,14 @@ function Overview({ onNavigate, onOwnerMoney }) {
     ny.pendingApprovals > 0 && { icon: ShieldCheck, tone: 'text-sky-300 bg-sky-500/15', text: `${ny.pendingApprovals} settlement${ny.pendingApprovals === 1 ? '' : 's'} waiting for your approval`, tab: 'commissions' },
     ny.pendingWithdrawals?.count > 0 && { icon: Coins, tone: 'text-amber-300 bg-amber-500/15', text: `${ny.pendingWithdrawals.count} withdrawal request${ny.pendingWithdrawals.count === 1 ? '' : 's'} — ${formatCurrency(ny.pendingWithdrawals.amount)}`, tab: 'commissions' },
     // Only what needs a DECISION: the supplier is paid as the stock sells, so the whole invoice is not
-    // listed — only money genuinely payable now.
-    (cs?.setAside || 0) > 0 && {
+    // listed — only money genuinely payable now. The amount is what is DUE (the tile's figure), never
+    // setAside: setAside is only the part a brand wallet holds, so it followed the wallet balance and
+    // gave this screen two different "due" amounts.
+    dueNow > 0 && {
       icon: Factory,
       tone: 'text-rose-300 bg-rose-500/15',
-      text: `${formatCurrency(cs.setAside)} is due to ${cs.supplierLabel || 'your supplier'} for boxes already sold`,
+      text: `${formatCurrency(dueNow)} is due to ${supplierLabel} for boxes already sold`
+        + ((cs?.setAside || 0) > 0 && round2ui(cs.setAside) < dueNow ? ` (${formatCurrency(cs.setAside)} of it is in the brand wallets)` : ''),
       tab: 'suppliers',
     },
     ...(ny.negativeAccounts || []).map((n) => ({ icon: AlertTriangle, tone: 'text-rose-300 bg-rose-500/15', text: `${n} is below zero — money left that never arrived`, tab: 'accounts' })),
@@ -641,14 +652,14 @@ function Overview({ onNavigate, onOwnerMoney }) {
         <div className="inline-flex rounded-full bg-white/[0.04] p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Period">
           {PERIODS.map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={period === k} onClick={() => setPeriod(k)}
-              className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition sm:px-3.5 sm:text-[13px] ${period === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
+              className={`min-h-11 cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition sm:min-h-0 sm:px-3.5 sm:text-[13px] ${period === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
           ))}
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')} title="Cash of your own going into an account — owed back to you">
+          <Button variant="secondary" className="min-h-11 px-3 py-1.5 text-xs sm:min-h-0" onClick={() => onOwnerMoney?.('in')} title="Cash of your own going into an account — owed back to you">
             <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
           </Button>
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
+          <Button variant="secondary" className="min-h-11 px-3 py-1.5 text-xs sm:min-h-0" onClick={() => onOwnerMoney?.('out')}>
             <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
           </Button>
         </div>
@@ -762,26 +773,28 @@ function Overview({ onNavigate, onOwnerMoney }) {
                   bars={[{ key: 'moneyIn', name: 'Money in', color: '#34d399' }, { key: 'moneyOut', name: 'Money out', color: '#fb7185' }]}
                   line={{ key: 'net', name: 'Net', color: '#7dd3fc' }} />
               </div>
-              <div className="mt-auto grid grid-cols-3 gap-3 border-t border-white/[0.07] pt-3">
+              <div className="mt-auto grid grid-cols-2 gap-3 border-t border-white/[0.07] pt-3 sm:grid-cols-3">
                 <div className="min-w-0">
                   <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">Average month in</p>
-                  <p className="truncate text-sm font-semibold tabular-nums text-foreground">{formatCurrency(avgIn)}</p>
+                  <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-foreground">{formatCurrency(avgIn)}</p>
                   <p className="text-[10.5px] text-white/50">{active.length} month{active.length === 1 ? '' : 's'}{thisMonthIn ? ', this one so far' : ' with money'}</p>
                 </div>
                 <div className="min-w-0">
                   <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">Best month in</p>
-                  <p className="truncate text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(best?.moneyIn)}</p>
+                  <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(best?.moneyIn)}</p>
                   <p className="text-[10.5px] text-white/50">{best?.period}</p>
                 </div>
-                <div className="min-w-0" title="Money in minus money out over the months in this chart. Your own money put in or taken out is not counted here, so this is not the same as Net movement.">
+                <div className="col-span-2 min-w-0 sm:col-span-1" title="Money in minus money out over the months in this chart. Your own money put in or taken out is not counted here, so this is not the same as Net movement.">
                   <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">In − out, these {series.length} months</p>
-                  <p className={`truncate text-sm font-semibold tabular-nums ${chartNet >= 0 ? 'text-foreground' : 'text-rose-300'}`}>{formatCurrency(chartNet)}</p>
+                  <p className={`whitespace-nowrap text-sm font-semibold tabular-nums ${chartNet >= 0 ? 'text-foreground' : 'text-rose-300'}`}>{formatCurrency(chartNet)}</p>
                   <p className="text-[10.5px] text-white/50">your own money not counted</p>
                 </div>
               </div>
             </>
+          ) : cfFailed && !cf ? (
+            <LoadError what="the monthly figures" onRetry={retryCf} />
           ) : (
-            <div className="flex h-[170px] items-center justify-center text-sm text-white/50">Fills in as months of activity add up.</div>
+            <div className="flex h-[170px] items-center justify-center text-sm text-white/50">{cf ? 'Fills in as months of activity add up.' : 'Loading…'}</div>
           )}
         </Panel>
 
@@ -1128,7 +1141,7 @@ function Money({ label, value, tone, big }) {
 // from an opening balance would drift the moment a page boundary hid a row.
 function AccountStatementModal({ account, onClose }) {
   const [page, setPage] = useState(1);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['finance', 'account-statement', account.id, page],
     queryFn: async () => unwrap(await api.get('/finance/transactions', {
       params: { accountId: account.id, page, limit: 25, sortBy: 'occurredAt', sortDir: 'desc' },
@@ -1145,12 +1158,12 @@ function AccountStatementModal({ account, onClose }) {
   // account — so the column is dropped rather than filled with zeroes.
   // Page 2 onwards starts below the rows on the pages before it (newerNet = their in minus out),
   // not at today's balance again.
-  let running = Math.round((account.balance - Number(data?.meta?.newerNet || 0)) * 100) / 100;
-  const withBalance = rows.map((t) => {
-    const after = running;
-    running = Math.round((after - (t.direction === 'IN' ? Number(t.amount) : -Number(t.amount))) * 100) / 100;
-    return { ...t, balanceAfter: after };
-  });
+  // Rows from before the books started (finance go-live) are listed as history but are in no balance:
+  // walking the balance back through them invented figures like -1,396,000 on 19 Jun (audit
+  // admin-money-3). They get no balance and sit under a "before the books started" line.
+  const epochAt = data?.meta?.epochAt || null;
+  const withBalance = statementRows(rows, account.balance, data?.meta?.newerNet, epochAt);
+  const firstBefore = withBalance.findIndex((t) => t.beforeBooks);
 
   const Icon = ACCOUNT_ICON[account.type] || Wallet;
   return (
@@ -1175,18 +1188,18 @@ function AccountStatementModal({ account, onClose }) {
                 <p className="text-xs text-muted">Balance now</p>
                 <p className={`text-2xl font-bold tabular-nums ${account.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(account.balance)}</p>
               </div>
-              <div className="ml-auto flex gap-6 text-right">
-                <div>
+              <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2 sm:ml-auto sm:flex sm:w-auto sm:gap-6 sm:text-right">
+                <div className="min-w-0">
                   <p className="text-[11px] uppercase tracking-wider text-muted">Came in</p>
-                  <p className="text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(sums?.in ?? account.moneyIn)}</p>
+                  <p className="whitespace-nowrap text-[13px] font-bold tabular-nums sm:text-sm text-emerald-400">{formatCurrency(sums?.in ?? account.moneyIn)}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[11px] uppercase tracking-wider text-muted">Went out</p>
-                  <p className="text-sm font-bold tabular-nums text-rose-400">{formatCurrency(sums?.out ?? account.moneyOut)}</p>
+                  <p className="whitespace-nowrap text-[13px] font-bold tabular-nums sm:text-sm text-rose-400">{formatCurrency(sums?.out ?? account.moneyOut)}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[11px] uppercase tracking-wider text-muted">Opening</p>
-                  <p className="text-sm font-bold tabular-nums text-muted">{formatCurrency(account.openingBalance)}</p>
+                  <p className="whitespace-nowrap text-[13px] font-bold tabular-nums sm:text-sm text-muted">{formatCurrency(account.openingBalance)}</p>
                 </div>
               </div>
             </>
@@ -1194,11 +1207,11 @@ function AccountStatementModal({ account, onClose }) {
         </div>
         {account.notes && <p className="text-xs text-faint">{account.notes}</p>}
 
-        {isLoading ? <PageSpinner /> : !rows.length ? (
+        {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="this account's movements" onRetry={refetch} /> : !rows.length ? (
           <EmptyState title="Nothing has moved through this account yet" icon={Receipt} />
         ) : (
           <>
-            <Table>
+            <Table stack="wide">
               <THead>
                 {/* On the record, In/Out is the wrong question — nothing came
                     in and nothing went out of any account. Every row is one
@@ -1211,12 +1224,20 @@ function AccountStatementModal({ account, onClose }) {
                 </TR>
               </THead>
               <TBody>
-                {withBalance.map((t) => (
-                  <TR key={t.id}>
+                {withBalance.map((t, i) => (
+                  <Fragment key={t.id}>
+                  {i === firstBefore && !isRecord && (
+                    <TR>
+                      <TD colSpan={6} className="bg-white/[0.03] text-[11px] text-faint">
+                        Before the books started on {formatDate(epochAt)} — listed for the record, not in the balance or the totals above
+                      </TD>
+                    </TR>
+                  )}
+                  <TR>
                     <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                     <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                     {/* Wraps to two lines rather than pushing Balance past the window's edge (it ran 63 px over at 1440). */}
-                    <TD className="min-w-[170px] max-w-[260px] whitespace-normal text-foreground"
+                    <TD className="stack-full min-w-[170px] max-w-[260px] whitespace-normal text-foreground"
                       title={isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || undefined)}>
                       <div className="line-clamp-2 break-words leading-snug">
                         {isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || '—')}
@@ -1234,10 +1255,14 @@ function AccountStatementModal({ account, onClose }) {
                         <TD className="text-right font-semibold tabular-nums text-rose-400">
                           {t.direction === 'OUT' ? formatCurrency(t.amount) : ''}
                         </TD>
-                        <TD className="text-right font-bold tabular-nums text-foreground">{formatCurrency(t.balanceAfter)}</TD>
+                        <TD className="text-right font-bold tabular-nums text-foreground"
+                          title={t.beforeBooks ? 'Before the books started — not in the balance' : undefined}>
+                          {t.beforeBooks ? <span className="font-normal text-faint">—</span> : formatCurrency(t.balanceAfter)}
+                        </TD>
                       </>
                     )}
                   </TR>
+                  </Fragment>
                 ))}
               </TBody>
             </Table>
@@ -1302,7 +1327,7 @@ function WalletTop({ label, chip, hidden, onToggleHide }) {
         <span role="button" tabIndex={0} onClick={toggle}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); } }}
           aria-pressed={hidden} aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
-          className="-m-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
+          className="-m-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
           {hidden ? <EyeOff className="h-[15px] w-[15px]" /> : <Eye className="h-[15px] w-[15px]" />}
         </span>
       </div>
@@ -1401,11 +1426,17 @@ function Accounts({ onQuick, onNavigate }) {
   const mask = (s) => (hidden ? DOTS : s);
   // Transfers and balance corrections are the owner's (the server refuses staff); staff do not see them.
   const isAdmin = useAuth().user?.role === ROLES.ADMIN;
-  const { data: accounts = [], isLoading } = useQuery(pageQueries.financeAccounts());
+  const accountsQ = useQuery(pageQueries.financeAccounts());
+  const accounts = accountsQ.data || [];
   // The newest movements across every account (the Ledger's own list, first eight rows). Under the 'finance'
   // key, so recording income, an expense or a transfer refreshes it with everything else.
-  const { data: latest } = useQuery(pageQueries.financeLatest());
-  if (isLoading) return <PageSpinner />;
+  const { data: latest, isError: latestFailed, refetch: retryLatest } = useQuery(pageQueries.financeLatest());
+  if (accountsQ.isLoading) return <PageSpinner />;
+  // Accounts that never arrived are not "TSh 0, no account holds money": say so, and offer no Transfer or
+  // Correct balance over a list that is not there (audit pwa-brand-load-2).
+  if (accountsQ.isError && !accountsQ.data) return <LoadError what="the accounts" onRetry={accountsQ.refetch} />;
+  // Saved-on-this-device balances read as a success until the server answers: not live (lib/freshness.js).
+  const accountsLive = figuresAreLive(accountsQ);
   // Wallets hold the money; the Commission account holds a record of money the
   // owner paid out of his own hand. Adding a record into a cash total would
   // claim the business is holding cash it has never held.
@@ -1437,8 +1468,10 @@ function Accounts({ onQuick, onNavigate }) {
           <p className="mt-0.5 hidden text-[11px] text-white/50 sm:block">What your accounts are holding right now</p>
         </div>
         <div className="flex flex-wrap gap-2 sm:justify-end">
-          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-3.5 w-3.5" /> Transfer</Button>}
-          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => setCorrectOpen(true)}><Scale className="h-3.5 w-3.5" /> Correct balance</Button>}
+          {/* Both work from the balances on screen (a correction is the typed figure minus the balance shown), so
+              they wait for balances that have just come back, not ones kept from before a refresh that failed. */}
+          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={!accountsLive} title={accountsLive ? undefined : 'Waiting for the latest balances'} onClick={() => setTransferOpen(true)}><ArrowLeftRight className="h-3.5 w-3.5" /> Transfer</Button>}
+          {isAdmin && <Button variant="secondary" className="px-3 py-1.5 text-xs" disabled={!accountsLive} title={accountsLive ? undefined : 'Waiting for the latest balances'} onClick={() => setCorrectOpen(true)}><Scale className="h-3.5 w-3.5" /> Correct balance</Button>}
           <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onQuick('income')}><ArrowDownLeft className="h-3.5 w-3.5" /> Income</Button>
           <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onQuick('expense')}><ArrowUpRight className="h-3.5 w-3.5" /> Expense</Button>
           <Button className="px-3 py-1.5 text-xs" onClick={() => setAddOpen(true)}><Plus className="h-3.5 w-3.5" /> Account</Button>
@@ -1540,6 +1573,8 @@ function Accounts({ onQuick, onNavigate }) {
               );
             })}
           </ul>
+        ) : latestFailed && !latest ? (
+          <LoadError what="the latest movements" onRetry={retryLatest} />
         ) : (
           <p className="py-6 text-center text-sm text-white/50">{latest ? 'Nothing has moved through any account yet.' : 'Loading…'}</p>
         )}
@@ -1547,7 +1582,7 @@ function Accounts({ onQuick, onNavigate }) {
 
       {addOpen && <AddAccountModal onClose={() => setAddOpen(false)} />}
       {transferOpen && <TransferModal accounts={accounts} onClose={() => setTransferOpen(false)} />}
-      {correctOpen && <CorrectBalanceModal accounts={accounts} onClose={() => setCorrectOpen(false)} />}
+      {correctOpen && <CorrectBalanceModal accounts={accounts} live={accountsLive} onClose={() => setCorrectOpen(false)} />}
       {viewing && <AccountStatementModal account={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
@@ -1567,7 +1602,7 @@ function Ledger({ expensesOnly }) {
   const { data: accounts = [] } = useQuery({ queryKey: ['finance', 'accounts'], queryFn: async () => unwrap(await api.get('/finance/accounts')).data });
   const { data: brands = [] } = useQuery({ queryKey: ['brands', 'all'], queryFn: async () => unwrap(await api.get('/brands', { params: { limit: 50 } })).data });
   // Expenses are genuine expenses only (not every OUT): see pageQueries.financeTransactions.
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.financeTransactions({ page, account, type, brand, category, search, expensesOnly }),
     placeholderData: keepOnPageTurn({ account, type, brand, category, expensesOnly }),
   });
@@ -1666,11 +1701,11 @@ function Ledger({ expensesOnly }) {
           </div>
         )}
       </div>
-      {isLoading ? <PageSpinner /> : !rows.length ? (
+      {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what={expensesOnly ? 'the expenses' : 'the ledger'} onRetry={refetch} /> : !rows.length ? (
         <EmptyState title={expensesOnly ? 'No expenses yet' : 'No transactions yet'} message="Record income or expenses, or approve a settlement." icon={Receipt} />
       ) : (
         <>
-          <Table>
+          <Table stack="wide">
             <THead><TR><TH>Date</TH><TH>Type</TH><TH>Brand</TH><TH>Description</TH><TH>Account</TH><TH className="text-right">Amount</TH><TH /></TR></THead>
             <TBody>
               {rows.map((t) => (
@@ -1678,7 +1713,7 @@ function Ledger({ expensesOnly }) {
                   <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                   <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                   <TD>{t.brandName ? <Badge className="bg-white/[0.08] text-foreground">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
-                  <TD className="max-w-[220px] truncate text-foreground">{ledgerLabel(t)}</TD>
+                  <TD className="stack-full max-w-[220px] truncate text-foreground">{ledgerLabel(t)}</TD>
                   <TD className="text-muted">{t.account?.name}</TD>
                   {isPayoutRow(t) ? (
                     <TD className="text-right tabular-nums">
@@ -1690,7 +1725,7 @@ function Ledger({ expensesOnly }) {
                   )}
                   <TD>
                     <div className="flex items-center justify-end gap-2">
-                      <button title="Correct this transaction" onClick={() => setEditing(t)} className="text-faint hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                      <button title="Correct this transaction" aria-label="Correct this transaction" onClick={() => setEditing(t)} className="flex h-11 w-11 items-center justify-center text-faint hover:text-brand-600 sm:h-auto sm:w-auto"><Pencil className="h-4 w-4" /></button>
                       {/* Asks first and ignores repeat taps (audit #22): one tap used to delete the row —
                           both legs of a transfer — with nothing to stop a slip of the finger. */}
                       <button
@@ -1701,7 +1736,8 @@ function Ledger({ expensesOnly }) {
                           const legs = t.type === 'TRANSFER' ? ' Both sides of the transfer will be removed.' : '';
                           if (confirm(`Delete ${what}? This cannot be undone.${legs}`)) del.mutate(t.id);
                         }}
-                        className="text-faint hover:text-rose-500 disabled:opacity-40"
+                        aria-label="Delete"
+                        className="flex h-11 w-11 items-center justify-center text-faint hover:text-rose-500 disabled:opacity-40 sm:h-auto sm:w-auto"
                       ><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </TD>
@@ -1809,7 +1845,7 @@ function PeriodPills({ periods, value, onChange }) {
     <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-white/[0.04] p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Period">
       {periods.map(([k, label]) => (
         <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)}
-          className={`shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition sm:px-3.5 sm:text-[13px] ${value === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
+          className={`min-h-11 shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition sm:min-h-0 sm:px-3.5 sm:text-[13px] ${value === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
       ))}
     </div>
   );
@@ -1846,8 +1882,9 @@ const PROFIT_PERIODS = [['today', 'Today'], ['week', 'This week'], ['month', 'Th
 
 function ProfitTab({ accounts = [] }) {
   const [period, setPeriod] = useState('all');
-  const { data, isLoading } = useQuery(pageQueries.profitOverview(period));
+  const { data, isLoading, isError, refetch } = useQuery(pageQueries.profitOverview(period));
   const { data: brandStockData } = useQuery(pageQueries.brandStock());
+  if (isError && !data) return <LoadError what="the profit figures" onRetry={refetch} />;
   if (isLoading || !data) return <PageSpinner />;
   const stockByBrand = new Map((brandStockData?.brands || []).map((b) => [b.brandId, b]));
   const t = data.totals;
@@ -2139,7 +2176,8 @@ function KindRows({ rows, total, colours, empty }) {
 
 function CashFlowTab() {
   const [period, setPeriod] = useState('month');
-  const { data, isLoading } = useQuery(pageQueries.financeCashflow(period));
+  const { data, isLoading, isError, refetch } = useQuery(pageQueries.financeCashflow(period));
+  if (isError && !data) return <LoadError what="the cash flow" onRetry={refetch} />;
   if (isLoading || !data) return <PageSpinner />;
 
   const inRows = (data.byType || []).filter((r) => r.direction === 'IN').map((r) => ({ label: TXN_TYPE_LABEL[r.type] || r.type, value: r.amount, count: r.count, hex: TYPE_HEX[r.type] }));
@@ -2178,7 +2216,8 @@ function CashFlowTab() {
   }[period];
   const day = (v) => eatDay(v, { day: 'numeric', month: 'short', year: 'numeric' });
   // One day ("Daily") is already in the title, so its range is not repeated under it.
-  const periodSub = !data.range ? 'everything recorded so far'
+  // The go-live date reads exactly as on the Overview (formatDate: "05 Jul 2026").
+  const periodSub = !data.range ? (data.epochAt ? `everything since ${formatDate(data.epochAt)}` : 'everything recorded so far')
     : day(data.range.start) === day(data.range.end) ? '' : `${day(data.range.start)} → ${day(data.range.end)}`;
   const ownerNet = data.ownerNet ?? 0;
   // Four terms run in one line from lg; the fifth (his own money) needs xl.
@@ -2343,10 +2382,12 @@ function AddSupplierModal({ onClose }) {
   );
 }
 
-function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
+function PaySupplierModal({ order, supplierOutstanding, accounts: all, onClose, onDone }) {
   const accounts = wallets(all);
   const [accountId, setAccountId] = useState(accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '');
-  const [amount, setAmount] = useState(String(order.outstanding || ''));
+  // Never more than the PO still owes AND the supplier is owed overall (the server refuses the same).
+  const cap = poPayCap(order.outstanding, supplierOutstanding);
+  const [amount, setAmount] = useState(cap > 0 ? String(cap) : '');
   // Money that moved weeks ago belongs in the week it moved. Without this the
   // payment landed on the day it was typed, which put a September purchase's
   // cash into October and left both months wrong.
@@ -2360,15 +2401,19 @@ function PaySupplierModal({ order, accounts: all, onClose, onDone }) {
     onError: (e) => toast.error(apiError(e)),
   });
   const amt = Number(amount);
-  const valid = accountId && amt > 0 && amt <= order.outstanding + 0.001;
+  const valid = accountId && amt > 0 && amt <= cap + 0.001;
   return (
     <Modal open onClose={onClose} title={`Pay supplier · ${order.poNumber}`}
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={pay.isPending} disabled={!valid} onClick={() => pay.mutate()}><Wallet className="h-4 w-4" /> Record payment</Button></>}>
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-elevated px-3 py-2 text-sm text-muted">
-          Order total {formatCurrency(order.totalCost)} · paid {formatCurrency(order.paid)} · <b className="text-rose-400">outstanding {formatCurrency(order.outstanding)}</b>
+          Order total {formatCurrency(order.totalCost)} · paid {formatCurrency(order.paid)}
+          {order.returned > 0 && <> · returned {formatCurrency(order.returned)}</>} · <b className="text-rose-400">outstanding {formatCurrency(order.outstanding)}</b>
+          {cap < order.outstanding && (
+            <div className="mt-1 text-xs text-faint">You owe the supplier {formatCurrency(Math.max(0, supplierOutstanding))} in all, so that is the most this payment can be.</div>
+          )}
         </div>
-        <Field label="Amount (TZS)" required error={amt > order.outstanding + 0.001 ? 'More than what is outstanding' : undefined}>
+        <Field label="Amount (TZS)" required error={amt > cap + 0.001 ? (cap < order.outstanding ? 'More than you owe this supplier' : 'More than what is outstanding') : undefined}>
           <NumberInput min="0" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -2640,7 +2685,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
   const [purchasing, setPurchasing] = useState(false);
   const [returning, setReturning] = useState(false);
   const isAdmin = useAuth().user?.role === ROLES.ADMIN; // returning goods lowers a bill: owner only, as on the server
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['finance', 'supplier', supplierId],
     queryFn: async () => unwrap(await api.get(`/finance/suppliers/${supplierId}`)).data,
   });
@@ -2665,7 +2710,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
             )}
           </>
         )}>
-        {isLoading || !data ? <PageSpinner /> : (
+        {isError && !data ? <LoadError what="this supplier" onRetry={refetch} /> : isLoading || !data ? <PageSpinner /> : (
           <div className="space-y-5">
             {/* Identity */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
@@ -2697,7 +2742,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
             <div>
               <div className="mb-2 text-sm font-semibold text-foreground">Purchase history</div>
               {!data.orders.length ? <p className="text-sm text-faint">No purchases yet — use "New purchase" when stock arrives from {s.name}.</p> : (
-                <Table>
+                <Table stack>
                   <THead><TR><TH>PO</TH><TH>Date</TH><TH>Boxes</TH><TH>Total</TH><TH>Paid</TH><TH>Outstanding</TH><TH /></TR></THead>
                   <TBody>
                     {data.orders.map((o) => (
@@ -2706,10 +2751,15 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
                         <TD className="text-faint">{formatDate(o.receivedAt || o.createdAt)}</TD>
                         <TD>{formatNumber(o.boxes)}</TD>
                         <TD>{formatCurrency(o.totalCost)}</TD>
-                        <TD className="text-emerald-500">{formatCurrency(o.paid)}</TD>
+                        {/* Paid includes this PO's share of balance payments (oldest PO first), so the rows add
+                            up to the balance owed; goods returned come off the outstanding under it. */}
+                        <TD className="text-emerald-500">
+                          {formatCurrency(o.paid)}
+                          {o.returned > 0 && <div className="text-[11px] text-amber-300/80">{formatCurrency(o.returned)} returned</div>}
+                        </TD>
                         <TD className={o.outstanding > 0 ? 'font-semibold text-rose-400' : 'text-faint'}>{formatCurrency(o.outstanding)}</TD>
                         <TD>
-                          {o.outstanding > 0 && (
+                          {poPayCap(o.outstanding, data.totals.outstanding) > 0 && (
                             <Button variant="ghost" className="px-2 py-1 text-xs" onClick={() => setPaying(o)}>Pay PO</Button>
                           )}
                         </TD>
@@ -2717,6 +2767,14 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
                     ))}
                   </TBody>
                 </Table>
+              )}
+              {/* Paid or returned beyond every bill fits on no PO row; said here so the rows and this line
+                  make the balance owed (audit admin-money-1). */}
+              {data.orders.length > 0 && data.totals.notOnAnyPo > 0 && (
+                <p className="mt-2 text-xs text-muted">
+                  {formatCurrency(data.totals.notOnAnyPo)} of balance payments or returned goods goes beyond every bill, so it is on no PO above
+                  — that is why the balance owed is {formatCurrency(data.totals.outstanding)}.
+                </p>
               )}
             </div>
 
@@ -2737,7 +2795,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
           </div>
         )}
       </Modal>
-      {paying && <PaySupplierModal order={paying} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
+      {paying && <PaySupplierModal order={paying} supplierOutstanding={data?.totals?.outstanding} accounts={accounts} onClose={() => setPaying(null)} onDone={refresh} />}
       {payingBalance && s && <PayBalanceModal supplier={s} outstanding={data.totals.outstanding} accounts={accounts} onClose={() => setPayingBalance(false)} onDone={refresh} />}
       {purchasing && s && <NewPurchaseModal supplier={s} accounts={accounts} onClose={() => setPurchasing(false)} onDone={refresh} />}
       {returning && s && <ReturnGoodsModal supplier={s} outstanding={data.totals.outstanding} onClose={() => setReturning(false)} onDone={refresh} />}
@@ -2810,8 +2868,11 @@ function ReturnGoodsModal({ supplier, outstanding, onClose, onDone }) {
 function SuppliersTab({ accounts }) {
   const [addOpen, setAddOpen] = useState(false);
   const [viewing, setViewing] = useState(null);
-  const { data: suppliers = [], isLoading } = useQuery(pageQueries.financeSuppliers());
-  if (isLoading) return <PageSpinner />;
+  const suppliersQ = useQuery(pageQueries.financeSuppliers());
+  const suppliers = suppliersQ.data || [];
+  if (suppliersQ.isLoading) return <PageSpinner />;
+  // Not "Still owed TSh 0, all settled" over a list that never came back (audit pwa-brand-load-2).
+  if (suppliersQ.isError && !suppliersQ.data) return <LoadError what="the suppliers" onRetry={suppliersQ.refetch} />;
   const totals = suppliers.reduce((s, x) => ({
     purchased: s.purchased + x.totalPurchased,
     returned: s.returned + (x.totalReturned || 0),
@@ -2848,8 +2909,8 @@ function SuppliersTab({ accounts }) {
           <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Supplier</Button>
         </div>
         {!suppliers.length ? <EmptyState title="No suppliers yet" message="Add your suppliers to start tracking purchases and payments." icon={Factory} /> : (
-          <Table>
-            <THead><TR><TH>Supplier</TH><TH>Brand</TH><TH>Country</TH><TH>Orders</TH><TH>Purchased</TH>{anyReturns && <TH>Returned</TH>}<TH>Paid</TH><TH>Outstanding</TH></TR></THead>
+          <Table stack="wide">
+            <THead><TR><TH>Supplier</TH><TH className="hidden xl:table-cell">Brand</TH><TH className="hidden xl:table-cell">Country</TH><TH>Orders</TH><TH>Purchased</TH>{anyReturns && <TH>Returned</TH>}<TH>Paid</TH><TH>Outstanding</TH></TR></THead>
             <TBody>
               {suppliers.map((s) => {
                 // Measured against the bill after returns, not against
@@ -2858,8 +2919,11 @@ function SuppliersTab({ accounts }) {
                 const billed = s.totalPurchased - (s.totalReturned || 0);
                 return (
                 <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
-                  <TD className="font-medium text-foreground">
+                  <TD className="stack-full font-medium text-foreground">
                     {s.name}{s.contactName ? <span className="ml-1.5 text-xs text-faint">· {s.contactName}</span> : null}
+                    {/* Under xl the brand and the country are told here, not in two columns of their own: at 1024 px
+                        those pushed Outstanding past the card's edge. */}
+                    <div className="mt-0.5 text-xs font-normal text-faint xl:hidden">{[s.brandName, s.country].filter(Boolean).join(' · ') || '—'}</div>
                     {/* How much of this supplier's stock is actually paid for. */}
                     {billed > 0 && (
                       <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-white/[0.07]">
@@ -2868,8 +2932,8 @@ function SuppliersTab({ accounts }) {
                       </div>
                     )}
                   </TD>
-                  <TD>{s.brandName ? <Badge className="bg-white/[0.08] text-foreground">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
-                  <TD className="text-muted">{s.country}</TD>
+                  <TD className="hidden xl:table-cell">{s.brandName ? <Badge className="bg-white/[0.08] text-foreground">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
+                  <TD className="hidden text-muted xl:table-cell">{s.country}</TD>
                   <TD>{s.poCount}</TD>
                   <TD>{formatCurrency(s.totalPurchased)}</TD>
                   {anyReturns && (
@@ -2906,9 +2970,11 @@ const TABS = [
 
 export default function Finance() {
   const [searchParams, setSearchParams] = useSearchParams();
+  // The tab IS the address, both ways: the sidebar's Finance link or the phone's Money tab opens Overview
+  // from any tab, and Back/Forward show the tab their address names (navigation-7).
   const urlTab = searchParams.get('tab');
-  const [tab, setTabState] = useState(TABS.some(([k]) => k === urlTab) ? urlTab : 'overview');
-  const setTab = (k) => { setTabState(k); setSearchParams(k === 'overview' ? {} : { tab: k }, { replace: true }); };
+  const tab = TABS.some(([k]) => k === urlTab) ? urlTab : 'overview';
+  const setTab = (k) => setSearchParams(k === 'overview' ? {} : { tab: k }, { replace: true });
   const [money, setMoney] = useState(null); // 'income' | 'expense'
   const [ownerMoney, setOwnerMoney] = useState(null); // 'in' | 'out'
   const { data: accounts = [] } = useQuery(pageQueries.financeAccounts());

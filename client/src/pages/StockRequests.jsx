@@ -9,7 +9,10 @@ import {
   Loader2, CheckCircle2, Pencil, ChevronRight, Clock, XCircle, Ban, Boxes, Wallet, Timer,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
+import { useSearchParams } from 'react-router-dom';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
+import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts } from '@/lib/hooks';
 import { ROLES, REQUEST_STATUS_META } from '@/lib/constants';
@@ -227,7 +230,7 @@ function CartOrderSheet({ onClose, existing }) {
       )}
       <div className="flex w-full items-center gap-1 rounded-full bg-elevated/70 p-1 ring-1 ring-white/[0.08]">
         <button type="button" onClick={onClose}
-          className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97]">
+          className="h-9 shrink-0 rounded-full px-4 text-[13px] font-medium text-muted transition hover:text-foreground active:scale-[0.97] disabled:opacity-40">
           Cancel
         </button>
         <Button
@@ -347,7 +350,7 @@ function CartOrderSheet({ onClose, existing }) {
                     <button
                       onClick={() => dec(product.id)}
                       disabled={qty === 0}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.05] text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
+                      className="flex h-11 w-11 items-center justify-center rounded-full border sm:h-8 sm:w-8 border-white/[0.12] bg-white/[0.05] text-muted transition hover:border-brand-500/40 hover:text-foreground active:scale-90 disabled:opacity-25"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
@@ -360,7 +363,7 @@ function CartOrderSheet({ onClose, existing }) {
                         setQty(product.id, isNaN(v) || v < 0 ? 0 : v);
                       }}
                       placeholder="0"
-                      className={`h-8 w-14 rounded-lg border text-center text-sm font-semibold tabular-nums outline-none transition
+                      className={`h-11 w-14 rounded-lg border sm:h-8 text-center text-sm font-semibold tabular-nums outline-none transition
                         [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none
                         ${inCart
                           ? 'border-brand-500/40 bg-brand-500/10 text-brand-600 focus:ring-1 focus:ring-brand-500/30'
@@ -369,7 +372,7 @@ function CartOrderSheet({ onClose, existing }) {
                     />
                     <button
                       onClick={() => inc(product.id)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-brand-500/40 bg-brand-500/15 text-brand-500 transition hover:bg-brand-500/25 active:scale-90"
+                      className="flex h-11 w-11 items-center justify-center rounded-full border sm:h-8 sm:w-8 border-brand-500/40 bg-brand-500/15 text-brand-500 transition hover:bg-brand-500/25 active:scale-90"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
@@ -422,14 +425,7 @@ function CartOrderSheet({ onClose, existing }) {
 
 // isPending only disables a button after React re-renders, so two taps in the same frame both sent a
 // decision (the server refused the second, but it should never have gone). run() lets one through until
-// done() — called when that decision has finished, either way.
-function useOnce() {
-  const busy = useRef(false);
-  return {
-    run: (fn) => { if (busy.current) return; busy.current = true; fn(); },
-    done: () => { busy.current = false; },
-  };
-}
+// done() — called when that decision has finished, either way. Shared hook: lib/useOnce.js.
 
 // The step before Reject and Cancel order, which cannot be undone. Reject can carry a reason: it is kept
 // under the rep's own note and sent to him in the app and on WhatsApp.
@@ -819,8 +815,11 @@ function PendingRequestApprovals({ onReview }) {
 // ── Staff table (admin / warehouse review) ────────────────────────────────────
 
 function StaffRequestTable({ onView }) {
-  const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  // The chip and the page are in the address, written with replace, so Back comes back to them (navigation-6).
+  const [params, setParams] = useSearchParams();
+  const status = pickParam(params, 'status', Object.keys(REQUEST_STATUS_META).filter((k) => k !== 'APPROVED'));
+  const page = pageParam(params);
+  const setPage = (n) => setParams((p) => withParams(p, { page: n }), { replace: true });
   const { data, isLoading, isError, refetch } = useQuery({
     // Decided requests only unless the filter asks for pending: see pageQueries.stockRequests.
     ...pageQueries.stockRequests({ page, status }),
@@ -886,7 +885,8 @@ function StaffRequestTable({ onView }) {
             sub: 'paid for and closed',
             ring: 'ring-emerald-500/25', glow: 'from-emerald-500/[0.12]', chip: 'bg-emerald-500/15 text-emerald-300', num: 'text-emerald-300',
           },
-        ].map((c) => (
+        // A failed load shows dashes, not "0 boxes, nothing owed" (as the Products cards do; audit pwa-brand-load-2).
+        ].map((c) => (isError && !data ? { ...c, value: '—', sub: "couldn't load" } : c)).map((c) => (
           <div key={c.label} className="stat-glass p-4">
             <div className="relative flex items-start justify-between gap-2">
               <p className="text-xs font-medium text-muted">{c.label}</p>
@@ -914,7 +914,7 @@ function StaffRequestTable({ onView }) {
       <Card>
         <div className="flex flex-wrap items-center gap-2 border-b border-border p-4">
           {chips.map((c) => (
-            <button key={c.key || 'all'} type="button" onClick={() => { setStatus(c.key); setPage(1); }}
+            <button key={c.key || 'all'} type="button" onClick={() => setParams((p) => withParams(p, { status: c.key, page: null }), { replace: true })}
               className={`cursor-pointer rounded-full px-3.5 py-2 text-sm font-medium ring-1 transition duration-200 ${
                 status === c.key ? TONE[c.tone] : 'bg-transparent text-muted ring-white/10 hover:bg-white/[0.05] hover:text-foreground'}`}>
               {c.label}
@@ -926,7 +926,7 @@ function StaffRequestTable({ onView }) {
           <EmptyState title="No stock requests" icon={ClipboardList} />
         ) : (
           <>
-            <Table>
+            <Table stack="wide">
               <THead>
                 <TR>
                   {/* On a phone the status sits under the order number and Products, Requested and the View

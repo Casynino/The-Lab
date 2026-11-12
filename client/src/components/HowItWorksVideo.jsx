@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { useBackToClose } from '@/lib/useBackToClose';
 
 /**
  * "How it works" — the rep guide film, on the sign-in page (Nino, 11 Nov 2026: a video a rep sees at the
@@ -15,6 +16,8 @@ const POSTER = '/video/rep-guide-poster.jpg';
 
 export default function HowItWorksVideo({ style, className }) {
   const [open, setOpen] = useState(false);
+  // The phone's Back closes the film, not the sign-in page (lib/backToClose.js).
+  useBackToClose(open, () => setOpen(false), { guard: false });
 
   useEffect(() => {
     if (!open) return undefined;

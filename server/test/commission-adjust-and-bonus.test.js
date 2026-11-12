@@ -24,12 +24,23 @@ function db(tables = {}) {
     findMany: async () => [], findFirst: async () => null, findUnique: async () => null,
     count: async () => 0, groupBy: async () => [], aggregate: async () => ({ _sum: {}, _count: 0 }),
   };
-  return new Proxy({}, {
+  // Transactions run one at a time, as the row lock they take makes them run on Postgres.
+  let chain = Promise.resolve();
+  const proxy = new Proxy({}, {
     get(_t, name) {
       if (name === 'then') return undefined;
+      if (name === '$transaction') {
+        return (fn) => {
+          const run = chain.then(() => fn(proxy));
+          chain = run.catch(() => {});
+          return run;
+        };
+      }
+      if (name === '$queryRaw' || name === '$executeRaw') return async () => [];
       return { ...empty, ...(tables[name] || {}) };
     },
   });
+  return proxy;
 }
 
 const notified = [];

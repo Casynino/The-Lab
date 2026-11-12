@@ -8,6 +8,7 @@
   for the side sheet's own reads); the page adds its own polling and options.
 */
 import api, { unwrap } from '@/lib/api';
+import { eatISODate } from '@/lib/tz';
 import { routeQueries, shellQueries, warmPaths } from '@/lib/routeQueries';
 
 // The answer's `data` (a record, a summary) …
@@ -131,6 +132,12 @@ export const pageQueries = {
   customers: ({ page, search }) => ({ queryKey: ['customers', { page, search }], queryFn: listOf('/customers', { page, limit: 15, search }) }),
   notifications: ({ page }) => ({ queryKey: ['notifications', { page }], queryFn: listOf('/notifications', { page, limit: 20 }) }),
   dailyReports: ({ page }) => ({ queryKey: ['daily-reports', { page }], queryFn: listOf('/daily-reports', { page, limit: 20 }) }),
+  // The rep's own opening or closing report of today (Tanzanian day), or null: the form opens it to change
+  // it instead of starting blank (lib/dailyReportForm.js). Under 'daily-reports', so a save refreshes it.
+  dailyReportToday: (type, day = eatISODate()) => ({
+    queryKey: ['daily-reports', 'today', type, day],
+    queryFn: async () => (unwrap(await api.get('/daily-reports', { params: { type, from: day, to: day, limit: 1 } })).data || [])[0] || null,
+  }),
   // The saved report PDFs (Finance's Statements tab, the owner's profile), by kind, year and search.
   reportArchive: ({ type = '', year = '', search = '' } = {}) => ({
     queryKey: ['report-archive', type, year, search],

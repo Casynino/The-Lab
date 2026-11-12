@@ -11,7 +11,9 @@ import { useAuth } from '@/context/AuthContext';
 import { Input } from '@/components/ui';
 import { InstallButton } from '@/components/InstallApp';
 import { RESTRICTED_KEY } from '@/lib/api';
+import { shouldPlayFilm } from '@/lib/chunkLoader';
 import HowItWorksVideo from '@/components/HowItWorksVideo';
+import { useBackToClose } from '@/lib/useBackToClose';
 import './login.css';
 
 /**
@@ -115,24 +117,61 @@ const FILM = {
 };
 
 function Film({ kind, className, onLoad }) {
+  const sourceRef = useRef(null);
+  const imgRef = useRef(null);
+  // The film is 3.3 MB. Taking it off the page did not stop its download: it ran on to the end under
+  // the rep's first screen after sign-in, slowing everything else on the line (audit pwa-brand-load-4).
+  // Clearing what it points at, in one go, is what makes the browser drop the request.
+  useEffect(() => {
+    if (kind !== 'film') return undefined;
+    const source = sourceRef.current;
+    const img = imgRef.current;
+    // Put the addresses back if a clean-up took them (React's StrictMode on localhost runs the clean-up
+    // once at mount, and React will not set them again): source first, so the browser picks by orientation.
+    if (source && !source.getAttribute('srcset')) source.setAttribute('srcset', FILM.film.portrait);
+    if (img && !img.getAttribute('src')) img.setAttribute('src', FILM.film.landscape);
+    return () => {
+      source?.removeAttribute('srcset');
+      img?.removeAttribute('src');
+    };
+  }, [kind]);
   return (
     <picture className={className}>
-      <source media="(orientation: portrait)" srcSet={FILM[kind].portrait} />
-      <img src={FILM[kind].landscape} alt="" width="1600" height="900" decoding="async"
-        fetchpriority={kind === 'poster' ? 'high' : undefined} onLoad={onLoad} />
+      <source ref={sourceRef} media="(orientation: portrait)" srcSet={FILM[kind].portrait} />
+      <img ref={imgRef} src={FILM[kind].landscape} alt="" width="1600" height="900" decoding="async"
+        fetchpriority={kind === 'poster' ? 'high' : 'low'} onLoad={onLoad} />
     </picture>
   );
 }
 
-function Scene() {
+function Scene({ hold = false }) {
+  const [posterIn, setPosterIn] = useState(false);
+  const [start, setStart] = useState(false);
   const [ready, setReady] = useState(false);
   const still = useReducedMotion();
+  // The poster first, always. The film only once the poster is on screen, the phone has a quiet moment,
+  // and the line can carry 3.3 MB (lib/chunkLoader.js shouldPlayFilm): never on data saver or a slow
+  // line, where the poster is the page (audit pwa-brand-load-4).
+  useEffect(() => {
+    if (still || !posterIn || start) return undefined;
+    if (!shouldPlayFilm(typeof navigator !== 'undefined' ? navigator.connection : null)) return undefined;
+    const go = () => setStart(true);
+    if (window.requestIdleCallback) {
+      const id = window.requestIdleCallback(go, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = window.setTimeout(go, 1500);
+    return () => window.clearTimeout(t);
+  }, [still, posterIn, start]);
+  // While the sign-in is on its way, a film still arriving is dropped so it does not hold the request
+  // up; one already playing stays. Leaving the page drops it too (Film's own clean-up).
+  const showFilm = start && !(hold && !ready);
   return (
     <div className="ls" aria-hidden="true">
-      <Film kind="poster" className="ls-film" />
+      <Film kind="poster" className="ls-film" onLoad={() => setPosterIn(true)} />
       {/* Somebody who has asked their phone to stop moving things gets the
           poster alone — it is a picture, not information. */}
-      {!still && <Film kind="film" className={`ls-film ls-moving${ready ? ' is-ready' : ''}`} onLoad={() => setReady(true)} />}
+      {showFilm && <Film kind="film" className={`ls-film ls-moving${ready ? ' is-ready' : ''}`} onLoad={() => setReady(true)} />}
       <div className="ls-vignette" />
     </div>
   );
@@ -159,6 +198,10 @@ function Gate({ children, defaultOpen = false }) {
     timer.current = window.setTimeout(() => { setOpen(false); setClosing(false); }, 160);
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // A reason that arrives after the page is drawn (the session check on opening was refused) opens the card too.
+  useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
+  // Phone/browser Back closes the card, like every other window, instead of leaving the site (navigation-1b).
+  useBackToClose(open, close, { guard: false });
 
   /* Open the card AND put the cursor in the email box, in the same tap. That is
      what makes the phone offer the saved login straight away — the suggestion
@@ -209,7 +252,7 @@ function Gate({ children, defaultOpen = false }) {
       <InstallButton
         render={(openSheet) => (
           <button type="button" onClick={openSheet} style={rise(0.68)}
-            className="ls-up inline-flex h-8 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline">
+            className="ls-up -my-1.5 inline-flex h-11 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline">
             Get the full-screen app
           </button>
         )}
@@ -219,7 +262,7 @@ function Gate({ children, defaultOpen = false }) {
           tapped. Same quiet style as the line above it. */}
       <HowItWorksVideo
         style={rise(0.78)}
-        className="ls-up inline-flex h-8 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline"
+        className="ls-up -my-1.5 inline-flex h-11 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline"
       />
 
       <div
@@ -232,7 +275,7 @@ function Gate({ children, defaultOpen = false }) {
           {children}
           {open && (
             <button type="button" onClick={close} aria-label="Close"
-              className="ls-card-x absolute right-2.5 top-2.5 z-10 grid h-7 w-7 cursor-pointer place-items-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white/80">
+              className="ls-card-x absolute right-0.5 top-0.5 z-10 grid h-11 w-11 cursor-pointer place-items-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white/80">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
@@ -252,7 +295,7 @@ function Gate({ children, defaultOpen = false }) {
  */
 function Credit() {
   return (
-    <Link to="/nino" className="group inline-flex items-center gap-1 text-white/45 transition-colors hover:text-white">
+    <Link to="/nino" className="tap-phone group inline-flex items-center gap-1 text-white/45 transition-colors hover:text-white">
       by <span className="font-semibold text-white/75 transition-colors group-hover:text-brand-500">Nino</span>
       <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
     </Link>
@@ -266,7 +309,9 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const [showPwd, setShowPwd] = useState(false);
-  const from = location.state?.from?.pathname || '/';
+  // Back to the whole address the person was sent here from, tab and filters included (navigation-8).
+  const back = location.state?.from;
+  const from = back?.pathname ? `${back.pathname}${back.search || ''}${back.hash || ''}` : '/';
   // A sales-rep account used on a computer or tablet (server rule): the reason stays on the page, not in a
   // toast that disappears — whether it came from this sign-in or from a session that was stopped.
   // Read, not consumed: the stopped-session path reloads the page, so a reader that removed the key lost
@@ -280,6 +325,14 @@ export default function Login() {
     defaultValues: { email: '', password: '' },
   });
 
+  // Opened at the sign-in page with a kept session that the server then refused (a rep suspended, an account
+  // switched off): the reason is written while this page is already on screen, so read it again once the
+  // check is over (audit 11 Nov 2026, auth-device-4).
+  useEffect(() => {
+    if (loading) return;
+    try { const s = sessionStorage.getItem(RESTRICTED_KEY); if (s) setRestricted(JSON.parse(s)); } catch { /* private window */ }
+  }, [loading]);
+
   if (!loading && isAuthenticated) return <Navigate to={from} replace />;
 
   const onSubmit = async (values) => {
@@ -291,6 +344,10 @@ export default function Login() {
       navigate(from, { replace: true });
     } else if (res.reason === 'DEVICE_RESTRICTED') {
       setRestricted({ message: res.message, hint: res.hint });
+    } else if (res.refusal) {
+      // The right password, but the account is suspended or switched off: said in the card and kept there,
+      // not in a toast that is gone in a few seconds. A wrong password stays a toast.
+      setRestricted({ message: res.refusal });
     } else {
       toast.error(res.message);
     }
@@ -306,7 +363,7 @@ export default function Login() {
      phone's clock on purpose. */
   return (
     <div data-login-scene className="relative isolate min-h-dvh overflow-x-hidden bg-[#070907] text-white">
-      <Scene />
+      <Scene hold={isSubmitting} />
 
       {/* One centred column at every size: the brand, one line, one button.
           ZELab, the port and the sea fill the rest of the glass, so the
@@ -340,7 +397,7 @@ export default function Login() {
               <form onSubmit={handleSubmit(onSubmit)} className="mt-3.5 space-y-3">
                 <div className="ls-field" style={stagger(1)}>
                   <label htmlFor="login-email" className="mb-1 block text-[12px] text-white/50">Email</label>
-                  <Input id="login-email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="you@thelab.co.tz"
+                  <Input id="login-email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="you@zelab.site"
                     className={FIELD} {...register('email')} />
                   {errors.email && <p className="mt-1 text-[11.5px] text-rose-400">{errors.email.message}</p>}
                 </div>
@@ -350,7 +407,7 @@ export default function Login() {
                     <Input id="login-password" type={showPwd ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="••••••••"
                       className={`${FIELD} !pr-10`} {...register('password')} />
                     <button type="button" onClick={() => setShowPwd((v) => !v)} aria-label={showPwd ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-white/35 transition hover:text-white/70">
+                      className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center cursor-pointer text-white/35 transition hover:text-white/70">
                       {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>

@@ -28,10 +28,27 @@ const loginLimiter = rateLimit({
   requestWasSuccessful: (_req, res) => !res.locals.deviceRestricted,
 });
 
+// Change password: at most 5 wrong current passwords per account in 15 minutes (audit 11 Nov 2026,
+// auth-device-2: someone holding a session could guess the password at the global rate, and one right
+// guess gave them the account and signed the owner out everywhere). Counted per account, not per address,
+// so a new address does not reset it; only a wrong current password counts (the controller marks it), so a
+// typo in the new password or a successful change never uses a try. Each wrong try is also in the audit
+// log. In memory per server instance, like the sign-in limiter.
+const passwordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => `user:${req.user.id}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: { message: 'Too many wrong passwords. Wait 15 minutes, then try again.' } },
+  skipSuccessfulRequests: true,
+  requestWasSuccessful: (_req, res) => !res.locals.wrongPassword,
+});
+
 router.post('/login', loginLimiter, validate(loginSchema), ctrl.login);
 router.post('/refresh', validate(refreshSchema), ctrl.refresh);
 router.get('/me', authenticate, ctrl.me);
 router.post('/logout', authenticate, ctrl.logout);
-router.post('/change-password', authenticate, validate(changePasswordSchema), ctrl.changePassword);
+router.post('/change-password', authenticate, passwordLimiter, validate(changePasswordSchema), ctrl.changePassword);
 
 module.exports = router;

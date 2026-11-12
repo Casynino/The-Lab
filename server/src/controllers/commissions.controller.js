@@ -140,17 +140,20 @@ const setEmergencyWindow = asyncHandler(async (req, res) => {
 });
 
 const adjustEarned = asyncHandler(async (req, res) => {
-  const row = await commission.adjustEarned(req.body || {}, req.user);
-  await audit.record(req, {
-    action: 'UPDATE',
-    entityType: 'SalesRepresentative',
-    entityId: row.id,
-    newValues: {
-      kind: 'COMMISSION_ADJUSTMENT',
-      amount: req.body?.amount,
-      adjustmentNow: row.commissionAdjustment,
-      note: req.body?.note || null,
-    },
+  // The audit row is written inside the service's transaction: it is also how a repeat of the same
+  // correction is recognised (audit backend-integrity-2).
+  const row = await commission.adjustEarned(req.body || {}, req.user, {
+    record: (tx, r, { amount, note }) => audit.record(req, {
+      action: 'UPDATE',
+      entityType: 'SalesRepresentative',
+      entityId: r.id,
+      newValues: {
+        kind: 'COMMISSION_ADJUSTMENT',
+        amount,
+        adjustmentNow: r.commissionAdjustment,
+        note: note || null,
+      },
+    }, tx),
   });
   return ok(res, row);
 });

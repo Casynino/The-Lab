@@ -7,14 +7,17 @@ import clsx from 'clsx';
 import {
   ArrowLeft, Package, Timer, Wallet, AlertTriangle, TrendingUp, History,
   ShieldCheck, ShieldAlert, Power, Trash2, CheckCircle2, Clock, Undo2, ClipboardList,
-  Boxes, ChevronRight, Mail, Phone, MapPin, Calendar, Coins, PackagePlus, Pencil, MessageCircle, Gauge,
+  Boxes, ChevronRight, Mail, Phone, MapPin, Calendar, Coins, PackagePlus, Pencil, MessageCircle, Gauge, UserX,
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
+import { wentThrough } from '@/lib/once';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, formatDateTime, initials, unitWord } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
+import { timeLeftLabel } from '@/lib/labels';
 import RegionPicker from '@/components/RegionPicker';
 import { repRegions } from '@/lib/repRegions';
 import OrderDetailModal from '@/components/OrderDetail';
@@ -22,7 +25,7 @@ import ProgressRows from '@/components/ProgressRows';
 import WithdrawalNote, { PayoutHistory, withdrawalState } from '@/components/WithdrawalNote';
 import { TrendChart } from '@/components/charts';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, StatCard,
+  PageHeader, Card, PageSpinner, EmptyState, LoadError, Badge, Button, StatCard,
   Table, THead, TBody, TR, TH, TD, Modal, Field, Select, Input, NumberInput, Textarea,
 } from '@/components/ui';
 
@@ -224,12 +227,6 @@ const ACTIVITY_META = {
   COMMISSION: { icon: Coins, cls: 'text-violet-400 bg-violet-500/10' },
 };
 
-function hoursLabel(h) {
-  if (h == null) return '';
-  if (h < 0) return `${Math.abs(Math.round(h))}h overdue`;
-  if (h < 24) return `${Math.round(h)}h left`;
-  return `${Math.round(h / 24)}d left`;
-}
 
 // ── Edit rep details (admin) ─────────────────────────────────────────────────
 // Name + email live on the user account; phone, region and target on the rep —
@@ -291,16 +288,24 @@ function AddCommissionModal({ rep, earned, onClose }) {
   const qc = useQueryClient();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const once = useOnce(); // a double tap sends one correction
 
+  const refresh = () => ['sales-rep-profile', 'commissions', 'penalties', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const add = useMutation({
     mutationFn: () => api.post('/commissions/adjust', { salesRepId: rep.id, amount: Number(amount), note }),
     onSuccess: () => {
       const n = Number(amount);
       toast.success(`${formatCurrency(Math.abs(n))} ${n >= 0 ? 'added to' : 'taken off'} ${rep.name || 'the rep'}'s commission`);
-      ['sales-rep-profile', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = this same correction was recorded a moment ago (a retry after a lost answer): close on the real
+    // balance instead of leaving the window open to be sent again with a changed note.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e), { duration: 8000 }); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
 
   const amt = Number(amount);
@@ -309,7 +314,7 @@ function AddCommissionModal({ rep, earned, onClose }) {
     <Modal open onClose={onClose} title={`Adjust commission — ${rep.name || rep.code}`} footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>
+        <Button loading={add.isPending} disabled={!valid} onClick={() => once.run(() => add.mutate())}>
           {amt < 0 ? 'Take off ' : 'Add '}{amt ? formatCurrency(Math.abs(amt)) : ''}
         </Button>
       </>
@@ -334,15 +339,23 @@ function DeductCommissionModal({ rep, available, onClose }) {
   const qc = useQueryClient();
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
+  const once = useOnce(); // a double tap sends one deduction
 
+  const refresh = () => ['sales-rep-profile', 'commissions', 'penalties', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const deduct = useMutation({
     mutationFn: () => api.post('/penalties/adjust', { salesRepId: rep.id, amount: Number(amount), reason }),
     onSuccess: () => {
       toast.success(`${formatCurrency(Number(amount))} deducted from ${rep.name || 'the rep'}'s commission`);
-      ['sales-rep-profile', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = this same deduction was recorded a moment ago (a retry after a lost answer): close on the real
+    // balance instead of leaving the window open to be sent again with a changed reason.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e), { duration: 8000 }); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
 
   const amt = Number(amount);
@@ -351,7 +364,7 @@ function DeductCommissionModal({ rep, available, onClose }) {
     <Modal open onClose={onClose} title={`Deduct commission — ${rep.name || rep.code}`} footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={deduct.isPending} disabled={!valid} onClick={() => deduct.mutate()}>
+        <Button loading={deduct.isPending} disabled={!valid} onClick={() => once.run(() => deduct.mutate())}>
           Deduct {amt > 0 ? formatCurrency(amt) : ''}
         </Button>
       </>
@@ -550,7 +563,7 @@ function AddStockModal({ repId, repName, onClose }) {
 // the business is owed and a deleted rep cannot be chased.
 function DeleteRepModal({ rep, onClose, onDone }) {
   const qc = useQueryClient();
-  const { data: check, isLoading } = useQuery({
+  const { data: check, isLoading, isError: checkFailed, refetch: retryCheck } = useQuery({
     queryKey: ['sales-reps', rep.id, 'deletion-check'],
     queryFn: async () => unwrap(await api.get(`/sales-reps/${rep.id}/deletion-check`)).data,
   });
@@ -583,7 +596,7 @@ function DeleteRepModal({ rep, onClose, onDone }) {
           </Button>
         )}
       </>}>
-      {isLoading ? <PageSpinner /> : !check?.canDelete ? (
+      {isLoading ? <PageSpinner /> : checkFailed && !check ? <LoadError what="what deleting would remove" onRetry={retryCheck} /> : !check?.canDelete ? (
         <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
           <Boxes className="mt-0.5 h-4 w-4 shrink-0" />
           <span className="text-xs">{check?.blockedReason}</span>
@@ -643,15 +656,19 @@ export default function SalesRepProfile() {
   // Which window the performance figures cover. Kept in the query key so
   // switching period refetches rather than showing last period's numbers.
   const [period, setPeriod] = useState('all');
-  const { data, isLoading } = useQuery({
+  // An address with an unknown or removed rep is answered "not found" at once: no second try, no polling,
+  // and a page that says so instead of "Loading…" for ever (navigation-9).
+  const gone = (e) => [400, 404].includes(e?.response?.status);
+  const { data, isLoading, isError, error, refetch } = useQuery({
     ...pageQueries.repProfile({ id, period }),
-    refetchInterval: STEADY,
+    refetchInterval: (q) => (q.state.status === 'error' ? false : STEADY),
+    retry: (count, e) => !gone(e) && count < 1,
     keepPreviousData: true,
   });
   // This rep's payouts, so the admin and the rep are looking at one list. Not
   // folded into the profile payload: it is a small, separate question, and it
   // has to invalidate on the Commissions screen's own mutations.
-  const { data: wd } = useQuery({
+  const { data: wd, isError: wdFailed, refetch: retryWd } = useQuery({
     ...pageQueries.repWithdrawals(id),
   });
 
@@ -681,6 +698,34 @@ export default function SalesRepProfile() {
     qc.invalidateQueries({ queryKey: ['commissions'] });
   };
 
+  // Back to where the profile was opened from (the filtered list, Commissions' rep view, the Dashboard)
+  // when that page is in this tab's history; opened straight from a link, to the list (navigation-5).
+  const cameFromApp = (Number(window.history.state?.idx) || 0) > 0;
+  const backButton = (
+    <Button variant="secondary" onClick={() => (cameFromApp ? navigate(-1) : navigate('/reps'))}>
+      <ArrowLeft className="h-4 w-4" /> {cameFromApp ? 'Back' : 'All reps'}
+    </Button>
+  );
+
+  if (isError && !data) {
+    return (
+      <div>
+        <PageHeader title="Sales Rep Profile">{backButton}</PageHeader>
+        <Card>
+          {gone(error) ? (
+            <EmptyState
+              icon={UserX}
+              title="This rep was not found"
+              message="The link may be old, or the rep has been removed."
+              action={<Button variant="secondary" onClick={() => navigate('/reps')}>All reps</Button>}
+            />
+          ) : (
+            <LoadError what="this rep" onRetry={refetch} />
+          )}
+        </Card>
+      </div>
+    );
+  }
   if (isLoading || !data) return <PageSpinner />;
 
   const { rep, stock, commission: c, settlements, performance: perf, activity } = data;
@@ -695,7 +740,7 @@ export default function SalesRepProfile() {
   return (
     <div>
       <PageHeader title="Sales Rep Profile" subtitle="Full control center — stock, settlements, commission, compliance.">
-        <Button variant="secondary" onClick={() => navigate('/reps')}><ArrowLeft className="h-4 w-4" /> All reps</Button>
+        {backButton}
       </PageHeader>
 
       {/* ── Identity header ── */}
@@ -943,7 +988,7 @@ export default function SalesRepProfile() {
                         <span className="text-emerald-500">Settled <b>{formatNumber(s.boxesSettled)}</b></span>
                         <span className="text-sky-400">Returned <b>{formatNumber(s.boxesReturned)}</b></span>
                         <span className={s.boxesRemaining > 0 ? 'font-semibold text-rose-500' : 'text-muted'}>Remaining {formatNumber(s.boxesRemaining)}</span>
-                        <span className="ml-auto text-faint">{hoursLabel(s.hoursRemaining)} · bal {formatCurrency(s.balance)}</span>
+                        <span className="ml-auto text-faint">{timeLeftLabel(s.hoursRemaining, '')} · bal {formatCurrency(s.balance)}</span>
                         <ChevronRight className="h-3.5 w-3.5 text-faint" />
                       </div>
                     </button>
@@ -958,13 +1003,13 @@ export default function SalesRepProfile() {
             {stock.items.length === 0 ? (
               <p className="py-2 text-sm text-faint">Holding no stock.</p>
             ) : (
-              <Table>
+              <Table stack>
                 <THead><TR><TH>Product</TH><TH>Boxes held</TH><TH>Value (cost)</TH></TR></THead>
                 <TBody>
                   {stock.items.map((s) => (
                     <TR key={s.productId}>
-                      <TD className="font-medium text-foreground">{s.name}</TD>
-                      <TD>{formatNumber(s.baseQuantity)} {s.baseUnitName || 'Box'}{s.baseQuantity !== 1 ? 'es' : ''}</TD>
+                      <TD className="stack-full font-medium text-foreground">{s.name}</TD>
+                      <TD>{formatNumber(s.baseQuantity)} {unitWord(s.baseQuantity, s.baseUnitName || 'Box')}</TD>
                       <TD>{formatCurrency(s.value)}</TD>
                     </TR>
                   ))}
@@ -1082,7 +1127,9 @@ export default function SalesRepProfile() {
             {showPayoutNote && (
               <WithdrawalNote className="mb-3" audience="owner" commission={c} latest={latestPayout} firstName={rep.name?.split(' ')[0] || ''} />
             )}
-            <PayoutHistory items={withdrawals} empty="No withdrawal has been requested yet." />
+            {wdFailed && !wd
+              ? <LoadError what="the payouts" onRetry={retryWd} />
+              : <PayoutHistory items={withdrawals} empty={wd ? 'No withdrawal has been requested yet.' : 'Loading…'} />}
             <p className="mt-3 text-[11px] leading-snug text-faint">
               Paid from your own pocket and kept on the Commission account. It never comes out of a wallet and never
               off your profit — it is money the business owes you back.
@@ -1164,7 +1211,8 @@ export default function SalesRepProfile() {
       {viewing && <OrderDetailModal settlementId={viewing} onClose={() => { setViewing(null); refreshAll(); }} />}
       {addOpen && <AddStockModal repId={id} repName={rep.name} onClose={() => setAddOpen(false)} />}
       {editOpen && <EditRepModal rep={rep} onClose={() => setEditOpen(false)} />}
-      {deleteOpen && <DeleteRepModal rep={rep} onClose={() => setDeleteOpen(false)} onDone={() => navigate('/reps')} />}
+      {/* Replace: Back from the list must not land on the page of a rep who no longer exists. */}
+      {deleteOpen && <DeleteRepModal rep={rep} onClose={() => setDeleteOpen(false)} onDone={() => navigate('/reps', { replace: true })} />}
       {opening && (
         <OpenWindowModal
           rep={rep}

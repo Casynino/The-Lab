@@ -21,6 +21,9 @@ const auditQuery = {
     userId: id.optional(),
     entityType: z.string().optional(),
     action: z.string().optional(),
+    // The codes whose words on the page match the search (see auditLogs.controller searchWhere).
+    searchActions: z.string().max(2000).optional(),
+    searchEntities: z.string().max(2000).optional(),
   }),
 };
 

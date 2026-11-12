@@ -3,30 +3,34 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import {
   LogIn, LogOut, Plus, Pencil, Trash2, Ban, CheckCircle2, XCircle, HandCoins, Power, ScrollText,
-  Send, Clock, SlidersHorizontal, PackagePlus, Undo2, RefreshCw,
+  Send, Clock, SlidersHorizontal, PackagePlus, Undo2, RefreshCw, KeyRound,
 } from 'lucide-react';
 import api, { unwrap } from '@/lib/api';
 import { useDebounce } from '@/lib/hooks';
-import { PageHeader, Card, EmptyState, SearchInput, Pagination } from '@/components/ui';
+import { matchingCodes } from '@/lib/auditSearch';
+import { PageHeader, Card, EmptyState, LoadError, SearchInput, Pagination } from '@/components/ui';
 
 // Rearranged 11 Nov 2026 (Nino: "it should be nice — and why does it take so long to load"): plain
 // sentences ("Nino updated a rep"), grouped by day, each kind of action with its own small icon, the time
 // on the right; skeleton rows while it loads, and the current page stays on screen while the next one
 // comes (no blank spinner between pages or searches).
 
+// `also`: other words people use for it, so a search finds it by them too (lib/auditSearch.js).
 const ACTION = {
-  CREATE: { verb: 'created', icon: Plus, cls: 'bg-emerald-500/15 text-emerald-300' },
-  UPDATE: { verb: 'updated', icon: Pencil, cls: 'bg-amber-500/15 text-amber-300' },
-  DELETE: { verb: 'deleted', icon: Trash2, cls: 'bg-rose-500/15 text-rose-300' },
-  DEACTIVATE: { verb: 'deactivated', icon: Power, cls: 'bg-rose-500/15 text-rose-300' },
+  CREATE: { verb: 'created', icon: Plus, cls: 'bg-emerald-500/15 text-emerald-300', also: 'added new' },
+  UPDATE: { verb: 'updated', icon: Pencil, cls: 'bg-amber-500/15 text-amber-300', also: 'edited changed' },
+  DELETE: { verb: 'deleted', icon: Trash2, cls: 'bg-rose-500/15 text-rose-300', also: 'removed' },
+  DEACTIVATE: { verb: 'deactivated', icon: Power, cls: 'bg-rose-500/15 text-rose-300', also: 'suspended suspend switched off' },
   CANCEL: { verb: 'cancelled', icon: Ban, cls: 'bg-white/[0.07] text-white/60' },
   REFUND: { verb: 'refunded boxes on', icon: Undo2, cls: 'bg-white/[0.07] text-white/60' },
   APPROVE: { verb: 'approved', icon: CheckCircle2, cls: 'bg-emerald-500/15 text-emerald-300' },
   REJECT: { verb: 'rejected', icon: XCircle, cls: 'bg-rose-500/15 text-rose-300' },
   PAY: { verb: 'paid', icon: HandCoins, cls: 'bg-emerald-500/15 text-emerald-300' },
-  LOGIN: { verb: 'signed in', icon: LogIn, cls: 'bg-sky-500/15 text-sky-300', self: true },
-  LOGOUT: { verb: 'signed out', icon: LogOut, cls: 'bg-white/[0.07] text-white/60', self: true },
-  LOGIN_FAILED: { verb: 'refused a sign-in', icon: Ban, cls: 'bg-rose-500/15 text-rose-300', self: true },
+  LOGIN: { verb: 'signed in', icon: LogIn, cls: 'bg-sky-500/15 text-sky-300', self: true, also: 'sign in log in login', anon: 'An account' },
+  LOGOUT: { verb: 'signed out', icon: LogOut, cls: 'bg-white/[0.07] text-white/60', self: true, also: 'sign out log out logout' },
+  LOGIN_FAILED: { verb: 'refused a sign-in', icon: Ban, cls: 'bg-rose-500/15 text-rose-300', self: true, also: 'failed sign in login wrong password' },
+  CHANGE_PASSWORD: { verb: 'changed the password', icon: KeyRound, cls: 'bg-amber-500/15 text-amber-300', self: true },
+  CHANGE_PASSWORD_FAILED: { verb: 'typed a wrong current password', icon: Ban, cls: 'bg-rose-500/15 text-rose-300', self: true, also: 'failed change password refused' },
   // Every other action the live log holds (11 Nov 2026), in words.
   SUBMIT_SETTLEMENT: { verb: 'sent', icon: Send, cls: 'bg-sky-500/15 text-sky-300', obj: 'a settlement' },
   APPROVE_SETTLEMENT: { verb: 'approved', icon: CheckCircle2, cls: 'bg-emerald-500/15 text-emerald-300', obj: 'a settlement' },
@@ -62,9 +66,22 @@ const ENTITY = {
 
 const words = (s) => String(s || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
 
+// The words each code is shown with, so a search for them finds the rows (lib/auditSearch.js).
+const ACTION_WORDS = Object.fromEntries(Object.entries(ACTION).map(([code, a]) => [code, [a.verb, a.obj, a.also].filter(Boolean).join(' ')]));
+function searchParams(text) {
+  const actions = matchingCodes(text, ACTION_WORDS);
+  const entities = matchingCodes(text, ENTITY);
+  return {
+    search: text,
+    searchActions: actions.length ? actions.join(',') : undefined,
+    searchEntities: entities.length ? entities.join(',') : undefined,
+  };
+}
+
 function line(log) {
   const a = ACTION[log.action] || { verb: words(log.action), icon: ScrollText, cls: 'bg-white/[0.07] text-white/60' };
-  const who = log.user?.name || 'The system';
+  // Sign-ins written before 12 Nov 2026 have no person (the account is the subject): not "The system".
+  const who = log.user?.name || a.anon || 'The system';
   const what = a.self ? '' : ` ${a.obj || ENTITY[log.entityType] || `a ${words(log.entityType)}`}`;
   return { ...a, text: `${who} ${a.verb}${what}` };
 }
@@ -96,9 +113,10 @@ export default function AuditLogs() {
   const [search, setSearch] = useState('');
   const debounced = useDebounce(search);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, isError, refetch } = useQuery({
     queryKey: ['audit-logs', { page, search: debounced }],
-    queryFn: async () => unwrap(await api.get('/audit-logs', { params: { page, limit: 25, search: debounced } })),
+    // A person's name or email, the words on the screen ("signed in", "suspended", "a rep"), or a code or id.
+    queryFn: async () => unwrap(await api.get('/audit-logs', { params: { page, limit: 25, ...searchParams(debounced) } })),
     placeholderData: keepPreviousData,
   });
 
@@ -115,12 +133,18 @@ export default function AuditLogs() {
     <div>
       <PageHeader title="Audit log" subtitle="Every important action — who did it, and when." />
       <div className="mb-4 max-w-sm">
-        <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search an action, a name or an id…" />
+        <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search a name, an email or what happened…" />
       </div>
       {isLoading ? (
         <Card><SkeletonRows /></Card>
+      ) : isError && !data ? (
+        <Card><LoadError what="the audit log" onRetry={refetch} /></Card>
       ) : !rows.length ? (
-        <Card><EmptyState title="Nothing recorded yet" icon={ScrollText} /></Card>
+        <Card>
+          {debounced.trim()
+            ? <EmptyState title="No entries match" message="Try a name, an email, or words like signed in, deleted or a rep." icon={ScrollText} />
+            : <EmptyState title="Nothing recorded yet" icon={ScrollText} />}
+        </Card>
       ) : (
         <div className={`space-y-6 transition-opacity ${isFetching ? 'opacity-70' : ''}`}>
           {groups.map((g) => (

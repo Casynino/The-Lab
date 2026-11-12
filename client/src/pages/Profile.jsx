@@ -29,7 +29,7 @@ import api, { unwrap, apiError, tokenStore } from '@/lib/api';
 import { ROLES, ROLE_LABELS } from '@/lib/constants';
 import { RED } from '@/lib/brand';
 import { formatCurrency, formatNumber, formatDate, formatDateTime } from '@/lib/format';
-import { PageSpinner, Button } from '@/components/ui';
+import { PageSpinner, Button, LoadError } from '@/components/ui';
 import { repRegions, shortRegion } from '@/lib/repRegions';
 import CollapsibleList from '@/components/CollapsibleList';
 import WalletCard from '@/components/WalletCard';
@@ -60,7 +60,7 @@ function PasswordField({ label, value, onChange, autoComplete, show, onToggle, e
             : 'input h-10 text-[14px] [&]:pr-10'}
         />
         {onToggle && (
-          <button type="button" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+          <button type="button" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'} className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
             {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         )}
@@ -389,9 +389,9 @@ function RepsThisMonth({ reps, onOpen }) {
             <span className="w-5 shrink-0 text-[12px] tabular-nums text-white/35">{i + 1}</span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">{r.name}</p>
-              <p className="mt-0.5 truncate text-xs text-muted">
-                {r.code} · {formatNumber(r.boxesHeld)} {r.boxesHeld === 1 ? 'box' : 'boxes'} · {formatNumber(r.activeOrders)} open
-                {r.overdueOrders > 0 && <span className="text-rose-300"> · {formatNumber(r.overdueOrders)} overdue</span>}
+              <p className="mt-0.5 text-xs text-muted">
+                {r.code} · <span className="whitespace-nowrap">{formatNumber(r.boxesHeld)} {r.boxesHeld === 1 ? 'box' : 'boxes'}</span> · <span className="whitespace-nowrap">{formatNumber(r.activeOrders)} open</span>
+                {r.overdueOrders > 0 && <span className="whitespace-nowrap text-rose-300"> · {formatNumber(r.overdueOrders)} overdue</span>}
               </p>
             </div>
             <span className="shrink-0 text-sm font-semibold tabular-nums text-white">{formatCurrency(r.salesMonth)}</span>
@@ -410,13 +410,13 @@ function BrandsThisMonth({ brands }) {
   return (
     <section>
       <SectionTitle>Your brands this month</SectionTitle>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {brands.map((b) => (
           <div key={b.brandId} className="stat-glass p-4">
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${BRAND_DOT[String(b.name).toUpperCase()] || 'bg-white/50'}`} aria-hidden="true" />
-              <p className="text-sm font-semibold text-white">{b.name}</p>
-              {b.marginMonth != null && <span className="ml-auto text-[11px] tabular-nums text-white/50">{Math.round(b.marginMonth)}% margin</span>}
+              <p className="min-w-0 truncate text-sm font-semibold text-white">{b.name}</p>
+              {b.marginMonth != null && <span className="ml-auto shrink-0 whitespace-nowrap text-[11px] tabular-nums text-white/50">{Math.round(b.marginMonth)}% margin</span>}
             </div>
             <p className="mt-3 text-[22px] font-bold leading-tight tabular-nums text-white">{formatCurrency(b.revenueMonth)}</p>
             <p className="mt-0.5 text-[11px] text-white/45">{formatNumber(b.boxesSoldMonth)} {b.boxesSoldMonth === 1 ? 'box' : 'boxes'} sold</p>
@@ -514,11 +514,13 @@ function AdminProfile({ user, sub }) {
   const section = LAB_SECTIONS.find((s) => s.key === tab);
   const contentRef = useRef(null);
   const openSection = (key) => {
-    setParams(key === 'overview' ? {} : { tab: key });
+    // On a computer a section is a tab: replace, so it is not a Back step. On a phone it opens below the list
+    // like a page of its own, and Back returns to the list (navigation-10).
+    setParams(key === 'overview' ? {} : { tab: key }, { replace: window.innerWidth >= 1024 });
     // On a phone the section opens below the list: bring it into view.
     if (window.innerWidth < 1024) setTimeout(() => contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
-  const { data: cmd, isError: cmdError } = useQuery({
+  const { data: cmd, isError: cmdError, refetch: retryCmd } = useQuery({
     queryKey: ['dashboard', 'command'],
     queryFn: async () => unwrap(await api.get('/dashboard/command')).data,
     enabled: tab === 'overview',
@@ -582,10 +584,10 @@ function AdminProfile({ user, sub }) {
           // One of his pages — its title, its tools, its tables — in the profile's own finish (.lab-section).
           <div className="lab-section"><section.Page /></div>
         ) : !cmd ? (
-          cmdError ? <p className="px-1 text-sm text-muted">The business figures are not available right now.</p> : <PageSpinner />
+          cmdError ? <LoadError what="the business figures" onRetry={retryCmd} /> : <PageSpinner />
         ) : (
           <>
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               <BusinessCard cmd={cmd} />
               <BusinessDoingCard a={analysis} />
             </div>
@@ -601,7 +603,7 @@ function AdminProfile({ user, sub }) {
             </section>
 
             {/* Wide screens: the reps beside the brands and the accounts; narrower ones: one under the other. */}
-            <div className="grid items-start gap-8 2xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 items-start gap-8 2xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
               <RepsThisMonth reps={cmd.reps} onOpen={(id) => navigate(`/reps/${id}`)} />
               <div className="space-y-8">
                 <BrandsThisMonth brands={cmd.brands} />
@@ -622,13 +624,13 @@ export default function Profile() {
   const navigate = useNavigate();
   const isRep = user?.role === ROLES.SALES_REP;
 
-  const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery({
+  const { data: stats, isLoading: statsLoading, isError: statsError, refetch: retryStats } = useQuery({
     queryKey: ['dashboard', 'me', 'stats'],
     queryFn: async () => unwrap(await api.get('/dashboard/me/stats')).data,
     enabled: isRep,
   });
 
-  const { data: c } = useQuery({
+  const { data: c, isError: walletFailed, refetch: retryWallet } = useQuery({
     queryKey: ['commissions', 'me'],
     queryFn: async () => unwrap(await api.get('/commissions/me')).data,
     enabled: isRep,
@@ -672,7 +674,7 @@ export default function Profile() {
 
       {isRep && (
         <>
-          {!c ? <PageSpinner /> : (
+          {walletFailed && !c ? <LoadError what="your wallet" onRetry={retryWallet} /> : !c ? <PageSpinner /> : (
             <WalletCard
               balance={formatCurrency(c.available)}
               negative={c.available < 0}
@@ -693,9 +695,11 @@ export default function Profile() {
 
           <section>
             <SectionTitle>Activity</SectionTitle>
-            {statsLoading ? <PageSpinner /> : statsError ? (
-              <p className="px-1 text-sm text-muted">The activity figures are not available right now.</p>
-            ) : (
+            {/* Never read stats while they are missing (audit pwa-brand-load-1: offline, a paused query had
+                no figures and no error, and reading one blacked out the whole app). */}
+            {statsLoading ? <PageSpinner /> : statsError && !stats ? (
+              <LoadError what="your activity figures" onRetry={retryStats} />
+            ) : !stats ? <PageSpinner /> : (
               <div className="grid grid-cols-2 gap-3">
                 <ActivityCard icon={ClipboardList} label="Active requests" value={formatNumber(stats.activeRequests)} />
                 <ActivityCard icon={CheckCircle2} label="Completed requests" value={formatNumber(stats.completedRequests)} />

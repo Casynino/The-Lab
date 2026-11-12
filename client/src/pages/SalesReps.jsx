@@ -491,7 +491,7 @@ export default function SalesReps() {
 
       {isLoading ? (
         <Card><PageSpinner /></Card>
-      ) : isError ? (
+      ) : isError && !data ? (
         <Card><LoadError what="the reps" onRetry={refetch} /></Card>
       ) : !reps.length ? (
         <Card><EmptyState title="No sales reps" icon={UserCog} action={isAdmin && <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New rep</Button>} /></Card>

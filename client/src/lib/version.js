@@ -1,5 +1,6 @@
 import toast from 'react-hot-toast';
 import React from 'react';
+import { dueForCheck } from '@/lib/versionCheck';
 
 // A tab left open never learns that a deploy happened. index.html is served
 // must-revalidate, so a refresh always gets the new build — but nobody
@@ -21,8 +22,12 @@ function currentEntry() {
   return m ? m[0] : null;
 }
 
+// 'no-cache', one fixed address: the browser sends the copy it holds with its
+// ETag and the server answers 304 when nothing has shipped. It used to ask with
+// 'no-store' and a new ?v= every time, which sends no ETag, defeats every cache
+// and downloaded the whole file on every check (audit pwa-brand-load-6).
 async function deployedEntry() {
-  const res = await fetch(`/?v=${Date.now()}`, { cache: 'no-store', credentials: 'same-origin' });
+  const res = await fetch('/', { cache: 'no-cache', credentials: 'same-origin' });
   if (!res.ok) return null;
   const m = (await res.text()).match(ENTRY);
   return m ? m[0] : null;
@@ -125,12 +130,17 @@ export function watchForNewVersion({ intervalMs = 3 * 60 * 1000 } = {}) {
   // In dev there is no hashed bundle to compare against.
   if (!mine) return;
   let asked = false;
+  let lastAt = 0;
 
   // A background tab is left alone; coming back to it, or asking directly, is
-  // always worth a check.
+  // worth a check — at most one a minute (lib/versionCheck.js), however often
+  // the window is clicked into.
   const check = async (force = false) => {
     if (asked) return;
     if (!force && document.hidden) return;
+    const now = Date.now();
+    if (!dueForCheck(now, lastAt)) return;
+    lastAt = now;
     let live;
     try {
       live = await deployedEntry();

@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import api, { tokenStore, unwrap, apiError, clientForm } from '@/lib/api';
+import api, { tokenStore, unwrap, apiError, clientForm, rememberRefusal } from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { idle } from '@/lib/idle';
 import { installOffer } from '@/lib/installOffer';
-import { sessionRefused, retryDelay } from '@/lib/sessionCheck';
+import { sessionRefused, retryDelay, accountRefusal } from '@/lib/sessionCheck';
 import { restoreSession, rememberUser, startPersisting, forgetCache } from '@/lib/persist';
 import { tokenClaims } from '@/lib/cacheSnapshot';
 import { prefetchRoute } from '@/lib/pageQueries';
@@ -120,6 +120,9 @@ export function AuthProvider({ children }) {
           if (!active || signedInHere.current) break;
           // Refused, or signed out meanwhile (another tab, or a refused device that cleared it).
           if (sessionRefused(err) || !tokenStore.get()) {
+            // A reason about the account (a rep suspended, an account switched off) waits on the sign-in
+            // page instead of a silent drop to it (auth-device-4).
+            rememberRefusal(err);
             // Everything goes: the tokens, the kept screens (tokenStore.clear) and anything shown or
             // read ahead from them.
             tokenStore.clear();
@@ -163,7 +166,8 @@ export function AuthProvider({ children }) {
       return { ok: true, user: u };
     } catch (err) {
       const details = err?.response?.data?.error?.details;
-      return { ok: false, message: apiError(err, 'Login failed'), reason: details?.reason, hint: details?.hint };
+      // `refusal`: the right password, but the account is suspended or switched off — shown in the card.
+      return { ok: false, message: apiError(err, 'Login failed'), reason: details?.reason, hint: details?.hint, refusal: accountRefusal(err) };
     }
   }, []);
 

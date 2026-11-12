@@ -12,13 +12,27 @@
   list (the server would refuse it anyway). Pure, so it is tested on its own.
 */
 
+import { pickParam, pageParam } from './urlParams.js';
+import { SALE_STATUS_META, REQUEST_STATUS_META } from './constants.js';
+
+// The chips each list page reads from its address (the same lists the pages pass to pickParam).
 const SETTLEMENT_CHIPS = ['OPEN', 'PARTIAL', 'OVERDUE', 'SETTLED'];
+const SALE_TYPES = ['CASH', 'CREDIT'];
+const SALE_CHIPS = Object.keys(SALE_STATUS_META);
+const REQUEST_CHIPS = Object.keys(REQUEST_STATUS_META).filter((k) => k !== 'APPROVED');
 const FINANCE_TABS = ['overview', 'profit', 'cashflow', 'suppliers', 'accounts', 'expenses', 'ledger', 'commissions', 'reports', 'archive'];
 const INVENTORY_TABS = ['balances', 'movements', 'purchases', 'transfers', 'reorder'];
 // The staff Commissions page (also Finance's Commissions tab): the rep cards, the payouts and the paid-out chart.
 const COMMISSIONS_STAFF = [
   ['commissionsSummary'], ['withdrawalsAll'], ['withdrawalsTrend'], ['settlementsAnalytics'], ['penaltiesCount'], ['bonusSummary'],
 ];
+// ...and with a rep card open (?rep=id, the open sheet's own address, reloadable): the board under it too.
+function commissionsStaff(params) {
+  const card = params.get('rep');
+  return card
+    ? [...COMMISSIONS_STAFF, ['repSheetProfile', card], ['repSheetWithdrawals', card], ['repFines', card]]
+    : [...COMMISSIONS_STAFF];
+}
 
 /** The shell's own answers (the bell, the waiting counts), asked on every page. */
 export function shellQueries(role) {
@@ -41,21 +55,18 @@ export function routeQueries(pathname, search, role) {
     case '/':
       return rep ? [['dashboardMe'], ['bonusMe']] : [['dashboardCommand'], ['dashboardAnalysis']];
     case '/stock-requests':
-      return rep ? [['stockRequestsMine']] : [['stockRequestsWaiting'], ['stockRequests', { page: 1, status: '' }]];
+      if (rep) return [['stockRequestsMine']];
+      return [['stockRequestsWaiting'], ['stockRequests', { page: pageParam(params), status: pickParam(params, 'status', REQUEST_CHIPS) }]];
     case '/settlements': {
       if (rep) return [['settlementsMine']];
-      const asked = params.get('status');
-      const status = SETTLEMENT_CHIPS.includes(asked) ? asked : '';
-      return [['settlementsWaiting'], ['settlementsSummary'], ['settlements', { page: 1, status }]];
+      const status = pickParam(params, 'status', SETTLEMENT_CHIPS);
+      return [['settlementsWaiting'], ['settlementsSummary'], ['settlements', { page: pageParam(params), status }]];
     }
     case '/returns':
       return [['returnsSummary'], ['returns', { type: '', page: 1 }]];
     case '/commissions': {
       if (rep) return [['commissionsInsights'], ['commissionsMine'], ['withdrawalsMine'], ['bonusMe']];
-      // A rep card names its rep (?rep=id, never opened as an address): what his side sheet asks for.
-      const card = params.get('rep');
-      if (card) return [['repSheetProfile', card], ['repSheetWithdrawals', card], ['repFines', card]];
-      return [...COMMISSIONS_STAFF];
+      return commissionsStaff(params);
     }
     case '/daily-reports':
       // The owner's reports open inside his profile instead.
@@ -75,7 +86,8 @@ export function routeQueries(pathname, search, role) {
   }
   switch (pathname) {
     case '/sales':
-      return tab === 'invoice' ? [] : [['sales', { page: 1, type: '', status: '' }]];
+      if (tab === 'invoice') return [];
+      return [['sales', { page: pageParam(params), type: pickParam(params, 'type', SALE_TYPES), status: pickParam(params, 'status', SALE_CHIPS) }]];
     case '/inventory':
       return !tab || tab === 'balances' || !INVENTORY_TABS.includes(tab)
         ? [['brandsAll'], ['inventoryBalances', { page: 1, search: '', brand: '' }]]
@@ -94,7 +106,7 @@ export function routeQueries(pathname, search, role) {
         accounts: [['financeLatest']],
         expenses: [['brandsAll'], ['financeTransactions', { ...ledger, expensesOnly: true }]],
         ledger: [['brandsAll'], ['financeTransactions', ledger]],
-        commissions: [...COMMISSIONS_STAFF],
+        commissions: commissionsStaff(params),
         archive: [['reportArchive']],
       };
       return root.concat(inside[tab] || []);

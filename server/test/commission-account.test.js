@@ -110,6 +110,16 @@ const prismaStub = {
   },
 };
 
+// A payout's ledger row is written in a transaction that first locks the withdrawal row (audit
+// backend-integrity-1). Transactions here run one at a time, as that lock makes them run on Postgres.
+let txChain = Promise.resolve();
+prismaStub.$transaction = (fn) => {
+  const run = txChain.then(() => fn(prismaStub));
+  txChain = run.catch(() => {});
+  return run;
+};
+prismaStub.$queryRaw = async () => [];
+
 require.cache[require.resolve('../src/config/prisma')] = { id: 'prisma', filename: 'prisma', loaded: true, exports: prismaStub };
 const reportsPath = require.resolve('../src/services/reports.service');
 // Gross profit is the sales side's business, not finance's — stubbed at a
@@ -218,6 +228,37 @@ test('one withdrawal is recorded once, however many times the payment is recorde
   const second = await finance.recordCommissionPayment({ amount: 75000, refId: 'wd-dup', occurredAt: D('2026-08-03') }, null);
   assert.equal(second.id, first.id);
   assert.equal(rows.filter((r) => r.refId === 'wd-dup' && r.type === 'COMMISSION_PAYMENT').length, 1);
+});
+
+// Audit backend-integrity-1: Approve & pay writes the payout's row while a Finance page read runs the
+// self-heal rebuild. Both used to read "no row yet" in the same few milliseconds and both write one, so
+// a 20,000 payout was booked twice. Every read here yields first, so the two really interleave.
+test('a payout paid while the ledger is being rebuilt is recorded once', async () => {
+  reset();
+  const tick = () => new Promise((r) => setImmediate(r));
+  const ft = prismaStub.financeTransaction;
+  const orig = { findFirst: ft.findFirst, findMany: ft.findMany, create: ft.create };
+  ft.findFirst = async (a) => { await tick(); return orig.findFirst(a); };
+  ft.findMany = async (a) => { await tick(); return orig.findMany(a); };
+  // A slow write: the other side reads while it is still on its way.
+  ft.create = async (a) => { await new Promise((r) => setTimeout(r, 15)); return orig.create(a); };
+  const paid = { id: 'wd-race', status: 'PAID', amount: 20000, paidAt: D('2026-08-05'), decidedAt: D('2026-08-05'), createdAt: D('2026-08-04'), salesRep: { user: { name: 'KP' } } };
+  Object.assign(prismaStub, {
+    sale: { findMany: async () => [] },
+    saleItem: { findMany: async () => [] },
+    commissionWithdrawal: { findMany: async () => [paid] },
+  });
+  try {
+    await Promise.all([
+      finance.backfillFromHistory(),
+      finance.recordCommissionPayment({ amount: 20000, refId: 'wd-race', who: 'KP', occurredAt: D('2026-08-05') }, { id: 'admin' }),
+      finance.backfillFromHistory(),
+    ]);
+  } finally {
+    Object.assign(ft, orig);
+    delete prismaStub.sale; delete prismaStub.saleItem; delete prismaStub.commissionWithdrawal;
+  }
+  assert.equal(rows.filter((r) => r.refId === 'wd-race' && r.type === 'COMMISSION_PAYMENT').length, 1);
 });
 
 test('a payout moves no balance on any money account, and the record is not a balance', async () => {

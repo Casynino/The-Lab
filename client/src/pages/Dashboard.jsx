@@ -8,7 +8,6 @@ import {
   Boxes,
   Warehouse,
   Truck,
-  AlertTriangle,
   ArrowRight,
   Timer,
   CheckCircle2,
@@ -43,6 +42,7 @@ import {
   CardBody,
   PageSpinner,
   EmptyState,
+  LoadError,
   Badge,
   Button,
   Table,
@@ -390,7 +390,7 @@ function Analysis({ a, navigate }) {
               <h2 className="text-base font-semibold text-foreground">Boxes still out with reps</h2>
               <p className="mt-0.5 text-xs text-muted">From the day they were issued</p>
             </div>
-            <button onClick={() => navigate('/settlements')} className="shrink-0 cursor-pointer text-xs font-semibold text-brand-600 hover:text-brand-600">
+            <button onClick={() => navigate('/settlements')} className="tap-phone shrink-0 cursor-pointer text-xs font-semibold text-brand-600 hover:text-brand-600">
               Open orders →
             </button>
           </div>
@@ -514,7 +514,7 @@ export default function Dashboard() {
   const [reviewing, setReviewing] = useState(null); // pending commission requests
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...pageQueries.dashboardCommand(),
     refetchInterval: STEADY, // live business status
   });
@@ -529,7 +529,10 @@ export default function Dashboard() {
   });
 
   if (isLoading) return <PageSpinner label="Building your command center…" />;
-  if (isError || !data) return <EmptyState title="Couldn't load the dashboard" message="Please try again shortly." icon={AlertTriangle} />;
+  // Figures already on screen stay there when a refresh fails (the notice above the page says they are
+  // not fresh); only a dashboard that never arrived says it could not load.
+  if (isError && !data) return <LoadError what="the dashboard" onRetry={refetch} />;
+  if (!data) return <PageSpinner label="Building your command center…" />;
 
   const { accounts, totalFunds, today, week, month, brands, reps, attention, inventory, charts} = data;
   // The same three windows everywhere on this page: the same figures, the same
@@ -831,7 +834,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <PeriodTabs value={period} onChange={setPeriod} options={Object.values(periods).filter((o) => o.available)} />
             <button type="button" onClick={() => navigate('/finance')}
-              className="shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
+              className="tap-phone shrink-0 cursor-pointer text-xs font-medium text-brand-500 transition duration-200 hover:underline">
               Open Finance →
             </button>
           </div>
@@ -1059,6 +1062,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {brands.map((b) => {
               const t = BRAND_TONE[b.name?.toUpperCase()] || { ring: 'border-border', bg: 'bg-surface', badge: 'bg-elevated text-muted', dot: 'bg-border' };
+              // The top product of the window on show, not the month's under every tab (audit admin-ops-1).
+              const top = b[`topProduct${shown.suffix}`] ?? (shown.suffix === 'Month' ? b.topProduct : null);
               return (
                 <button key={b.brandId} onClick={() => navigate('/finance?tab=profit')} className={`w-full rounded-2xl border ${t.ring} ${t.bg} p-4 text-left transition hover:bg-elevated`}>
                   <div className="mb-3 flex items-center gap-2">
@@ -1072,7 +1077,7 @@ export default function Dashboard() {
                     <Mini label="Inventory value" value={formatCurrency(b.inventoryValue)} />
                     <Mini label="In warehouse" value={`${formatNumber(b.warehouseBoxes)} boxes`} />
                     <Mini label="With reps" value={`${formatNumber(b.repBoxes)} boxes`} />
-                    <Mini label="Top product" value={b.topProduct ? b.topProduct.name.replace(/civlily|ohis/i, '').trim().slice(0, 18) : '—'} sub={b.topProduct ? formatCurrency(b.topProduct.revenue) : 'no sales yet'} />
+                    <Mini label="Top product" value={top ? top.name.replace(/civlily|ohis/i, '').trim().slice(0, 18) : '—'} sub={top ? formatCurrency(top.revenue) : 'no sales yet'} />
                   </div>
                 </button>
               );
