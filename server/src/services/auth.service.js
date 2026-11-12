@@ -22,8 +22,11 @@ function publicUser(user) {
     warehouseId: user.warehouseId,
     warehouse: user.warehouse || null,
     salesRepId: user.salesRep ? user.salesRep.id : null,
-    // never the rep's own WhatsApp API key: the app has no use for it
-    salesRep: user.salesRep ? { ...user.salesRep, whatsappApiKey: undefined } : null,
+    // never the rep's own WhatsApp API key: the app has no use for it. Only whether his WhatsApp alerts can
+    // arrive (number AND key set), so a screen never promises a WhatsApp that cannot come (audit, 12 Nov 2026).
+    salesRep: user.salesRep
+      ? { ...user.salesRep, whatsappApiKey: undefined, whatsappOn: Boolean(user.salesRep.whatsappPhone && user.salesRep.whatsappApiKey) }
+      : null,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
   };
