@@ -903,11 +903,11 @@ function StaffRequestTable({ onView }) {
         <p className="text-xs leading-relaxed text-muted">
           Reps have asked for stock <b className="text-foreground">{formatNumber(sum.totalRequests)}</b> time{sum.totalRequests === 1 ? '' : 's'}
           {span && <> {span}</>}. You issued <b className="text-foreground">{formatNumber(sum.issued)}</b> of them
-          {' '}— <b className="text-foreground">{formatNumber(sum.boxes)}</b> boxes worth <b className="text-foreground">{formatCurrency(sum.value)}</b>.
-          {' '}<b className="text-emerald-400">{formatNumber(sum.settled)}</b> have been settled and
-          {' '}<b className={sum.stillOpen > 0 ? 'text-amber-400' : 'text-foreground'}>{formatNumber(sum.stillOpen)}</b> are still owed.
-          {sum.pending > 0 && <> <b className="text-foreground">{formatNumber(sum.pending)}</b> are waiting for your decision.</>}
-          {sum.refused > 0 && <> {formatNumber(sum.refused)} were rejected or cancelled, so no stock left the warehouse.</>}
+          {' '}— <b className="text-foreground">{formatNumber(sum.boxes)}</b> {sum.boxes === 1 ? 'box' : 'boxes'} worth <b className="text-foreground">{formatCurrency(sum.value)}</b>.
+          {' '}<b className="text-emerald-400">{formatNumber(sum.settled)}</b> {sum.settled === 1 ? 'has' : 'have'} been settled and
+          {' '}<b className={sum.stillOpen > 0 ? 'text-amber-400' : 'text-foreground'}>{formatNumber(sum.stillOpen)}</b> {sum.stillOpen === 1 ? 'is' : 'are'} still owed.
+          {sum.pending > 0 && <> <b className="text-foreground">{formatNumber(sum.pending)}</b> {sum.pending === 1 ? 'is' : 'are'} waiting for your decision.</>}
+          {sum.refused > 0 && <> {formatNumber(sum.refused)} {sum.refused === 1 ? 'was' : 'were'} rejected or cancelled, so no stock left the warehouse.</>}
         </p>
       )}
 
