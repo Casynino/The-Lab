@@ -124,6 +124,7 @@ function tellOwner(results, actor) {
       type: 'GENERAL',
       severity: 'INFO',
       title: 'New settlement awaiting approval',
+      forStaff: true, // staff approve settlements today (D32)
       message: `${repName} submitted ${sub.boxes} box(es) of ${product.name} (${formatCurrency(sub.amount)}) on order ${s.settlementNumber}. Verify the money and approve.`,
       entityType: 'Settlement',
       entityId: s.id,
@@ -137,6 +138,7 @@ function tellOwner(results, actor) {
     type: 'GENERAL',
     severity: 'INFO',
     title: 'New settlement awaiting approval',
+    forStaff: true, // staff approve settlements today (D32)
     message: `${repName} submitted ${results.length} products (${boxes} box(es), ${formatCurrency(total)}) on order ${s.settlementNumber}. Verify the money and approve.`,
     entityType: 'Settlement',
     entityId: s.id,

@@ -51,7 +51,8 @@ const setPackagings = asyncHandler(async (req, res) => {
 
 const remove = asyncHandler(async (req, res) => {
   const result = await productsService.deleteProduct(req.params.id);
-  await audit.record(req, { action: 'DELETE', entityType: 'Product', entityId: req.params.id });
+  // The log says what really happened: a product with stock history is switched off, not deleted.
+  await audit.record(req, { action: result.deactivated ? 'DEACTIVATE' : 'DELETE', entityType: 'Product', entityId: req.params.id });
   return ok(res, result);
 });
 

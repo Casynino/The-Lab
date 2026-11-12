@@ -10,6 +10,15 @@ const asyncHandler = require('../utils/asyncHandler');
 
 const router = express.Router();
 
+// A link's signature is exactly what the server signs: 32 lower-case hex characters. Anything else is
+// an invalid link. It was padded or cut to 32 first, so a valid signature followed by any text (or sent
+// twice) still opened the PDF, and a non-ASCII one made timingSafeEqual throw (a 500 instead of a 403).
+// Once the shape is checked both buffers are 32 bytes, so the comparison cannot throw.
+function signatureMatches(sig, expected) {
+  return typeof sig === 'string' && /^[0-9a-f]{32}$/.test(sig)
+    && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+}
+
 // The weekly bank-statement PDF, generated on demand from live records.
 // /api/public/weekly-statement.pdf?week=2026-W27&sig=<hmac>
 router.get(
@@ -19,10 +28,8 @@ router.get(
     const { weeklyStatementPdf } = require('../services/weeklyPdf.service');
 
     const week = String(req.query.week || '');
-    const sig = String(req.query.sig || '');
     if (!/^\d{4}-W\d{2}$/.test(week)) return res.status(400).json({ success: false, error: { message: 'Bad week' } });
-    const expected = weekly.signWeek(week);
-    if (!sig || !crypto.timingSafeEqual(Buffer.from(sig.padEnd(expected.length).slice(0, expected.length)), Buffer.from(expected))) {
+    if (!signatureMatches(req.query.sig, weekly.signWeek(week))) {
       return res.status(403).json({ success: false, error: { message: 'Invalid link' } });
     }
 
@@ -43,9 +50,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const archive = require('../services/reportArchive.service');
     const id = String(req.params.id || '');
-    const sig = String(req.query.sig || '');
-    const expected = archive.signReport(id);
-    if (!sig || !crypto.timingSafeEqual(Buffer.from(sig.padEnd(expected.length).slice(0, expected.length)), Buffer.from(expected))) {
+    if (!signatureMatches(req.query.sig, archive.signReport(id))) {
       return res.status(403).json({ success: false, error: { message: 'Invalid link' } });
     }
     const row = await archive.getPdf(id);
@@ -57,3 +62,4 @@ router.get(
 );
 
 module.exports = router;
+module.exports.signatureMatches = signatureMatches;

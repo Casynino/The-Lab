@@ -9,6 +9,7 @@ const notification = require('./notification.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2, formatCurrency } = require('../utils/money');
 const { dayjs } = require('../utils/dates');
+const { dateTime } = require('./whatsappText'); // "14 Nov 2026 | 07:09 EAT", as the other rep notices
 
 const SETTLEMENT_WINDOW_HOURS = 72;
 const APPROACHING_HOURS = 12; // flag as "approaching" within this many hours of deadline
@@ -767,22 +768,31 @@ async function addStockToRep(salesRepId, payload, actor) {
 // for — settled (paid) or returned — before the request can be closed. Since
 // settled value + returned value = order value when no boxes remain, this also
 // guarantees the balance is fully cleared.
+//
+// Closed once (audit reversals-stock-6): under the order's lock, and only the press that actually turns
+// it SETTLED goes on to tell the owner and the rep. Three presses at once used to each close it again,
+// each rewriting settledAt and each sending an ORDER CLOSED WhatsApp. A second press is answered 409, which
+// the order window reads as "already closed".
 async function settle(id, actor, { notes } = {}) {
-  const s = await prisma.settlement.findUnique({ where: { id } });
-  if (!s) throw ApiError.notFound('Settlement not found');
-  if (s.status === 'SETTLED') throw ApiError.badRequest('This order is already settled');
+  const { s, updated } = await prisma.$transaction(async (tx) => {
+    await lockOrder(tx, id);
+    const s = await tx.settlement.findUnique({ where: { id } });
+    if (!s) throw ApiError.notFound('Settlement not found');
+    if (s.status === 'SETTLED') throw ApiError.conflict('This order is already closed.');
 
-  const bd = await orderBreakdown(s);
-  if (bd.totals.remainingBoxes > 0) {
-    throw ApiError.badRequest(
-      `Cannot close yet — ${bd.totals.remainingBoxes} box(es) are still unaccounted. Every box must be settled or returned (outstanding ${formatCurrency(bd.totals.outstanding)}).`,
-    );
-  }
+    const bd = await orderBreakdown(s, tx);
+    if (bd.totals.remainingBoxes > 0) {
+      throw ApiError.badRequest(
+        `Cannot close yet — ${bd.totals.remainingBoxes} box(es) are still unaccounted. Every box must be settled or returned (outstanding ${formatCurrency(bd.totals.outstanding)}).`,
+      );
+    }
 
-  const updated = await prisma.settlement.update({
-    where: { id },
-    data: { status: 'SETTLED', settledAt: new Date(), notes: notes || s.notes },
-    include: INCLUDE_HISTORY,
+    const claimed = await tx.settlement.updateMany({
+      where: { id, status: { not: 'SETTLED' } },
+      data: { status: 'SETTLED', settledAt: new Date(), notes: notes || s.notes },
+    });
+    if (claimed.count !== 1) throw ApiError.conflict('This order is already closed.');
+    return { s, updated: await tx.settlement.findUnique({ where: { id }, include: INCLUDE_HISTORY }) };
   });
 
   notification.notifyAdmins({
@@ -820,40 +830,46 @@ async function refreshOverdue() {
 // 24h (info) → 6h (warning) → 1h (urgent). Each stage fires ONCE — tracked by
 // Settlement.reminderStage (0=none,1=24h,2=6h,3=1h) — so repeated sweeps never
 // re-notify. Settled/closed orders are never touched.
+// Every reminder says when the order is due and the fine that starts then (audit, 12 Nov 2026: the
+// final one promised the order "will be auto-processed soon" — nothing is; the daily fine starts — and
+// none gave the deadline or the fine). The first one says the hours really left: the sweep that sends
+// it may run with 8 hours to go, not 24.
+const fineLine = (rate) => `From the deadline a ${formatCurrency(rate)} fine is charged every day until every box is settled or returned.`;
+const hoursLeft = (hrs) => {
+  const h = Math.max(1, Math.round(hrs));
+  return `${h} hour${h === 1 ? '' : 's'}`;
+};
 const REMINDER_DEFS = {
   1: {
     severity: 'INFO',
-    title: 'Settlement due in 24 hours',
-    msg: (n) => `Order ${n} is due for settlement in 24 hours. Please complete settlement or return process.`,
+    title: ({ hrs }) => `Settlement due in ${hoursLeft(hrs)}`,
+    msg: ({ n, deadline, rate }) => `Order ${n} is due at ${dateTime(deadline)}. Settle or return its boxes before then. ${fineLine(rate)}`,
   },
   2: {
     severity: 'WARNING',
-    title: 'Final reminder — settle soon',
-    msg: (n) => `Final reminder: Order ${n} will be auto-processed soon. Settle or return immediately.`,
+    title: () => 'Final reminder — settle soon',
+    msg: ({ n, deadline, rate }) => `Final reminder: Order ${n} is due at ${dateTime(deadline)}. Settle or return its boxes now. ${fineLine(rate)}`,
   },
   3: {
     severity: 'CRITICAL',
-    title: 'Urgent — settlement deadline near',
-    msg: (n) => `Urgent: Order ${n} settlement deadline is almost reached. Immediate action required.`,
+    title: () => 'Urgent — settlement deadline near',
+    msg: ({ n, deadline, rate }) => `Urgent: Order ${n} is due at ${dateTime(deadline)}, in less than an hour. Settle or return its boxes now. ${fineLine(rate)}`,
   },
 };
 
-// Which reminder stage a given hours-to-deadline falls in (0 = none).
-function reminderStageFor(hoursRemaining) {
-  if (hoursRemaining > 0 && hoursRemaining <= 1) return 3;
-  if (hoursRemaining > 1 && hoursRemaining <= 6) return 2;
-  if (hoursRemaining > 6 && hoursRemaining <= 24) return 1;
-  return 0;
-}
+// Which reminder stage a given hours-to-deadline falls in (0 = none): utils/reminders.js, shared with
+// returns.service, which re-arms the stage when a return gives an order its hours back.
+const { reminderStageFor } = require('../utils/reminders');
 
 // Send any due 24h/6h/1h reminders to reps. Idempotent: a per-settlement atomic
 // claim (reminderStage < stage) guarantees each reminder goes out exactly once
 // even if two sweeps race. Only active orders are considered.
 async function sendDueReminders() {
+  const penalty = require('./penalty.service'); // lazy: penalty.service requires this file
   const now = Date.now();
   const active = await prisma.settlement.findMany({
     where: { status: { in: ['OPEN', 'PARTIAL', 'OVERDUE'] } },
-    select: { id: true, settlementNumber: true, deadlineAt: true, reminderStage: true, salesRep: { select: { user: { select: { id: true } } } } },
+    select: { id: true, settlementNumber: true, deadlineAt: true, selfExtendedAt: true, reminderStage: true, salesRep: { select: { user: { select: { id: true } } } } },
   });
 
   let sent = 0;
@@ -872,12 +888,13 @@ async function sendDueReminders() {
     const def = REMINDER_DEFS[stage];
     const uid = s.salesRep?.user?.id;
     if (uid && def) {
+      const facts = { n: s.settlementNumber, deadline: s.deadlineAt, rate: penalty.dailyRateFor(s), hrs };
       await notification.notifyUser(uid, {
         type: 'GENERAL',
         severity: def.severity,
-        title: def.title,
-        message: def.msg(s.settlementNumber),
-        whatsapp: { kind: 'DEADLINE_NEAR', order: s.settlementNumber, stage },
+        title: def.title(facts),
+        message: def.msg(facts),
+        whatsapp: { kind: 'DEADLINE_NEAR', order: s.settlementNumber, stage, deadline: s.deadlineAt, rate: facts.rate },
         entityType: 'Settlement',
         entityId: s.id,
       }).catch(() => {});

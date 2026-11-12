@@ -5,14 +5,16 @@ import toast from 'react-hot-toast';
 import { Plus, Ship, PackageCheck, Pencil, Trash2, Eye } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { keepOnPageTurn } from '@/lib/pageQueries';
-import { useProducts, useWarehouses } from '@/lib/hooks';
+import { useProducts, useWarehouses, useBrands } from '@/lib/hooks';
+import { wentThrough } from '@/lib/once';
+import { refreshAfter } from '@/lib/afterWrite';
 import { PO_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatDate, formatNumber, pluralizeUnit } from '@/lib/format';
 import { eatISODate } from '@/lib/tz';
 import ProductPicker, { useHomeWarehouse, PlaceLine, Chips, Caution, MoreToggle, DiscardFooter, changeBtn } from '@/components/ProductPicker';
 import { pickerRows, rowsWithSaved, pickedBoxes, primaryWarehouse, lineCost, boxWord, shortPlace, buttonPlace } from '@/lib/stockPick';
 import {
-  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea,
+  PageHeader, Card, PageSpinner, EmptyState, Badge, Button, Modal, Field, Input, NumberInput, Textarea, Select,
   Pagination, LoadError, Table, THead, TBody, TR, TH, TD,
 } from '@/components/ui';
 
@@ -87,6 +89,9 @@ function POModal({ onClose, editing }) {
   const picked = rows.filter((r) => Number(qty[r.key]) > 0);
   const payload = () => ({
     supplierId,
+    // Every figure on this form is in shillings (audit reversals-stock-8: new orders were saved as USD). Only
+    // on a new order: an edit leaves an older order's stored label as it is.
+    currency: editing ? undefined : 'TZS',
     items: picked.map((r) => ({ productId: r.id, packagingUnitId: r.packagingUnitId, quantity: Number(qty[r.key]), unitCost: Number(lineCost(cost, r)) || 0 })),
     shippingCost: Number(costs.shippingCost) || 0,
     clearingCost: Number(costs.clearingCost) || 0,
@@ -134,7 +139,11 @@ function POModal({ onClose, editing }) {
   // The toggle only shows or hides the costs: closing it never changes a figure, and the closed toggle shows their sum.
   const toggleExtras = () => setExtras((x) => !x);
 
-  const supplierOptions = suppliers.map((s) => ({ value: s.id, label: s.name, sub: s.country || undefined }));
+  // A switched-off supplier still shows (an old order may name it), marked as such (audit money-flows-8).
+  const supplierOptions = suppliers.map((s) => ({
+    value: s.id, label: s.name,
+    sub: [s.isActive === false ? 'switched off' : null, s.country].filter(Boolean).join(' · ') || undefined,
+  }));
   // The primary is '' (named in no request) — except on an order saved into another warehouse: there, choosing
   // the primary must name it, or the server would keep the old warehouse while the window says the primary.
   const primaryValue = (id) => (primary && id === primary.id && !editing?.warehouseId ? '' : id);
@@ -242,10 +251,19 @@ function POModal({ onClose, editing }) {
 
 function SupplierModal({ editing, onClose }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState(editing || { name: '', country: 'China', contactName: '', phone: '', email: '' });
+  const [form, setForm] = useState(editing || { name: '', country: 'China', brandId: '', contactName: '', phone: '', email: '' });
+  // The brand, as on Finance's supplier form (audit money-flows-8: a supplier made here could never get one).
+  const { data: brands = [] } = useBrands();
+  // A blank brand is "no brand": cleared on an edit, left out on a new supplier.
+  const body = () => ({ ...form, brandId: form.brandId || (editing ? null : undefined) });
   const save = useMutation({
-    mutationFn: () => (editing ? api.put(`/suppliers/${editing.id}`, form) : api.post('/suppliers', form)),
-    onSuccess: () => { toast.success('Saved'); qc.invalidateQueries({ queryKey: ['suppliers'] }); onClose(); },
+    mutationFn: () => (editing ? api.put(`/suppliers/${editing.id}`, body()) : api.post('/suppliers', body())),
+    onSuccess: () => {
+      toast.success('Saved');
+      qc.invalidateQueries({ queryKey: ['suppliers'] });
+      qc.invalidateQueries({ queryKey: ['finance'] });
+      onClose();
+    },
     onError: (e) => toast.error(apiError(e)),
   });
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -254,6 +272,12 @@ function SupplierModal({ editing, onClose }) {
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={save.isPending} disabled={!form.name} onClick={() => save.mutate()}>Save</Button></>}>
       <div className="space-y-4">
         <Field label="Name" required><Input value={form.name} onChange={set('name')} /></Field>
+        <Field label="Brand" hint="Payments to this supplier count against this brand's books">
+          <Select value={form.brandId || ''} onChange={set('brandId')}>
+            <option value="">General (no brand)</option>
+            {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </Select>
+        </Field>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Country"><Input value={form.country || ''} onChange={set('country')} /></Field>
           <Field label="Contact"><Input value={form.contactName || ''} onChange={set('contactName')} /></Field>
@@ -262,6 +286,13 @@ function SupplierModal({ editing, onClose }) {
           <Field label="Phone"><Input value={form.phone || ''} onChange={set('phone')} /></Field>
           <Field label="Email"><Input value={form.email || ''} onChange={set('email')} /></Field>
         </div>
+        {/* Switching a supplier off or back on (audit money-flows-8: one switched off could not come back). */}
+        {editing && (
+          <label className="flex min-h-[44px] w-fit cursor-pointer items-center gap-2 text-sm text-foreground sm:min-h-0">
+            <input type="checkbox" checked={form.isActive !== false} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              className="h-4 w-4 rounded accent-zinc-300" /> Active
+          </label>
+        )}
       </div>
     </Modal>
   );
@@ -382,13 +413,25 @@ function PurchaseOrders() {
       toast.success(`${r.data?.data?.poNumber || 'Order'} deleted`);
       qc.invalidateQueries({ queryKey: ['purchase-orders'] });
     },
-    onError: (e) => toast.error(apiError(e)),
+    // The server refuses a delete that would leave the supplier overpaid, and says by how much.
+    onError: (e) => { toast.error(apiError(e), { duration: 9000 }); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); },
   });
 
+  // Stock in at a new cost: Inventory, the Dashboard's stock alerts and value, and Finance's suppliers too
+  // (audit freshness-4).
+  const afterReceive = () => {
+    qc.invalidateQueries({ queryKey: ['purchase-orders'] });
+    qc.invalidateQueries({ queryKey: ['finance'] });
+    refreshAfter(qc, 'stock');
+  };
   const receive = useMutation({
     mutationFn: (id) => api.post(`/purchase-orders/${id}/receive`, {}),
-    onSuccess: () => { toast.success('Received into warehouse'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['inventory'] }); },
-    onError: (e) => toast.error(apiError(e)),
+    onSuccess: () => { toast.success('Received into warehouse'); afterReceive(); },
+    // 409: it was already received — a second press or a retry after a lost answer (audit reversals-stock-5).
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success('Already received into the warehouse'); afterReceive(); return; }
+      toast.error(apiError(e));
+    },
   });
   const otw = data?.meta?.onTheWay;
 
@@ -532,7 +575,11 @@ function Suppliers() {
         <Table stack>
           <THead><TR><TH>Name</TH><TH>Country</TH><TH>Contact</TH><TH>Phone</TH><TH>POs</TH><TH /></TR></THead>
           <TBody>{data.data.map((s) => (
-            <TR key={s.id}><TD className="font-medium">{s.name}</TD><TD>{s.country}</TD><TD>{s.contactName || '—'}</TD><TD>{s.phone || '—'}</TD><TD>{s._count?.purchaseOrders ?? 0}</TD>
+            <TR key={s.id}><TD className="font-medium">
+              {s.name}
+              {/* Switched off (a supplier with history is never deleted): said here, not hidden (money-flows-8). */}
+              {s.isActive === false && <Badge className="ml-2 bg-white/[0.06] text-muted">Inactive</Badge>}
+            </TD><TD>{s.country}</TD><TD>{s.contactName || '—'}</TD><TD>{s.phone || '—'}</TD><TD>{s._count?.purchaseOrders ?? 0}</TD>
               <TD><button className="btn-ghost px-2 py-1" onClick={() => setModal({ open: true, editing: s })}><Pencil className="h-4 w-4" /></button></TD></TR>
           ))}</TBody>
         </Table>

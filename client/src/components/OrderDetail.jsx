@@ -7,6 +7,8 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useWarehouses } from '@/lib/hooks';
 import { useOnce } from '@/lib/useOnce';
+import { wentThrough } from '@/lib/once';
+import { refreshAfter } from '@/lib/afterWrite';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDateTime, formatDate, unitWord } from '@/lib/format';
 import {
@@ -1149,18 +1151,18 @@ export default function OrderDetailModal({ settlementId, onClose }) {
     queryFn: async () => unwrap(await api.get(`/settlements/${settlementId}`)).data,
   });
 
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['settlement', settlementId] });
-    qc.invalidateQueries({ queryKey: ['settlements'] });
-    qc.invalidateQueries({ queryKey: ['inventory'] });
-    qc.invalidateQueries({ queryKey: ['commissions'] });
-    qc.invalidateQueries({ queryKey: ['dashboard'] }); // refresh rep/admin dashboards live
-  };
+  // Approving, closing or deciding a return here moves money, stock, commission and the rep's figures:
+  // Finance, Sales reps, Inventory and the dashboards are asked again too (audit freshness-1/2/3).
+  const refresh = () => refreshAfter(qc, 'settlement');
 
   const settle = useMutation({
     mutationFn: () => api.post(`/settlements/${settlementId}/settle`, {}),
     onSuccess: () => { toast.success('Order closed'); refresh(); onClose(); },
-    onError: (e) => toast.error(apiError(e)),
+    // 409: it is already closed — a second press, or a retry after a lost answer (audit reversals-stock-6).
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success('Order already closed'); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
   });
 
   // One press per row goes through until it has an answer: a same-frame double tap sent two approvals

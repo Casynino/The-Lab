@@ -1,4 +1,5 @@
 import { formatNumber } from '@/lib/format';
+import { useAuth } from '@/context/AuthContext';
 
 /**
  * What a window turns into once the rep has sent something for approval — a settlement or a withdrawal.
@@ -10,7 +11,13 @@ import { formatNumber } from '@/lib/format';
  * tick drawing itself, the title, one amber line saying the approval comes on WhatsApp, the amount with a
  * small "TSh", one detail line, and a small quiet Done.
  */
-export default function DoneReceipt({ title, status = "You'll get a WhatsApp once it's approved.", amount, detail, onClose }) {
+// The WhatsApp promise only for a rep whose alerts can arrive (number and key set by the admin). A rep added
+// without them was told "You'll get a WhatsApp" and none came (audit, 12 Nov 2026).
+export default function DoneReceipt({ title, status, amount, detail, onClose }) {
+  const { user } = useAuth();
+  const line = status ?? (user?.salesRep?.whatsappOn
+    ? "You'll get a WhatsApp once it's approved."
+    : "You'll see it in ZELab once it's approved.");
   return (
     <div className="relative flex flex-col items-center px-1 pt-1 text-center">
       {/* A soft emerald light behind the mark — the only decoration. */}
@@ -34,10 +41,10 @@ export default function DoneReceipt({ title, status = "You'll get a WhatsApp onc
         <p className="animate-rise mt-1 max-w-full truncate text-[12px] text-white/45" style={{ animationDelay: '0.32s' }}>{detail}</p>
       )}
 
-      {status && (
+      {line && (
         <p className="animate-rise mt-3 flex items-center gap-1.5 text-[12px] text-amber-200/90" style={{ animationDelay: '0.38s' }}>
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
-          {status}
+          {line}
         </p>
       )}
 

@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, PackageX } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useProducts, useWarehouses, useSalesReps, useDebounce } from '@/lib/hooks';
 import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, unitWord, sharePercents } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
@@ -50,7 +51,8 @@ function ReceiveModal({ onClose }) {
       items,
       notes: notes || undefined,
     }),
-    onSuccess: () => { saveStockWarehouse(warehouseId); toast.success('Stock received'); qc.invalidateQueries({ queryKey: ['inventory'] }); onClose(); },
+    // The Dashboard's low / out of stock and stock value move too (audit freshness-4).
+    onSuccess: () => { saveStockWarehouse(warehouseId); toast.success('Stock received'); refreshAfter(qc, 'stock'); onClose(); },
     onError: (e) => toast.error(apiError(e)),
     onSettled: () => { sending.current = false; },
   });
@@ -153,7 +155,7 @@ function AdjustModal({ mode, onClose }) {
     onSuccess: () => {
       if (loc?.type === 'WAREHOUSE') saveStockWarehouse(loc.id);
       toast.success(mode === 'adjust' ? 'Adjustment posted' : 'Damage recorded');
-      qc.invalidateQueries({ queryKey: ['inventory'] });
+      refreshAfter(qc, 'stock'); // the Dashboard's stock alerts and a rep's boxes too (audit freshness-4)
       onClose();
     },
     onError: (e) => { toast.error(apiError(e)); stock.refetch(); },

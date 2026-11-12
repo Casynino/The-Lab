@@ -190,6 +190,27 @@ test('daily message without a PDF (it failed to build) still carries the numbers
   assert.match(text, /Net Profit: TSh 1,730,000/);
 });
 
+// Final audit, 12 Nov 2026: the WhatsApp "Cash Balance" was the accounts at the time of sending, so
+// October's report said TSh 4,548,999 while its own PDF closed October at 3,434,000. Every report's text
+// now quotes the balance at the end of its period, the figure its PDF's cash statement shows.
+test('every report text quotes the cash balance at the end of its period, as its PDF does', () => {
+  const weekly = require('../src/services/weeklyReport.service');
+  const monthly = require('../src/services/monthlyReport.service');
+  const d = { ...dayData(), growth: { revenuePct: 5 }, repPerformance: [] }; // closing 10,280,000; accounts now 3,000,000
+  const late = { late: new Date('2026-11-11T06:00:00Z') };
+  for (const [kind, text] of [
+    ['daily', daily.buildWhatsAppText(d, LINK)],
+    ['daily, sent late', daily.buildWhatsAppText(d, LINK, late)],
+    ['weekly', weekly.buildWhatsAppText(d, LINK)],
+    ['monthly', monthly.buildWhatsAppText(d, LINK)],
+  ]) {
+    assert.match(text, /Cash Balance: TSh 10,280,000/, kind);
+    assert.ok(!text.includes('3,000,000'), kind);
+  }
+  // A late daily says only its stock is the morning's: its cash balance is the day's own.
+  assert.match(daily.buildWhatsAppText(d, LINK, late), /\(stock as at then\)/);
+});
+
 // Rule changed 11 Nov 2026 (Nino: "why only weekly and monthly — we should see the daily ones too"): by
 // default the archive lists EVERY report, with room for a year of dailies; a kind still narrows it.
 test('the archive lists every report by default, dailies included; a kind narrows it', async () => {

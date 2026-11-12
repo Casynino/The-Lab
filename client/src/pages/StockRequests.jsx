@@ -12,6 +12,7 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { useSearchParams } from 'react-router-dom';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useOnce } from '@/lib/useOnce';
+import { refreshAfter } from '@/lib/afterWrite';
 import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts } from '@/lib/hooks';
@@ -476,12 +477,9 @@ function OrderDetailModal({ request, isRep, staff, onClose, onEdit }) {
   const [confirm, setConfirm] = useState(null); // 'reject' | 'cancel' while the second step is open
   const once = useOnce();
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['stock-requests'] });
-    qc.invalidateQueries({ queryKey: ['settlements'] });
-    qc.invalidateQueries({ queryKey: ['inventory'] });
-    qc.invalidateQueries({ queryKey: ['dashboard', 'me'] });
-  };
+  // Boxes leave the warehouse and an order opens: the Dashboards and Sales reps are asked again too
+  // (audit freshness-3).
+  const invalidate = () => refreshAfter(qc, 'stockRequest');
 
   const approve = useMutation({
     mutationFn: () => api.post(`/stock-requests/${request.id}/approve`, {
@@ -733,9 +731,7 @@ function PendingRequestApprovals({ onReview }) {
   });
   const pending = data?.data || [];
 
-  const refresh = () => {
-    ['stock-requests', 'settlements', 'inventory', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-  };
+  const refresh = () => refreshAfter(qc, 'stockRequest'); // Sales reps too (audit freshness-3)
   const once = useOnce();
   const [rejecting, setRejecting] = useState(null); // the request whose Reject step is open
   const approve = useMutation({
@@ -903,11 +899,11 @@ function StaffRequestTable({ onView }) {
         <p className="text-xs leading-relaxed text-muted">
           Reps have asked for stock <b className="text-foreground">{formatNumber(sum.totalRequests)}</b> time{sum.totalRequests === 1 ? '' : 's'}
           {span && <> {span}</>}. You issued <b className="text-foreground">{formatNumber(sum.issued)}</b> of them
-          {' '}— <b className="text-foreground">{formatNumber(sum.boxes)}</b> boxes worth <b className="text-foreground">{formatCurrency(sum.value)}</b>.
-          {' '}<b className="text-emerald-400">{formatNumber(sum.settled)}</b> have been settled and
-          {' '}<b className={sum.stillOpen > 0 ? 'text-amber-400' : 'text-foreground'}>{formatNumber(sum.stillOpen)}</b> are still owed.
-          {sum.pending > 0 && <> <b className="text-foreground">{formatNumber(sum.pending)}</b> are waiting for your decision.</>}
-          {sum.refused > 0 && <> {formatNumber(sum.refused)} were rejected or cancelled, so no stock left the warehouse.</>}
+          {' '}— <b className="text-foreground">{formatNumber(sum.boxes)}</b> {sum.boxes === 1 ? 'box' : 'boxes'} worth <b className="text-foreground">{formatCurrency(sum.value)}</b>.
+          {' '}<b className="text-emerald-400">{formatNumber(sum.settled)}</b> {sum.settled === 1 ? 'has' : 'have'} been settled and
+          {' '}<b className={sum.stillOpen > 0 ? 'text-amber-400' : 'text-foreground'}>{formatNumber(sum.stillOpen)}</b> {sum.stillOpen === 1 ? 'is' : 'are'} still owed.
+          {sum.pending > 0 && <> <b className="text-foreground">{formatNumber(sum.pending)}</b> {sum.pending === 1 ? 'is' : 'are'} waiting for your decision.</>}
+          {sum.refused > 0 && <> {formatNumber(sum.refused)} {sum.refused === 1 ? 'was' : 'were'} rejected or cancelled, so no stock left the warehouse.</>}
         </p>
       )}
 

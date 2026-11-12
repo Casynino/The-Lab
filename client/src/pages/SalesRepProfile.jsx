@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useOnce } from '@/lib/useOnce';
 import { wentThrough } from '@/lib/once';
 import { useAuth } from '@/context/AuthContext';
@@ -505,8 +506,10 @@ function AddStockModal({ repId, repName, onClose }) {
           ? `Added ${formatNumber(r.boxes)} box(es) to ${repName}'s active order`
           : `Issued ${formatNumber(r.boxes)} box(es) to ${repName} — new order opened`,
       );
-      ['sales-rep-profile', 'settlements', 'commissions', 'inventory', 'dashboard'].forEach((k) =>
-        qc.invalidateQueries({ queryKey: [k] }));
+      // Boxes leave the warehouse and an order opens or grows, like an approved stock request: Sales reps'
+      // "Boxes out with reps", the catalogue and the reorder list too (lib/afterWrite.js).
+      refreshAfter(qc, 'stockRequest');
+      qc.invalidateQueries({ queryKey: ['commissions'] });
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),
@@ -763,6 +766,14 @@ export default function SalesRepProfile() {
               {repRegions(rep).length > 0 && <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-faint" />{repRegions(rep).join(', ')}</span>}
               <span className="inline-flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5 text-faint" />Joined {formatDate(rep.joinDate)}</span>
             </div>
+            {/* A rep without his CallMeBot number and key gets no WhatsApp at all, only the app (audit, 12 Nov
+                2026: nothing here said so, and Test WhatsApp only appears once both are set). */}
+            {isAdmin && !(rep.whatsappPhone && rep.whatsappApiKey) && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-300">
+                <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+                WhatsApp alerts not set — add his CallMeBot number and key in Edit
+              </p>
+            )}
           </div>
           {isAdmin && (
             <div className="flex flex-shrink-0 flex-wrap gap-2">
@@ -1028,8 +1039,9 @@ export default function SalesRepProfile() {
           {/* The same two bars the rep sees, so a conversation about their
               progress is had over identical numbers. */}
           <ProgressRows
-            commission={{ available: c.available, minWithdrawal: c.threshold }}
+            commission={{ available: c.available, minWithdrawal: c.threshold, penalties: c.penalties, eligible: c.eligible, emergency: c.emergency, pendingRequests: c.pendingRequests }}
             bonus={data.bonus}
+            forStaff
           />
           {/* A rep who is not on commission has no balance to read, no fines
               to carry and nothing to withdraw — so the panel says that instead

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { staleSince, noticeKind, figuresAreLive } from './freshness.js';
+import { staleSince, noticeKind, figuresAreLive, correctionFrom } from './freshness.js';
 
 const ok = (t) => ({ status: 'success', data: { rows: 1 }, dataUpdatedAt: t });
 const failedWithData = (t) => ({ status: 'error', data: { rows: 1 }, dataUpdatedAt: t });
@@ -50,4 +50,25 @@ test('figures whose refresh failed, or that never came, are never live', () => {
   assert.equal(figuresAreLive({ isSuccess: false, isError: true, isFetchedAfterMount: true, isStale: true }), false);
   assert.equal(figuresAreLive({ isSuccess: false, isPending: true }), false);
   assert.equal(figuresAreLive(undefined), false);
+});
+
+test('a correction is written from the balance the server gives right before it (freshness-1)', () => {
+  assert.deepEqual(correctionFrom({ shown: 2297900, live: 2297900, target: 2332900 }),
+    { kind: 'write', direction: 'IN', amount: 35000, from: 2297900 });
+  assert.deepEqual(correctionFrom({ shown: 500, live: 500, target: 120.5 }),
+    { kind: 'write', direction: 'OUT', amount: 379.5, from: 500 });
+});
+
+test('money that moved while the window was open stops the write and names both balances', () => {
+  // The screen still showed the balance from before a settlement of 35,000 was approved.
+  assert.deepEqual(correctionFrom({ shown: 2297900, live: 2332900, target: 2332900 }),
+    { kind: 'moved', from: 2297900, to: 2332900 });
+  // Float noise below a cent is not a move.
+  assert.equal(correctionFrom({ shown: 0.1 + 0.2, live: 0.3, target: 1 }).kind, 'write');
+});
+
+test('nothing to record when it already holds that, and nothing when the account is gone', () => {
+  assert.deepEqual(correctionFrom({ shown: 100, live: 100, target: 100 }), { kind: 'nothing' });
+  assert.deepEqual(correctionFrom({ shown: 100, live: null, target: 50 }), { kind: 'gone' });
+  assert.deepEqual(correctionFrom({ shown: 100, live: undefined, target: 50 }), { kind: 'gone' });
 });

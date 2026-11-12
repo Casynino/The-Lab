@@ -5,6 +5,7 @@ const ApiError = require('../utils/ApiError');
 const inventory = require('./inventory.service');
 const { nextDocNumber } = require('../utils/numbering');
 const { toNumber, round2, formatCurrency } = require('../utils/money');
+const env = require('../config/env');
 
 // --- Suppliers -------------------------------------------------------------
 
@@ -27,11 +28,35 @@ async function updateSupplier(id, data) {
   if (!s) throw ApiError.notFound('Supplier not found');
   return prisma.supplier.update({ where: { id }, data });
 }
+// Remove a supplier. One with history — purchase orders, goods sent back, or balance payments — is
+// switched off instead, so the money stays explained, and the answer says which happened (audit
+// money-flows-8: it answered 200 either way, and a supplier with returns but no PO was deleted along
+// with its returns).
 async function removeSupplier(id) {
-  const count = await prisma.purchaseOrder.count({ where: { supplierId: id } });
-  if (count > 0) return prisma.supplier.update({ where: { id }, data: { isActive: false } });
+  const s = await prisma.supplier.findUnique({ where: { id } });
+  if (!s) throw ApiError.notFound('Supplier not found');
+  const [orders, credits, payments] = await Promise.all([
+    prisma.purchaseOrder.count({ where: { supplierId: id } }),
+    prisma.supplierCredit.count({ where: { supplierId: id } }),
+    prisma.financeTransaction.count({ where: { refType: 'Supplier', refId: id } }),
+  ]);
+  if (orders + credits + payments > 0) {
+    const updated = await prisma.supplier.update({ where: { id }, data: { isActive: false } });
+    const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+    const history = [
+      orders && n(orders, 'purchase order', 'purchase orders'),
+      credits && n(credits, 'return', 'returns'),
+      payments && n(payments, 'balance payment', 'balance payments'),
+    ].filter(Boolean).join(', ');
+    return {
+      ...updated,
+      deleted: false,
+      deactivated: true,
+      message: `${s.name} has ${history}, so it was switched off, not deleted. Its history stays; switch it back on in Edit supplier.`,
+    };
+  }
   await prisma.supplier.delete({ where: { id } });
-  return { id, deleted: true };
+  return { id, name: s.name, deleted: true, deactivated: false, message: `${s.name} deleted.` };
 }
 
 // --- Purchase orders -------------------------------------------------------
@@ -83,7 +108,9 @@ async function createPurchaseOrder(payload, actor) {
         poNumber,
         supplierId: payload.supplierId,
         status: payload.orderedAt ? 'ORDERED' : 'DRAFT',
-        currency: payload.currency || 'USD',
+        // Every figure on the form is in shillings (audit reversals-stock-8: a PO saved from Purchases was
+        // labelled USD while Finance's were TZS).
+        currency: payload.currency || env.business.currency || 'TZS',
         goodsCost,
         shippingCost,
         clearingCost,
@@ -188,6 +215,54 @@ async function getPurchaseOrder(id) {
   return po;
 }
 
+// Money paid against one order (PO-level payments only).
+async function paidOnOrder(id) {
+  const paid = await prisma.financeTransaction.aggregate({
+    where: { refType: 'PurchaseOrder', refId: id, direction: 'OUT' },
+    _sum: { amount: true },
+  });
+  return round2(toNumber(paid._sum.amount));
+}
+
+// An order cannot shrink below what was paid against it (audit reversals-stock-2): an edit from
+// 50,000 down to 10,000 with 40,000 paid left the order, and the supplier, quietly overpaid.
+function assertNotBelowPaid(paidOnThis, newTotal) {
+  if (newTotal < paidOnThis - 0.001) {
+    throw ApiError.badRequest(
+      `${formatCurrency(paidOnThis)} has been paid against this order; the new total ${formatCurrency(newTotal)} is less. Correct the payment in Finance first.`,
+    );
+  }
+}
+
+// What the supplier would be owed once this order counts for `newTotal` instead of its total today
+// (0 when it is deleted, cancelled or moved to another supplier), by the supplier window's own formula:
+// orders − goods returned − every payment, on an order or on the balance. Refused when that goes below
+// zero (audit reversals-stock-3): deleting an order after a balance payment left the supplier overpaid
+// with nothing said, and the next payment was refused with "You only owe … TZS -10,000".
+// `leaving` is true when the order and its own payments leave this supplier's books together.
+async function assertSupplierNotOverpaid(po, newTotal, { leaving = false, action }) {
+  if (po.status === 'CANCELLED' || !po.supplierId) return; // a cancelled order already counts nowhere
+  const drop = round2(toNumber(po.totalCost) - newTotal);
+  if (!(drop > 0)) return;
+  const paidOnThis = leaving ? await paidOnOrder(po.id) : 0;
+  const finance = require('./finance.service'); // lazy: avoids an import cycle
+  const [{ supplier, totals }, balance] = await Promise.all([
+    finance.supplierDetail(po.supplierId),
+    prisma.financeTransaction.aggregate({
+      where: { refType: 'Supplier', refId: po.supplierId, direction: 'OUT' },
+      _sum: { amount: true },
+    }),
+  ]);
+  const after = round2(totals.outstanding - drop + paidOnThis);
+  if (after < -0.001) {
+    const onBalance = round2(toNumber(balance._sum.amount));
+    throw ApiError.badRequest(
+      `${action} would leave ${supplier.name} overpaid by ${formatCurrency(-after)}: ${formatCurrency(totals.paid)} has been paid to them`
+      + `${onBalance > 0 ? ` (${formatCurrency(onBalance)} of it on the balance)` : ''}. Correct that payment in Finance first.`,
+    );
+  }
+}
+
 async function updatePurchaseOrder(id, payload) {
   const po = await prisma.purchaseOrder.findUnique({ where: { id } });
   if (!po) throw ApiError.notFound('Purchase order not found');
@@ -202,16 +277,20 @@ async function updatePurchaseOrder(id, payload) {
   // cancelling removes it from "purchased" AND its payments from "paid" at
   // once, so the supplier's outstanding balance quietly swallows real money.
   // The payments must be reversed (or moved to the supplier's balance) first.
-  if (payload.status === 'CANCELLED') {
-    const paid = await prisma.financeTransaction.aggregate({
-      where: { refType: 'PurchaseOrder', refId: id, direction: 'OUT' },
-      _sum: { amount: true },
-    });
-    if (toNumber(paid._sum.amount) > 0) {
+  const cancelling = payload.status === 'CANCELLED' && po.status !== 'CANCELLED';
+  if (cancelling) {
+    const paid = await paidOnOrder(id);
+    if (paid > 0) {
       throw ApiError.badRequest(
-        `${formatCurrency(toNumber(paid._sum.amount))} has been paid against this order. Delete or reassign those payments in Finance before cancelling, or the supplier balance would silently absorb them.`,
+        `${formatCurrency(paid)} has been paid against this order. Delete or reassign those payments in Finance before cancelling, or the supplier balance would silently absorb them.`,
       );
     }
+    // Balance payments are the supplier's, not this order's: cancelling must not leave him overpaid.
+    await assertSupplierNotOverpaid(po, 0, { leaving: true, action: `Cancelling ${po.poNumber}` });
+  }
+  // Moving the order to another supplier takes it, and its own payments, off this supplier's books.
+  if (!cancelling && payload.supplierId && payload.supplierId !== po.supplierId) {
+    await assertSupplierNotOverpaid(po, 0, { leaving: true, action: `Moving ${po.poNumber} to another supplier` });
   }
 
   const data = {};
@@ -238,6 +317,16 @@ async function updatePurchaseOrder(id, payload) {
     const other = data.otherCost ?? toNumber(po.otherCost);
     data.totalCost = round2(toNumber(po.goodsCost) + shipping + clearing + other);
   }
+  // A new total, from the costs above or from new lines below, is checked before anything is written.
+  const checkNewTotal = async (newTotal) => {
+    if (cancelling) return; // a cancel was checked above
+    assertNotBelowPaid(await paidOnOrder(id), newTotal);
+    // Only while the order stays with this supplier; a move was checked above.
+    if (!payload.supplierId || payload.supplierId === po.supplierId) {
+      await assertSupplierNotOverpaid(po, newTotal, { action: `Lowering ${po.poNumber} to ${formatCurrency(newTotal)}` });
+    }
+  };
+  if (data.totalCost !== undefined && !payload.items) await checkNewTotal(data.totalCost);
   // Correcting the lines while the order has not landed: replace them
   // wholesale and reprice, the same way the order was costed when created. A
   // received order never reaches here — it is refused above, because its
@@ -262,13 +351,15 @@ async function updatePurchaseOrder(id, payload) {
       const shipping = data.shippingCost ?? toNumber(po.shippingCost);
       const clearing = data.clearingCost ?? toNumber(po.clearingCost);
       const other = data.otherCost ?? toNumber(po.otherCost);
+      const totalCost = round2(goodsCost + shipping + clearing + other);
+      await checkNewTotal(totalCost);
       await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
       return tx.purchaseOrder.update({
         where: { id },
         data: {
           ...data,
           goodsCost,
-          totalCost: round2(goodsCost + shipping + clearing + other),
+          totalCost,
           items: { create: lines },
         },
         include: PO_INCLUDE,
@@ -289,15 +380,14 @@ async function deletePurchaseOrder(id) {
   if (po.status === 'RECEIVED') {
     throw ApiError.badRequest('This order has already been received — its boxes are in the warehouse. Adjust the stock instead of deleting the order it came from.');
   }
-  const paid = await prisma.financeTransaction.aggregate({
-    where: { refType: 'PurchaseOrder', refId: id, direction: 'OUT' },
-    _sum: { amount: true },
-  });
-  if (toNumber(paid._sum.amount) > 0) {
+  const paid = await paidOnOrder(id);
+  if (paid > 0) {
     throw ApiError.badRequest(
-      `${formatCurrency(toNumber(paid._sum.amount))} has been paid against this order. Remove those payments in Finance first, or the money would outlive its reason.`,
+      `${formatCurrency(paid)} has been paid against this order. Remove those payments in Finance first, or the money would outlive its reason.`,
     );
   }
+  // Balance payments are the supplier's, not this order's: deleting it must not leave him overpaid.
+  await assertSupplierNotOverpaid(po, 0, { leaving: true, action: `Deleting ${po.poNumber}` });
   await prisma.purchaseOrder.delete({ where: { id } });
   return po;
 }
@@ -313,7 +403,9 @@ async function receivePurchaseOrder(id, actor, { actualArrival, stockAlreadyCoun
   return prisma.$transaction(async (tx) => {
     const po = await tx.purchaseOrder.findUnique({ where: { id }, include: { items: true } });
     if (!po) throw ApiError.notFound('Purchase order not found');
-    if (po.status === 'RECEIVED') throw ApiError.badRequest('Purchase order already received');
+    // 409, like the claim below: a retry after a lost answer finds it received, and the screens treat
+    // that as done instead of saying it is not received yet (audit reversals-stock-5).
+    if (po.status === 'RECEIVED') throw ApiError.conflict('This purchase order was already received.');
     if (po.status === 'CANCELLED') throw ApiError.badRequest('Cancelled purchase order cannot be received');
     if (po.items.length === 0) throw ApiError.badRequest('Purchase order has no items');
     // Claim it before any stock moves (audit #41): two clicks on Receive used to both pass the check

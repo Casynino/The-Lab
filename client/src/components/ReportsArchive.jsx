@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import dayjs from 'dayjs';
 import { FileBarChart, ExternalLink, Download } from 'lucide-react';
 import api, { apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
 import { formatCurrency, formatNumber } from '@/lib/format';
+import { reportPeriodLabel, reportMonthLabel } from '@/lib/labels';
+import { eatISODate } from '@/lib/tz';
 import { Card, EmptyState, LoadError, Input, Select } from '@/components/ui';
 
 // The business reports the owner receives on WhatsApp — daily, weekly and monthly PDFs — kept here exactly
@@ -23,14 +24,8 @@ const TONE = {
 const NAME = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly', YEARLY: 'Yearly' };
 const DOT = { DAILY: 'bg-amber-400', WEEKLY: 'bg-emerald-400', MONTHLY: 'bg-violet-400', YEARLY: 'bg-sky-400' };
 
-function period(r) {
-  const from = dayjs(r.from);
-  const to = dayjs(r.to);
-  if (r.type === 'DAILY') return from.format('dddd, D MMM YYYY');
-  if (r.type === 'MONTHLY') return from.format('MMMM YYYY');
-  if (r.type === 'YEARLY') return `The year ${from.format('YYYY')}`;
-  return `${from.format('D MMM')} – ${to.format('D MMM YYYY')}`;
-}
+// Named on Tanzania's calendar, whatever the device's time zone (lib/labels.js).
+const period = reportPeriodLabel;
 
 export default function ReportsArchive() {
   const [type, setType] = useState('');
@@ -44,7 +39,7 @@ export default function ReportsArchive() {
   });
 
   const years = [];
-  for (let y = new Date().getFullYear(); y >= 2026; y -= 1) years.push(String(y));
+  for (let y = Number(eatISODate().slice(0, 4)); y >= 2026; y -= 1) years.push(String(y));
 
   const download = async (r) => {
     try {
@@ -158,7 +153,7 @@ export default function ReportsArchive() {
 function byMonth(rows) {
   const out = [];
   for (const r of rows) {
-    const label = dayjs(r.from).format('MMMM YYYY');
+    const label = reportMonthLabel(r);
     const last = out[out.length - 1];
     if (last && last.label === label) last.items.push(r);
     else out.push({ label, items: [r] });

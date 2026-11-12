@@ -95,6 +95,20 @@ const recordOwnerMoney = asyncHandler(async (req, res) => {
 // expense — it moves the account balance without touching net profit. Used for
 // go-live initialization and intentional corrections only.
 const recordAdjustment = asyncHandler(async (req, res) => {
+  // "Correct balance": the difference is worked out here, from the balance as it is now (audit freshness-1).
+  if (req.body.targetBalance != null) {
+    const txn = await finance.recordBalanceCorrection(req.body, req.user);
+    await audit.record(req, {
+      action: 'CREATE',
+      entityType: 'FinanceTransaction',
+      entityId: txn.id,
+      newValues: {
+        kind: 'ADJUSTMENT', direction: txn.direction, amount: txn.amount, accountId: txn.accountId, description: txn.description,
+        targetBalance: req.body.targetBalance, expectedBalance: req.body.expectedBalance ?? null,
+      },
+    });
+    return created(res, txn);
+  }
   const direction = req.body.direction === 'IN' ? 'IN' : 'OUT';
   const txn = await finance.recordTransaction(
     {
