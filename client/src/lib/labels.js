@@ -1,4 +1,6 @@
 // Small words and figures the screens print, kept here (plain JS, no Vite) so they are tested.
+import dayjs from 'dayjs';
+import { eatISODate } from './tz.js';
 
 // Time left before an order's deadline, as a rep reads it. Always rounded DOWN: the deadline is when
 // fines start, so "4d left" for 3 days 15 hours promised half a day that was not there (audit,
@@ -66,4 +68,22 @@ export function bonusTrack(bonus) {
     barPct: top > 0 ? bonusFillPct(bonus.sales, tiers, top) : clamp(Number(aim.progress) || 0),
     markers: top > 0 ? tiers.map((t) => ({ at: clamp(((Number(t.target) || 0) / top) * 100), passed: Boolean(t.reached) })) : [],
   };
+}
+
+// An archived report's period, named on Tanzania's calendar whatever the device's time zone. A report's
+// `from` is the EAT start of its period (21:00 UTC the day before), so read in the device's own zone a
+// phone or laptop set to UTC named the 12 Nov daily "Wednesday, 11 Nov" and October's report
+// "September 2026" (final audit, 12 Nov 2026). The EAT day is taken first, then formatted as a plain date.
+const eatDate = (value) => dayjs(eatISODate(value));
+export function reportPeriodLabel(r) {
+  const from = eatDate(r.from);
+  const to = eatDate(r.to);
+  if (r.type === 'DAILY') return from.format('dddd, D MMM YYYY');
+  if (r.type === 'MONTHLY') return from.format('MMMM YYYY');
+  if (r.type === 'YEARLY') return `The year ${from.format('YYYY')}`;
+  return `${from.format('D MMM')} – ${to.format('D MMM YYYY')}`;
+}
+// The month a report's period starts in, the archive's group heading.
+export function reportMonthLabel(r) {
+  return eatDate(r.from).format('MMMM YYYY');
 }

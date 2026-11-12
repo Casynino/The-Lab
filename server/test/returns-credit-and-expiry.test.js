@@ -107,6 +107,41 @@ test('an order that was Open is left Open (nothing else changes)', async () => {
   assert.equal(stl.status, 'OPEN');
 });
 
+// Final audit, 12 Nov 2026: the hours given back moved the deadline but not the reminder stage, so an order
+// whose "1 hour left" reminder had gone out was back to a day left with no 24 h / 6 h / 1 h reminder to come.
+test('hours given back re-arm the deadline reminders for the new deadline', async () => {
+  stl = order({ status: 'OPEN', deadlineAt: new Date(Date.now() + 10 * 60_000), reminderStage: 3 });
+  ret = pendingReturn({ processedAt: ago(23.6) });
+  await returns.rejectReturn('r1', { id: 'admin' });
+  const left = (new Date(stl.deadlineAt) - Date.now()) / HOUR;
+  assert.ok(left > 23 && left < 24);
+  assert.equal(stl.reminderStage, 0, 'the 24 h reminder (the window it is in now) fires again, then 6 h and 1 h');
+});
+
+test('a short wait does not send a reminder twice, and an order still past its deadline keeps its stage', async () => {
+  stl = order({ status: 'OPEN', deadlineAt: new Date(Date.now() + 20 * HOUR), reminderStage: 1 });
+  ret = pendingReturn({ processedAt: ago(0.2) });
+  await returns.cancelReturn('r1', { id: 'u1', salesRepId: 'rep1' }, { asRep: true });
+  assert.equal(stl.reminderStage, 1); // still inside the 24 h window it was reminded about
+  stl = order({ deadlineAt: ago(10), reminderStage: 3 });
+  ret = pendingReturn({ processedAt: ago(3) });
+  await returns.rejectReturn('r1', { id: 'admin' });
+  assert.equal(stl.reminderStage, 3);
+});
+
+test('rearmedReminderStage: only stages for windows the order has left are re-armed', () => {
+  const { rearmedReminderStage } = require('../src/utils/reminders');
+  const now = Date.now();
+  const at = (h) => new Date(now + h * HOUR);
+  assert.equal(rearmedReminderStage(3, at(23.8), now), 0); // 1 h sent, a day left: from the 24 h one again
+  assert.equal(rearmedReminderStage(3, at(5), now), 1); // 1 h sent, 5 h left: the 6 h one fires again
+  assert.equal(rearmedReminderStage(2, at(30), now), 0); // more than a day left: all three to come
+  assert.equal(rearmedReminderStage(1, at(20), now), 1); // same window: not sent twice
+  assert.equal(rearmedReminderStage(0, at(3), now), 0); // nothing sent yet: the sweep sends what is due
+  assert.equal(rearmedReminderStage(3, at(-2), now), 3); // still overdue: unchanged
+  assert.equal(rearmedReminderStage(undefined, at(10), now), 0);
+});
+
 test('an expiry that charges a fine names it', async () => {
   stl = order({ status: 'OPEN', deadlineAt: new Date(Date.now() + 20 * HOUR) });
   ret = pendingReturn({ processedAt: ago(25) });

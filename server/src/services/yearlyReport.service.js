@@ -140,7 +140,11 @@ function buildWhatsAppText(d, link) {
     netProfit: d.finance.netProfit,
     expenses: d.finance.expenses,
     boxes: d.finance.boxesSold,
-    cashBalance: d.cashPosition,
+    // The balance at the END of the period the message is labelled with, the figure its PDF's cash
+    // statement ("Balance at the end") and the Cash Flow page show. It quoted the accounts at the time of
+    // sending: October's report said TSh 4,548,999 while its own PDF closed October at 3,434,000, and the
+    // Tuesday weekly counted Monday's money (final audit, 12 Nov 2026).
+    cashBalance: d.extras?.cashStatement?.closing ?? d.cashPosition,
     growthPct: d.growth.revenuePct,
     prevLabel: d.prevLabel,
     bestMonth: s.bestProfit && { name: s.bestProfit.label, netProfit: s.bestProfit.netProfit, revenue: s.bestProfit.revenue },

@@ -847,13 +847,9 @@ const REMINDER_DEFS = {
   },
 };
 
-// Which reminder stage a given hours-to-deadline falls in (0 = none).
-function reminderStageFor(hoursRemaining) {
-  if (hoursRemaining > 0 && hoursRemaining <= 1) return 3;
-  if (hoursRemaining > 1 && hoursRemaining <= 6) return 2;
-  if (hoursRemaining > 6 && hoursRemaining <= 24) return 1;
-  return 0;
-}
+// Which reminder stage a given hours-to-deadline falls in (0 = none): utils/reminders.js, shared with
+// returns.service, which re-arms the stage when a return gives an order its hours back.
+const { reminderStageFor } = require('../utils/reminders');
 
 // Send any due 24h/6h/1h reminders to reps. Idempotent: a per-settlement atomic
 // claim (reminderStage < stage) guarantees each reminder goes out exactly once

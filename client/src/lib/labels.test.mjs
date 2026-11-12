@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { timeLeftLabel, approvalLeftLabel, pluralizeUnit, unitWord, bonusTrack, bonusFillPct } from './labels.js';
+import { timeLeftLabel, approvalLeftLabel, pluralizeUnit, unitWord, bonusTrack, bonusFillPct, reportPeriodLabel, reportMonthLabel } from './labels.js';
 
 test('time left is rounded down, never up to a day that is not there', () => {
   assert.equal(timeLeftLabel(86.87), '3d left'); // 3 days 14.9 h — it used to read "4d left"
@@ -105,4 +105,32 @@ test("a return's 24 h decision never reads 'due now' to the rep (the clock runs 
   assert.equal(approvalLeftLabel(0.6), 'under 1h left');
   assert.equal(approvalLeftLabel(0), 'under 1h left'); // window over, expiry job not run yet
   assert.equal(approvalLeftLabel(null), '—');
+});
+
+// Final audit, 12 Nov 2026: the archive named reports in the device's time zone; in UTC the 12 Nov daily
+// read "Wednesday, 11 Nov" and October's report "September 2026". Rows as the server stores them.
+test('archived reports are named on the Tanzanian calendar in any device time zone', () => {
+  const rows = {
+    daily: { type: 'DAILY', from: '2026-11-11T21:00:00.000Z', to: '2026-11-12T20:59:59.999Z' },
+    monthly: { type: 'MONTHLY', from: '2026-09-30T21:00:00.000Z', to: '2026-10-31T20:59:59.999Z' },
+    january: { type: 'MONTHLY', from: '2026-12-31T21:00:00.000Z', to: '2027-01-31T20:59:59.999Z' },
+    yearly: { type: 'YEARLY', from: '2024-12-31T21:00:00.000Z', to: '2025-12-31T20:59:59.999Z' },
+    weekly: { type: 'WEEKLY', from: '2026-11-02T00:00:00.000Z', to: '2026-11-08T00:00:00.000Z' },
+  };
+  const env = globalThis.process.env; // the device's time zone, changed for each pass
+  const saved = env.TZ;
+  try {
+    for (const tz of ['UTC', 'America/Los_Angeles', 'Africa/Dar_es_Salaam', 'Pacific/Kiritimati']) {
+      env.TZ = tz;
+      assert.equal(reportPeriodLabel(rows.daily), 'Thursday, 12 Nov 2026', tz);
+      assert.equal(reportPeriodLabel(rows.monthly), 'October 2026', tz);
+      assert.equal(reportMonthLabel(rows.monthly), 'October 2026', tz);
+      assert.equal(reportPeriodLabel(rows.january), 'January 2027', tz);
+      assert.equal(reportPeriodLabel(rows.yearly), 'The year 2025', tz);
+      assert.equal(reportPeriodLabel(rows.weekly), '2 Nov – 8 Nov 2026', tz);
+      assert.equal(reportMonthLabel(rows.daily), 'November 2026', tz);
+    }
+  } finally {
+    if (saved === undefined) delete env.TZ; else env.TZ = saved;
+  }
 });

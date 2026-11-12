@@ -27,16 +27,47 @@ const fresh = (rel) => {
 const eat = (iso) => dayjs.utc(iso); // an EAT wall-clock moment, as eatNow() builds one
 
 // ── the WhatsApp queue ────────────────────────────────────────────────────────
+// A small Prisma `where` evaluator with SQL's null rules (NULL never matches not/notIn/lt/gt), so the
+// stub answers the queries flush() really sends instead of handing back every row.
+function matches(r, where = {}) {
+  return Object.entries(where).every(([k, cond]) => {
+    if (k === 'AND') return cond.every((w) => matches(r, w));
+    if (k === 'OR') return cond.some((w) => matches(r, w));
+    const v = r[k] ?? null;
+    if (cond === null) return v === null;
+    if (typeof cond !== 'object' || cond instanceof Date) return v === cond;
+    return Object.entries(cond).every(([op, x]) => {
+      if (op === 'not') return x === null ? v !== null : v !== null && v !== x;
+      if (v === null) return false;
+      if (op === 'in') return x.includes(v);
+      if (op === 'notIn') return !x.includes(v);
+      if (op === 'lt') return v < x;
+      if (op === 'gt') return v > x;
+      throw new Error(`stub: no operator ${op}`);
+    });
+  });
+}
 function loadNotify({ rows = [], settings = {}, sentInWindow = {}, claimedElsewhere = [], existingKeys = [] } = {}) {
-  const calls = { claims: [], fetches: 0, updateManyWhere: null, admins: [] };
+  const calls = { claims: [], fetches: 0, updateManyWhere: null, admins: [], expired: [], queries: [] };
   const prisma = {
     setting: { findUnique: async ({ where }) => (where.key in settings ? { key: where.key, value: settings[where.key] } : null) },
     whatsAppNotification: {
-      findMany: async () => rows,
+      findMany: async ({ where, take } = {}) => {
+        calls.queries.push(where);
+        const hit = rows.filter((r) => matches(r, where)).sort((a, b) => a.createdAt - b.createdAt);
+        return take ? hit.slice(0, take) : hit;
+      },
       findFirst: async ({ where }) => (existingKeys.includes(where.dedupeKey) ? { id: 'x' } : null),
       count: async ({ where }) => sentInWindow[where.toPhone || 'owner'] || 0,
+      groupBy: async () => Object.entries(sentInWindow).map(([to, n]) => ({ toPhone: to === 'owner' ? null : to, _count: { _all: n } })),
       updateMany: async ({ where, data }) => {
         if (where.status === 'FAILED') { calls.updateManyWhere = where; return { count: 3 }; }
+        if (where.id && where.id.in) {
+          const hit = rows.filter((r) => where.id.in.includes(r.id) && r.status === where.status);
+          for (const r of hit) Object.assign(r, data);
+          calls.expired.push(...hit.map((r) => r.id));
+          return { count: hit.length };
+        }
         calls.claims.push(where.id);
         return { count: claimedElsewhere.includes(where.id) ? 0 : 1 };
       },
@@ -49,7 +80,12 @@ function loadNotify({ rows = [], settings = {}, sentInWindow = {}, claimedElsewh
   return { wa: fresh('../src/services/whatsappNotify.service'), calls };
 }
 const OWNER = { 'whatsapp.phone': '+255700000000', 'whatsapp.apikey': 'k' };
-const row = (id, priority, extra = {}) => ({ id, priority, type: 'X', attempts: 0, toPhone: null, toApiKey: null, text: 't', createdAt: new Date(), ...extra });
+let rowClock = Date.now() - 3600_000; // rows made by row() are created one second apart, oldest first
+const row = (id, priority, extra = {}) => ({
+  id, priority, type: 'X', status: 'PENDING', attempts: 0, lastAttemptAt: null, dedupeKey: null,
+  toPhone: null, toApiKey: null, text: 't', createdAt: new Date((rowClock += 1000)), ...extra,
+});
+const REP = { toPhone: '+255700000002', toApiKey: 'r' };
 
 test('flush: INFO rows held by the budget no longer block the queue, and nothing waits 8 s for them', async () => {
   const { wa, calls } = loadNotify({
@@ -75,6 +111,93 @@ test('flush: the most urgent row goes first, and a row taken by another run cost
   await wa.flush({ throttleMs: 0 });
   assert.deepEqual(calls.claims, ['new-warning', 'old-info']);
   assert.ok(Date.now() - t0 < 2000);
+});
+
+// Final audit, 12 Nov 2026: the window was the 50 oldest waiting rows, ranked only afterwards, so 50+
+// INFO alerts to one number over its budget filled it and every run sent nothing.
+// The 8-second gap between two real sends is CallMeBot's burst limit; a test does not need to sit it out.
+async function withoutGap(fn) {
+  const real = global.setTimeout;
+  global.setTimeout = (cb) => real(cb, 0);
+  try { return await fn(); } finally { global.setTimeout = real; }
+}
+const heldBacklog = (n) => Array.from({ length: n }, (_, i) => row(`held-${i}`, 'INFO', { type: 'REP_ALERT', ...REP }));
+
+test('flush: 51 budget-held INFO rows no longer hide a newer warning', async () => {
+  const { wa, calls } = loadNotify({
+    settings: OWNER,
+    rows: [...heldBacklog(51), row('warning', 'WARNING', { type: 'REP_ALERT', ...REP })],
+    sentInWindow: { '+255700000002': 14 },
+  });
+  const r = await wa.flush({ throttleMs: 0 });
+  assert.deepEqual(calls.claims, ['warning']);
+  assert.deepEqual(r, { retried: 1, sent: 1 });
+});
+
+test('flush: behind a held backlog, other recipients\' INFO messages still go out, oldest first', async () => {
+  const { wa, calls } = loadNotify({
+    settings: OWNER,
+    rows: [
+      ...heldBacklog(60),
+      row('rep4-a', 'INFO', { type: 'REP_ALERT', toPhone: '+255700000004', toApiKey: 'r4' }),
+      row('owner-report', 'INFO', { type: 'DAILY_SUMMARY' }),
+      row('rep4-b', 'INFO', { type: 'REP_ALERT', toPhone: '+255700000004', toApiKey: 'r4' }),
+    ],
+    sentInWindow: { '+255700000002': 15, '+255700000004': 1, owner: 6 },
+  });
+  const r = await withoutGap(() => wa.flush({ throttleMs: 0 }));
+  assert.deepEqual(calls.claims, ['rep4-a', 'owner-report']);
+  assert.equal(r.sent, 2);
+  // The held number is left out by the query itself, not after reading 50 of its rows.
+  const infoQuery = calls.queries.find((w) => w.AND);
+  assert.ok(JSON.stringify(infoQuery).includes('+255700000002'));
+});
+
+test('flush: never picks more rows for one number than the budget it has left', async () => {
+  const { wa, calls } = loadNotify({
+    settings: OWNER,
+    rows: [row('a', 'INFO', REP), row('b', 'INFO', REP), row('owner', 'INFO')],
+    sentInWindow: { '+255700000002': 13 }, // one message left for this number
+  });
+  await withoutGap(() => wa.flush({ throttleMs: 0 }));
+  assert.deepEqual(calls.claims, ['a', 'owner']);
+});
+
+test('flush: the owner at the cap holds only the owner\'s INFO rows; a test message is never held', async () => {
+  const { wa, calls } = loadNotify({
+    settings: OWNER,
+    rows: [row('owner-info', 'INFO'), row('owner-test', 'INFO', { type: 'TEST' }), row('rep-info', 'INFO', REP)],
+    sentInWindow: { owner: 14 },
+  });
+  await withoutGap(() => wa.flush({ throttleMs: 0 }));
+  assert.deepEqual(calls.claims, ['owner-test', 'rep-info']);
+});
+
+test('flush: in quiet hours only CRITICAL rows are read, however many others wait', async () => {
+  const h = eatNow().hour();
+  const { wa, calls } = loadNotify({
+    settings: { ...OWNER, 'whatsapp.quietFrom': String(h), 'whatsapp.quietTo': String((h + 1) % 24) },
+    rows: [row('warning', 'WARNING'), row('info', 'INFO'), row('critical', 'CRITICAL')],
+  });
+  await wa.flush({ throttleMs: 0 });
+  assert.deepEqual(calls.claims, ['critical']);
+});
+
+test('flush: a "minutes from its deadline" warning still waiting when the deadline passes is closed, never sent', async () => {
+  const past = Date.now() - 60_000;
+  const ahead = Date.now() + 5 * 60_000;
+  const { wa, calls } = loadNotify({
+    settings: OWNER,
+    rows: [
+      row('late', 'WARNING', { type: 'DEADLINE_IMMINENT', dedupeKey: `deadlinewarn:stl1:${past}`, lastAttemptAt: new Date(Date.now() - 3600_000), attempts: 1 }),
+      row('held-quiet', 'WARNING', { type: 'DEADLINE_IMMINENT', dedupeKey: `deadlinewarn:stl2:${past}` }),
+      row('still-true', 'WARNING', { type: 'DEADLINE_IMMINENT', dedupeKey: `deadlinewarn:stl3:${ahead}` }),
+    ],
+  });
+  const r = await wa.flush({ throttleMs: 0 });
+  assert.deepEqual(calls.expired.sort(), ['held-quiet', 'late']);
+  assert.deepEqual(calls.claims, ['still-true']);
+  assert.equal(r.expired, 2);
 });
 
 test('Retry failed puts back only the last 48 hours, the window flush() still sends', async () => {
@@ -204,6 +327,22 @@ function loadWeekly({ existingKeys = [], lastWeeklySent = null } = {}) {
 }
 const keyOfWeek = (d) => `${d.isoWeekYear()}-W${String(d.isoWeek()).padStart(2, '0')}`;
 
+test('daily: before 21:00 Tanzania time the day is refused without building, archiving or taking its key; force still sends', async (t) => {
+  const sends = [];
+  stub('../src/services/dailyBusinessReport.service', { sendDailyReport: async (o) => { sends.push(o); return { queued: true }; } });
+  const { wa } = loadNotify({ settings: OWNER });
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-12T17:59:00Z') }); // 20:59 EAT
+  await assert.rejects(wa.dailySummary(), (e) => e.statusCode === 400 && /not over yet/.test(e.message));
+  assert.equal(sends.length, 0);
+  await wa.dailySummary({ force: true }); // a manual look at the day so far, under its own key
+  assert.equal(sends.length, 1);
+  assert.equal(sends[0].force, true);
+  t.mock.timers.setTime(new Date('2026-11-12T18:00:00Z').getTime()); // 21:00 EAT, the scheduled run
+  await wa.dailySummary();
+  assert.equal(sends.length, 2);
+  assert.equal(sends[1].force, false);
+});
+
 test('weekly: a week still under way is refused unless forced (it used up the real report\'s key)', async () => {
   const { weekly, calls } = loadWeekly();
   const current = keyOfWeek(eatNow());
@@ -303,7 +442,7 @@ test('daily: "Orders" are orders issued that day and "Returns" are returns accep
 
   // a late send says so under the date
   const text = daily.buildWhatsAppText(d, null, { late: new Date('2026-11-11T06:00:00Z') });
-  assert.match(text, /^\*ZELAB — DAILY REPORT\*\n10 November 2026\nSent late: 11 Nov 2026 \| 09:00 EAT \(cash and stock as at then\)\n/);
+  assert.match(text, /^\*ZELAB — DAILY REPORT\*\n10 November 2026\nSent late: 11 Nov 2026 \| 09:00 EAT \(stock as at then\)\n/);
   assert.ok(!daily.buildWhatsAppText(d, null).includes('Sent late'));
 });
 
