@@ -27,11 +27,23 @@ const PUBLIC_SELECT = {
 
 // Refuses when this account is an active administrator and no other active administrator would be left.
 // Called before an administrator is demoted, switched off, suspended or deleted.
-async function assertNotLastAdmin(userId) {
-  const target = await prisma.user.findUnique({ where: { id: userId }, select: { isActive: true, role: { select: { name: true } } } });
+async function assertNotLastAdmin(userId, db = prisma) {
+  const target = await db.user.findUnique({ where: { id: userId }, select: { isActive: true, role: { select: { name: true } } } });
   if (!target || !target.isActive || target.role?.name !== 'ADMIN') return;
-  const others = await prisma.user.count({ where: { id: { not: userId }, isActive: true, role: { name: 'ADMIN' } } });
+  const others = await db.user.count({ where: { id: { not: userId }, isActive: true, role: { name: 'ADMIN' } } });
   if (others < 1) throw ApiError.badRequest('Cannot remove the last active administrator');
+}
+
+// The check and the write in one transaction that first locks every active administrator's row (audit
+// 11 Nov 2026, admin-system-3 rework). Without it, two administrators demoting, switching off or deleting
+// each other at the same instant both saw the other still active, both writes went through and nobody was
+// left. Now the second waits for the first to finish, then counts again and is refused.
+async function withLastAdminGuard(userId, write) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "users" WHERE "isActive" = true AND "roleId" IN (SELECT id FROM "roles" WHERE name = 'ADMIN') ORDER BY id FOR UPDATE`;
+    await assertNotLastAdmin(userId, tx);
+    return write(tx);
+  }, { maxWait: 10_000, timeout: 20_000 });
 }
 
 const list = asyncHandler(async (req, res) => {
@@ -136,14 +148,14 @@ const update = asyncHandler(async (req, res) => {
 
   // The last active administrator keeps the role and stays switched on.
   const losesAdmin = (roleChanges && newRole.name !== 'ADMIN') || data.isActive === false;
-  if (losesAdmin) await assertNotLastAdmin(existing.id);
 
   // A new password, a new role or switching the account off signs it out everywhere.
   if (data.passwordHash || roleChanges || data.isActive === false) {
     data.sessionVersion = { increment: 1 };
   }
 
-  const user = await prisma.user.update({ where: { id: req.params.id }, data, select: PUBLIC_SELECT });
+  const write = (db) => db.user.update({ where: { id: req.params.id }, data, select: PUBLIC_SELECT });
+  const user = losesAdmin ? await withLastAdminGuard(existing.id, write) : await write(prisma);
   await audit.record(req, { action: 'UPDATE', entityType: 'User', entityId: user.id, newValues: { ...data, passwordHash: undefined } });
   return ok(res, user);
 });
@@ -185,8 +197,10 @@ const remove = asyncHandler(async (req, res) => {
       await prisma.salesRepresentative.delete({ where: { id: rep.id } });
       await require('../services/inventory.service').recomputeAllCaches();
     }
-    await prisma.notification.deleteMany({ where: { userId: user.id } });
-    await prisma.user.delete({ where: { id: user.id } });
+    await withLastAdminGuard(user.id, async (tx) => {
+      await tx.notification.deleteMany({ where: { userId: user.id } });
+      await tx.user.delete({ where: { id: user.id } });
+    });
     await audit.record(req, {
       action: 'DELETE',
       entityType: 'User',
@@ -201,11 +215,11 @@ const remove = asyncHandler(async (req, res) => {
   // actor references. Suspending ends every session for good, as switching the account off in the edit
   // form does: the session version moves on, so the old keys stay refused after the account is activated
   // again (audit 11 Nov 2026, admin-system-2 / auth-device-1).
-  const updated = await prisma.user.update({
+  const updated = await withLastAdminGuard(user.id, (tx) => tx.user.update({
     where: { id: req.params.id },
     data: { isActive: false, sessionVersion: { increment: 1 } },
     select: PUBLIC_SELECT,
-  });
+  }));
   await audit.record(req, { action: 'DEACTIVATE', entityType: 'User', entityId: req.params.id });
   return ok(res, { ...updated, deactivated: true });
 });
