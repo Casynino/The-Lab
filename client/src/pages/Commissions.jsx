@@ -15,6 +15,8 @@ import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
 import { useOnce } from '@/lib/useOnce';
 import { wentThrough } from '@/lib/once';
+import { refreshAfter } from '@/lib/afterWrite';
+import { LIVE, STEADY } from '@/lib/polling';
 import { pickParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, WITHDRAWAL_STATUS_META } from '@/lib/constants';
@@ -757,8 +759,10 @@ function RepView() {
   const [tab, setTab] = useTabParam('tab', REP_TABS, 'overview');
   const insightsQ = useQuery(pageQueries.commissionsInsights());
   const insights = insightsQ.data;
-  const { data: c, isLoading, isError, refetch } = useQuery(pageQueries.commissionsMine());
-  const wdQ = useQuery(pageQueries.withdrawalsMine());
+  // The balance and the payouts move when the office approves a settlement or pays a request: asked again
+  // every two minutes while the wallet is open, like the rep's Home (audit freshness-5).
+  const { data: c, isLoading, isError, refetch } = useQuery({ ...pageQueries.commissionsMine(), refetchInterval: STEADY });
+  const wdQ = useQuery({ ...pageQueries.withdrawalsMine(), refetchInterval: STEADY });
   const wd = wdQ.data;
   const bonusQ = useQuery(pageQueries.bonusMe());
   const bonusProgress = bonusQ.data;
@@ -2380,9 +2384,9 @@ function RepBoard({ items, bonus, onTime, isAdmin }) {
   const usualMin = [...tally.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? null;
   const onTimeFor = new Map((onTime || []).map((r) => [r.salesRepId, r]));
   const open = openId ? items.find((i) => i.salesRepId === openId) : null;
-  // The rep's view also fills the profile page's cache ('sales-rep-profile'), so a payout decided or a fine
-  // forgiven from it refreshes that too — "Open full profile" is the next click.
-  const refresh = () => ['commissions', 'dashboard', 'sales-rep-profile'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  // A payout decided from the rep's view: the profile page's cache ('sales-rep-profile', the next click is
+  // "Open full profile"), Finance and Sales reps are asked again with the rest (lib/afterWrite.js).
+  const refresh = () => refreshAfter(qc, 'payout');
   const sortLabel = SORTS.find((s) => s.k === sort)?.l;
   const subtitle = [
     many && `${formatNumber(items.length)} reps`,
@@ -2625,7 +2629,9 @@ function AdminView({ embedded = false }) {
   const [openWd, setOpenWd] = useState(null); // a withdrawal being read
   const [rejectingWd, setRejectingWd] = useState(null); // a Reject waiting for its confirmation
   const { data: summary, isLoading, isError, refetch } = useQuery(pageQueries.commissionsSummary());
-  const { data: wd, isError: wdFailed, refetch: retryWd } = useQuery(pageQueries.withdrawalsAll());
+  // The payout requests are an approval queue like Settle, Requests and Returns: asked again every minute
+  // while the page is open, so a rep's new request shows without a click or a focus (audit freshness-5).
+  const { data: wd, isError: wdFailed, refetch: retryWd } = useQuery({ ...pageQueries.withdrawalsAll(), refetchInterval: LIVE });
   // The "Paid out" bars need six months of payouts, more than the 30 newest the table lists. Same
   // endpoint, under the 'commissions' key, so every decision refreshes it with the rest.
   const { data: wdTrend, isError: trendFailed, refetch: retryTrend } = useQuery(pageQueries.withdrawalsTrend());
@@ -2661,16 +2667,16 @@ function AdminView({ embedded = false }) {
     mutationFn: ({ id, action, fromOwnPocket }) => api.post(`/commissions/withdrawals/${id}/decide`, { action, fromOwnPocket }),
     onSuccess: (_r, v) => {
       toast.success(v?.fromOwnPocket ? 'Paid from your own money — the business account is untouched' : 'Updated');
-      qc.invalidateQueries({ queryKey: ['commissions'] });
-      qc.invalidateQueries({ queryKey: ['finance'] });
+      refreshAfter(qc, 'payout');
     },
     // A lost answer may still have paid it: reload so the row shows its real state (audit backend-integrity-5).
     onError: (e) => {
       toast.error(apiError(e));
-      qc.invalidateQueries({ queryKey: ['commissions'] });
-      qc.invalidateQueries({ queryKey: ['finance'] });
+      refreshAfter(qc, 'payout');
     },
   });
+  // The strip and the payout window decide with their own buttons: the same refresh (audit freshness-2/3).
+  const refreshPayouts = () => refreshAfter(qc, 'payout');
 
   // Balances that never arrived are not a spinner for ever (audit pwa-brand-load-2).
   if (isError && !summary) return <LoadError what="the commissions" onRetry={refetch} />;
@@ -2697,7 +2703,7 @@ function AdminView({ embedded = false }) {
           shows while something is waiting). */}
       <PendingWithdrawalsStrip
         items={(wd?.data || []).filter((w) => w.status === 'PENDING')}
-        refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
+        refresh={refreshPayouts}
         onOpen={setOpenWd}
       />
 
@@ -2710,7 +2716,7 @@ function AdminView({ embedded = false }) {
           w={openWd}
           balance={items.find((r) => r.salesRepId === openWd.salesRepId)?.available ?? null}
           onClose={() => setOpenWd(null)}
-          refresh={() => ['commissions', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }))}
+          refresh={refreshPayouts}
         />
       )}
 
