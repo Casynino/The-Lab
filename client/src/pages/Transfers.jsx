@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import { Plus, Truck, Ban, ArrowRight, Boxes, Warehouse, UserRound, RotateCcw, ChevronDown } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { keepOnPageTurn } from '@/lib/pageQueries';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useProducts, useWarehouses, useSalesReps } from '@/lib/hooks';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/format';
 import ProductPicker, {
@@ -98,7 +99,7 @@ function TransferModal({ onClose }) {
     onSuccess: () => {
       saveStockWarehouse(fromRep ? toWarehouseId : fromWarehouseId);
       toast.success('Transfer completed');
-      qc.invalidateQueries({ queryKey: ['transfers'] });
+      refreshAfter(qc, 'transfer'); // the stock counts, the Dashboard alerts and a rep's boxes too, not only this list
       onClose();
     },
     onError: (e) => { toast.error(apiError(e)); stock.refetch(); },
@@ -271,7 +272,7 @@ export default function Transfers() {
 
   const cancel = useMutation({
     mutationFn: (id) => api.post(`/transfers/${id}/cancel`, {}),
-    onSuccess: () => { toast.success('Transfer cancelled'); qc.invalidateQueries({ queryKey: ['transfers'] }); },
+    onSuccess: () => { toast.success('Transfer cancelled'); refreshAfter(qc, 'transfer'); },
     onError: (e) => toast.error(apiError(e)),
   });
 

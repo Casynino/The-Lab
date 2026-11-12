@@ -68,3 +68,9 @@ test('refreshAfter invalidates each key by its first part', () => {
   refreshAfter({ invalidateQueries: (o) => calls.push(o.queryKey) }, 'payout');
   assert.deepEqual(calls, AFTER.payout.map((k) => [k]));
 });
+
+test('a transfer made or cancelled refreshes the stock, the Dashboard alerts and a rep\'s order, not only its list', () => {
+  for (const k of ['transfers', 'inventory', 'dashboard', 'products', 'reorder', 'sales-reps', 'sales-rep-profile', 'settlements', 'settlement']) {
+    assert.ok(AFTER.transfer.includes(k), `transfer misses ${k}`);
+  }
+});

@@ -155,7 +155,7 @@ function CorrectBalanceModal({ onClose }) {
   const qc = useQueryClient();
   // The balances are read again as the window opens, whatever the page holds: an answer under 30 s old
   // counts as fresh, yet a settlement approved or a payout made in that time is not in it, and the server
-  // records only the difference it is sent (audit freshness-1). Record waits for this answer.
+  // refuses a correction made from a balance it no longer holds (audit freshness-1). Record waits for this.
   const accountsQ = useQuery({ ...pageQueries.financeAccounts(), refetchOnMount: 'always' });
   const live = figuresAreLive(accountsQ) && !accountsQ.isFetching;
   const usable = (accountsQ.data || []).filter((a) => !a.isCommissionRecord);
@@ -177,17 +177,30 @@ function CorrectBalanceModal({ onClose }) {
       const now = (fresh || []).find((a) => a.id === accountId);
       const plan = correctionFrom({ shown, live: now ? now.balance : null, target: truth });
       if (plan.kind !== 'write') throw Object.assign(new Error('not written'), { plan, name: account?.name });
-      return api.post('/finance/adjustments', {
-        accountId,
-        direction: plan.direction,
-        amount: plan.amount,
-        description: reason.trim() || 'Balance corrected to what the account really holds',
-        notes: `Corrected from ${formatCurrency(plan.from)} to ${formatCurrency(truth)}.`,
-      });
+      try {
+        // What it really holds and the balance this window showed. The server works the difference out from
+        // the balance as it is when it writes, and writes nothing if that is no longer the one shown, so money
+        // landing between this read and the write cannot leave the account at a figure nobody typed.
+        return await api.post('/finance/adjustments', {
+          accountId,
+          targetBalance: truth,
+          expectedBalance: plan.from,
+          description: reason.trim() || 'Balance corrected to what the account really holds',
+          notes: `Corrected from ${formatCurrency(plan.from)} to ${formatCurrency(truth)}.`,
+        });
+      } catch (e) {
+        const said = e?.response?.data?.error?.details;
+        if (e?.response?.status === 409 && said?.code === 'BALANCE_MOVED') {
+          throw Object.assign(new Error('not written'), { plan: { kind: 'moved', from: plan.from, to: said.balance }, name: account?.name, reread: true });
+        }
+        throw e;
+      }
     },
     onSuccess: () => { toast.success('Balance corrected'); invalidateFinance(qc); onClose(); },
     onError: (e) => {
       const plan = e?.plan;
+      // Refused by the server: the window's balances are read again, so the difference shown is the new one.
+      if (e?.reread) qc.invalidateQueries({ queryKey: pageQueries.financeAccounts().queryKey });
       if (plan?.kind === 'moved') { setMoved({ name: e.name, from: plan.from, to: plan.to }); return; }
       if (plan?.kind === 'nothing') { setMoved(null); toast.success(`${e.name} already holds ${formatCurrency(truth)} — nothing to record`); return; }
       if (plan?.kind === 'gone') { toast.error('This account is no longer listed. Close this window and open it again.'); return; }

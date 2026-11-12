@@ -56,7 +56,8 @@ const cents = (n) => Math.round((Number(n) || 0) * 100) / 100;
 /**
  * "Correct balance", worked out once more right before it is written (audit freshness-1). An answer
  * within its fresh window still passes figuresAreLive, yet money may have moved since (a settlement
- * approved, a payout, another tab), and the server records only the difference it is sent. So:
+ * approved, a payout, another tab). The server checks it too (it writes target − live, and nothing when
+ * the balance is no longer the one shown); this check answers first, without a refused request. So:
  *   shown  — the balance the window showed when the owner typed what the account really holds;
  *   live   — the balance the server gave a moment ago (null when the account is no longer listed);
  *   target — what the owner says it really holds.

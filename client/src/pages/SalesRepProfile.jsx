@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
+import { refreshAfter } from '@/lib/afterWrite';
 import { useOnce } from '@/lib/useOnce';
 import { wentThrough } from '@/lib/once';
 import { useAuth } from '@/context/AuthContext';
@@ -505,8 +506,10 @@ function AddStockModal({ repId, repName, onClose }) {
           ? `Added ${formatNumber(r.boxes)} box(es) to ${repName}'s active order`
           : `Issued ${formatNumber(r.boxes)} box(es) to ${repName} — new order opened`,
       );
-      ['sales-rep-profile', 'settlements', 'commissions', 'inventory', 'dashboard'].forEach((k) =>
-        qc.invalidateQueries({ queryKey: [k] }));
+      // Boxes leave the warehouse and an order opens or grows, like an approved stock request: Sales reps'
+      // "Boxes out with reps", the catalogue and the reorder list too (lib/afterWrite.js).
+      refreshAfter(qc, 'stockRequest');
+      qc.invalidateQueries({ queryKey: ['commissions'] });
       onClose();
     },
     onError: (e) => toast.error(apiError(e)),

@@ -40,6 +40,9 @@ export const AFTER = Object.freeze({
   stockRequest: ['stock-requests', 'settlements', 'settlement', ...STOCK],
   // A rep's return approved, rejected or cancelled: boxes come back and the order's remaining changes.
   repReturn: ['returns', 'return', 'settlements', 'settlement', ...STOCK],
+  // A transfer made or cancelled: warehouse to warehouse, or to / from a rep, whose order then holds more
+  // or fewer boxes (Inventory > Balances sits next to Transfers, and the Transfer window's own caps).
+  transfer: ['transfers', 'settlements', 'settlement', ...STOCK],
 });
 
 /** The first key parts one or more kinds of write refresh, each once. */
