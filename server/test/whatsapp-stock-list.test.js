@@ -110,13 +110,13 @@ test('the sweep sends ONE message for every low product, and running it again se
   assert.equal(sent.length, 1);
   assert.equal(sent[0], `*LOW STOCK — RESTOCK*
 
-(1)- OHIS Ndogo (Brown) – Bila Filter
+(1) OHIS Ndogo (Brown) – Bila Filter
 20 Boxes Remaining | Restock: 80 Boxes
 
-(2)- Civlily Ndogo (Brown) – Na Filter
+(2) Civlily Ndogo (Brown) – Na Filter
 34 Boxes Remaining | Restock: 66 Boxes
 
-(3)- Civlily Kubwa (White) – Bila Filter
+(3) Civlily Kubwa (White) – Bila Filter
 42 Boxes Remaining | Restock: 58 Boxes`);
   const [row] = stockRows();
   assert.match(row.dedupeKey, /^stockalerts:\d{4}-\d{2}-\d{2}$/);
@@ -142,7 +142,7 @@ test('while the list waits, a product that runs low is added to it in place (sti
   lowNow = [OHIS, CIV1, OHIS2];
   await wa.stockAlertForProduct('o2');
   assert.equal(stockRows().length, 1, 'still one row');
-  assert.match(stockRows()[0].text, /\(1\)- OHIS Ndogo \(Brown\) – Bila Filter\n20 Boxes.*\n\n\(2\)- OHIS Ndogo \(White\) – Bila Filter\n50 Boxes Remaining \| Restock: 50 Boxes\n\n\(3\)- Civlily Ndogo \(Brown\) – Na Filter/);
+  assert.match(stockRows()[0].text, /\(1\) OHIS Ndogo \(Brown\) – Bila Filter\n20 Boxes.*\n\n\(2\) OHIS Ndogo \(White\) – Bila Filter\n50 Boxes Remaining \| Restock: 50 Boxes\n\n\(3\) Civlily Ndogo \(Brown\) – Na Filter/);
   assert.equal(stockRows()[0].priority, 'WARNING');
   assert.equal(sent.length, 0, 'quiet hours still hold a WARNING');
 
@@ -154,7 +154,7 @@ test('while the list waits, a product that runs low is added to it in place (sti
   assert.equal(stockRows()[0].priority, 'CRITICAL');
   assert.equal(stockRows()[0].status, 'SENT');
   assert.equal(sent.length, 1);
-  assert.match(sent[0], /\(4\)- Civlily Kubwa \(Brown\) – Bila Filter\n0 Boxes Remaining \| Restock: 100 Boxes$/);
+  assert.match(sent[0], /\(4\) Civlily Kubwa \(Brown\) – Bila Filter\n0 Boxes Remaining \| Restock: 100 Boxes$/);
 });
 
 test('flush sends the waiting list as it is NOW, even if it was rewritten after flush read it', async () => {
@@ -185,7 +185,7 @@ test('after the list went out, a product that runs low gets ONE new message with
   assert.equal(r.queued, true);
   assert.equal(stockRows().length, 2);
   assert.match(stockRows()[1].dedupeKey, /^stockalerts:\d{4}-\d{2}-\d{2}:2$/);
-  assert.equal(sent[1], '*LOW STOCK — RESTOCK*\n\n(1)- Civlily Kubwa (White) – Bila Filter\n42 Boxes Remaining | Restock: 58 Boxes');
+  assert.equal(sent[1], '*LOW STOCK — RESTOCK*\n\n(1) Civlily Kubwa (White) – Bila Filter\n42 Boxes Remaining | Restock: 58 Boxes');
   assert.equal(stockRows()[1].refId, 'c5');
 
   // Nothing new: nothing sent, no row.
@@ -209,7 +209,7 @@ test('the switches still decide: LOW_STOCK off leaves the low products out, both
   lowNow = [OHIS, EMPTY, CIV1];
   await wa.scanStockAlerts();
   assert.equal(stockRows().length, 1);
-  assert.equal(sent[0], '*LOW STOCK — RESTOCK*\n\n(1)- Civlily Kubwa (Brown) – Bila Filter\n0 Boxes Remaining | Restock: 100 Boxes');
+  assert.equal(sent[0], '*LOW STOCK — RESTOCK*\n\n(1) Civlily Kubwa (Brown) – Bila Filter\n0 Boxes Remaining | Restock: 100 Boxes');
   assert.equal(stockRows()[0].type, 'OUT_OF_STOCK');
 
   reset();
@@ -257,11 +257,11 @@ test('a list too long for one message is queued as parts (1/2), (2/2) in order, 
   assert.equal(list.length, 2);
   assert.match(list[0].dedupeKey, /^stockalerts:\d{4}-\d{2}-\d{2}$/);
   assert.match(list[1].dedupeKey, /^stockalerts:\d{4}-\d{2}-\d{2}:part2$/);
-  assert.ok(list[0].text.startsWith('*LOW STOCK — RESTOCK (1/2)*\n\n(1)- OHIS Ndogo (Brown) – Bila Filter'));
+  assert.ok(list[0].text.startsWith('*LOW STOCK — RESTOCK (1/2)*\n\n(1) OHIS Ndogo (Brown) – Bila Filter'));
   assert.ok(list[1].text.startsWith('*LOW STOCK — RESTOCK (2/2)*\n\n('));
   for (const r of list) assert.ok(r.text.length <= 700, `${r.text.length} characters`);
   assert.deepEqual([...list[0].refId.split(','), ...list[1].refId.split(',')], names.map((_, k) => `p${k}`));
-  const numbers = list.flatMap((r) => [...r.text.matchAll(/^\((\d+)\)- /gm)].map((m) => Number(m[1])));
+  const numbers = list.flatMap((r) => [...r.text.matchAll(/^\((\d+)\) /gm)].map((m) => Number(m[1])));
   assert.deepEqual(numbers, Array.from({ length: 11 }, (_, i) => i + 1));
 });
 
@@ -280,7 +280,7 @@ test('a product sent as low that then runs OUT the same day is sent once more, a
   assert.equal(stockRows()[1].type, 'OUT_OF_STOCK');
   assert.equal(stockRows()[1].priority, 'CRITICAL');
   assert.equal(stockRows()[1].refId, 'c9!', 'remembered as out');
-  assert.equal(sent[1], '*LOW STOCK — RESTOCK*\n\n(1)- Civlily Ndogo (White) – Bila Filter\n0 Boxes Remaining | Restock: 100 Boxes');
+  assert.equal(sent[1], '*LOW STOCK — RESTOCK*\n\n(1) Civlily Ndogo (White) – Bila Filter\n0 Boxes Remaining | Restock: 100 Boxes');
 
   // Once as out is enough: still out, or back to low after a small restock, nothing more that day.
   await wa.scanStockAlerts();

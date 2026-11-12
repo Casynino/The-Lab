@@ -6,7 +6,8 @@
 // Nino, 10 Nov 2026: clean, well arranged, no emoji. One shape for all of them:
 //
 //   *TITLE IN CAPITALS*      <- bold in WhatsApp (the asterisks make it bold)
-//   (date or reference, when the message has one)
+//   (a reference, when the message has one — never the date or time it was
+//    sent: Nino, 12 Nov 2026, "no date or time on any text")
 //
 //   Label: value             <- a group of 2-3 lines
 //   Label: value
@@ -43,9 +44,9 @@ const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const count = (n, word) => `${Math.round(Number(n) || 0)} ${plural(word, Math.round(Number(n) || 0))}`; // 1 Box, 4 Boxes
 const boxes = (n, unit) => count(n, cap(unit || 'Box'));
 
-// The marker in front of each product in a list. Every list of products is numbered "(1)- Name", "(2)- Name" (Nino, 12 Nov 2026: numbers in brackets
-// with a dash, in every WhatsApp that lists products — it replaced the (a), (b), (c) letters).
-const mark = (k) => `(${k + 1})- `;
+// The marker in front of each product in a list. Every list of products is numbered "(1) Name", "(2) Name" (Nino, 12 Nov 2026: numbers in brackets,
+// no dash, in every WhatsApp that lists products — it replaced the (a), (b), (c) letters).
+const mark = (k) => `(${k + 1}) `;
 
 // WhatsApp shows *text* in bold. Only the heading of a message is bold.
 const bold = (s) => `*${s}*`;
@@ -57,7 +58,7 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  // The products are numbered, one line each: "(1)- Name: 2 Boxes", "(2)- Name: 3 Boxes" — numbered, not
+  // The products are numbered, one line each: "(1) Name: 2 Boxes", "(2) Name: 3 Boxes" — numbered, not
   // numbers, so nothing in front of a name can be read as a number of boxes (Nino chose this on 11 Nov 2026
   // after trying "1-Name", "Product 1:" and arrows). Then, for several products, the box count of the whole
   // request (a carton counts as the boxes it holds: `boxes`), and the value.
@@ -65,11 +66,11 @@ const owner = {
   // END of the list ("+3 more, see ZELab") and never the totals.
   // The city the stock is for stands under the name; a request split between cities says each line's city
   // after its boxes instead.
-  stockRequest: ({ by, city, items = [], total, when }) => {
+  stockRequest: ({ by, city, items = [], total }) => {
     const itemCities = [...new Set(items.map((i) => i.city).filter(Boolean))];
     const split = itemCities.length > 1;
     const oneCity = split ? null : (city || itemCities[0] || null);
-    const head = [lines(bold('STOCK REQUEST'), dateTime(when)), oneCity ? lines(`By: ${by}`, `City: ${oneCity}`) : `By: ${by}`];
+    const head = [bold('STOCK REQUEST'), oneCity ? lines(`By: ${by}`, `City: ${oneCity}`) : `By: ${by}`];
     const totalBoxes = items.reduce((s, i) => s + (Number(i.boxes ?? i.qty) || 0), 0);
     const tail = items.length > 1
       ? lines(`Total Boxes: ${Math.round(totalBoxes)}`, `Total Value: ${money(total)}`)
@@ -85,12 +86,12 @@ const owner = {
   },
 
   // Who and which order / the products / the money: small groups, not one block.
-  // Every product is numbered like the stock request — "(1)- Name" with its Boxes Sold under it (Nino,
+  // Every product is numbered like the stock request — "(1) Name" with its Boxes Sold under it (Nino,
   // 11 Nov 2026: "any text that comes with a list of products must come with a b c d"), one product too.
   // Several products then show the total boxes, then what was paid to each account and the commission.
   // Like a long stock request, a very long one drops lines from the LIST and never from the money.
-  settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, when, items, payments }) => {
-    const head = [lines(bold('SETTLEMENT SUBMITTED'), dateOnly(when)), lines(`By: ${by}`, `Order: ${order}`)];
+  settlementSubmitted: ({ by, order, product, boxes: n, amount, method, commission, items, payments }) => {
+    const head = [bold('SETTLEMENT SUBMITTED'), lines(`By: ${by}`, `Order: ${order}`)];
     if (!items || items.length <= 1) {
       return doc(
         ...head,
@@ -115,7 +116,7 @@ const owner = {
     return fitted(build, steps);
   },
 
-  // Who and which order, then the products numbered like the stock request ("(1)- Name: 4 Boxes"), the
+  // Who and which order, then the products numbered like the stock request ("(1) Name: 4 Boxes"), the
   // total when there are several, then the reason.
   returnRequest: ({ by, order, items = [], reason }) => {
     const total = items.reduce((t, i) => t + (Number(i.quantity) || 0), 0);
@@ -141,7 +142,7 @@ const owner = {
 
   // Every low and out-of-stock product in ONE message (Nino, 12 Nov 2026: one text per product used up the
   // WhatsApp budget and the daily report did not go). His own format, word for word, with the products
-  // numbered (1)-, (2)-, (3)- (first "only use abc", then 12 Nov: "(1)- (2)-" in every list): the heading, then
+  // numbered (1), (2), (3) (first "only use abc", then 12 Nov: "(1) Name" in every list, no dash): the heading, then
   // per product its name as stored and "20 Boxes Remaining | Restock: 80 Boxes" — nothing else, no brand
   // headings, no totals. All brands in one list, OHIS first, then Civlily, then any other brand A-Z (the
   // brand is in each name), and within a brand the fixed product order. An empty product sits in its place
@@ -208,9 +209,10 @@ function fitted(build, steps) {
 
 owner.dailyReport = (d) => {
   const build = ({ reps }) => doc(
-    // A missed report sent the next morning: its stock is the morning's, so say so. Its cash balance is the
+    // A missed report sent the next morning: its stock is the morning's, so say so (no time — Nino, 12 Nov 2026:
+    // no date or time on any text; the report's own day stays, so a late one is never taken for today's). Its cash balance is the
     // day's closing balance (the caller passes the period's end), whenever it is sent.
-    lines(bold('ZELAB — DAILY REPORT'), d.date, d.late && `Sent late: ${dateTime(d.late)} (stock as at then)`),
+    lines(bold('ZELAB — DAILY REPORT'), d.date, d.late && 'Sent late (stock as at sending)'),
     lines(`Sales: ${money(d.sales)} (${boxes(d.boxesSold)})`, `Net Profit: ${money(d.netProfit)}`, `Expenses: ${money(d.expenses)}`),
     lines(`Cash In: ${money(d.cashIn)}`, `Cash Out: ${money(d.cashOut)}`, `Cash Balance: ${money(d.cashBalance)}`),
     `Orders: ${d.orders} | Settlements: ${d.settlements} | Returns: ${d.returns}`,

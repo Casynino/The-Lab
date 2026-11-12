@@ -94,7 +94,7 @@ test('owner alerts go to the owner\'s number in the new shape', async () => {
     items: [{ product: { name: 'Pepa King Size' }, quantityRequested: 20, packagingUnit: null }],
   });
   assert.match(sent[0], /phone=255700000000&apikey=ownerkey/);
-  assert.equal(textOf(sent[0]), '*STOCK REQUEST*\n10 Nov 2026 | 14:32 EAT\n\nBy: Asha Mwinyi\n\n(1)- Pepa King Size: 20 Boxes\n\nTotal Value: TSh 760,000');
+  assert.equal(textOf(sent[0]), '*STOCK REQUEST*\n\nBy: Asha Mwinyi\n\n(1) Pepa King Size: 20 Boxes\n\nTotal Value: TSh 760,000');
   assert.equal(logged[0].type, 'STOCK_REQUEST');
   assert.equal(logged[0].priority, 'ACTION', 'priority still decides quiet-hours and budget; only the emoji is gone');
 });
@@ -125,5 +125,5 @@ test('a stock request with several products arrives as arrow lines, with the box
     ],
   });
   assert.equal(textOf(sent[0]),
-    '*STOCK REQUEST*\n10 Nov 2026 | 19:01 EAT\n\nBy: Nyoya\n\n(1)- OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box\n(2)- OHIS Pepa Ndogo (Blue): 2 Cartons\n\nTotal Boxes: 21\nTotal Value: TSh 30,000');
+    '*STOCK REQUEST*\n\nBy: Nyoya\n\n(1) OHIS Pepa Ndogo (Brown) – Bila Filter: 1 Box\n(2) OHIS Pepa Ndogo (Blue): 2 Cartons\n\nTotal Boxes: 21\nTotal Value: TSh 30,000');
 });

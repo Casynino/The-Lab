@@ -208,7 +208,7 @@ test('every report text quotes the cash balance at the end of its period, as its
     assert.ok(!text.includes('3,000,000'), kind);
   }
   // A late daily says only its stock is the morning's: its cash balance is the day's own.
-  assert.match(daily.buildWhatsAppText(d, LINK, late), /\(stock as at then\)/);
+  assert.match(daily.buildWhatsAppText(d, LINK, late), /\(stock as at sending\)/);
 });
 
 // Rule changed 11 Nov 2026 (Nino: "why only weekly and monthly — we should see the daily ones too"): by
