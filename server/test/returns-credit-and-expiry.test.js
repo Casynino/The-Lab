@@ -159,11 +159,11 @@ test('too many boxes back: the rep reads "your open orders", staff read the rep\
   const body = { type: 'SALES_RETURN', salesRepId: 'rep1', warehouseId: 'w1', items: [{ productId: 'p1', quantity: 9 }] };
   await assert.rejects(
     returns.createReturn(body, { id: 'u1', role: 'SALES_REP', salesRepId: 'rep1' }),
-    (e) => e.statusCode === 400 && /^Pepa: only 5 box\(es\) are still unaccounted on your open orders/.test(e.message),
+    (e) => e.statusCode === 400 && /^Pepa: only 5 boxes are still unaccounted on your open orders/.test(e.message),
   );
   await assert.rejects(
     returns.createReturn(body, { id: 'owner', role: 'ADMIN', salesRepId: null }),
-    (e) => e.statusCode === 400 && /^Pepa: Paul has only 5 box\(es\) still unaccounted on his open orders/.test(e.message)
+    (e) => e.statusCode === 400 && /^Pepa: Paul has only 5 boxes still unaccounted on his open orders/.test(e.message)
       && !/your/.test(e.message),
   );
   assert.equal(created.length, 0, 'nothing is written either way');

@@ -21,6 +21,7 @@ const TONE = {
   YEARLY: 'bg-sky-500/15 text-sky-300',
 };
 const NAME = { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly', YEARLY: 'Yearly' };
+const DOT = { DAILY: 'bg-amber-400', WEEKLY: 'bg-emerald-400', MONTHLY: 'bg-violet-400', YEARLY: 'bg-sky-400' };
 
 function period(r) {
   const from = dayjs(r.from);
@@ -108,24 +109,32 @@ export default function ReportsArchive() {
                   {g.items.map((r) => {
                     const m = r.meta || {};
                     return (
-                      <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
-                        <span className={`w-[68px] shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold ${TONE[r.type] || 'bg-white/[0.07] text-white/60'}`}>{NAME[r.type] || r.type}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-white">{period(r)}</p>
-                          {(m.revenue != null || m.boxes != null) && (
-                            <p className="truncate text-[11px] text-faint">
-                              {m.revenue != null && <>Sales {formatCurrency(m.revenue)}</>}
-                              {m.boxes != null && <> · {formatNumber(m.boxes)} {m.boxes === 1 ? 'box' : 'boxes'}</>}
-                            </p>
-                          )}
-                        </div>
-                        <a href={r.link} target="_blank" rel="noreferrer" aria-label={`Open ${period(r)}`}
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/[0.07] px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-inset ring-white/15 transition hover:bg-white/[0.12]">
-                          <ExternalLink className="h-3.5 w-3.5" /> Open
+                      // The whole line opens the report, and Download is its own button beside it. On a phone the
+                      // type is a coloured dot (the period already says daily, weekly or monthly) and the "Open"
+                      // pill is an arrow, so the period and the sales figure keep their room: at 360 px they were
+                      // "26 Oct – 1 N…" and "Sales TSh 1,559,…" (audit, 12 Nov 2026).
+                      <li key={r.id} className="flex items-center gap-2 px-2 py-1.5 sm:gap-3 sm:px-4 sm:py-2.5">
+                        <a href={r.link} target="_blank" rel="noreferrer" aria-label={`Open ${NAME[r.type] || r.type} ${period(r)}`}
+                          className="group flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg px-2 transition hover:bg-white/[0.03] sm:min-h-0 sm:px-0 sm:hover:bg-transparent">
+                          <span className={`hidden w-[68px] shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-semibold sm:inline-block ${TONE[r.type] || 'bg-white/[0.07] text-white/60'}`}>{NAME[r.type] || r.type}</span>
+                          <span aria-hidden="true" title={NAME[r.type] || r.type} className={`h-2 w-2 shrink-0 rounded-full sm:hidden ${DOT[r.type] || 'bg-white/40'}`} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-white">{period(r)}</span>
+                            {(m.revenue != null || m.boxes != null) && (
+                              <span className="block truncate text-[11px] text-faint">
+                                {m.revenue != null && <span className="whitespace-nowrap">Sales {formatCurrency(m.revenue)}</span>}
+                                {m.boxes != null && <> · {formatNumber(m.boxes)} {m.boxes === 1 ? 'box' : 'boxes'}</>}
+                              </span>
+                            )}
+                          </span>
+                          <ExternalLink className="h-4 w-4 shrink-0 text-white/40 sm:hidden" aria-hidden="true" />
+                          <span className="hidden shrink-0 items-center gap-1.5 rounded-full bg-white/[0.07] px-3 py-1 text-xs font-semibold text-foreground ring-1 ring-inset ring-white/15 transition group-hover:bg-white/[0.12] sm:inline-flex">
+                            <ExternalLink className="h-3.5 w-3.5" /> Open
+                          </span>
                         </a>
                         <button type="button" onClick={() => download(r)} aria-label={`Download ${period(r)}`} title="Download"
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white/60 ring-1 ring-white/15 transition hover:bg-white/[0.06] hover:text-white">
-                          <Download className="h-3.5 w-3.5" />
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/60 ring-white/15 transition hover:bg-white/[0.06] hover:text-white sm:h-7 sm:w-7 sm:ring-1">
+                          <Download className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                         </button>
                       </li>
                     );

@@ -252,7 +252,7 @@ function Gate({ children, defaultOpen = false }) {
       <InstallButton
         render={(openSheet) => (
           <button type="button" onClick={openSheet} style={rise(0.68)}
-            className="ls-up inline-flex h-8 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline">
+            className="ls-up -my-1.5 inline-flex h-11 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline">
             Get the full-screen app
           </button>
         )}
@@ -262,7 +262,7 @@ function Gate({ children, defaultOpen = false }) {
           tapped. Same quiet style as the line above it. */}
       <HowItWorksVideo
         style={rise(0.78)}
-        className="ls-up inline-flex h-8 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline"
+        className="ls-up -my-1.5 inline-flex h-11 cursor-pointer items-center px-2 text-[11.5px] tracking-[0.01em] text-white/50 underline-offset-4 transition hover:text-white hover:underline"
       />
 
       <div
@@ -275,7 +275,7 @@ function Gate({ children, defaultOpen = false }) {
           {children}
           {open && (
             <button type="button" onClick={close} aria-label="Close"
-              className="ls-card-x absolute right-2.5 top-2.5 z-10 grid h-7 w-7 cursor-pointer place-items-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white/80">
+              className="ls-card-x absolute right-0.5 top-0.5 z-10 grid h-11 w-11 cursor-pointer place-items-center rounded-full text-white/40 transition hover:bg-white/10 hover:text-white/80">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
@@ -295,7 +295,7 @@ function Gate({ children, defaultOpen = false }) {
  */
 function Credit() {
   return (
-    <Link to="/nino" className="group inline-flex items-center gap-1 text-white/45 transition-colors hover:text-white">
+    <Link to="/nino" className="tap-phone group inline-flex items-center gap-1 text-white/45 transition-colors hover:text-white">
       by <span className="font-semibold text-white/75 transition-colors group-hover:text-brand-500">Nino</span>
       <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
     </Link>
@@ -397,7 +397,7 @@ export default function Login() {
               <form onSubmit={handleSubmit(onSubmit)} className="mt-3.5 space-y-3">
                 <div className="ls-field" style={stagger(1)}>
                   <label htmlFor="login-email" className="mb-1 block text-[12px] text-white/50">Email</label>
-                  <Input id="login-email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="you@thelab.co.tz"
+                  <Input id="login-email" type="email" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="you@zelab.site"
                     className={FIELD} {...register('email')} />
                   {errors.email && <p className="mt-1 text-[11.5px] text-rose-400">{errors.email.message}</p>}
                 </div>
@@ -407,7 +407,7 @@ export default function Login() {
                     <Input id="login-password" type={showPwd ? 'text' : 'password'} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="••••••••"
                       className={`${FIELD} !pr-10`} {...register('password')} />
                     <button type="button" onClick={() => setShowPwd((v) => !v)} aria-label={showPwd ? 'Hide password' : 'Show password'}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-white/35 transition hover:text-white/70">
+                      className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center cursor-pointer text-white/35 transition hover:text-white/70">
                       {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>

@@ -7,7 +7,7 @@ import { PackagePlus, SlidersHorizontal, Boxes, Warehouse, Truck, TrendingDown, 
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { useProducts, useWarehouses, useSalesReps, useDebounce } from '@/lib/hooks';
-import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, sharePercents } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDateTime, pluralizeUnit, unitWord, sharePercents } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
 import { MOVEMENT_META } from '@/lib/constants';
 import ProductPicker, {
@@ -540,7 +540,7 @@ function Movements() {
       </div>
       {isLoading ? <PageSpinner /> : isError && !data ? <LoadError what="the movements" onRetry={refetch} /> : !data?.data?.length ? <EmptyState title="No movements" /> : (
         <>
-          <Table>
+          <Table stack="wide">
             <THead><TR><TH>When</TH><TH>Type</TH><TH>Product</TH><TH>Qty</TH><TH>Base Δ</TH><TH>Location</TH><TH>By</TH></TR></THead>
             <TBody>
               {data.data.map((m) => {
@@ -549,8 +549,8 @@ function Movements() {
                   <TR key={m.id}>
                     <TD className="text-muted">{formatDateTime(m.occurredAt)}</TD>
                     <TD><Badge className={meta.cls}>{meta.label}</Badge></TD>
-                    <TD className="max-w-[200px] truncate">{m.product?.name}</TD>
-                    <TD>{m.quantity} {m.packagingUnit?.name}</TD>
+                    <TD className="stack-full max-w-[200px] truncate">{m.product?.name}</TD>
+                    <TD>{formatNumber(m.quantity)} {m.packagingUnit?.name ? unitWord(m.quantity, m.packagingUnit.name) : ''}</TD>
                     <TD className={m.baseQuantity < 0 ? 'text-rose-600' : 'text-emerald-600'}>{m.baseQuantity > 0 ? '+' : ''}{formatNumber(m.baseQuantity)}</TD>
                     <TD>{m.locationType === 'WAREHOUSE' ? m.warehouse?.name : m.salesRep?.user?.name}</TD>
                     <TD>{m.user?.name || '—'}</TD>
@@ -593,7 +593,7 @@ function ProductStockModal({ row, onClose }) {
   const withReps = row.totalBase - inStore;
 
   return (
-    <Modal open onClose={onClose} size="lg" title={row.name}
+    <Modal open onClose={onClose} size="xl" title={row.name}
       footer={<Button variant="secondary" onClick={onClose}>Close</Button>}>
       <div className="space-y-5">
         {/* What it is worth and how it splits, before the detail. */}
@@ -651,7 +651,7 @@ function ProductStockModal({ row, onClose }) {
             <EmptyState title="No movement recorded for this product yet" icon={Boxes} />
           ) : (
             <>
-              <Table>
+              <Table stack>
                 <THead><TR><TH>When</TH><TH>What happened</TH><TH className="text-right">Change</TH><TH>Where</TH><TH>By</TH></TR></THead>
                 <TBody>
                   {data.data.map((m) => {

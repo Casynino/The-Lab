@@ -593,12 +593,12 @@ function ProductsCatalogue() {
           )
         ) : (
           <>
-            <Table>
+            <Table stack="wide">
               <THead><TR><TH>Product</TH><TH>Brand</TH><TH>Packaging</TH><TH>Pack price</TH><TH>On hand</TH><TH>Status</TH><TH /></TR></THead>
               <TBody>
                 {data.data.map((p) => (
                   <TR key={p.id}>
-                    <TD className="min-w-[12rem] whitespace-normal">
+                    <TD className="stack-full min-w-[12rem] whitespace-normal">
                       <div className="font-medium text-foreground">{p.name}</div>
                       <div className="text-xs text-faint">{p.sku}</div>
                     </TD>

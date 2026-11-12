@@ -10,7 +10,7 @@ import { pageQueries, keepOnPageTurn } from '@/lib/pageQueries';
 import { pickParam, pageParam, withParams } from '@/lib/urlParams';
 import { useAuth } from '@/context/AuthContext';
 import { useProducts, useCustomers, useWarehouses, useSalesReps } from '@/lib/hooks';
-import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateTime, formatNumber, formatPercent, unitWord } from '@/lib/format';
 import { ROLES, SALE_STATUS_META } from '@/lib/constants';
 import ItemLines from '@/components/ItemLines';
 import QuickSale from '@/components/QuickSale';
@@ -253,7 +253,7 @@ function SaleDetail({ id, onClose }) {
             <div><span className="text-muted">Date</span><div className="font-medium">{formatDateTime(data.soldAt)}</div></div>
           </div>
           {/* Per-item profit trace: sell/box vs cost/box (captured at sale time) */}
-          <Table>
+          <Table stack>
             <THead><TR><TH>Item</TH><TH>Qty</TH><TH>Sell / box</TH><TH>Cost / box</TH><TH>Profit / box</TH><TH>Line profit</TH></TR></THead>
             <TBody>
               {data.items.map((it) => {
@@ -261,7 +261,7 @@ function SaleDetail({ id, onClose }) {
                 return (
                   <TR key={it.id}>
                     <TD className="font-medium text-foreground">{it.product.name}</TD>
-                    <TD>{it.quantity} {it.packagingUnit.name}</TD>
+                    <TD>{formatNumber(it.quantity)} {unitWord(it.quantity, it.packagingUnit.name)}</TD>
                     <TD>{formatCurrency(it.unitPrice)}</TD>
                     <TD className="text-muted">{formatCurrency(it.unitCost)}</TD>
                     <TD>{formatCurrency(it.unitPrice - it.unitCost)}</TD>
@@ -566,7 +566,7 @@ function SalesList() {
             />
           ) : (
             <>
-              <Table>
+              <Table stack="wide">
                 <THead>
                   <TR>
                     <TH>Sale</TH><TH>Customer</TH><TH>Rep</TH><TH>Type</TH>

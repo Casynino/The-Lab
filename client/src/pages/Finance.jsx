@@ -652,14 +652,14 @@ function Overview({ onNavigate, onOwnerMoney }) {
         <div className="inline-flex rounded-full bg-white/[0.04] p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Period">
           {PERIODS.map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={period === k} onClick={() => setPeriod(k)}
-              className={`cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition sm:px-3.5 sm:text-[13px] ${period === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
+              className={`min-h-11 cursor-pointer rounded-full px-3 py-1 text-xs font-semibold transition sm:min-h-0 sm:px-3.5 sm:text-[13px] ${period === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
           ))}
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('in')} title="Cash of your own going into an account — owed back to you">
+          <Button variant="secondary" className="min-h-11 px-3 py-1.5 text-xs sm:min-h-0" onClick={() => onOwnerMoney?.('in')} title="Cash of your own going into an account — owed back to you">
             <ArrowDownLeft className="h-3.5 w-3.5" /> Put my money in
           </Button>
-          <Button variant="secondary" className="px-3 py-1.5 text-xs" onClick={() => onOwnerMoney?.('out')}>
+          <Button variant="secondary" className="min-h-11 px-3 py-1.5 text-xs sm:min-h-0" onClick={() => onOwnerMoney?.('out')}>
             <ArrowUpRight className="h-3.5 w-3.5" /> Take profit out
           </Button>
         </div>
@@ -773,20 +773,20 @@ function Overview({ onNavigate, onOwnerMoney }) {
                   bars={[{ key: 'moneyIn', name: 'Money in', color: '#34d399' }, { key: 'moneyOut', name: 'Money out', color: '#fb7185' }]}
                   line={{ key: 'net', name: 'Net', color: '#7dd3fc' }} />
               </div>
-              <div className="mt-auto grid grid-cols-3 gap-3 border-t border-white/[0.07] pt-3">
+              <div className="mt-auto grid grid-cols-2 gap-3 border-t border-white/[0.07] pt-3 sm:grid-cols-3">
                 <div className="min-w-0">
                   <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">Average month in</p>
-                  <p className="truncate text-sm font-semibold tabular-nums text-foreground">{formatCurrency(avgIn)}</p>
+                  <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-foreground">{formatCurrency(avgIn)}</p>
                   <p className="text-[10.5px] text-white/50">{active.length} month{active.length === 1 ? '' : 's'}{thisMonthIn ? ', this one so far' : ' with money'}</p>
                 </div>
                 <div className="min-w-0">
                   <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">Best month in</p>
-                  <p className="truncate text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(best?.moneyIn)}</p>
+                  <p className="whitespace-nowrap text-sm font-semibold tabular-nums text-emerald-300">{formatCurrency(best?.moneyIn)}</p>
                   <p className="text-[10.5px] text-white/50">{best?.period}</p>
                 </div>
-                <div className="min-w-0" title="Money in minus money out over the months in this chart. Your own money put in or taken out is not counted here, so this is not the same as Net movement.">
+                <div className="col-span-2 min-w-0 sm:col-span-1" title="Money in minus money out over the months in this chart. Your own money put in or taken out is not counted here, so this is not the same as Net movement.">
                   <p className="min-h-[2.75em] text-[11px] leading-snug text-white/50 sm:min-h-0">In − out, these {series.length} months</p>
-                  <p className={`truncate text-sm font-semibold tabular-nums ${chartNet >= 0 ? 'text-foreground' : 'text-rose-300'}`}>{formatCurrency(chartNet)}</p>
+                  <p className={`whitespace-nowrap text-sm font-semibold tabular-nums ${chartNet >= 0 ? 'text-foreground' : 'text-rose-300'}`}>{formatCurrency(chartNet)}</p>
                   <p className="text-[10.5px] text-white/50">your own money not counted</p>
                 </div>
               </div>
@@ -1188,18 +1188,18 @@ function AccountStatementModal({ account, onClose }) {
                 <p className="text-xs text-muted">Balance now</p>
                 <p className={`text-2xl font-bold tabular-nums ${account.balance < 0 ? 'text-rose-400' : 'text-foreground'}`}>{formatCurrency(account.balance)}</p>
               </div>
-              <div className="ml-auto flex gap-6 text-right">
-                <div>
+              <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2 sm:ml-auto sm:flex sm:w-auto sm:gap-6 sm:text-right">
+                <div className="min-w-0">
                   <p className="text-[11px] uppercase tracking-wider text-muted">Came in</p>
-                  <p className="text-sm font-bold tabular-nums text-emerald-400">{formatCurrency(sums?.in ?? account.moneyIn)}</p>
+                  <p className="whitespace-nowrap text-[13px] font-bold tabular-nums sm:text-sm text-emerald-400">{formatCurrency(sums?.in ?? account.moneyIn)}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[11px] uppercase tracking-wider text-muted">Went out</p>
-                  <p className="text-sm font-bold tabular-nums text-rose-400">{formatCurrency(sums?.out ?? account.moneyOut)}</p>
+                  <p className="whitespace-nowrap text-[13px] font-bold tabular-nums sm:text-sm text-rose-400">{formatCurrency(sums?.out ?? account.moneyOut)}</p>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[11px] uppercase tracking-wider text-muted">Opening</p>
-                  <p className="text-sm font-bold tabular-nums text-muted">{formatCurrency(account.openingBalance)}</p>
+                  <p className="whitespace-nowrap text-[13px] font-bold tabular-nums sm:text-sm text-muted">{formatCurrency(account.openingBalance)}</p>
                 </div>
               </div>
             </>
@@ -1211,7 +1211,7 @@ function AccountStatementModal({ account, onClose }) {
           <EmptyState title="Nothing has moved through this account yet" icon={Receipt} />
         ) : (
           <>
-            <Table>
+            <Table stack="wide">
               <THead>
                 {/* On the record, In/Out is the wrong question — nothing came
                     in and nothing went out of any account. Every row is one
@@ -1237,7 +1237,7 @@ function AccountStatementModal({ account, onClose }) {
                     <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                     <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                     {/* Wraps to two lines rather than pushing Balance past the window's edge (it ran 63 px over at 1440). */}
-                    <TD className="min-w-[170px] max-w-[260px] whitespace-normal text-foreground"
+                    <TD className="stack-full min-w-[170px] max-w-[260px] whitespace-normal text-foreground"
                       title={isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || undefined)}>
                       <div className="line-clamp-2 break-words leading-snug">
                         {isRecord && t.payee ? t.payee : (t.description || t.category || t.reference || '—')}
@@ -1327,7 +1327,7 @@ function WalletTop({ label, chip, hidden, onToggleHide }) {
         <span role="button" tabIndex={0} onClick={toggle}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); } }}
           aria-pressed={hidden} aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
-          className="-m-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
+          className="-m-3 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/55 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30">
           {hidden ? <EyeOff className="h-[15px] w-[15px]" /> : <Eye className="h-[15px] w-[15px]" />}
         </span>
       </div>
@@ -1705,7 +1705,7 @@ function Ledger({ expensesOnly }) {
         <EmptyState title={expensesOnly ? 'No expenses yet' : 'No transactions yet'} message="Record income or expenses, or approve a settlement." icon={Receipt} />
       ) : (
         <>
-          <Table>
+          <Table stack="wide">
             <THead><TR><TH>Date</TH><TH>Type</TH><TH>Brand</TH><TH>Description</TH><TH>Account</TH><TH className="text-right">Amount</TH><TH /></TR></THead>
             <TBody>
               {rows.map((t) => (
@@ -1713,7 +1713,7 @@ function Ledger({ expensesOnly }) {
                   <TD className="whitespace-nowrap text-faint">{formatDate(t.occurredAt)}</TD>
                   <TD><Badge className={isPayoutRow(t) ? PAYOUT_BADGE : DIR_BADGE[t.direction]}>{TXN_TYPE_LABEL[t.type] || t.type}</Badge></TD>
                   <TD>{t.brandName ? <Badge className="bg-white/[0.08] text-foreground">{t.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
-                  <TD className="max-w-[220px] truncate text-foreground">{ledgerLabel(t)}</TD>
+                  <TD className="stack-full max-w-[220px] truncate text-foreground">{ledgerLabel(t)}</TD>
                   <TD className="text-muted">{t.account?.name}</TD>
                   {isPayoutRow(t) ? (
                     <TD className="text-right tabular-nums">
@@ -1725,7 +1725,7 @@ function Ledger({ expensesOnly }) {
                   )}
                   <TD>
                     <div className="flex items-center justify-end gap-2">
-                      <button title="Correct this transaction" onClick={() => setEditing(t)} className="text-faint hover:text-brand-600"><Pencil className="h-4 w-4" /></button>
+                      <button title="Correct this transaction" aria-label="Correct this transaction" onClick={() => setEditing(t)} className="flex h-11 w-11 items-center justify-center text-faint hover:text-brand-600 sm:h-auto sm:w-auto"><Pencil className="h-4 w-4" /></button>
                       {/* Asks first and ignores repeat taps (audit #22): one tap used to delete the row —
                           both legs of a transfer — with nothing to stop a slip of the finger. */}
                       <button
@@ -1736,7 +1736,8 @@ function Ledger({ expensesOnly }) {
                           const legs = t.type === 'TRANSFER' ? ' Both sides of the transfer will be removed.' : '';
                           if (confirm(`Delete ${what}? This cannot be undone.${legs}`)) del.mutate(t.id);
                         }}
-                        className="text-faint hover:text-rose-500 disabled:opacity-40"
+                        aria-label="Delete"
+                        className="flex h-11 w-11 items-center justify-center text-faint hover:text-rose-500 disabled:opacity-40 sm:h-auto sm:w-auto"
                       ><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </TD>
@@ -1844,7 +1845,7 @@ function PeriodPills({ periods, value, onChange }) {
     <div className="inline-flex max-w-full overflow-x-auto rounded-full bg-white/[0.04] p-1 ring-1 ring-inset ring-white/10" role="tablist" aria-label="Period">
       {periods.map(([k, label]) => (
         <button key={k} type="button" role="tab" aria-selected={value === k} onClick={() => onChange(k)}
-          className={`shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition sm:px-3.5 sm:text-[13px] ${value === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
+          className={`min-h-11 shrink-0 cursor-pointer whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold transition sm:min-h-0 sm:px-3.5 sm:text-[13px] ${value === k ? 'bg-white/[0.14] text-foreground shadow-sm' : 'text-muted hover:text-foreground'}`}>{label}</button>
       ))}
     </div>
   );
@@ -2741,7 +2742,7 @@ function SupplierDetailModal({ supplierId, accounts, onClose }) {
             <div>
               <div className="mb-2 text-sm font-semibold text-foreground">Purchase history</div>
               {!data.orders.length ? <p className="text-sm text-faint">No purchases yet — use "New purchase" when stock arrives from {s.name}.</p> : (
-                <Table>
+                <Table stack>
                   <THead><TR><TH>PO</TH><TH>Date</TH><TH>Boxes</TH><TH>Total</TH><TH>Paid</TH><TH>Outstanding</TH><TH /></TR></THead>
                   <TBody>
                     {data.orders.map((o) => (
@@ -2908,8 +2909,8 @@ function SuppliersTab({ accounts }) {
           <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Supplier</Button>
         </div>
         {!suppliers.length ? <EmptyState title="No suppliers yet" message="Add your suppliers to start tracking purchases and payments." icon={Factory} /> : (
-          <Table>
-            <THead><TR><TH>Supplier</TH><TH>Brand</TH><TH>Country</TH><TH>Orders</TH><TH>Purchased</TH>{anyReturns && <TH>Returned</TH>}<TH>Paid</TH><TH>Outstanding</TH></TR></THead>
+          <Table stack="wide">
+            <THead><TR><TH>Supplier</TH><TH className="hidden xl:table-cell">Brand</TH><TH className="hidden xl:table-cell">Country</TH><TH>Orders</TH><TH>Purchased</TH>{anyReturns && <TH>Returned</TH>}<TH>Paid</TH><TH>Outstanding</TH></TR></THead>
             <TBody>
               {suppliers.map((s) => {
                 // Measured against the bill after returns, not against
@@ -2918,8 +2919,11 @@ function SuppliersTab({ accounts }) {
                 const billed = s.totalPurchased - (s.totalReturned || 0);
                 return (
                 <TR key={s.id} className="cursor-pointer" onClick={() => setViewing(s.id)}>
-                  <TD className="font-medium text-foreground">
+                  <TD className="stack-full font-medium text-foreground">
                     {s.name}{s.contactName ? <span className="ml-1.5 text-xs text-faint">· {s.contactName}</span> : null}
+                    {/* Under xl the brand and the country are told here, not in two columns of their own: at 1024 px
+                        those pushed Outstanding past the card's edge. */}
+                    <div className="mt-0.5 text-xs font-normal text-faint xl:hidden">{[s.brandName, s.country].filter(Boolean).join(' · ') || '—'}</div>
                     {/* How much of this supplier's stock is actually paid for. */}
                     {billed > 0 && (
                       <div className="mt-1 h-1 w-28 overflow-hidden rounded-full bg-white/[0.07]">
@@ -2928,8 +2932,8 @@ function SuppliersTab({ accounts }) {
                       </div>
                     )}
                   </TD>
-                  <TD>{s.brandName ? <Badge className="bg-white/[0.08] text-foreground">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
-                  <TD className="text-muted">{s.country}</TD>
+                  <TD className="hidden xl:table-cell">{s.brandName ? <Badge className="bg-white/[0.08] text-foreground">{s.brandName}</Badge> : <span className="text-faint">—</span>}</TD>
+                  <TD className="hidden text-muted xl:table-cell">{s.country}</TD>
                   <TD>{s.poCount}</TD>
                   <TD>{formatCurrency(s.totalPurchased)}</TD>
                   {anyReturns && (

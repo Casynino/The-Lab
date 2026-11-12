@@ -247,7 +247,7 @@ function GlassSidebar({
             'relative flex items-center rounded-lg',
             FOCUS,
             sheet
-              ? clsx('px-2 text-[12px]', child ? 'min-h-7 gap-2 py-1' : 'min-h-8 gap-2.5 py-1.5')
+              ? clsx('px-2 text-[12px]', child ? 'min-h-10 gap-2 py-1' : 'min-h-11 gap-2.5 py-1.5')
               : clsx('gap-3 text-[13px]', child ? 'px-3 py-1.5' : 'px-3 py-2'),
             active ? 'glass-active font-medium g-strong' : 'glass-row g-text g-hover',
           )}
@@ -357,7 +357,7 @@ function GlassSidebar({
                   className={clsx(
                     'glass-row g-hover flex w-full items-center rounded-lg text-left font-medium',
                     FOCUS,
-                    sheet ? 'min-h-8 gap-2.5 px-2.5 py-1.5 text-[12.5px]' : 'gap-3 px-3 py-2 text-[13px]',
+                    sheet ? 'min-h-11 gap-2.5 px-2.5 py-1.5 text-[12.5px]' : 'gap-3 px-3 py-2 text-[13px]',
                     here ? 'g-strong' : 'g-text',
                   )}
                 >
@@ -621,7 +621,7 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
             Notifications
             {unread > 0 && <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-bold text-white">{unread}</span>}
           </span>
-          {unread > 0 && <button onClick={onReadAll} className="cursor-pointer text-xs text-brand-600 hover:underline">Mark all read</button>}
+          {unread > 0 && <button onClick={onReadAll} className="tap-phone cursor-pointer text-xs text-brand-600 hover:underline">Mark all read</button>}
         </div>
         {notes.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted">You're all caught up.</div>
@@ -635,13 +635,13 @@ function BellPanel({ unread, notes, onClose, onReadAll, onReadOne, onViewAll, po
                   <div className="mt-0.5 line-clamp-2 text-xs text-muted">{n.message}</div>
                   <div className="mt-1 text-[10px] text-faint">{fromNow(n.createdAt)}</div>
                 </div>
-                {!n.isRead && <button onClick={() => onReadOne(n.id)} className="shrink-0 cursor-pointer text-[10px] text-brand-600 hover:underline">Read</button>}
+                {!n.isRead && <button onClick={() => onReadOne(n.id)} className="tap-phone shrink-0 cursor-pointer px-1 text-[10px] text-brand-600 hover:underline">Read</button>}
               </li>
             ))}
           </ul>
         )}
         <div className="border-t border-white/[0.07] p-2.5 text-center">
-          <button onClick={onViewAll} className="cursor-pointer text-sm text-brand-600 hover:underline">View all notifications →</button>
+          <button onClick={onViewAll} className="tap-phone cursor-pointer text-sm text-brand-600 hover:underline">View all notifications →</button>
         </div>
       </div>
     </>
@@ -683,7 +683,7 @@ function ChangePasswordModal({ onClose }) {
         <Field label="Current password" required>
           <div className="relative">
             <Input type={showCurrent ? 'text' : 'password'} value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
-            <button type="button" onClick={() => setShowCurrent((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+            <button type="button" onClick={() => setShowCurrent((v) => !v)} className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
               {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
@@ -691,7 +691,7 @@ function ChangePasswordModal({ onClose }) {
         <Field label="New password" required hint="Minimum 8 characters">
           <div className="relative">
             <Input type={showNext ? 'text' : 'password'} value={next} onChange={(e) => setNext(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
-            <button type="button" onClick={() => setShowNext((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-faint hover:text-muted">
+            <button type="button" onClick={() => setShowNext((v) => !v)} className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-faint hover:text-muted">
               {showNext ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>

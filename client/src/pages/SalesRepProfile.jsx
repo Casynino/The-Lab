@@ -15,8 +15,9 @@ import { useOnce } from '@/lib/useOnce';
 import { wentThrough } from '@/lib/once';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
-import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } from '@/lib/format';
+import { formatCurrency, formatNumber, formatDate, formatDateTime, initials, unitWord } from '@/lib/format';
 import { sortByCanonical } from '@/lib/productOrder';
+import { timeLeftLabel } from '@/lib/labels';
 import RegionPicker from '@/components/RegionPicker';
 import { repRegions } from '@/lib/repRegions';
 import OrderDetailModal from '@/components/OrderDetail';
@@ -226,12 +227,6 @@ const ACTIVITY_META = {
   COMMISSION: { icon: Coins, cls: 'text-violet-400 bg-violet-500/10' },
 };
 
-function hoursLabel(h) {
-  if (h == null) return '';
-  if (h < 0) return `${Math.abs(Math.round(h))}h overdue`;
-  if (h < 24) return `${Math.round(h)}h left`;
-  return `${Math.round(h / 24)}d left`;
-}
 
 // ── Edit rep details (admin) ─────────────────────────────────────────────────
 // Name + email live on the user account; phone, region and target on the rep —
@@ -993,7 +988,7 @@ export default function SalesRepProfile() {
                         <span className="text-emerald-500">Settled <b>{formatNumber(s.boxesSettled)}</b></span>
                         <span className="text-sky-400">Returned <b>{formatNumber(s.boxesReturned)}</b></span>
                         <span className={s.boxesRemaining > 0 ? 'font-semibold text-rose-500' : 'text-muted'}>Remaining {formatNumber(s.boxesRemaining)}</span>
-                        <span className="ml-auto text-faint">{hoursLabel(s.hoursRemaining)} · bal {formatCurrency(s.balance)}</span>
+                        <span className="ml-auto text-faint">{timeLeftLabel(s.hoursRemaining, '')} · bal {formatCurrency(s.balance)}</span>
                         <ChevronRight className="h-3.5 w-3.5 text-faint" />
                       </div>
                     </button>
@@ -1008,13 +1003,13 @@ export default function SalesRepProfile() {
             {stock.items.length === 0 ? (
               <p className="py-2 text-sm text-faint">Holding no stock.</p>
             ) : (
-              <Table>
+              <Table stack>
                 <THead><TR><TH>Product</TH><TH>Boxes held</TH><TH>Value (cost)</TH></TR></THead>
                 <TBody>
                   {stock.items.map((s) => (
                     <TR key={s.productId}>
-                      <TD className="font-medium text-foreground">{s.name}</TD>
-                      <TD>{formatNumber(s.baseQuantity)} {s.baseUnitName || 'Box'}{s.baseQuantity !== 1 ? 'es' : ''}</TD>
+                      <TD className="stack-full font-medium text-foreground">{s.name}</TD>
+                      <TD>{formatNumber(s.baseQuantity)} {unitWord(s.baseQuantity, s.baseUnitName || 'Box')}</TD>
                       <TD>{formatCurrency(s.value)}</TD>
                     </TR>
                   ))}

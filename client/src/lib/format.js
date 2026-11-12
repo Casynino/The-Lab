@@ -47,13 +47,8 @@ export function fromNow(value) {
   return dayjs(value).fromNow();
 }
 
-// Pluralize a unit name for display ("Box" -> "Boxes", "Carton" -> "Cartons").
-export function pluralizeUnit(unit = 'unit') {
-  if (!unit) return 'units';
-  if (/[^aeiou]y$/i.test(unit)) return `${unit.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh)$/i.test(unit)) return `${unit}es`;
-  return `${unit}s`;
-}
+// Unit names ("Box" -> "Boxes") live in lib/labels.js, where they are tested.
+export { pluralizeUnit, unitWord } from './labels.js';
 
 export function initials(name = '') {
   return name
