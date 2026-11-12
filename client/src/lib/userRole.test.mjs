@@ -9,12 +9,10 @@ const roles = [
   { id: 'r-staff', name: 'WAREHOUSE_STAFF' },
 ];
 
-test('a new account starts as a Sales rep, never as the first role in the list (Administrator)', () => {
-  assert.equal(defaultUserRoleId(roles), 'r-rep');
-  assert.equal(defaultUserRoleId([...roles].reverse()), 'r-rep');
-});
-
-test('with no Sales rep role (or roles not loaded yet) nothing is pre-selected, so a role must be chosen', () => {
+test('a new account starts with no role, so one must be chosen: never Administrator, never Sales rep', () => {
+  // Administrator first in the list handed out owner powers; Sales rep made a phone-only rep that cannot become staff.
+  assert.equal(defaultUserRoleId(roles), '');
+  assert.equal(defaultUserRoleId([...roles].reverse()), '');
   assert.equal(defaultUserRoleId([{ id: 'r-admin', name: 'ADMIN' }]), '');
   assert.equal(defaultUserRoleId([]), '');
   assert.equal(defaultUserRoleId(), '');

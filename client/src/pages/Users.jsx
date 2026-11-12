@@ -24,8 +24,8 @@ function UserModal({ open, onClose, editing, roles, warehouses, me }) {
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm({
     defaultValues: editing
       ? { name: editing.name, email: editing.email, phone: editing.phone || '', roleId: editing.roleId, warehouseId: editing.warehouse?.id || '', isActive: editing.isActive }
-      // A new account starts as a Sales rep, never as an Administrator (see defaultUserRoleId).
-      : { name: '', email: '', password: '', phone: '', roleId: defaultUserRoleId(roles), warehouseId: '', isActive: true },
+      // A new account starts with no role, so one must be chosen (see defaultUserRoleId).
+      : { name: '', email: '', password: '', phone: '', roleId: defaultUserRoleId(), warehouseId: '', isActive: true },
   });
 
   // Not part of the react-hook-form values: it is a list, picked with chips.
