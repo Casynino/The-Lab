@@ -39,7 +39,10 @@ global.fetch = async (url) => { sent.push(String(url)); everSent.push(decodeURIC
 const notification = require('../src/services/notification.service');
 const wa = require('../src/services/whatsappNotify.service');
 
-const textOf = (url) => decodeURIComponent(new URL(url).searchParams.get('text'));
+// What the phone shows: the copy sent to CallMeBot joins each line's first word with a non-breaking space
+// (its firewall refuses "\nNet Profit"), which WhatsApp shows as an ordinary space.
+const sentRaw = (url) => decodeURIComponent(new URL(url).searchParams.get('text'));
+const textOf = (url) => sentRaw(url).replace(/\u00A0/g, ' ');
 const settle = async () => { for (let i = 0; i < 20 && !sent.length; i += 1) await new Promise((r) => setImmediate(r)); };
 const reset = () => { saved.length = 0; logged.length = 0; sent.length = 0; };
 
@@ -126,4 +129,22 @@ test('a stock request with several products arrives as arrow lines, with the box
   });
   assert.equal(textOf(sent[0]),
     '*STOCK REQUEST*\n\nBy: Nyoya\n\nOHIS\n(1) Pepa Ndogo (Brown) – Bila Filter: 1 Box\n(2) Pepa Ndogo (Blue): 2 Cartons\n\nTotal Boxes: 21\nTotal Value: TSh 30,000');
+});
+
+// 12 Nov 2026: CallMeBot's firewall refused every report (403) because a line started "Net Profit" — read as
+// the Windows `net` command. What goes to the provider never has a line starting with a word and a plain space.
+test('the copy sent to CallMeBot never starts a line with a word and a plain space (its firewall reads "Net Profit" as a command)', async () => {
+  reset();
+  const wt = require('../src/services/whatsappText');
+  const daily = wt.owner.dailyReport({
+    date: '12 November 2026', sales: 90000, boxesSold: 3, netProfit: 48000, expenses: 0, cashIn: 90000, cashOut: 0, cashBalance: 1,
+    orders: 1, settlements: 1, returns: 0, reps: [], stockValue: 1, stockBoxes: 1, alerts: 0, link: 'https://www.zelab.site/api/public/report/x.pdf?sig=1',
+  });
+  assert.match(daily, /\nNet Profit: TSh 48,000\n/, 'the stored wording is unchanged');
+  await wa.sendRaw(daily);
+  const raw = sentRaw(sent[0]);
+  assert.ok(!/(^|\n)[A-Za-z]+ /.test(raw), raw);
+  assert.match(raw, /\nNet\u00A0Profit: TSh 48,000\n/);
+  assert.ok(raw.endsWith('https://www.zelab.site/api/public/report/x.pdf?sig=1'), 'the link goes as it is');
+  assert.equal(textOf(sent[0]), daily, 'on the phone it reads exactly as written');
 });

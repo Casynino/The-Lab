@@ -108,11 +108,21 @@ function background(promise) {
   return p;
 }
 
-// CallMeBot's firewall refuses (HTTP 403, from its Apache) messages carrying a www.zelab.site link — the
-// first daily report after the move to the new domain (10 Nov 2026, 21:00) was refused five times and
-// never arrived, while the same kind of message with the old vercel.app link went through. So a message
-// refused that way is sent again at once WITHOUT its links, saying where the document is kept: every
-// report is archived and opens from ZELab → Profile → Reports. The text that was stored is unchanged.
+// CallMeBot's firewall (its Apache, with attack-filter rules) refuses with HTTP 403 any text in which a line
+// starts with a word that is also a Windows command followed by a space: "Net Profit: …" reads as the `net`
+// command. Found 12 Nov 2026 by sending every template through it with a made-up key (nothing is delivered
+// that way): only the four reports were refused, each for its "Net Profit" line, so every daily, weekly,
+// monthly and yearly report since their 10 Nov redesign was lost while all other messages arrived. The link
+// was never the cause (www.zelab.site links pass). So the first word of every line is joined to the next by a
+// non-breaking space: it looks the same in WhatsApp, and the rule no longer sees a command. Only the copy
+// sent to the provider changes; the stored text stays as written.
+const NBSP = '\u00A0';
+function forProvider(text) {
+  return String(text ?? '').replace(/(^|\n)([A-Za-z]+) (?=\S)/g, `$1$2${NBSP}`);
+}
+
+// Kept as a last resort: a message still refused with 403 is sent once more without its links, saying where
+// the document is kept (every report is archived and opens from ZELab → Profile → Reports).
 const LINK = /https?:\/\/\S+/g;
 async function sendRaw(text, creds = null) {
   const first = await sendRawOnce(text, creds);
@@ -131,7 +141,7 @@ async function sendRawOnce(text, creds = null) {
     ? { phone: creds.phone, apikey: creds.apikey, configured: true }
     : await getConfig();
   if (!configured) return { sent: false, reason: 'WhatsApp not configured' };
-  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&apikey=${encodeURIComponent(apikey)}&text=${encodeURIComponent(text)}`;
+  const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(phone)}&apikey=${encodeURIComponent(apikey)}&text=${encodeURIComponent(forProvider(text))}`;
   // Browser UA on purpose — CallMeBot's firewall 403s bot user agents.
   // Generous timeout + trust any 2xx: CallMeBot can take >15s to answer while
   // having ALREADY queued the message — classifying that as failure made the
@@ -1031,6 +1041,7 @@ module.exports = {
   TYPES,
   background,
   sendRaw,
+  _forProvider: forProvider,
   queue,
   flush,
   stockRequestSubmitted,
