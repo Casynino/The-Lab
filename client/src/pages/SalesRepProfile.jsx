@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import api, { unwrap, apiError } from '@/lib/api';
 import { pageQueries } from '@/lib/pageQueries';
+import { useOnce } from '@/lib/useOnce';
+import { wentThrough } from '@/lib/once';
 import { useAuth } from '@/context/AuthContext';
 import { ROLES, SETTLEMENT_STATUS_META } from '@/lib/constants';
 import { formatCurrency, formatNumber, formatDate, formatDateTime, initials } from '@/lib/format';
@@ -291,16 +293,24 @@ function AddCommissionModal({ rep, earned, onClose }) {
   const qc = useQueryClient();
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
+  const once = useOnce(); // a double tap sends one correction
 
+  const refresh = () => ['sales-rep-profile', 'commissions', 'penalties', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const add = useMutation({
     mutationFn: () => api.post('/commissions/adjust', { salesRepId: rep.id, amount: Number(amount), note }),
     onSuccess: () => {
       const n = Number(amount);
       toast.success(`${formatCurrency(Math.abs(n))} ${n >= 0 ? 'added to' : 'taken off'} ${rep.name || 'the rep'}'s commission`);
-      ['sales-rep-profile', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = this same correction was recorded a moment ago (a retry after a lost answer): close on the real
+    // balance instead of leaving the window open to be sent again with a changed note.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e), { duration: 8000 }); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
 
   const amt = Number(amount);
@@ -309,7 +319,7 @@ function AddCommissionModal({ rep, earned, onClose }) {
     <Modal open onClose={onClose} title={`Adjust commission — ${rep.name || rep.code}`} footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={add.isPending} disabled={!valid} onClick={() => add.mutate()}>
+        <Button loading={add.isPending} disabled={!valid} onClick={() => once.run(() => add.mutate())}>
           {amt < 0 ? 'Take off ' : 'Add '}{amt ? formatCurrency(Math.abs(amt)) : ''}
         </Button>
       </>
@@ -334,15 +344,23 @@ function DeductCommissionModal({ rep, available, onClose }) {
   const qc = useQueryClient();
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
+  const once = useOnce(); // a double tap sends one deduction
 
+  const refresh = () => ['sales-rep-profile', 'commissions', 'penalties', 'dashboard', 'finance'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   const deduct = useMutation({
     mutationFn: () => api.post('/penalties/adjust', { salesRepId: rep.id, amount: Number(amount), reason }),
     onSuccess: () => {
       toast.success(`${formatCurrency(Number(amount))} deducted from ${rep.name || 'the rep'}'s commission`);
-      ['sales-rep-profile', 'commissions', 'penalties', 'dashboard'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      refresh();
       onClose();
     },
-    onError: (e) => toast.error(apiError(e)),
+    // 409 = this same deduction was recorded a moment ago (a retry after a lost answer): close on the real
+    // balance instead of leaving the window open to be sent again with a changed reason.
+    onError: (e) => {
+      if (wentThrough(e)) { toast.success(apiError(e), { duration: 8000 }); refresh(); onClose(); return; }
+      toast.error(apiError(e));
+    },
+    onSettled: once.done,
   });
 
   const amt = Number(amount);
@@ -351,7 +369,7 @@ function DeductCommissionModal({ rep, available, onClose }) {
     <Modal open onClose={onClose} title={`Deduct commission — ${rep.name || rep.code}`} footer={
       <>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button loading={deduct.isPending} disabled={!valid} onClick={() => deduct.mutate()}>
+        <Button loading={deduct.isPending} disabled={!valid} onClick={() => once.run(() => deduct.mutate())}>
           Deduct {amt > 0 ? formatCurrency(amt) : ''}
         </Button>
       </>

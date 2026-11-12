@@ -283,9 +283,11 @@ async function waivePenalty(id, actor, reason) {
     const ApiError = require('../utils/ApiError');
     throw ApiError.notFound('Penalty not found');
   }
+  // 409, like the race below: the fine is already in the state asked for (a retry after a lost answer),
+  // so the window closes on it instead of showing an error (audit backend-integrity-2).
   if (p.status === 'WAIVED') {
     const ApiError = require('../utils/ApiError');
-    throw ApiError.badRequest('This fine has already been forgiven');
+    throw ApiError.conflict('This fine has already been forgiven');
   }
 
   // Claimed, not just written (audit backend-integrity-3): the status changes only if it is still
@@ -297,7 +299,7 @@ async function waivePenalty(id, actor, reason) {
   });
   if (claimed.count !== 1) {
     const ApiError = require('../utils/ApiError');
-    throw ApiError.conflict('This fine has already been forgiven — refresh to see it');
+    throw ApiError.conflict('This fine has already been forgiven');
   }
   const updated = await prisma.settlementPenalty.findUnique({ where: { id } });
 

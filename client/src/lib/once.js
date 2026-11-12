@@ -19,3 +19,9 @@ export function makeOnce() {
     isBusy(key = '*') { return busy.has(key); },
   };
 }
+
+// A 409 from a money write that the server lets through once — a deduction, a commission correction, a
+// forgiven fine — means the same press already went through: a double tap, or a retry after the first
+// answer was lost. The window treats it as done (closes, reloads the balances, says so), not as an error,
+// so nobody changes the note by one letter and sends it again (audit backend-integrity-2).
+export const wentThrough = (error) => error?.response?.status === 409;
