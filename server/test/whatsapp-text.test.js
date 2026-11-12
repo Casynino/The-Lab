@@ -322,6 +322,25 @@ ZELab`);
   assert.match(t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage: 3 }), /^\*SETTLEMENT DEADLINE URGENT\*\n\nOrder: O\n\n/);
 });
 
+// Audit, 12 Nov 2026: no reminder said when the order is due or the fine that starts then.
+test('SETTLEMENT DEADLINE reminders give the deadline and the daily fine', () => {
+  assert.equal(t.repText({ kind: 'DEADLINE_NEAR', order: 'STL-20261112-0018', stage: 2, deadline: at, rate: 10000 }),
+`*SETTLEMENT FINAL REMINDER*
+
+Order: STL-20261112-0018
+Deadline: 10 Nov 2026 | 14:32 EAT
+Daily Fine After Deadline: TSh 10,000
+
+Your settlement deadline is very close. Settle or return your order now.
+
+ZELab`);
+  for (const stage of [1, 3]) {
+    const text = t.repText({ kind: 'DEADLINE_NEAR', order: 'O', stage, deadline: at, rate: 20000 });
+    assert.match(text, /\n\nOrder: O\nDeadline: 10 Nov 2026 \| 14:32 EAT\nDaily Fine After Deadline: TSh 20,000\n\n/);
+    assert.doesNotMatch(text, /auto-processed/);
+  }
+});
+
 test('LATE SETTLEMENT FINE (rep)', () => {
   assert.equal(t.repText({ kind: 'LATE_FINE', fine: 10000, order: 'STL-20261110-0001', days: 1 }),
 `*LATE SETTLEMENT FINE*
@@ -383,6 +402,24 @@ ZELab`);
   assert.ok(long.length <= 700, `${long.length} characters`);
   assert.match(long, /Order: STL-1\nDeadline: /);
   assert.match(long, /\+\d+ more, see ZELab/);
+});
+
+// Audit, 12 Nov 2026: a request split between two cities listed the same product twice with nothing to
+// tell the lines apart. Each line now says its city, as on the owner's STOCK REQUEST; one city says none.
+test('STOCK REQUEST APPROVED (rep): a request split between cities says each line\'s city', () => {
+  const items = [
+    { name: 'Civlily Kubwa (Brown) – Na Filter', approved: 2, requested: 2, unit: 'Box', city: 'Arusha' },
+    { name: 'Civlily Ndogo (Brown) – Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Arusha' },
+    { name: 'Civlily Kubwa (Brown) – Na Filter', approved: 1, requested: 1, unit: 'Box', city: 'Dodoma' },
+    { name: 'OHIS Ndogo (Brown) – Na Filter', approved: 1, requested: 2, unit: 'Box', city: 'Dodoma' },
+  ];
+  const text = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'REQ-20261112-0007', order: 'STL-20261112-0018', deadline: at, items });
+  assert.match(text, /\n\(a\) Civlily Kubwa \(Brown\) – Na Filter: 2 Boxes · Arusha\n\(b\) Civlily Ndogo \(Brown\) – Na Filter: 1 Box · Arusha\n\(c\) Civlily Kubwa \(Brown\) – Na Filter: 1 Box · Dodoma\n\(d\) OHIS Ndogo \(Brown\) – Na Filter: 1 of 2 Boxes · Dodoma\n/);
+  // One city only (or old requests with no city): no city on the lines.
+  const one = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', items: items.map((i) => ({ ...i, city: 'Arusha' })) });
+  assert.doesNotMatch(one, /·/);
+  const none = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', items: items.map(({ city, ...i }) => i) });
+  assert.doesNotMatch(none, /·/);
 });
 
 // Audit, 11 Nov 2026: the admin changing a rep's pending request went out in the general wording, every

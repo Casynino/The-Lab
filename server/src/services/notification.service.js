@@ -5,11 +5,15 @@ const ApiError = require('../utils/ApiError');
 // reorder / credit / dashboard are lazy-required inside generateSystemAlerts()
 // to avoid circular deps (settlement → notification → dashboard → settlement).
 
-// Visibility rule: admins see every notification (broadcasts + targeted).
-// All other roles see only notifications explicitly addressed to them.
+// Visibility rule: admins see the admin notices (userId null) and every targeted one except those
+// addressed to warehouse staff — those are the staff's own copies of business alerts (below) and their
+// own notices, so the owner's bell does not show each alert once more per staff member, and the owner's
+// "mark all read" never clears a staff member's bell. All other roles see only notifications explicitly
+// addressed to them.
+const STAFF_ROLE = 'WAREHOUSE_STAFF';
 function visibilityWhere(user) {
   if (!user) return {};
-  if (user.role === 'ADMIN') return {};
+  if (user.role === 'ADMIN') return { OR: [{ userId: null }, { user: { role: { name: { not: STAFF_ROLE } } } }] };
   return { userId: user.id };
 }
 
@@ -37,11 +41,10 @@ async function unreadCount(user) {
 }
 
 async function markRead(id, user) {
-  const n = await prisma.notification.findUnique({ where: { id } });
-  // Only a notification the user can see (the visibility rule above): anyone else could clear
-  // another person's alert, or an admin broadcast, by its id. Not found, so ids are not confirmed.
-  const visible = n && (!user || user.role === 'ADMIN' || n.userId === user.id);
-  if (!visible) throw ApiError.notFound('Notification not found');
+  // Only a notification the user can see (the visibility rule above, the very same where): anyone else
+  // could clear another person's alert, or an admin broadcast, by its id. Not found, so ids are not confirmed.
+  const n = await prisma.notification.findFirst({ where: { id, ...visibilityWhere(user) }, select: { id: true } });
+  if (!n) throw ApiError.notFound('Notification not found');
   return prisma.notification.update({ where: { id }, data: { isRead: true, readAt: new Date() } });
 }
 
@@ -64,10 +67,11 @@ async function create(data) {
 }
 
 // Create a notification only if an equivalent unread one does not already
-// exist (avoid spamming the same alert every run).
+// exist (avoid spamming the same alert every run). The check is per recipient (userId null = the owner's
+// copy): an unread staff copy of a stock alert must not stop the owner's, nor the other way round.
 async function createIfAbsent(data) {
   const existing = await prisma.notification.findFirst({
-    where: { type: data.type, entityId: data.entityId ?? null, isRead: false },
+    where: { type: data.type, entityId: data.entityId ?? null, isRead: false, userId: data.userId ?? null },
   });
   if (existing) return existing;
   const created = await create(data);
@@ -75,6 +79,25 @@ async function createIfAbsent(data) {
   if (data.userId) {
     const wa = require('./whatsappNotify.service');
     wa.background(wa.mirrorToRep(data.userId, data));
+  }
+  return created;
+}
+
+// Low and out-of-stock alerts: the owner's copy, plus one for each active warehouse-staff member, who
+// looks after the stock (audit staff-settings-2, 12 Nov 2026: his bell never got them). Each copy has its
+// own read state; a staff user is not a rep, so no WhatsApp follows his copy. `staffIds` lets a scan load
+// the staff once; a missed staff copy never undoes the owner's.
+async function activeStaffIds() {
+  const staff = await prisma.user.findMany({ where: { isActive: true, role: { name: STAFF_ROLE } }, select: { id: true } });
+  return staff.map((u) => u.id);
+}
+
+async function stockAlert(data, staffIds) {
+  const created = await createIfAbsent({ ...data, userId: null });
+  try {
+    for (const id of staffIds || (await activeStaffIds())) await createIfAbsent({ ...data, userId: id });
+  } catch {
+    // The owner's alert is already written.
   }
   return created;
 }
@@ -111,15 +134,17 @@ async function generateSystemAlerts() {
     });
   }
 
+  const staffIds = lowStock.length ? await activeStaffIds().catch(() => []) : [];
   for (const p of lowStock) {
-    await push({
+    await stockAlert({
       type: 'LOW_STOCK',
       severity: 'WARNING',
       title: `Low stock: ${p.name}`,
       message: `${p.name} is at ${p.onHand} ${p.baseUnitName}(s), at or below the minimum of ${p.minStockLevel}.`,
       entityType: 'Product',
       entityId: p.id,
-    });
+    }, staffIds);
+    created += 1;
   }
 
   if (debt.overdueAccounts > 0) {
@@ -148,8 +173,23 @@ async function generateSystemAlerts() {
 }
 
 // Broadcast to all admins (userId = null means every admin sees it).
+// `forStaff: true` also puts a copy in every active warehouse-staff bell (audit staff-settings-2, 12 Nov
+// 2026: staff approve stock requests, returns and settlements, yet their bell was always empty). Each
+// staff member gets his own row, so reading it never touches the owner's copy or another's. Only the
+// callers of approvals staff can do today set it; money alerts (withdrawals, fines, bonuses) never do.
 async function notifyAdmins(data) {
-  return create({ ...data, userId: null });
+  const { forStaff, ...row } = data;
+  const created = await create({ ...row, userId: null });
+  if (forStaff) {
+    try {
+      const { whatsapp, dedupeSalt, ...plain } = row; // eslint-disable-line no-unused-vars
+      const staff = await prisma.user.findMany({ where: { isActive: true, role: { name: STAFF_ROLE } }, select: { id: true } });
+      if (staff.length) await prisma.notification.createMany({ data: staff.map((u) => ({ ...plain, userId: u.id })) });
+    } catch {
+      // The owner's notice is already written; a missed staff copy never undoes it.
+    }
+  }
+  return created;
 }
 
 // Announcement to a whole audience ('reps' | 'staff' | 'all'): one targeted
@@ -202,24 +242,22 @@ async function checkProductLowStock(productId) {
     const onHand = agg._sum.baseQuantity || 0;
 
     if (onHand <= 0) {
-      await createIfAbsent({
+      await stockAlert({
         type: 'LOW_STOCK',
         severity: 'CRITICAL',
         title: `Out of stock: ${product.name}`,
         message: `${product.name} is OUT OF STOCK across all warehouses. Immediate restock required.`,
         entityType: 'Product',
         entityId: productId,
-        userId: null,
       });
     } else if (onHand <= product.minStockLevel) {
-      await createIfAbsent({
+      await stockAlert({
         type: 'LOW_STOCK',
         severity: 'WARNING',
         title: `Low stock: ${product.name}`,
         message: `${product.name} has ${onHand} ${product.baseUnitName}(s) remaining — below minimum of ${product.minStockLevel}. Restock needed.`,
         entityType: 'Product',
         entityId: productId,
-        userId: null,
       });
     }
   } catch {
@@ -234,6 +272,7 @@ module.exports = {
   markAllRead,
   create,
   createIfAbsent,
+  stockAlert,
   notifyAdmins,
   notifyUser,
   broadcast,

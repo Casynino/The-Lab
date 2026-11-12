@@ -448,11 +448,22 @@ test('daily: "Orders" are orders issued that day and "Returns" are returns accep
 
 // ── notifications: mark read only what you can see ──────────────────────────
 test('a rep cannot mark someone else\'s notification (or an admin broadcast) read by its id', async () => {
-  const rows = { mine: { id: 'mine', userId: 'u1' }, other: { id: 'other', userId: 'u2' }, broadcast: { id: 'broadcast', userId: null } };
+  const rows = {
+    mine: { id: 'mine', userId: 'u1', role: 'SALES_REP' },
+    other: { id: 'other', userId: 'u2', role: 'SALES_REP' },
+    broadcast: { id: 'broadcast', userId: null },
+    staffCopy: { id: 'staffCopy', userId: 's1', role: 'WAREHOUSE_STAFF' },
+  };
+  // Just enough of Prisma's where for the visibility rule: id, userId, and the admin's OR.
+  const fits = (r, w) => Object.entries(w).every(([k, v]) => {
+    if (k === 'OR') return v.some((x) => fits(r, x));
+    if (k === 'user') return r.userId != null && r.role !== v.role.name.not;
+    return r[k] === v;
+  });
   const updated = [];
   stub('../src/config/prisma', {
     notification: {
-      findUnique: async ({ where }) => rows[where.id] || null,
+      findFirst: async ({ where }) => Object.values(rows).find((r) => fits(r, where)) || null,
       update: async ({ where }) => { updated.push(where.id); return rows[where.id]; },
     },
   });
@@ -462,6 +473,12 @@ test('a rep cannot mark someone else\'s notification (or an admin broadcast) rea
   await assert.rejects(svc.markRead('broadcast', rep), (e) => e.statusCode === 404);
   await assert.rejects(svc.markRead('missing', rep), (e) => e.statusCode === 404);
   await svc.markRead('mine', rep);
-  await svc.markRead('broadcast', { id: 'a1', role: 'ADMIN' }); // admins see every notification (unchanged)
-  assert.deepEqual(updated, ['mine', 'broadcast']);
+  const admin = { id: 'a1', role: 'ADMIN' };
+  await svc.markRead('broadcast', admin); // admins see the admin notices and reps' ones (unchanged)
+  await svc.markRead('other', admin);
+  // A staff member's own copy is his to read; the owner cannot clear it (audit staff-settings-2).
+  await assert.rejects(svc.markRead('staffCopy', admin), (e) => e.statusCode === 404);
+  await svc.markRead('staffCopy', { id: 's1', role: 'WAREHOUSE_STAFF' });
+  await assert.rejects(svc.markRead('broadcast', { id: 's1', role: 'WAREHOUSE_STAFF' }), (e) => e.statusCode === 404);
+  assert.deepEqual(updated, ['mine', 'broadcast', 'other', 'staffCopy']);
 });

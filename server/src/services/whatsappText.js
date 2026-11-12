@@ -265,15 +265,18 @@ const rep = (title, ...parts) => doc(bold(title), ...parts, FOOT);
 
 // The approved request (audit, 11 Nov 2026: the rep was not told about a part-approval): Nino's sample,
 // plus the order it opened and its deadline, then one lettered line per product as on the owner's
-// STOCK REQUEST — a line cut by the admin reads "3 of 4 Boxes". A very long list drops products from the
-// end ("+2 more, see ZELab"), never the order or the deadline.
+// STOCK REQUEST — a line cut by the admin reads "3 of 4 Boxes". A request split between cities says each
+// line's city after its boxes (" · Arusha"), as the owner's STOCK REQUEST does, so the same product asked
+// for two cities is never two identical lines (audit, 12 Nov 2026). A very long list drops products from
+// the end ("+2 more, see ZELab"), never the order or the deadline.
 const stockRequestApproved = ({ request, order, deadline, items }) => {
   const list = Array.isArray(items) ? items : [];
   const short = (i) => Number(i.approved) < Number(i.requested);
   const cut = list.some(short);
+  const split = new Set(list.map((i) => i.city).filter(Boolean)).size > 1;
   const line = (i, k) => `(${letter(k)}) ${i.name}: ${short(i)
     ? `${Math.round(Number(i.approved) || 0)} of ${boxes(i.requested, i.unit)}`
-    : boxes(i.approved, i.unit)}`;
+    : boxes(i.approved, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`;
   const build = ({ shown }) => rep(
     'STOCK REQUEST APPROVED',
     lines(`Request: ${request}`, order && `Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`),
@@ -344,10 +347,13 @@ const repTexts = {
     lines(reason && `Reason: ${reason}`, 'Please review and resubmit.'),
   ),
   ORDER_CLOSED: ({ order }) => rep('ORDER CLOSED', `Order: ${order}`, 'Fully settled. All boxes accounted for.'),
-  DEADLINE_NEAR: ({ order, stage = 1 }) => {
-    if (stage >= 3) return rep('SETTLEMENT DEADLINE URGENT', `Order: ${order}`, 'Your settlement deadline is almost reached. Settle or return your order immediately.');
-    if (stage === 2) return rep('SETTLEMENT FINAL REMINDER', `Order: ${order}`, 'Your settlement deadline is very close. Settle or return your order now.');
-    return rep('SETTLEMENT DEADLINE NEAR', `Order: ${order}`, 'Your settlement deadline is approaching. Please settle your order.');
+  // The deadline and the daily fine that starts at it ride under the order (audit, 12 Nov 2026: no
+  // reminder said when, or what happens then). Without them the text is Nino's sample as it was.
+  DEADLINE_NEAR: ({ order, stage = 1, deadline, rate }) => {
+    const head = lines(`Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`, rate != null && `Daily Fine After Deadline: ${money(rate)}`);
+    if (stage >= 3) return rep('SETTLEMENT DEADLINE URGENT', head, 'Your settlement deadline is almost reached. Settle or return your order immediately.');
+    if (stage === 2) return rep('SETTLEMENT FINAL REMINDER', head, 'Your settlement deadline is very close. Settle or return your order now.');
+    return rep('SETTLEMENT DEADLINE NEAR', head, 'Your settlement deadline is approaching. Please settle your order.');
   },
   LATE_FINE: ({ fine, order, days }) => rep('LATE SETTLEMENT FINE', `Fine Applied: ${money(fine)}`, lines(`Order: ${order}`, `Overdue: ${count(days, 'Day')}`)),
   FINE_FORGIVEN: ({ amount, order }) => rep('FINE FORGIVEN', lines(`Amount: ${money(amount)}`, order && `Order: ${order}`), 'Returned to your commission balance.'),

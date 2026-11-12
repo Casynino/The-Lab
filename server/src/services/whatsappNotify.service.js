@@ -864,6 +864,7 @@ async function test(kind) {
 }
 
 module.exports = {
+  isEnabled,
   retryFailed,
   deadlineWarnings,
   extensionTaken,

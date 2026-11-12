@@ -29,6 +29,7 @@ function makePassword() {
 // "Existing account" is the old path, for a Sales-rep login that has no rep profile yet.
 function RepModal({ onClose }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { data: users = [] } = useQuery({ queryKey: ['users', 'all'], queryFn: async () => unwrap(await api.get('/users', { params: { limit: 200 } })).data });
   const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: async () => unwrap(await api.get('/roles')).data });
   const repRole = roles.find((r) => r.name === ROLES.SALES_REP);
@@ -44,7 +45,7 @@ function RepModal({ onClose }) {
   const [userId, setUserId] = useState('');
   const [regions, setRegions] = useState([]);
   const [monthlyTarget, setMonthlyTarget] = useState('');
-  const [done, setDone] = useState(null); // { name, code, email, password }
+  const [done, setDone] = useState(null); // { name, code, email, password, repId }
 
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const takenEmail = emailOk && users.some((u) => (u.email || '').toLowerCase() === email.trim().toLowerCase());
@@ -65,7 +66,7 @@ function RepModal({ onClose }) {
       qc.invalidateQueries({ queryKey: ['users'] });
       if (mode === 'existing') { toast.success('Sales rep created'); onClose(); return; }
       const u = unwrap(res)?.data || unwrap(res);
-      setDone({ name: name.trim(), code: u?.salesRep?.code || '', email: email.trim().toLowerCase(), password });
+      setDone({ name: name.trim(), code: u?.salesRep?.code || '', email: email.trim().toLowerCase(), password, repId: u?.salesRep?.id || null });
     },
     onError: (e) => toast.error(apiError(e)),
   });
@@ -85,6 +86,18 @@ function RepModal({ onClose }) {
             <div className="flex justify-between gap-3"><dt className="text-muted">Password</dt><dd className="font-mono text-right font-semibold tracking-wide text-foreground">{done.password}</dd></div>
           </dl>
           <p className="text-[11px] text-faint">Reps sign in on a phone only.</p>
+          {/* His phone number is not his WhatsApp alerts: those need his own CallMeBot number and key, which he
+              gets by messaging CallMeBot himself (audit, 12 Nov 2026 — a new rep was promised WhatsApp that
+              could not arrive). Until then he gets everything in the app only. */}
+          <div className="rounded-xl bg-amber-500/[0.06] p-3 text-xs leading-relaxed text-amber-200/90 ring-1 ring-inset ring-amber-400/20">
+            <p><b className="font-semibold text-amber-200">WhatsApp alerts are off for now.</b> He gets his alerts in the app only until you add his CallMeBot number and key: his profile › Edit › WhatsApp alerts, then Test WhatsApp.</p>
+            {done.repId && (
+              <button type="button" onClick={() => { onClose(); navigate(`/reps/${done.repId}`); }}
+                className="mt-2 min-h-11 font-semibold text-amber-200 underline underline-offset-2 sm:min-h-0">
+                Open his profile
+              </button>
+            )}
+          </div>
         </div>
       </Modal>
     );
@@ -111,7 +124,7 @@ function RepModal({ onClose }) {
               <Field label="Full name" required>
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Juma Hamisi" autoFocus autoComplete="off" />
               </Field>
-              <Field label="Phone" required hint="His WhatsApp number">
+              <Field label="Phone" required hint="His phone (WhatsApp alerts are set in his profile)">
                 <Input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0712 345 678" autoComplete="off" />
               </Field>
             </div>

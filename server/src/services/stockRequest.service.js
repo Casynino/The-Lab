@@ -153,6 +153,7 @@ async function create(salesRepId, payload) {
     type: 'GENERAL',
     severity: 'INFO',
     title: `New stock request: ${result.requestNumber}`,
+    forStaff: true, // staff approve stock requests
     message: `${result.salesRep?.user?.name || 'A rep'} requested stock worth ${formatCurrency(result.totalValue)}. Review and approve.`,
     entityType: 'StockRequest',
     entityId: result.id,
@@ -365,6 +366,7 @@ async function update(id, payload, actor = null) {
     type: 'GENERAL',
     severity: 'INFO',
     title: `Stock request updated: ${result.requestNumber}`,
+    forStaff: true, // staff approve stock requests
     message: byStaff
       ? `${actor.name || 'Staff'} changed ${repName}'s pending order — now worth ${formatCurrency(result.totalValue)}. Review and approve.`
       : `${repName} edited their pending order — now worth ${formatCurrency(result.totalValue)}. Review and approve.`,
@@ -506,6 +508,7 @@ async function approve(id, actor, approvals = []) {
     approved: i.quantityApproved ?? 0,
     requested: i.quantityRequested,
     unit: i.packagingUnit?.name || null,
+    city: i.region || null, // shown per line only when the request is split between cities
   }));
   const cut = issuedLines.some((l) => l.approved < l.requested);
   const order = settlement?.settlementNumber || null;
@@ -573,6 +576,7 @@ async function cancel(id, actor) {
     type: 'GENERAL',
     severity: 'INFO',
     title: `Stock request cancelled: ${result.requestNumber}`,
+    forStaff: true, // staff approve stock requests
     message: `${result.salesRep?.user?.name || 'A rep'} cancelled stock request ${result.requestNumber}.`,
     entityType: 'StockRequest',
     entityId: result.id,
