@@ -33,6 +33,15 @@ const MAX_ATTEMPTS = 5;
 // (observed: a 990-char report was cut mid-word around 716). Trim ourselves so
 // the cut is never mid-sentence and important lines are ordered first.
 const MAX_TEXT = 700;
+// The refType of a LOW STOCK — RESTOCK list: its refId is the comma-joined ids of the products it carries,
+// an id ending in "!" when that product was out of stock on it.
+const STOCK_LIST = 'ProductList';
+const listEntries = (row) => (row.refType === STOCK_LIST && row.refId
+  ? row.refId.split(',').map((s) => ({ id: s.replace(/!$/, ''), out: s.endsWith('!') }))
+  : []);
+// A long list goes in parts keyed <list key>, <list key>:part2, <list key>:part3 …
+const partNo = (key) => Number((/:part(\d+)$/.exec(key || '') || [])[1] || 1);
+const listKeyOf = (key) => String(key || '').replace(/:part\d+$/, '');
 const fmt = (n) => `TSh ${Math.round(Number(n) || 0).toLocaleString('en-US')}`;
 
 // Notification catalogue: label + default priority, used by the Settings UI.
@@ -176,6 +185,14 @@ async function deliver(row) {
   if (cap > 0 && row.priority === 'INFO' && row.type !== 'TEST' && (await providerBudgetUsed(row.toPhone)) >= cap) {
     return { queued: true, sent: false, status: 'PENDING', reason: 'provider-budget', id: row.id };
   }
+  // A list's later part waits while the part before it has not gone: a failed part 1 sits out flush's
+  // 10-minute cool-down, and "(2/2)" starting at (i) must not arrive before "(1/2)".
+  if (row.refType === STOCK_LIST && partNo(row.dedupeKey) > 1) {
+    const k = partNo(row.dedupeKey) - 1;
+    const prevKey = k === 1 ? listKeyOf(row.dedupeKey) : `${listKeyOf(row.dedupeKey)}:part${k}`;
+    const prev = await prisma.whatsAppNotification.findUnique({ where: { dedupeKey: prevKey }, select: { status: true } });
+    if (prev?.status === 'PENDING') return { queued: true, sent: false, status: 'PENDING', reason: 'waiting-for-earlier-part', id: row.id };
+  }
 
   // Optimistic claim: bump attempts only if nobody else has. Two concurrent
   // flushes (separate serverless instances) can pick the same PENDING row;
@@ -188,8 +205,16 @@ async function deliver(row) {
     return { queued: true, sent: false, status: 'PENDING', reason: 'claimed-elsewhere', id: row.id };
   }
 
+  // A waiting stock list is rewritten in place with what is low now (syncStockAlerts), so send its text as it
+  // is after the claim, not as it was when the row was read: a rewrite either landed before the claim (and
+  // is read here) or found the row claimed and left it alone.
+  let { text } = row;
+  if (row.refType === STOCK_LIST) {
+    const now = await prisma.whatsAppNotification.findUnique({ where: { id: row.id }, select: { text: true } }).catch(() => null);
+    if (now?.text) text = now.text;
+  }
   const creds = row.toPhone && row.toApiKey ? { phone: row.toPhone, apikey: row.toApiKey } : null;
-  const result = await sendRaw(row.text, creds).catch((e) => ({ sent: false, provider: e.message }));
+  const result = await sendRaw(text, creds).catch((e) => ({ sent: false, provider: e.message }));
   const attempts = row.attempts + 1;
   // A quota refusal will never succeed on retry — fail it immediately so the
   // owner is told now instead of after five pointless attempts.
@@ -223,7 +248,8 @@ async function deliver(row) {
 
 // Queue a notification: log it (dedupe on dedupeKey) and try to send now.
 // Quiet hours hold non-critical messages as PENDING; flush() sends them later.
-async function queue(type, { priority, dedupeKey = null, refType = null, refId = null, text, toPhone = null, toApiKey = null }) {
+// `hold` only logs it and hands the row back, for a caller that sends several in order itself.
+async function queue(type, { priority, dedupeKey = null, refType = null, refId = null, text, toPhone = null, toApiKey = null, hold = false }) {
   if (!(await isEnabled(type))) return { queued: false, reason: 'disabled' };
   // A rep recipient carries its own creds; the owner path needs the settings.
   if (!(toPhone && toApiKey)) {
@@ -252,6 +278,7 @@ async function queue(type, { priority, dedupeKey = null, refType = null, refId =
     if (e.code === 'P2002') return { queued: false, reason: 'duplicate' };
     throw e;
   }
+  if (hold) return { queued: true, sent: false, status: 'PENDING', reason: 'held', id: row.id, row };
   if (prio !== 'CRITICAL' && (await inQuietHours())) {
     return { queued: true, sent: false, status: 'PENDING', reason: 'quiet-hours', id: row.id };
   }
@@ -282,12 +309,30 @@ async function expireStale(now) {
     select: { id: true, type: true, dedupeKey: true },
   });
   const ids = waiting.filter((r) => { const at = expiresAt(r); return at && at.getTime() <= now; }).map((r) => r.id);
-  if (!ids.length) return 0;
-  const { count } = await prisma.whatsAppNotification.updateMany({
-    where: { id: { in: ids }, status: 'PENDING' },
-    data: { status: 'EXPIRED', lastError: 'Not sent: the deadline it warned about had already passed' },
+  let count = 0;
+  if (ids.length) {
+    ({ count } = await prisma.whatsAppNotification.updateMany({
+      where: { id: { in: ids }, status: 'PENDING' },
+      data: { status: 'EXPIRED', lastError: 'Not sent: the deadline it warned about had already passed' },
+    }));
+  }
+  // A stock list from an earlier day that quiet hours held is not sent when quiet hours end.
+  return count + (await expireOldStockLists(now));
+}
+
+// A stock list from an earlier day still waiting carries old numbers: today's list replaces it (it follows
+// at the sweep or the next stock move). One being sent right now (tried in the last 10 minutes) is left alone.
+async function expireOldStockLists(now = Date.now()) {
+  const r = await prisma.whatsAppNotification.updateMany({
+    where: {
+      refType: STOCK_LIST,
+      status: 'PENDING',
+      NOT: { dedupeKey: { startsWith: `stockalerts:${dateEAT()}` } },
+      OR: [{ lastAttemptAt: null }, { lastAttemptAt: { lt: new Date(now - 10 * 60 * 1000) } }],
+    },
+    data: { status: 'EXPIRED', lastError: 'Not sent: a newer stock list replaced it' },
   });
-  return count;
+  return r?.count || 0;
 }
 
 // Messages sent to each recipient in the provider's 4-hour window, in one query (null = the owner).
@@ -502,42 +547,161 @@ async function commissionReadyCheck(salesRepId) {
   });
 }
 
-// 10 & 11. Low stock / out of stock for one product. Once per product per day.
-async function stockAlertForProduct(productId) {
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    select: { id: true, name: true, minStockLevel: true, brand: { select: { name: true } } },
+// 10 & 11. Low stock / out of stock: ONE list for every product that is low or out.
+// Nino, 12 Nov 2026: at 09:00 every low product sent its own WhatsApp, the batch used up the owner's
+// 14-per-4-hours budget, and the urgent alerts kept the 21:00 daily report waiting until it failed. Now the
+// products go together in one "LOW STOCK — RESTOCK" list (whatsappText owner.stockAlerts):
+//  - The day's first list is keyed stockalerts:<EAT day>. While no part of it has been tried (held by quiet
+//    hours), every check rewrites it in place with what is low NOW, CRITICAL as soon as a product is out.
+//  - Once a list has gone out (or been tried), a product that runs low later that day goes in a new list,
+//    stockalerts:<day>:<n>, carrying only the products no earlier list of the day carried, so one that
+//    recovered and runs low again the same day is not repeated. Nothing new: nothing is sent. The one
+//    exception: a product sent as low that then runs OUT is sent once more, as out (CRITICAL), as the old
+//    lowstock/outofstock keys did; each id in a list's refId ends in "!" when it was out on that list.
+//  - Too long for one message: parts "(1/2)", "(2/2)" keyed <list key> and <list key>:part<k>, sent in order.
+//  - Every row keeps the ids of its products (refType ProductList, refId the comma-joined ids).
+//  - The switches still decide: LOW_STOCK off leaves out the low products, OUT_OF_STOCK off the empty ones,
+//    both off sends nothing.
+// At most one list per check, so stock alerts can no longer use up the budget the daily report needs.
+// The in-app bell alerts (notification.service) are separate and unchanged.
+// Every product low or out right now (the sweep's rule: a minimum set, warehouse stock at or below it,
+// active products only), as the list shows it, with the switched-off kind left out.
+async function stockAlertItems() {
+  const reorder = require('./reorder.service');
+  const [low, lowOn, outOn] = await Promise.all([reorder.lowStock(), isEnabled('LOW_STOCK'), isEnabled('OUT_OF_STOCK')]);
+  const wanted = low.filter((p) => (p.onHand <= 0 ? outOn : lowOn));
+  if (!wanted.length) return [];
+  const brands = await prisma.product.findMany({
+    where: { id: { in: wanted.map((p) => p.id) } },
+    select: { id: true, brand: { select: { name: true } } },
   });
-  if (!product || product.minStockLevel <= 0) return { queued: false, reason: 'no-min-level' };
+  const brandOf = new Map(brands.map((p) => [p.id, p.brand?.name || null]));
+  return wanted.map((p) => ({
+    id: p.id,
+    name: p.name,
+    brand: brandOf.get(p.id) || null,
+    remaining: p.onHand,
+    out: p.onHand <= 0,
+    restock: Math.max(p.minStockLevel * 2 - p.onHand, p.minStockLevel), // the recommended figure, as before
+  }));
+}
 
-  const agg = await prisma.warehouseStock.aggregate({ where: { productId }, _sum: { baseQuantity: true } });
-  const onHand = agg._sum.baseQuantity || 0;
-  if (onHand > product.minStockLevel) return { queued: false, reason: 'in-stock' };
+// The parts of one list, in order, 8 seconds apart (CallMeBot's burst limit). Quiet hours hold all but
+// CRITICAL; a part that does not go stops the rest, and flush() sends them later.
+async function sendStockList(rows) {
+  if (!rows.length || (rows[0].priority !== 'CRITICAL' && (await inQuietHours()))) return 0;
+  let sent = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    if (i > 0) await new Promise((res) => setTimeout(res, 8000));
+    const r = await deliver(rows[i]);
+    if (!r.sent) break;
+    sent += 1;
+  }
+  return sent;
+}
 
-  const recommended = Math.max(product.minStockLevel * 2 - onHand, product.minStockLevel);
-  if (onHand <= 0) {
-    const lastSale = await prisma.saleItem.findFirst({
-      where: { productId, sale: { status: { not: 'CANCELLED' } } },
-      orderBy: { sale: { soldAt: 'desc' } },
-      select: { sale: { select: { soldAt: true } } },
-    }).catch(() => null);
-    const text = wt.owner.outOfStock({
-      product: product.name,
-      brand: product.brand?.name,
-      lastSale: lastSale?.sale?.soldAt,
-      suggested: recommended,
-    });
-    return queue('OUT_OF_STOCK', { dedupeKey: `outofstock:${productId}:${dateEAT()}`, refType: 'Product', refId: productId, text });
+async function syncStockAlerts({ retried = false } = {}) {
+  const prefix = `stockalerts:${dateEAT()}`;
+  await expireOldStockLists();
+
+  const [items, rows] = await Promise.all([
+    stockAlertItems(),
+    prisma.whatsAppNotification.findMany({ where: { dedupeKey: { startsWith: prefix } }, orderBy: { createdAt: 'asc' } }),
+  ]);
+
+  // Today's lists. One that no part of has been tried yet is still open and is rewritten; the others went
+  // out (or are going, or failed), and the products they carried are not sent again today.
+  const lists = new Map();
+  for (const r of rows) {
+    const k = listKeyOf(r.dedupeKey);
+    if (!lists.has(k)) lists.set(k, []);
+    lists.get(k).push(r);
+  }
+  let open = null;
+  const carriedAny = new Set(); // sent today, low or out
+  const carriedOut = new Set(); // sent today as out of stock
+  for (const [key, parts] of lists) {
+    parts.sort((a, b) => partNo(a.dedupeKey) - partNo(b.dedupeKey));
+    if (parts.every((r) => r.attempts === 0 && (r.status === 'PENDING' || r.status === 'EXPIRED'))) open = { key, parts };
+    else {
+      parts.filter((r) => r.status !== 'EXPIRED').forEach((r) => listEntries(r).forEach(({ id, out }) => {
+        carriedAny.add(id);
+        if (out) carriedOut.add(id);
+      }));
+    }
   }
 
-  const text = wt.owner.lowStock({
-    product: product.name,
-    remaining: onHand,
-    level: product.minStockLevel,
-    suggested: recommended,
-    high: onHand <= product.minStockLevel / 2,
-  });
-  return queue('LOW_STOCK', { dedupeKey: `lowstock:${productId}:${dateEAT()}`, refType: 'Product', refId: productId, text });
+  // At most once as low and once as out per product per day.
+  const fresh = items.filter((i) => (i.out ? !carriedOut.has(i.id) : !carriedAny.has(i.id)));
+  const type = fresh.some((i) => i.out) ? 'OUT_OF_STOCK' : 'LOW_STOCK';
+  const priority = TYPES[type].priority;
+  const parts = wt.owner.stockAlerts({ items: fresh });
+  const keyOf = (base, k) => (k === 0 ? base : `${base}:part${k + 1}`);
+  const idsOf = (part) => part.items.map((i) => (i.out ? `${i.id}!` : i.id)).join(',');
+  // Two checks at once (one stock movement touches several products): the one that lost the race reads
+  // again, once, and finds the list the other one wrote.
+  const again = () => (retried ? { queued: false, reason: 'busy' } : syncStockAlerts({ retried: true }));
+
+  if (open) {
+    // Each write lands only on a row nobody has started sending (attempts still 0); if a flush claimed one
+    // meanwhile, start over: that list is no longer open.
+    const written = [];
+    const last = Math.max(parts.length, ...open.parts.map((r) => partNo(r.dedupeKey)));
+    for (let k = 0; k < last; k += 1) {
+      const row = open.parts.find((r) => partNo(r.dedupeKey) === k + 1);
+      const part = parts[k];
+      if (part) {
+        const data = { type, priority, status: 'PENDING', lastError: null, text: part.text, refType: STOCK_LIST, refId: idsOf(part) };
+        if (row && row.status === 'PENDING' && row.text === data.text && row.refId === data.refId && row.priority === priority && row.type === type) {
+          written.push(row); // nothing changed
+        } else if (row) {
+          // Compare-and-set on the text read: a check that read older stock and writes last cannot undo a
+          // newer rewrite; it finds the row changed and reads again.
+          const { count } = await prisma.whatsAppNotification.updateMany({ where: { id: row.id, status: row.status, attempts: 0, text: row.text }, data });
+          if (!count) return again();
+          written.push({ ...row, ...data });
+        } else {
+          try {
+            written.push(await prisma.whatsAppNotification.create({ data: { ...data, dedupeKey: keyOf(open.key, k) } }));
+          } catch (e) {
+            if (e.code === 'P2002') return again();
+            throw e;
+          }
+        }
+      } else if (row && row.status === 'PENDING') {
+        const { count } = await prisma.whatsAppNotification.updateMany({
+          where: { id: row.id, status: 'PENDING', attempts: 0, text: row.text },
+          data: { status: 'EXPIRED', lastError: 'Not sent: no product on it is low any more' },
+        });
+        if (!count) return again();
+      }
+    }
+    const sent = await sendStockList(written);
+    return { queued: written.length > 0, rewritten: true, key: open.key, parts: written.length, products: fresh.length, sent };
+  }
+
+  if (!parts.length) return { queued: false, reason: items.length ? 'already-sent-today' : 'nothing-low', products: 0 };
+  const n = Math.max(0, ...[...lists.keys()].map((k) => (k === prefix ? 1 : Number(k.slice(prefix.length + 1)) || 1))) + 1;
+  const base = n === 1 ? prefix : `${prefix}:${n}`;
+  const created = [];
+  for (let k = 0; k < parts.length; k += 1) {
+    const r = await queue(type, { priority, dedupeKey: keyOf(base, k), refType: STOCK_LIST, refId: idsOf(parts[k]), text: parts[k].text, hold: true });
+    if (r.reason === 'duplicate') return again();
+    if (!r.queued) return r; // switched off, or WhatsApp not set up
+    created.push(r.row);
+  }
+  const sent = await sendStockList(created);
+  return { queued: true, key: base, parts: created.length, products: fresh.length, sent };
+}
+
+// After stock leaves the warehouse (notification.service checkProductLowStock): nothing to do unless this
+// product is now low; then today's list is brought up to date — never a message of its own.
+async function stockAlertForProduct(productId) {
+  const product = await prisma.product.findUnique({ where: { id: productId }, select: { minStockLevel: true } });
+  if (!product || product.minStockLevel <= 0) return { queued: false, reason: 'no-min-level' };
+  const agg = await prisma.warehouseStock.aggregate({ where: { productId }, _sum: { baseQuantity: true } });
+  if ((agg._sum.baseQuantity || 0) > product.minStockLevel) return { queued: false, reason: 'in-stock' };
+  return syncStockAlerts();
 }
 
 // Cron sweep: catch anything the movement hooks missed.
@@ -625,15 +789,9 @@ async function deadlineWarnings(withinMinutes = DEADLINE_WARN_MINUTES) {
   return { candidates: due.length, queued };
 }
 
+// The 09:00 sweep: one list for everything low now (or today's waiting list brought up to date).
 async function scanStockAlerts() {
-  const reorder = require('./reorder.service');
-  const low = await reorder.lowStock();
-  let queued = 0;
-  for (const p of low) {
-    const r = await stockAlertForProduct(p.id).catch(() => ({ queued: false }));
-    if (r.queued) queued += 1;
-  }
-  return { candidates: low.length, queued };
+  return syncStockAlerts();
 }
 
 // 15. Daily business report — the 21:00 (Tanzania time) evening report: a short

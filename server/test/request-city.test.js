@@ -120,7 +120,7 @@ test('STOCK REQUEST text shows the city under the name, only when there is one',
 By: Juma
 City: Kilimanjaro
 
-(a) Pepa: 4 Boxes
+(1)- Pepa: 4 Boxes
 
 Total Value: TSh 144,000`);
   const without = t.owner.stockRequest({ by: 'Juma', items: [{ name: 'Pepa', qty: 4 }], total: 144000, when: at });
@@ -212,7 +212,7 @@ test('STOCK REQUEST text split between cities says each line\'s city', () => {
   const t = require('../src/services/whatsappText');
   const at = new Date('2026-11-10T11:32:00Z');
   const text = t.owner.stockRequest({ by: 'Juma', items: [{ name: 'Pepa', qty: 2, city: 'Arusha' }, { name: 'Pepa', qty: 3, city: 'Kilimanjaro' }], total: 180000, when: at });
-  assert.match(text, /\(a\) Pepa: 2 Boxes · Arusha/);
-  assert.match(text, /\(b\) Pepa: 3 Boxes · Kilimanjaro/);
+  assert.match(text, /\(1\)- Pepa: 2 Boxes · Arusha/);
+  assert.match(text, /\(2\)- Pepa: 3 Boxes · Kilimanjaro/);
   assert.ok(!/City:/.test(text));
 });

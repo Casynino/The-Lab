@@ -79,10 +79,11 @@ function StatusChip({ row }) {
     return <Badge className="bg-emerald-500/15 text-emerald-400">{row.attempts > 1 ? 'Sent · retried' : 'Sent'}</Badge>;
   }
   if (row.status === 'FAILED') return <Badge className="bg-red-500/15 text-red-600">Failed</Badge>;
-  // A warning still waiting when the moment it warned about passed ("minutes from its deadline"): not sent.
-  // Short label so the row title still fits on a phone; the full meaning is in the tooltip.
+  // A warning still waiting when the moment it warned about passed ("minutes from its deadline"), or a
+  // waiting stock list replaced by a newer one: not sent. Short label so the row title still fits on a
+  // phone; the full meaning (the row's own reason) is in the tooltip.
   if (row.status === 'EXPIRED') {
-    return <Badge className="bg-white/[0.07] text-muted" title="Not sent: the deadline it warned about had already passed">Too late</Badge>;
+    return <Badge className="bg-white/[0.07] text-muted" title={row.lastError || 'Not sent: the deadline it warned about had already passed'}>Too late</Badge>;
   }
   return <Badge className="bg-amber-500/15 text-amber-600">Pending</Badge>;
 }

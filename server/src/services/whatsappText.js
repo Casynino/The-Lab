@@ -25,6 +25,7 @@
 // ===========================================================================
 
 const { dayjs } = require('../utils/dates');
+const { compareBrands, compareProducts } = require('../utils/productOrder');
 
 const MAX_REPORT_CHARS = 690;
 
@@ -42,13 +43,9 @@ const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
 const count = (n, word) => `${Math.round(Number(n) || 0)} ${plural(word, Math.round(Number(n) || 0))}`; // 1 Box, 4 Boxes
 const boxes = (n, unit) => count(n, cap(unit || 'Box'));
 
-// 0 -> a, 1 -> b … 25 -> z, 26 -> aa: the marker in front of each product of a stock request.
-const letter = (i) => {
-  let n = i;
-  let out = '';
-  do { out = String.fromCharCode(97 + (n % 26)) + out; n = Math.floor(n / 26) - 1; } while (n >= 0);
-  return out;
-};
+// The marker in front of each product in a list. Every list of products is numbered "(1)- Name", "(2)- Name" (Nino, 12 Nov 2026: numbers in brackets
+// with a dash, in every WhatsApp that lists products — it replaced the (a), (b), (c) letters).
+const mark = (k) => `(${k + 1})- `;
 
 // WhatsApp shows *text* in bold. Only the heading of a message is bold.
 const bold = (s) => `*${s}*`;
@@ -60,7 +57,7 @@ const doc = (...parts) => parts.filter((p) => p !== null && p !== undefined && p
 // ═══ To the owner ════════════════════════════════════════════════════════════
 
 const owner = {
-  // The products are lettered, one line each: "(a) Name: 2 Boxes", "(b) Name: 3 Boxes" — letters, not
+  // The products are numbered, one line each: "(1)- Name: 2 Boxes", "(2)- Name: 3 Boxes" — numbered, not
   // numbers, so nothing in front of a name can be read as a number of boxes (Nino chose this on 11 Nov 2026
   // after trying "1-Name", "Product 1:" and arrows). Then, for several products, the box count of the whole
   // request (a carton counts as the boxes it holds: `boxes`), and the value.
@@ -79,7 +76,7 @@ const owner = {
       : `Total Value: ${money(total)}`;
     const build = ({ shown }) => doc(
       ...head,
-      lines(...items.slice(0, shown).map((i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.qty, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
+      lines(...items.slice(0, shown).map((i, k) => `${mark(k)}${i.name}: ${boxes(i.qty, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`), shown < items.length && `+${items.length - shown} more, see ZELab`),
       tail,
     );
     const steps = [];
@@ -88,7 +85,7 @@ const owner = {
   },
 
   // Who and which order / the products / the money: small groups, not one block.
-  // Every product is lettered like the stock request — "(a) Name" with its Boxes Sold under it (Nino,
+  // Every product is numbered like the stock request — "(1)- Name" with its Boxes Sold under it (Nino,
   // 11 Nov 2026: "any text that comes with a list of products must come with a b c d"), one product too.
   // Several products then show the total boxes, then what was paid to each account and the commission.
   // Like a long stock request, a very long one drops lines from the LIST and never from the money.
@@ -97,7 +94,7 @@ const owner = {
     if (!items || items.length <= 1) {
       return doc(
         ...head,
-        lines(`(a) ${product}`, `Boxes Sold: ${Math.round(Number(n) || 0)}`),
+        lines(`${mark(0)}${product}`, `Boxes Sold: ${Math.round(Number(n) || 0)}`),
         lines(`Payment: ${money(amount)}${method ? ` (${method})` : ''}`, Number(commission) > 0 && `Commission: ${money(commission)}`),
       );
     }
@@ -108,7 +105,7 @@ const owner = {
     );
     const build = ({ gap, shown }) => doc(
       ...head,
-      items.slice(0, shown).map((i, k) => lines(`(${letter(k)}) ${i.product}`, `Boxes Sold: ${Math.round(Number(i.boxes) || 0)}`)).join(gap ? '\n\n' : '\n'),
+      items.slice(0, shown).map((i, k) => lines(`${mark(k)}${i.product}`, `Boxes Sold: ${Math.round(Number(i.boxes) || 0)}`)).join(gap ? '\n\n' : '\n'),
       shown < items.length && `+${items.length - shown} more, see ZELab`,
       `Total Boxes: ${Math.round(totalBoxes)}`,
       paid,
@@ -118,14 +115,14 @@ const owner = {
     return fitted(build, steps);
   },
 
-  // Who and which order, then the products lettered like the stock request ("(a) Name: 4 Boxes"), the
+  // Who and which order, then the products numbered like the stock request ("(1)- Name: 4 Boxes"), the
   // total when there are several, then the reason.
   returnRequest: ({ by, order, items = [], reason }) => {
     const total = items.reduce((t, i) => t + (Number(i.quantity) || 0), 0);
     return doc(
       bold('RETURN REQUEST'),
       lines(`By: ${by}`, order && `Order: ${order}`),
-      items.length > 0 && lines(...items.map((i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.quantity)}`)),
+      items.length > 0 && lines(...items.map((i, k) => `${mark(k)}${i.name}: ${boxes(i.quantity)}`)),
       items.length > 1 && `Total Boxes: ${Math.round(total)}`,
       reason && `Reason: ${reason}`,
     );
@@ -142,19 +139,40 @@ const owner = {
     ),
   ),
 
-  lowStock: ({ product, remaining, level, suggested, high }) => doc(
-    bold('LOW STOCK'),
-    `Product: ${product}`,
-    lines(`Remaining: ${boxes(remaining)}`, `Reorder Level: ${boxes(level)}`, `Suggested Restock: ${boxes(suggested)}`),
-    `Priority: ${high ? 'High' : 'Medium'}`,
-  ),
-
-  outOfStock: ({ product, brand, lastSale, suggested }) => doc(
-    bold('OUT OF STOCK'),
-    lines(`Product: ${product}`, brand && `Brand: ${brand}`),
-    lines('Warehouse Stock: 0 Boxes', lastSale && `Last Sale: ${dateTime(lastSale)}`),
-    `Suggested Restock: ${boxes(suggested)}`,
-  ),
+  // Every low and out-of-stock product in ONE message (Nino, 12 Nov 2026: one text per product used up the
+  // WhatsApp budget and the daily report did not go). His own format, word for word, with the products
+  // numbered (1)-, (2)-, (3)- (first "only use abc", then 12 Nov: "(1)- (2)-" in every list): the heading, then
+  // per product its name as stored and "20 Boxes Remaining | Restock: 80 Boxes" — nothing else, no brand
+  // headings, no totals. All brands in one list, OHIS first, then Civlily, then any other brand A-Z (the
+  // brand is in each name), and within a brand the fixed product order. An empty product sits in its place
+  // with "0 Boxes Remaining". A list too long for one message (CallMeBot keeps ~700 characters) becomes
+  // consecutive messages "*LOW STOCK — RESTOCK (1/2)*", "(2/2)", split between products, the numbers running
+  // on. Returns the parts in order, each with the products it carries: [{ text, items }].
+  // items: [{ name, brand, remaining, restock }]
+  stockAlerts: ({ items = [] } = {}) => {
+    const title = 'LOW STOCK — RESTOCK';
+    const list = [...items].sort((a, b) => compareBrands(a.brand, b.brand) || compareProducts(a.name, b.name));
+    if (!list.length) return [];
+    const blocks = list.map((i, k) => lines(
+      `${mark(k)}${i.name}`,
+      `${boxes(Math.max(0, Number(i.remaining) || 0))} Remaining | Restock: ${boxes(i.restock)}`,
+    ));
+    const whole = doc(bold(title), ...blocks);
+    if (whole.length <= MAX_REPORT_CHARS) return [{ text: whole, items: list }];
+    // Room for the longest heading the split can have ("(12/12)"), then whole products only.
+    const room = MAX_REPORT_CHARS - bold(`${title} (${list.length}/${list.length})`).length;
+    const groups = [];
+    let used = 0;
+    blocks.forEach((b, k) => {
+      if (!groups.length || used + 2 + b.length > room) { groups.push([]); used = 0; }
+      groups[groups.length - 1].push(k);
+      used += 2 + b.length;
+    });
+    return groups.map((ks, p) => ({
+      text: doc(bold(`${title} (${p + 1}/${groups.length})`), ...ks.map((k) => blocks[k])),
+      items: ks.map((k) => list[k]),
+    }));
+  },
 
   settlementDeadline: ({ order, rep, minutes, outstanding, rate }) => doc(
     lines(bold('SETTLEMENT DEADLINE'), order),
@@ -264,7 +282,7 @@ const FOOT = 'ZELab';
 const rep = (title, ...parts) => doc(bold(title), ...parts, FOOT);
 
 // The approved request (audit, 11 Nov 2026: the rep was not told about a part-approval): Nino's sample,
-// plus the order it opened and its deadline, then one lettered line per product as on the owner's
+// plus the order it opened and its deadline, then one numbered line per product as on the owner's
 // STOCK REQUEST — a line cut by the admin reads "3 of 4 Boxes". A request split between cities says each
 // line's city after its boxes (" · Arusha"), as the owner's STOCK REQUEST does, so the same product asked
 // for two cities is never two identical lines (audit, 12 Nov 2026). A very long list drops products from
@@ -274,7 +292,7 @@ const stockRequestApproved = ({ request, order, deadline, items }) => {
   const short = (i) => Number(i.approved) < Number(i.requested);
   const cut = list.some(short);
   const split = new Set(list.map((i) => i.city).filter(Boolean)).size > 1;
-  const line = (i, k) => `(${letter(k)}) ${i.name}: ${short(i)
+  const line = (i, k) => `${mark(k)}${i.name}: ${short(i)
     ? `${Math.round(Number(i.approved) || 0)} of ${boxes(i.requested, i.unit)}`
     : boxes(i.approved, i.unit)}${split && i.city ? ` · ${i.city}` : ''}`;
   const build = ({ shown }) => rep(
@@ -289,11 +307,11 @@ const stockRequestApproved = ({ request, order, deadline, items }) => {
 };
 
 // Stock the admin issued straight from Transfers, with no request behind it (audit, 11 Nov 2026: the
-// rep was never told): the order it opened and its deadline, then one lettered line per product, the
+// rep was never told): the order it opened and its deadline, then one numbered line per product, the
 // same shape as the approved request. A very long list drops products from the end, never the deadline.
 const stockIssued = ({ transfer, order, deadline, items }) => {
   const list = Array.isArray(items) ? items : [];
-  const line = (i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.quantity, i.unit)}`;
+  const line = (i, k) => `${mark(k)}${i.name}: ${boxes(i.quantity, i.unit)}`;
   const build = ({ shown }) => rep(
     'STOCK ISSUED',
     lines(transfer && `Transfer: ${transfer}`, order && `Order: ${order}`, deadline && `Deadline: ${dateTime(deadline)}`),
@@ -307,11 +325,11 @@ const stockIssued = ({ transfer, order, deadline, items }) => {
 
 // A rep's pending request changed by the admin (audit, 11 Nov 2026: it went out in the general wording,
 // every product run together on one line, and a long one passed CallMeBot's ~700 characters and lost its
-// end). Same family as STOCK REQUEST APPROVED: one lettered line per product as it is now; a very long
+// end). Same family as STOCK REQUEST APPROVED: one numbered line per product as it is now; a very long
 // list drops products from the end ("+2 more, see ZELab"), never the total.
 const stockRequestChanged = ({ request, by, items, total }) => {
   const list = Array.isArray(items) ? items : [];
-  const line = (i, k) => `(${letter(k)}) ${i.name}: ${boxes(i.quantity, i.unit)}`;
+  const line = (i, k) => `${mark(k)}${i.name}: ${boxes(i.quantity, i.unit)}`;
   const build = ({ shown }) => rep(
     'STOCK REQUEST CHANGED',
     lines(`Request: ${request}`, by && `Changed by: ${by}`),

@@ -62,6 +62,7 @@ function loadNotify({ rows = [], settings = {}, sentInWindow = {}, claimedElsewh
       groupBy: async () => Object.entries(sentInWindow).map(([to, n]) => ({ toPhone: to === 'owner' ? null : to, _count: { _all: n } })),
       updateMany: async ({ where, data }) => {
         if (where.status === 'FAILED') { calls.updateManyWhere = where; return { count: 3 }; }
+        if (where.refType === 'ProductList') return { count: 0 }; // flush closing an earlier day's stock list
         if (where.id && where.id.in) {
           const hit = rows.filter((r) => where.id.in.includes(r.id) && r.status === where.status);
           for (const r of hit) Object.assign(r, data);

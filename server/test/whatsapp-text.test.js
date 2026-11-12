@@ -22,7 +22,7 @@ test('STOCK REQUEST (one product): an arrow line, then the value', () => {
 
 By: Asha Mwinyi
 
-(a) Pepa King Size: 20 Boxes
+(1)- Pepa King Size: 20 Boxes
 
 Total Value: TSh 760,000`);
 });
@@ -40,10 +40,10 @@ test('STOCK REQUEST with several products: one arrow line each, no numbers, then
 
 By: Nyoya
 
-(a) OHIS Pepa Ndogo (Brown) – Bila Filter: 2 Boxes
-(b) OHIS Pepa Ndogo (White) – Bila Filter: 3 Boxes
-(c) OHIS Pepa Ndogo (Brown) – Na Filter: 2 Boxes
-(d) OHIS Pepa Kubwa (Brown) – Na Filter: 2 Boxes
+(1)- OHIS Pepa Ndogo (Brown) – Bila Filter: 2 Boxes
+(2)- OHIS Pepa Ndogo (White) – Bila Filter: 3 Boxes
+(3)- OHIS Pepa Ndogo (Brown) – Na Filter: 2 Boxes
+(4)- OHIS Pepa Kubwa (Brown) – Na Filter: 2 Boxes
 
 Total Boxes: 9
 Total Value: TSh 318,000`);
@@ -54,16 +54,16 @@ test('STOCK REQUEST: a very long request keeps its totals; products drop from th
   const text = t.owner.stockRequest({ by: 'Nyoya', items: many, total: 420000, when: at });
   assert.ok(text.length <= t.MAX_REPORT_CHARS, `${text.length} characters`);
   assert.match(text, /\+\d+ more, see ZELab\n\nTotal Boxes: 32\nTotal Value: TSh 420,000$/);
-  assert.ok(text.includes('(a) OHIS Pepa Ndogo (Colour 1) – Bila Filter: 2 Boxes'));
+  assert.ok(text.includes('(1)- OHIS Pepa Ndogo (Colour 1) – Bila Filter: 2 Boxes'));
   // a request that fits is untouched: every product shown
   const four = t.owner.stockRequest({ by: 'A', items: many.slice(0, 4), total: 1, when: at });
-  assert.ok(!four.includes('more, see ZELab') && four.includes('(d) OHIS Pepa Ndogo (Colour 4) – Bila Filter: 2 Boxes'));
+  assert.ok(!four.includes('more, see ZELab') && four.includes('(4)- OHIS Pepa Ndogo (Colour 4) – Bila Filter: 2 Boxes'));
 });
 
-test('STOCK REQUEST: no digit ever stands in front of a product (only the arrow does); a carton counts as the boxes it holds', () => {
+test('STOCK REQUEST: every product line starts (1)-, (2)- — never a bare number; a carton counts as the boxes it holds', () => {
   const mixed = t.owner.stockRequest({ by: 'A', items: [{ name: 'A', qty: 1 }, { name: 'B', qty: 3, unit: 'Carton', boxes: 30 }], total: 5, when: at });
-  assert.match(mixed, /\n\(a\) A: 1 Box\n\(b\) B: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
-  assert.ok(!/^\d/m.test(mixed.split('\n\n').slice(2, 3)[0]), 'the list lines do not start with a number');
+  assert.match(mixed, /\n\(1\)- A: 1 Box\n\(2\)- B: 3 Cartons\n\nTotal Boxes: 31\nTotal Value: TSh 5$/);
+  assert.ok(!/^\d/m.test(mixed.split('\n\n').slice(2, 3)[0]), 'the list lines do not start with a bare number');
   const one = t.owner.stockRequest({ by: 'Nyoya', items: [{ name: 'OHIS Pepa Ndogo (Brown) – Bila Filter', qty: 1 }], total: 7500, when: at });
   assert.ok(!one.includes('Total Boxes'), 'one product: the line already says it');
 });
@@ -76,7 +76,7 @@ test('SETTLEMENT SUBMITTED', () => {
 By: Asha Mwinyi
 Order: STL-20261110-0001
 
-(a) Pepa King Size
+(1)- Pepa King Size
 Boxes Sold: 10
 
 Payment: TSh 380,000 (CRDB)
@@ -97,14 +97,14 @@ test('RETURN REQUEST', () => {
 By: Asha Mwinyi
 Order: STL-20261110-0001
 
-(a) Pepa Roll: 4 Boxes
+(1)- Pepa Roll: 4 Boxes
 
 Reason: Damaged`);
 });
 
-test('RETURN REQUEST with several products letters them like the stock request, with the total', () => {
+test('RETURN REQUEST with several products numbers them like the stock request, with the total', () => {
   const text = t.owner.returnRequest({ by: 'W', order: null, items: [{ name: 'A', quantity: 1 }, { name: 'B', quantity: 2 }], reason: null });
-  assert.equal(text, '*RETURN REQUEST*\n\nBy: W\n\n(a) A: 1 Box\n(b) B: 2 Boxes\n\nTotal Boxes: 3');
+  assert.equal(text, '*RETURN REQUEST*\n\nBy: W\n\n(1)- A: 1 Box\n(2)- B: 2 Boxes\n\nTotal Boxes: 3');
 });
 
 test('COMMISSION READY', () => {
@@ -121,33 +121,107 @@ Minimum Withdrawal: TSh 100,000`);
   assert.ok(!t.owner.commissionReady({ rep: 'A', available: 1, earned: 999, penalties: 0, minimum: 1 }).includes('Earned'));
 });
 
-test('LOW STOCK', () => {
-  assert.equal(t.owner.lowStock({ product: 'Pepa Roll', remaining: 6, level: 10, suggested: 14, high: true }),
-`*LOW STOCK*
+// ── LOW STOCK — RESTOCK: one list for every low product (Nino, 12 Nov 2026) ─────
+// His own sample, numbered (1)-, (2)-, (3)- (12 Nov 2026).
+const P = {
+  ohisNdBrBila: { id: 'o1', brand: 'OHIS', name: 'OHIS Ndogo (Brown) – Bila Filter' },
+  ohisNdWhBila: { id: 'o2', brand: 'OHIS', name: 'OHIS Ndogo (White) – Bila Filter' },
+  ohisNdBrNa: { id: 'o3', brand: 'OHIS', name: 'OHIS Ndogo (Brown) – Na Filter' },
+  ohisKbBrNa: { id: 'o4', brand: 'OHIS', name: 'OHIS Kubwa (Brown) – Na Filter' },
+  ohisKbBrBila: { id: 'o5', brand: 'OHIS', name: 'OHIS Kubwa (Brown) – Bila Filter' },
+  civNdBrBila: { id: 'c1', brand: 'Civlily', name: 'Civlily Ndogo (Brown) – Bila Filter' },
+  civNdWhBila: { id: 'c2', brand: 'Civlily', name: 'Civlily Ndogo (White) – Bila Filter' },
+  civNdBrNa: { id: 'c3', brand: 'Civlily', name: 'Civlily Ndogo (Brown) – Na Filter' },
+  civKbBrBila: { id: 'c4', brand: 'Civlily', name: 'Civlily Kubwa (Brown) – Bila Filter' },
+  civKbWhBila: { id: 'c5', brand: 'Civlily', name: 'Civlily Kubwa (White) – Bila Filter' },
+  civKbBrNa: { id: 'c6', brand: 'Civlily', name: 'Civlily Kubwa (Brown) – Na Filter' },
+  civKbMixNa: { id: 'c7', brand: 'Civlily', name: 'Civlily Kubwa (Mix) – Na Filter' },
+  civNdMixBila: { id: 'c8', brand: 'Civlily', name: 'Civlily Ndogo (Mix) – Bila Filter' },
+};
+const low = (p, remaining, restock) => ({ ...p, remaining, restock });
 
-Product: Pepa Roll
+test('LOW STOCK — RESTOCK: Nino\'s sample word for word, lettered (a), (b), (c), in one message', () => {
+  const parts = t.owner.stockAlerts({ items: [low(P.civKbWhBila, 42, 58), low(P.civNdBrNa, 34, 66), low(P.ohisNdBrBila, 20, 80)] });
+  assert.equal(parts.length, 1);
+  assert.equal(parts[0].text,
+`*LOW STOCK — RESTOCK*
 
-Remaining: 6 Boxes
-Reorder Level: 10 Boxes
-Suggested Restock: 14 Boxes
+(1)- OHIS Ndogo (Brown) – Bila Filter
+20 Boxes Remaining | Restock: 80 Boxes
 
-Priority: High`);
-  assert.match(t.owner.lowStock({ product: 'P', remaining: 1, level: 10, suggested: 19, high: false }), /Remaining: 1 Box\n.*\nSuggested Restock: 19 Boxes\n\nPriority: Medium$/s);
+(2)- Civlily Ndogo (Brown) – Na Filter
+34 Boxes Remaining | Restock: 66 Boxes
+
+(3)- Civlily Kubwa (White) – Bila Filter
+42 Boxes Remaining | Restock: 58 Boxes`);
+  assert.deepEqual(parts[0].items.map((i) => i.id), ['o1', 'c3', 'c5']);
 });
 
-test('OUT OF STOCK', () => {
-  assert.equal(t.owner.outOfStock({ product: 'Pepa Roll', brand: 'Pepa', lastSale: new Date('2026-11-09T13:10:00Z'), suggested: 20 }),
-`*OUT OF STOCK*
+test('LOW STOCK — RESTOCK: all brands in one list, OHIS first, then Civlily, then other brands A-Z, each in the fixed order', () => {
+  const parts = t.owner.stockAlerts({
+    items: [
+      { id: 'z', brand: 'Zig', name: 'Zig Roll', remaining: 2, restock: 18 },
+      low(P.civKbBrNa, 47, 53),
+      low(P.ohisKbBrBila, 30, 70),
+      { id: 'a', brand: 'Afro', name: 'Afro Cones', remaining: 1, restock: 9 },
+      low(P.civNdBrBila, 10, 90),
+      low(P.ohisNdWhBila, 49, 51),
+    ],
+  });
+  assert.equal(parts.length, 1);
+  assert.equal(parts[0].text,
+`*LOW STOCK — RESTOCK*
 
-Product: Pepa Roll
-Brand: Pepa
+(1)- OHIS Ndogo (White) – Bila Filter
+49 Boxes Remaining | Restock: 51 Boxes
 
-Warehouse Stock: 0 Boxes
-Last Sale: 9 Nov 2026 | 16:10 EAT
+(2)- OHIS Kubwa (Brown) – Bila Filter
+30 Boxes Remaining | Restock: 70 Boxes
 
-Suggested Restock: 20 Boxes`);
-  const bare = t.owner.outOfStock({ product: 'P', brand: null, lastSale: null, suggested: 4 });
-  assert.ok(!bare.includes('Brand') && !bare.includes('Last Sale'));
+(3)- Civlily Ndogo (Brown) – Bila Filter
+10 Boxes Remaining | Restock: 90 Boxes
+
+(4)- Civlily Kubwa (Brown) – Na Filter
+47 Boxes Remaining | Restock: 53 Boxes
+
+(5)- Afro Cones
+1 Box Remaining | Restock: 9 Boxes
+
+(6)- Zig Roll
+2 Boxes Remaining | Restock: 18 Boxes`);
+});
+
+test('LOW STOCK — RESTOCK: an empty product sits in its place with 0 Boxes Remaining, nothing else added', () => {
+  const [part] = t.owner.stockAlerts({ items: [low(P.civNdBrNa, 34, 66), low(P.ohisNdBrNa, 0, 100), low(P.ohisNdBrBila, -3, 103)] });
+  assert.equal(part.text,
+`*LOW STOCK — RESTOCK*
+
+(1)- OHIS Ndogo (Brown) – Bila Filter
+0 Boxes Remaining | Restock: 103 Boxes
+
+(2)- OHIS Ndogo (Brown) – Na Filter
+0 Boxes Remaining | Restock: 100 Boxes
+
+(3)- Civlily Ndogo (Brown) – Na Filter
+34 Boxes Remaining | Restock: 66 Boxes`);
+  assert.deepEqual(t.owner.stockAlerts({ items: [] }), []);
+});
+
+test('LOW STOCK — RESTOCK too long for one message: split between products, (1/2) (2/2), the numbers running on', () => {
+  const all = Object.values(P).map((p, k) => low(p, k + 1, 100 - k));
+  const parts = t.owner.stockAlerts({ items: [...all].reverse() });
+  assert.equal(parts.length, 2);
+  parts.forEach((p, i) => {
+    assert.ok(p.text.length <= t.MAX_REPORT_CHARS, `part ${i + 1} is ${p.text.length} characters`);
+    assert.ok(p.text.startsWith(`*LOW STOCK — RESTOCK (${i + 1}/2)*\n\n(`), p.text.split('\n')[0]);
+    // never a product cut in half: every block is a name line and its numbers line
+    for (const block of p.text.split('\n\n').slice(1)) assert.match(block, /^\(\d+\)- .+\n\d+ Box(es)? Remaining \| Restock: \d+ Box(es)?$/);
+  });
+  const numbers = parts.flatMap((p) => [...p.text.matchAll(/^\((\d+)\)- /gm)].map((m) => Number(m[1])));
+  assert.deepEqual(numbers, Array.from({ length: 13 }, (_, i) => i + 1));
+  // every product exactly once, OHIS first, in the fixed order across the parts
+  assert.deepEqual(parts.flatMap((p) => p.items.map((i) => i.id)), Object.values(P).map((p) => p.id));
+  assert.match(parts[1].text, /^\*LOW STOCK — RESTOCK \(2\/2\)\*\n\n\(\d+\)- /);
 });
 
 test('SETTLEMENT DEADLINE', () => {
@@ -385,9 +459,9 @@ Request: REQ-20261111-0001
 Order: STL-20261111-0001
 Deadline: 10 Nov 2026 | 14:32 EAT
 
-(a) Civlily Pepa Ndogo (Brown): 3 of 4 Boxes
-(b) OHIS Pepa Kubwa (Brown): 2 Boxes
-(c) OHIS Pepa Ndogo (White): 0 of 1 Carton
+(1)- Civlily Pepa Ndogo (Brown): 3 of 4 Boxes
+(2)- OHIS Pepa Kubwa (Brown): 2 Boxes
+(3)- OHIS Pepa Ndogo (White): 0 of 1 Carton
 
 Your stock request has been approved and issued.
 Some products were approved in a smaller quantity than you asked for.
@@ -395,7 +469,7 @@ Some products were approved in a smaller quantity than you asked for.
 ZELab`);
   // Everything approved as asked: no "of", no extra sentence.
   const full = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', order: 'O', deadline: at, items: [{ name: 'P', approved: 2, requested: 2, unit: 'Box' }] });
-  assert.match(full, /\(a\) P: 2 Boxes\n\nYour stock request has been approved and issued\.\n\nZELab$/);
+  assert.match(full, /\(1\)- P: 2 Boxes\n\nYour stock request has been approved and issued\.\n\nZELab$/);
   // A very long request keeps the order and deadline and drops products from the end.
   const many = Array.from({ length: 40 }, (_, k) => ({ name: `OHIS Pepa Kubwa (Brown) – Bila Filter ${k}`, approved: 1, requested: 2, unit: 'Box' }));
   const long = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', order: 'STL-1', deadline: at, items: many });
@@ -414,7 +488,7 @@ test('STOCK REQUEST APPROVED (rep): a request split between cities says each lin
     { name: 'OHIS Ndogo (Brown) – Na Filter', approved: 1, requested: 2, unit: 'Box', city: 'Dodoma' },
   ];
   const text = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'REQ-20261112-0007', order: 'STL-20261112-0018', deadline: at, items });
-  assert.match(text, /\n\(a\) Civlily Kubwa \(Brown\) – Na Filter: 2 Boxes · Arusha\n\(b\) Civlily Ndogo \(Brown\) – Na Filter: 1 Box · Arusha\n\(c\) Civlily Kubwa \(Brown\) – Na Filter: 1 Box · Dodoma\n\(d\) OHIS Ndogo \(Brown\) – Na Filter: 1 of 2 Boxes · Dodoma\n/);
+  assert.match(text, /\n\(1\)- Civlily Kubwa \(Brown\) – Na Filter: 2 Boxes · Arusha\n\(2\)- Civlily Ndogo \(Brown\) – Na Filter: 1 Box · Arusha\n\(3\)- Civlily Kubwa \(Brown\) – Na Filter: 1 Box · Dodoma\n\(4\)- OHIS Ndogo \(Brown\) – Na Filter: 1 of 2 Boxes · Dodoma\n/);
   // One city only (or old requests with no city): no city on the lines.
   const one = t.repText({ kind: 'STOCK_REQUEST_APPROVED', request: 'R', items: items.map((i) => ({ ...i, city: 'Arusha' })) });
   assert.doesNotMatch(one, /·/);
@@ -440,8 +514,8 @@ test('STOCK REQUEST CHANGED (rep): one line per product, and a long list never l
 Request: REQ-20261111-0001
 Changed by: Doctor
 
-(a) Civlily Pepa Ndogo (Brown): 3 Boxes
-(b) OHIS Pepa Ndogo (White): 1 Carton
+(1)- Civlily Pepa Ndogo (Brown): 3 Boxes
+(2)- OHIS Pepa Ndogo (White): 1 Carton
 
 Total Value: TSh 8,500
 
@@ -487,8 +561,7 @@ test('no owner template contains an emoji either', () => {
     t.owner.settlementSubmitted({ by: 'A', order: 'O', product: 'P', boxes: 1, amount: 1, method: 'x', commission: 1, when: at }),
     t.owner.returnRequest({ by: 'A', order: 'O', items: [{ name: 'P', quantity: 1 }], reason: 'r' }),
     t.owner.commissionReady({ rep: 'A', available: 1, earned: 1, penalties: 1, minimum: 1 }),
-    t.owner.lowStock({ product: 'P', remaining: 1, level: 1, suggested: 1, high: true }),
-    t.owner.outOfStock({ product: 'P', brand: 'B', lastSale: at, suggested: 1 }),
+    ...t.owner.stockAlerts({ items: [{ name: 'P', brand: 'B', remaining: 1, restock: 1 }, { name: 'Q', remaining: 0, restock: 2 }] }).map((p) => p.text),
     t.owner.settlementDeadline({ order: 'O', rep: 'R', minutes: 1, outstanding: 1, rate: 1 }),
     t.owner.extensionGranted({ rep: 'R', deadline: at, rate: 1 }),
     t.owner.dailyReport(daily()), t.owner.weeklyReport(weekly()), t.owner.monthlyReport(weekly()), t.owner.test(),
@@ -511,8 +584,7 @@ test('the heading of every message is bold in WhatsApp (*TITLE*) and nothing els
     ['returnRequest', t.owner.returnRequest({ by: 'A', order: 'O', items: [{ name: 'P', quantity: 1 }], reason: 'r' })],
     ['returnRequest (several)', t.owner.returnRequest({ by: 'A', items: [{ name: 'P', quantity: 1 }, { name: 'Q', quantity: 2 }] })],
     ['commissionReady', t.owner.commissionReady({ rep: 'A', available: 1, earned: 1, penalties: 1, minimum: 1 })],
-    ['lowStock', t.owner.lowStock({ product: 'P', remaining: 1, level: 1, suggested: 1, high: true })],
-    ['outOfStock', t.owner.outOfStock({ product: 'P', brand: 'B', lastSale: at, suggested: 1 })],
+    ['stockAlerts', t.owner.stockAlerts({ items: [{ name: 'P', brand: 'B', remaining: 1, restock: 1 }, { name: 'Q', remaining: 0, restock: 2 }] })[0].text],
     ['settlementDeadline', t.owner.settlementDeadline({ order: 'O', rep: 'R', minutes: 1, outstanding: 1, rate: 1 })],
     ['extensionGranted', t.owner.extensionGranted({ rep: 'R', deadline: at, rate: 1 })],
     ['dailyReport', t.owner.dailyReport(daily())],
@@ -546,8 +618,7 @@ test('no alert is a wall of text: every block is at most 4 lines, with a blank l
     ['settlementSubmitted', t.owner.settlementSubmitted({ by: 'Mrema', order: 'STL-20261101-0001', product: 'OHIS Pepa Ndogo (White) – Bila Filter', boxes: 2, amount: 60000, method: 'M-Pesa', commission: 10000, when: at })],
     ['returnRequest', t.owner.returnRequest({ by: 'A', order: 'O', items: [{ name: 'P', quantity: 1 }], reason: 'r' })],
     ['commissionReady', t.owner.commissionReady({ rep: 'A', available: 1, earned: 1, penalties: 1, minimum: 1 })],
-    ['lowStock', t.owner.lowStock({ product: 'P', remaining: 1, level: 1, suggested: 1, high: true })],
-    ['outOfStock', t.owner.outOfStock({ product: 'P', brand: 'B', lastSale: at, suggested: 1 })],
+    ['stockAlerts', t.owner.stockAlerts({ items: [{ name: 'P', brand: 'B', remaining: 1, restock: 1 }, { name: 'Q', remaining: 0, restock: 2 }] })[0].text],
     ['settlementDeadline', t.owner.settlementDeadline({ order: 'O', rep: 'R', minutes: 1, outstanding: 1, rate: 1 })],
     ['extensionGranted', t.owner.extensionGranted({ rep: 'R', deadline: at, rate: 1 })],
   );
@@ -572,10 +643,10 @@ test('SETTLEMENT SUBMITTED with several products: (a) / (b) with Boxes Sold, the
 By: Mrema
 Order: STL-20261101-0001
 
-(a) OHIS Pepa Ndogo (White) – Bila Filter
+(1)- OHIS Pepa Ndogo (White) – Bila Filter
 Boxes Sold: 2
 
-(b) Civlily Pepa Kubwa (Brown) – Bila Filter
+(2)- Civlily Pepa Kubwa (Brown) – Bila Filter
 Boxes Sold: 1
 
 Total Boxes: 3
@@ -601,7 +672,7 @@ test('SETTLEMENT SUBMITTED for one product reads exactly like the owner\'s sampl
 By: Nyoya
 Order: STL-20261110-0001
 
-(a) OHIS Pepa Ndogo (Brown) – Bila Filter
+(1)- OHIS Pepa Ndogo (Brown) – Bila Filter
 Boxes Sold: 1
 
 Payment: TSh 30,000 (M-Pesa)
