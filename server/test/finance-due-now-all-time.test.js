@@ -87,6 +87,10 @@ install('../src/services/inventory.service', {
   valuation: async () => ({ items: [], totals: { totalValue: 0, warehouseValue: 0, repValue: 0, retailValue: 0, totalBaseUnits: 0 } }),
 });
 install('../src/services/commission.service', { summaryAllReps: async () => ({ totals: { available: 0, requested: 0 } }) });
+// The reps' bonus wallets (14 Nov 2026), read only by Finance. Nil unless a test sets them.
+let bonusTotals = { available: 0, pending: 0, paid: 0, earned: 0 };
+let bonusHeal = null;
+install('../src/services/bonus.service', { summaryAllReps: async (o) => { bonusHeal = o && o.heal; return { items: [], totals: bonusTotals }; } });
 
 const finance = require('../src/services/finance.service');
 
@@ -122,4 +126,16 @@ test('paid ahead is measured against everything sold, not the period', async () 
     assert.equal(s.setAside, 0, `${period}: nothing to set aside`);
     assert.equal(s.yours, WALLET, `${period}: the wallet is his`);
   }
+});
+
+test('a credited bonus and a bonus withdrawal not yet paid are owed to the reps; Finance never credits', async () => {
+  supplierPaid = 5000000;
+  const before = await finance.overview('all');
+  bonusTotals = { available: 1000000, pending: 500000, paid: 1500000, earned: 3000000 };
+  const o = await finance.overview('all');
+  assert.equal(bonusHeal, false, 'Finance reads the bonus wallets without crediting');
+  assert.equal(o.capital.owes.reps, before.capital.owes.reps + 1500000);
+  assert.equal(o.outstandingCommission, o.capital.owes.reps, 'one figure in both places');
+  assert.equal(o.capital.left, before.capital.left - 1500000);
+  bonusTotals = { available: 0, pending: 0, paid: 0, earned: 0 };
 });

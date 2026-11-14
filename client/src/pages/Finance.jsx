@@ -130,9 +130,10 @@ const isPayoutRow = (t) => t?.type === 'COMMISSION_PAYMENT';
 const PAYOUT_BADGE = 'bg-violet-500/15 text-violet-300';
 // What a row says it was. A payout names the rep, because "Commission Payments"
 // is a category, not an answer to "who did I pay?".
+// A bonus payout (14 Nov 2026) is the same kind of row, under 'Bonus Payments', and says so.
 const ledgerLabel = (t) => (
   isPayoutRow(t) && t.payee
-    ? `Commission paid — ${t.payee}`
+    ? `${t.category === 'Bonus Payments' ? 'Bonus' : 'Commission'} paid — ${t.payee}`
     : t.category || t.description || t.reference || '—'
 );
 
@@ -800,7 +801,7 @@ function Overview({ onNavigate, onOwnerMoney }) {
           )} />
         <Tile label="Reps can withdraw" value={formatCurrency(data.outstandingCommission)}
           tone={data.outstandingCommission > 0 ? 'text-amber-300' : 'text-foreground'}
-          caption="commission owed to reps" title="What the reps have earned and can withdraw"
+          caption="commission and bonus owed to reps" title="What the reps have earned and can withdraw"
           onClick={() => onNavigate?.('commissions')} />
       </div>
 

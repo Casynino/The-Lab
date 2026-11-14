@@ -1024,6 +1024,13 @@ enum WithdrawalStatus {
   PAID
 }
 
+// What a withdrawal takes money from (owner, 14 Nov 2026). Every request made
+// before bonuses lived in the wallet is COMMISSION, which is the default.
+enum WithdrawalSource {
+  COMMISSION
+  BONUS
+}
+
 enum DailyReportType {
   OPENING
   CLOSING
@@ -1406,12 +1413,17 @@ model CommissionWithdrawal {
   // browser by listWithdrawals, and the reason is The Doctor's, not theirs.
   underEmergency Boolean             @default(false)
   minWaived      Decimal?            @db.Decimal(14, 2)
+  // COMMISSION (box commission, every request before 14 Nov 2026) or BONUS (the
+  // whole sales bonus credited in the rep's current bonus cycle). Each source is
+  // reduced on its own; requesting a BONUS withdrawal ends the bonus cycle.
+  source         WithdrawalSource    @default(COMMISSION)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([salesRepId])
   @@index([status])
+  @@index([salesRepId, source, status])
   @@map("commission_withdrawals")
 }
 
@@ -1605,7 +1617,10 @@ model BonusAward {
   bonusRule       BonusRule           @relation(fields: [bonusRuleId], references: [id], onDelete: Cascade)
   qualifyingSales Decimal             @db.Decimal(16, 2)
   bonusAmount     Decimal             @db.Decimal(14, 2)
-  // ELIGIBLE (target reached) | PAID | CANCELLED
+  // CREDITED (since 14 Nov 2026: the milestone's money was put in the rep's
+  // wallet; `bonusAmount` is the increment, so a cycle's credits add up to the
+  // top tier reached) | PAID (before 14 Nov 2026: paid by hand outside the
+  // wallet, kept as history) | ELIGIBLE | CANCELLED (never written)
   status          String              @default("ELIGIBLE")
   unlockedAt      DateTime            @default(now())
   paidAt          DateTime?

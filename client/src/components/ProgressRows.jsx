@@ -72,7 +72,7 @@ function Row({ label, pct, barPct, hint, reward, ready, readyLabel, markers = []
 }
 
 // The wallet and the bonus, one soft card each.
-// `forStaff`: the admin reading a rep's profile, who is the one that pays a reached bonus.
+// `forStaff`: the admin reading a rep's profile (the rep withdraws a reached bonus from his own wallet).
 export default function ProgressRows({ commission, bonus, onOpenCommission, forStaff = false }) {
   const rows = [];
 
@@ -111,11 +111,16 @@ export default function ProgressRows({ commission, bonus, onOpenCommission, forS
   // mountain — "6,329,500 more" is discouraging where "3,670,500 of 10,000,000"
   // is the same fact told as ground covered — so the gap appears near the line,
   // which is exactly where it becomes the encouraging number.
-  // A reached bonus is shown as that bonus, whole (its amount, 100%), not the next tier's percentage and
-  // amount beside it; a rep cannot take it himself, so the line says who pays it (audit, 12 Nov 2026).
+  // A reached bonus is shown as that bonus, whole (what his wallet holds, 100%), not the next tier's
+  // percentage and amount beside it (audit, 12 Nov 2026). Since 14 Nov 2026 it is in his wallet and he
+  // withdraws it himself from the Wallet, or keeps selling for the bigger total.
   const b = bonusRow(bonus);
   if (b) {
     const { aim } = b;
+    // A bonus withdrawal not yet paid, named like the wallet's own pending (one piece that never splits).
+    const waiting = b.waiting > 0
+      ? <>{' '}<span className="whitespace-nowrap font-medium text-amber-300">· {formatCurrency(b.waiting)} pending</span></>
+      : null;
     rows.push(
       <Row
         key="bonus"
@@ -124,11 +129,13 @@ export default function ProgressRows({ commission, bonus, onOpenCommission, forS
         barPct={b.barPct}
         reward={b.reward}
         ready={b.ready}
-        readyLabel={forStaff ? 'Reached — ready to pay' : 'Reached — ask ZELab to pay it, or push on'}
-        hint={aim.progress >= 90
+        readyLabel={forStaff
+          ? 'In the wallet — the rep withdraws it'
+          : <>{b.more ? 'In your wallet — withdraw it, or push on' : 'In your wallet — ready to withdraw'}{waiting}</>}
+        hint={<>{aim.progress >= 90
           ? `Almost there — only ${formatCurrency(aim.remaining)} to go`
           // The tier's own count: a tier added later counts only from its start (audit money-flows-1).
-          : `${formatCurrency(aim.sales ?? bonus.sales)} of ${formatCurrency(aim.target)}`}
+          : `${formatCurrency(aim.sales ?? bonus.sales)} of ${formatCurrency(aim.target)}`}{waiting}</>}
         markers={b.markers}
         onClick={onOpenCommission}
       />,

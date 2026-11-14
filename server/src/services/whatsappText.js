@@ -447,18 +447,30 @@ const repTexts = {
     lines(`Return: ${number}`, Number(fine) > 0 && `Fine Applied: ${money(fine)}`),
     `Your return was not completed within ${count(hours, 'Hour')} and was cancelled automatically. The boxes are back on your order. Settle them or submit a new return.`,
   ),
-  WITHDRAWAL_REQUESTED: ({ amount }) => rep('WITHDRAWAL REQUESTED', lines(`Amount: ${money(amount)}`, 'Status: Pending approval')),
-  WITHDRAWAL_APPROVED: ({ amount }) => rep('WITHDRAWAL APPROVED', lines(`Amount: ${money(amount)}`, 'Status: Approved')),
-  WITHDRAWAL_REJECTED: ({ amount }) => rep('WITHDRAWAL REJECTED', lines(`Amount: ${money(amount)}`, 'Status: Not approved')),
-  WITHDRAWAL_PAID: ({ amount }) => rep('COMMISSION PAID', lines(`Amount: ${money(amount)}`, 'Status: Paid out')),
+  // `source` BONUS (14 Nov 2026) names it a bonus withdrawal; without it the text is as it always was.
+  WITHDRAWAL_REQUESTED: ({ amount, source }) => (source === 'BONUS'
+    ? rep('BONUS WITHDRAWAL REQUESTED', lines(`Amount: ${money(amount)}`, 'Status: Pending approval'), 'Your bonus count starts again from zero.')
+    : rep('WITHDRAWAL REQUESTED', lines(`Amount: ${money(amount)}`, 'Status: Pending approval'))),
+  WITHDRAWAL_APPROVED: ({ amount, source }) => rep(source === 'BONUS' ? 'BONUS WITHDRAWAL APPROVED' : 'WITHDRAWAL APPROVED', lines(`Amount: ${money(amount)}`, 'Status: Approved')),
+  WITHDRAWAL_REJECTED: ({ amount, source }) => (source === 'BONUS'
+    ? rep('BONUS WITHDRAWAL REJECTED', lines(`Amount: ${money(amount)}`, 'Status: Not approved'), 'The bonus is back in your wallet.')
+    : rep('WITHDRAWAL REJECTED', lines(`Amount: ${money(amount)}`, 'Status: Not approved'))),
+  WITHDRAWAL_PAID: ({ amount, source }) => rep(source === 'BONUS' ? 'BONUS PAID' : 'COMMISSION PAID', lines(`Amount: ${money(amount)}`, 'Status: Paid out')),
   WINDOW_OPEN: () => rep('WITHDRAWAL WINDOW OPEN', 'A one-off withdrawal has been opened for you. Your usual minimum does not apply. Request it from your Commission page within the next 2 Days.'),
   WINDOW_CLOSED: () => rep('WITHDRAWAL WINDOW CLOSED', 'The one-off withdrawal opened for you has been closed. Your usual minimum applies again.'),
   COMMISSION_READY: ({ available, minimum }) => rep('COMMISSION READY', lines(`Available: ${money(available)}`, `Minimum Withdrawal: ${money(minimum)}`), 'You can request a withdrawal.'),
-  BONUS_UNLOCKED: ({ bonus, target, nextTarget, nextBonus }) => rep(
-    'BONUS UNLOCKED',
-    lines(`Bonus: ${money(bonus)}`, `Sales Reached: ${money(target)}`),
-    nextTarget != null && `Keep going: ${money(nextTarget)} earns ${money(nextBonus)} instead. Taking a bonus starts your count again from zero.`,
-  ),
+  // A milestone credited into the wallet (owner, 14 Nov 2026): what went in, then his choice. `total` is what
+  // this bonus cycle now holds; `nextTarget`/`nextTotal` the next tier, if there is one.
+  BONUS_UNLOCKED: ({ amount, total, nextTarget, nextTotal }) => {
+    const more = Number(total) > Number(amount);
+    return rep(
+      'BONUS ADDED',
+      more ? `${money(amount)} more is in your wallet. Your bonus is now ${money(total)}.` : `${money(amount)} is in your wallet.`,
+      nextTarget != null
+        ? `Withdraw it now, or keep selling to ${money(nextTarget)} for ${money(nextTotal)} in total. Withdrawing starts your bonus count again from zero.`
+        : 'Withdraw it whenever you are ready. Withdrawing starts your bonus count again from zero.',
+    );
+  },
   BONUS_PAID: ({ bonus }) => rep('BONUS PAID', `Bonus: ${money(bonus)}`, 'Your sales count starts again from zero for the next one.'),
   PASSWORD_CHANGED: () => rep('PASSWORD CHANGED', 'Your account password was changed. If you did not do this, contact your administrator immediately.'),
   TEST: () => rep('ZELAB', 'WhatsApp alerts are now active for you. You will get a message here whenever something important happens with your stock, settlements and commission.'),

@@ -277,13 +277,18 @@ function BonusTrack({ b, active }) {
   const tiers = b.tiers || [];
   const top = tiers.reduce((m, t) => Math.max(m, Number(t.target) || 0), 0);
   const pct = top > 0 ? clampPct((Number(b.sales) / top) * 100) : 0;
-  const won = b.claimable;
+  // A reached bonus is in the rep's wallet (14 Nov 2026): the server's wallet figure, not a tier's total.
+  const inWallet = Number(b.wallet?.available) || 0;
+  const requested = Number(b.wallet?.pending) || 0;
+  const won = inWallet > 0;
   const next = b.next;
   const none = !(Number(b.sales) > 0);
   // Every figure is on hover; the card itself keeps one line: the bar and where the rep is on it.
   const detail = [
     `Sold ${formatCurrency(b.sales)}${top > 0 ? ` of ${formatCurrency(top)} (top tier)` : ''}`,
-    won ? `${formatCurrency(won.bonusAmount)} earned` : null,
+    b.cycleStart ? `cycle from ${formatDate(b.cycleStart)}` : null,
+    won ? `${formatCurrency(inWallet)} in wallet` : null,
+    requested > 0 ? `${formatCurrency(requested)} requested` : null,
     next ? `${next.progress}% · ${formatCurrency(next.remaining)} more → ${formatCurrency(next.bonusAmount)}` : 'every tier reached',
   ].filter(Boolean).join(' · ');
   return (
@@ -303,7 +308,7 @@ function BonusTrack({ b, active }) {
         })}
       </div>
       <span className="shrink-0 whitespace-nowrap text-[10.5px] tabular-nums">
-        {won && <span className="font-semibold text-emerald-300">{formatCurrency(won.bonusAmount, { compact: true })} won · </span>}
+        {won && <span className="font-semibold text-emerald-300">{formatCurrency(inWallet, { compact: true })} in wallet · </span>}
         {next ? (
           none ? <span className="text-faint">no sales yet</span> : (
             <>
@@ -577,7 +582,7 @@ export default function SalesReps() {
               {showBonus && (
                 <p className="text-faint">
                   <span className="whitespace-nowrap">Sales bonus from {sharedStart ? formatDate(new Date(sharedStart)) : 'each rep’s own start'}</span>
-                  {' · '}<span className="whitespace-nowrap">paid on Commissions</span>
+                  {' · '}<span className="whitespace-nowrap">goes into the rep’s wallet</span>
                 </p>
               )}
             </div>

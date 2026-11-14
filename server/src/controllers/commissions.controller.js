@@ -10,13 +10,20 @@ const finance = require('../services/finance.service');
 const audit = require('../services/audit.service');
 const { ROLES } = require('../middleware/authorize');
 
+// Commission exactly as before, plus `bonus` (the bonus wallet: what is ready to withdraw, waiting, paid)
+// and `combined` (the card's figures, commission + bonus). Commission fields keep their meaning.
+async function withBonus(c, salesRepId) {
+  const b = await bonus.walletForRep(salesRepId);
+  return { ...c, bonus: b, combined: bonus.combine(c, b) };
+}
+
 const me = asyncHandler(async (req, res) => {
   if (!req.user.salesRepId) throw ApiError.forbidden('Only sales representatives have commissions');
   const c = await commission.computeForRep(req.user.salesRepId);
   // The rep is told the window is open and until when. Why it was opened, and
   // by whom, is The Doctor's note about them and is stripped here rather than
   // in the service, so the admin paths keep it.
-  return ok(res, { ...c, emergency: { open: c.emergency.open, until: c.emergency.until } });
+  return ok(res, await withBonus({ ...c, emergency: { open: c.emergency.open, until: c.emergency.until } }, req.user.salesRepId));
 });
 
 // The rep's own page as pictures: earnings by month, by brand and product, and their settlement record.
@@ -25,7 +32,7 @@ const insightsMe = asyncHandler(async (req, res) => {
   return ok(res, await require('../services/repInsights.service').insightsForRep(req.user.salesRepId));
 });
 
-const getForRep = asyncHandler(async (req, res) => ok(res, await commission.computeForRep(req.params.salesRepId)));
+const getForRep = asyncHandler(async (req, res) => ok(res, await withBonus(await commission.computeForRep(req.params.salesRepId), req.params.salesRepId)));
 
 const summary = asyncHandler(async (_req, res) => ok(res, await commission.summaryAllReps()));
 
@@ -42,8 +49,9 @@ const listWithdrawals = asyncHandler(async (req, res) => {
 
 const requestWithdrawal = asyncHandler(async (req, res) => {
   if (!req.user.salesRepId) throw ApiError.forbidden('Only sales representatives can request withdrawals');
-  const w = await commission.requestWithdrawal(req.user.salesRepId, req.body.amount, req.body.notes, req.user);
-  await audit.record(req, { action: 'CREATE', entityType: 'CommissionWithdrawal', entityId: w.id, newValues: { amount: w.amount } });
+  const source = req.body.source || 'COMMISSION';
+  const w = await commission.requestWithdrawal(req.user.salesRepId, req.body.amount, req.body.notes, req.user, { source });
+  await audit.record(req, { action: 'CREATE', entityType: 'CommissionWithdrawal', entityId: w.id, newValues: { amount: w.amount, source } });
   return created(res, w);
 });
 
@@ -59,9 +67,10 @@ const decideWithdrawal = asyncHandler(async (req, res) => {
       refId: w.id,
       occurredAt: w.paidAt || new Date(),
       fromOwnPocket: req.body.fromOwnPocket === true,
+      source: w.source,
     }, req.user).catch(() => {});
   }
-  await audit.record(req, { action: req.body.action, entityType: 'CommissionWithdrawal', entityId: req.params.id });
+  await audit.record(req, { action: req.body.action, entityType: 'CommissionWithdrawal', entityId: req.params.id, newValues: { source: w.source } });
   return ok(res, w);
 });
 
@@ -81,8 +90,11 @@ const deleteRate = asyncHandler(async (req, res) => {
 });
 
 // ── Sales bonus ──────────────────────────────────────────────────────────────
-// The run in progress plus the bonuses already paid to this rep (audit money-flows-10), only his own.
+// The cycle in progress, the bonus wallet and bonus withdrawals (`wallet`, `history`), plus the bonuses paid
+// by hand before the wallet existed (`paidAwards`, audit money-flows-10) — only his own. A caller who is not
+// a rep is refused: with no rep the old code summed every rep's sales.
 const bonusMe = asyncHandler(async (req, res) => {
+  if (!req.user.salesRepId) throw ApiError.forbidden('Only sales representatives have a sales bonus');
   const [progress, paidAwards] = await Promise.all([
     bonus.progressForRep(req.user.salesRepId),
     bonus.paidAwardsForRep(req.user.salesRepId),
@@ -112,15 +124,10 @@ const setBonusRuleActive = asyncHandler(async (req, res) => {
 
 const bonusAwards = asyncHandler(async (req, res) => ok(res, await bonus.listAwards({ status: req.query.status })));
 
-// Paying a tier ends that rep's run and starts their count again from zero.
-const payBonusAward = asyncHandler(async (req, res) => {
-  const row = await bonus.payTier(
-    { salesRepId: req.body?.salesRepId, bonusRuleId: req.body?.bonusRuleId },
-    req.user,
-    req.body?.notes,
-  );
-  await audit.record(req, { action: 'CREATE', entityType: 'BonusAward', entityId: row.id, newValues: { status: 'PAID', bonusAmount: row.bonusAmount } });
-  return created(res, row);
+// Retired 14 Nov 2026. A bonus is now credited into the rep's wallet when it is reached and taken out as a
+// BONUS withdrawal; a payment made here, outside the wallet, would pay the same bonus twice.
+const payBonusAward = asyncHandler(async () => {
+  throw new ApiError(410, 'Paying a bonus here has been retired. Bonuses now go into the rep\'s wallet when they are reached; the rep withdraws it and you pay it from Withdrawal requests.');
 });
 
 // Credit or claw back a rep's commission by hand. Deducting has always been

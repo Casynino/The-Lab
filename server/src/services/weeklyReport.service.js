@@ -114,6 +114,8 @@ async function buildWeeklyData(weekKey) {
     prisma.commissionWithdrawal.aggregate({
       where: {
         status: 'PAID',
+        // Commission paid: a bonus payout (source BONUS, 14 Nov 2026) is not commission.
+        source: 'COMMISSION',
         OR: [{ paidAt: { gte: rangeStart, lte: rangeEnd } }, { paidAt: null, decidedAt: { gte: rangeStart, lte: rangeEnd } }],
       },
       _sum: { amount: true },

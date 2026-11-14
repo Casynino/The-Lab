@@ -114,6 +114,8 @@ export const pageQueries = {
   // Only the whole-table counts are read (meta.counts), so one row is enough.
   penaltiesCount: () => ({ queryKey: ['penalties', 'all'], queryFn: listOf('/penalties', { limit: 1 }) }),
   bonusSummary: () => ({ queryKey: ['bonus-summary'], queryFn: dataOf('/commissions/bonus/summary') }),
+  // Every bonus credited or paid, with where its money is now (in the wallet, requested, paid).
+  bonusAwards: () => ({ queryKey: ['bonus-awards'], queryFn: dataOf('/commissions/bonus/awards') }),
 
   // People and records.
   salesReps: ({ page }) => ({ queryKey: ['sales-reps', { page }], queryFn: listOf('/sales-reps', { page, limit: 100 }) }),

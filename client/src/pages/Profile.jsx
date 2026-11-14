@@ -661,7 +661,10 @@ export default function Profile() {
   const sub = isRep ? (repInfo?.code || '') : (ROLE_LABELS[user?.role] || user?.role);
 
   // The wallet card, fed exactly as on the wallet page (same rule for "can withdraw", same progress).
-  const canWithdraw = c ? (c.eligible ?? (c.available >= c.minWithdrawal)) : false;
+  // Its figures are commission + bonus as the server adds them up (`combined`, 14 Nov 2026), as on the wallet
+  // page; an answer saved before the wallet existed has no `combined`: commission alone, as before.
+  const card = c ? (c.combined || { available: c.available, earned: c.earned, paid: c.paid, pending: c.pendingRequests }) : null;
+  const canWithdraw = c ? (c.combined?.canWithdraw ?? c.eligible ?? (c.available >= c.minWithdrawal)) : false;
   const pct = c && c.minWithdrawal > 0 ? Math.max(0, Math.min(100, (Math.max(0, c.available) / c.minWithdrawal) * 100)) : 0;
 
   // The owner is not "Administrator" here — he runs the Lab (Nino, 11 Nov 2026: "he is like the main lab,
@@ -676,16 +679,17 @@ export default function Profile() {
         <>
           {walletFailed && !c ? <LoadError what="your wallet" onRetry={retryWallet} /> : !c ? <PageSpinner /> : (
             <WalletCard
-              balance={formatCurrency(c.available)}
-              negative={c.available < 0}
+              balance={formatCurrency(card.available)}
+              negative={card.available < 0}
               canWithdraw={canWithdraw}
               pct={pct}
               stats={[
-                { label: 'Earned', value: formatCurrency(c.earned) },
-                { label: 'Paid out', value: formatCurrency(c.paid) },
-                c.penalties > 0
-                  ? { label: 'Fines', value: formatCurrency(c.penalties), tone: 'rose' }
-                  : { label: 'Pending', value: formatCurrency(c.pendingRequests) },
+                { label: 'Earned', value: formatCurrency(card.earned) },
+                { label: 'Paid out', value: formatCurrency(card.paid) },
+                // As on the wallet page: a request waiting to be paid shows as Pending, even for a rep with fines.
+                (Number(card.pending) || 0) > 0 || !(c.penalties > 0)
+                  ? { label: 'Pending', value: formatCurrency(card.pending), tone: (Number(card.pending) || 0) > 0 ? 'amber' : undefined }
+                  : { label: 'Fines', value: formatCurrency(c.penalties), tone: 'rose' },
               ]}
               onWithdraw={() => navigate('/commissions')}
             />

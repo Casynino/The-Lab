@@ -2,8 +2,8 @@
 
 // ── Commission and bonus money, audit round 3 (11 Nov 2026) ────────────────────────────────────────────
 // Pinned: two manual commission corrections saved at once both count (#120); a deactivated rep who is
-// still owed money stays in the commission totals and in "owed to reps" (#71); a bonus pays the tier
-// that was asked for or nothing, and two tiers paid at the same moment can never both stand (#119).
+// still owed money stays in the commission totals and in "owed to reps" (#71). The old "pay a tier" (#119)
+// was retired on 14 Nov 2026 when bonuses moved into the wallet: see bonus-wallet.test.js.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -143,11 +143,15 @@ test('an approved, unpaid withdrawal counts as waiting, not as paid, and the bal
   assert.equal(s.totals.requested, 70000);
 });
 
-// ── #119 bonus tiers ─────────────────────────────────────────────────────────────────────────────────
+// ── bonus tiers ──────────────────────────────────────────────────────────────────────────────────────
+// Since 14 Nov 2026 a reached tier is CREDITED into the wallet (bonus-wallet.test.js holds the wallet rules);
+// the tier-start rules of audit money-flows-1 stand, with the cycle start in place of the last payment.
 // `sales` is every settled sale the rep made, newest last; a figure alone is one sale on 1 Oct.
 function loadBonus({ sales = 250000, tiers, lastPaidAt = null } = {}) {
   const since = new Date('2026-10-01T00:00:00Z');
-  const awards = [];
+  const awards = lastPaidAt
+    ? [{ id: 'legacy', salesRepId: 'r1', bonusRuleId: 'old', status: 'PAID', paidAt: lastPaidAt, cycleStart: since, unlockedAt: since, bonusAmount: 1000, qualifyingSales: 0 }]
+    : [];
   const sold = Array.isArray(sales) ? sales : [{ at: since, total: sales }];
   let n = 0;
   stub('../src/config/prisma', db({
@@ -158,22 +162,11 @@ function loadBonus({ sales = 250000, tiers, lastPaidAt = null } = {}) {
       ],
     },
     bonusAward: {
-      findFirst: async () => (lastPaidAt ? { paidAt: lastPaidAt } : null), // the last payment, if any
+      findMany: async ({ where }) => awards.filter((a) => a.salesRepId === where.salesRepId && where.status.in.includes(a.status)),
       create: async ({ data }) => {
-        const clash = awards.find((a) => a.salesRepId === data.salesRepId && a.bonusRuleId === data.bonusRuleId
-          && a.cycleStart.getTime() === data.cycleStart.getTime());
-        if (clash) throw Object.assign(new Error('unique'), { code: 'P2002' });
         const row = { id: `a${++n}`, ...data };
         awards.push(row);
-        await tick(); // the other payment gets in here
         return row;
-      },
-      // Same run = paid after the payment the run started from.
-      count: async ({ where }) => awards.filter((a) => a.salesRepId === where.salesRepId && a.status === where.status
-        && a.id !== where.id.not && (!where.paidAt || a.paidAt > where.paidAt.gt)).length,
-      delete: async ({ where }) => {
-        const i = awards.findIndex((a) => a.id === where.id);
-        return awards.splice(i, 1)[0];
       },
     },
     sale: {
@@ -181,45 +174,11 @@ function loadBonus({ sales = 250000, tiers, lastPaidAt = null } = {}) {
         _sum: { total: sold.filter((s) => s.at >= where.soldAt.gte).reduce((x, s) => x + s.total, 0) },
       }),
     },
-    salesRepresentative: { findUnique: async () => ({ id: 'r1', user: { id: 'u1' } }) },
+    salesRepresentative: { findUnique: async () => ({ id: 'r1', user: { id: 'u1', name: 'Rep' } }) },
   }));
   notified.length = 0;
   return { bonus: fresh('../src/services/bonus.service'), awards };
 }
-
-test('a bonus tier switched off since the page loaded is refused, not swapped for another tier', async () => {
-  const { bonus, awards } = loadBonus();
-  await assert.rejects(bonus.payTier({ salesRepId: 'r1', bonusRuleId: 'retired' }, { id: 'admin' }),
-    (e) => e.statusCode === 400 && /not active/i.test(e.message));
-  assert.equal(awards.length, 0);
-  assert.equal(notified.length, 0);
-});
-
-test('the tier asked for is the one paid; with none named, the best one reached', async () => {
-  const one = loadBonus();
-  const paid = await one.bonus.payTier({ salesRepId: 'r1', bonusRuleId: 't1' }, { id: 'admin' });
-  assert.equal(paid.bonusRuleId, 't1');
-  assert.equal(paid.bonusAmount, 10000);
-  assert.equal(one.awards.length, 1);
-
-  const best = loadBonus();
-  assert.equal((await best.bonus.payTier({ salesRepId: 'r1' }, { id: 'admin' })).bonusRuleId, 't2');
-});
-
-test('two different tiers paid at the same moment: never two bonuses in one run', async () => {
-  const { bonus, awards } = loadBonus();
-  const results = await Promise.allSettled([
-    bonus.payTier({ salesRepId: 'r1', bonusRuleId: 't1' }, { id: 'a' }),
-    bonus.payTier({ salesRepId: 'r1', bonusRuleId: 't2' }, { id: 'b' }),
-  ]);
-  const ok = results.filter((r) => r.status === 'fulfilled');
-  const refused = results.filter((r) => r.status === 'rejected');
-  assert.ok(awards.length <= 1, `${awards.length} bonuses stand in one run`);
-  assert.equal(ok.length, awards.length);
-  assert.ok(refused.length >= 1);
-  refused.forEach((r) => assert.equal(r.reason.statusCode, 409));
-  assert.equal(notified.length, awards.length); // nobody is told about a payment that was taken back
-});
 
 // ── money-flows-1: a tier counts sales only from its own start ───────────────────────────────────────
 const jul5 = new Date('2026-07-05T09:36:54Z');
@@ -248,19 +207,20 @@ test('a tier added today does not count the selling done before it existed', asy
   assert.equal(p.sales, 9500000, 'the run itself still starts at the oldest tier');
   assert.equal(new Date(p.cycleStart).getTime(), jul5.getTime());
 
-  await assert.rejects(bonus.payTier({ salesRepId: 'r1', bonusRuleId: 'new9m' }, { id: 'admin' }),
-    (e) => e.statusCode === 400 && /short of/.test(e.message));
+  assert.deepEqual(await bonus.creditMilestones('r1'), [], 'nothing is credited for selling done before the tier');
   assert.equal(awards.length, 0);
+  assert.equal(p.wallet.available, 0);
 });
 
-test('sales after a tier starts count toward it, and the award records that tier\'s own count', async () => {
+test('sales after a tier starts count toward it, and the credit records that tier\'s own count', async () => {
   const { bonus, awards } = loadBonus({
     sales: [...repSales, { at: new Date('2026-11-12T08:00:00Z'), total: 9100000 }],
     tiers: [{ id: 'new9m', salesTarget: 9000000, bonusAmount: 1000, effectiveFrom: nov11 }],
   });
-  const paid = await bonus.payTier({ salesRepId: 'r1', bonusRuleId: 'new9m' }, { id: 'admin' });
-  assert.equal(paid.qualifyingSales, 9100000);
-  assert.equal(new Date(paid.cycleStart).getTime(), nov11.getTime());
+  const [credited] = await bonus.creditMilestones('r1');
+  assert.equal(credited.award.qualifyingSales, 9100000);
+  assert.equal(new Date(credited.award.cycleStart).getTime(), nov11.getTime());
+  assert.equal(credited.award.status, 'CREDITED');
   assert.equal(awards.length, 1);
 });
 
@@ -272,14 +232,14 @@ test('tiers that start on the same day behave as before: one shared count', asyn
       { id: 'b', salesTarget: 10000000, bonusAmount: 500000, effectiveFrom: jul5 },
     ],
   });
-  const p = await bonus.progressForRep('r1');
+  const p = await bonus.progressForRep('r1', { heal: false });
   assert.deepEqual(p.tiers.map((t) => t.sales), [9500000, 9500000]);
   assert.equal(p.claimable.ruleId, 'a');
   assert.equal(p.next.ruleId, 'b');
   assert.equal(p.next.remaining, 500000);
 });
 
-test('after a payment every tier counts from the payment, and the payment is the run boundary', async () => {
+test('after a bonus paid by hand every tier counts from the payment, and the payment is the cycle boundary', async () => {
   const paidAt = new Date('2026-09-01T00:00:00Z');
   const { bonus } = loadBonus({
     sales: [...repSales, { at: new Date('2026-10-01T00:00:00Z'), total: 3000000 }],
@@ -289,11 +249,13 @@ test('after a payment every tier counts from the payment, and the payment is the
       { id: 'late', salesTarget: 1000000, bonusAmount: 50000, effectiveFrom: new Date('2026-10-15T00:00:00Z') },
     ],
   });
-  const p = await bonus.progressForRep('r1');
+  const p = await bonus.progressForRep('r1', { heal: false });
   assert.equal(p.tiers.find((t) => t.ruleId === 'a').sales, 3000000);
   assert.equal(p.tiers.find((t) => t.ruleId === 'late').sales, 0, 'a tier that starts after the payment counts from its start');
   assert.equal(new Date(p.cycleStart).getTime(), paidAt.getTime());
   assert.equal(new Date(p.lastPaidAt).getTime(), paidAt.getTime());
+  assert.equal(p.wallet.available, 0, 'a bonus paid by hand is history, never wallet money');
+  assert.equal(p.wallet.legacyPaid, 1000);
 });
 
 test('next is the nearest tier worth chasing, never a later-start tier far away or below one reached', async () => {
@@ -307,7 +269,7 @@ test('next is the nearest tier worth chasing, never a later-start tier far away 
       { id: 't15m', salesTarget: 15000000, bonusAmount: 1000000, effectiveFrom: jul5 },
     ],
   });
-  const p = await bonus.progressForRep('r1');
+  const p = await bonus.progressForRep('r1', { heal: false });
   assert.equal(p.tiers.find((t) => t.ruleId === 'new1m').reached, false);
   assert.equal(p.claimable.ruleId, 't9m');
   assert.equal(p.next.ruleId, 't10m');
@@ -315,14 +277,13 @@ test('next is the nearest tier worth chasing, never a later-start tier far away 
   assert.equal(p.target, 10000000, 'the bar follows the tier he is closest to');
   assert.equal(p.remaining, 277500);
 
-  unlockedNotices.length = 0;
-  await bonus.checkAndAward('r1');
-  const notice = unlockedNotices.find((n) => n.whatsapp?.kind === 'BONUS_UNLOCKED');
-  assert.ok(notice, 'the rep is told he unlocked a bonus');
-  assert.equal(notice.whatsapp.target, 9000000);
+  await bonus.creditMilestones('r1');
+  const notice = notified.find((n) => n.whatsapp?.kind === 'BONUS_UNLOCKED');
+  assert.ok(notice, 'the rep is told a bonus went into his wallet');
+  assert.equal(notice.whatsapp.amount, 2000);
   assert.equal(notice.whatsapp.nextTarget, 10000000);
-  assert.equal(notice.whatsapp.nextBonus, 500000);
-  assert.match(notice.message, /Keep going and [^0-9]*10,000,000 earns/);
+  assert.equal(notice.whatsapp.nextTotal, 500000);
+  assert.match(notice.message, /keep selling to [^0-9]*10,000,000 for [^0-9]*500,000 in total/);
 });
 
 test('a rep sees the bonuses he has been paid, newest first, and only his own', async () => {

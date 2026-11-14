@@ -160,6 +160,34 @@ test('a reached bonus shows as that bonus, whole, not the next tier', () => {
   assert.equal(bonusRow(null), null);
 });
 
+// The bonus in the wallet (owner, 14 Nov 2026): the row shows what the wallet holds, not a tier's total.
+test('a bonus in the wallet shows the wallet figure; a waiting withdrawal never reads as ready', () => {
+  const tiers = [
+    { ruleId: 'a', target: 10000000, bonusAmount: 500000, progress: 100, reached: true, credited: true },
+    { ruleId: 'b', target: 15000000, bonusAmount: 1000000, progress: 73, reached: false, credited: false },
+  ];
+  const held = bonusRow({
+    configured: true, sales: 11000000, claimable: tiers[0], next: tiers[1], tiers,
+    wallet: { available: 500000, pending: 0 },
+  });
+  assert.equal(held.ready, true);
+  assert.equal(held.reward, 500000);
+  assert.equal(held.more, true); // the 15M tier is still ahead in this cycle
+  const both = bonusRow({
+    configured: true, sales: 15200000, claimable: { ...tiers[1], reached: true }, next: null,
+    tiers: tiers.map((t) => ({ ...t, reached: true, credited: true })), wallet: { available: 1000000, pending: 0 },
+  });
+  assert.equal(both.reward, 1000000); // the cycle's whole bonus, never 1,500,000
+  assert.equal(both.more, false);
+  // Asked for: the count starts again; a tier reached since is not in the wallet until that one is paid.
+  const frozen = bonusRow({
+    configured: true, sales: 10500000, frozen: true, claimable: tiers[0], next: tiers[1], tiers,
+    wallet: { available: 0, pending: 1000000 },
+  });
+  assert.equal(frozen.ready, false);
+  assert.equal(frozen.waiting, 1000000);
+});
+
 test('the wallet row keeps a negative balance and blames the fines only when they explain it', () => {
   const r = walletRow({ minWithdrawal: 250000, available: -6500, penalties: 20000, eligible: false, pendingRequests: 0 });
   assert.equal(r.balance, -6500);

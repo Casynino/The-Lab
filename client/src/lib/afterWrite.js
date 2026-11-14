@@ -30,8 +30,9 @@ export const AFTER = Object.freeze({
     'commissions', 'bonus-summary', 'bonus', ...STOCK,
   ],
   // A payout paid or rejected: the rep's balance (Commissions, Sales reps, the rep's profile and Wallet)
-  // and, when paid, the Commission account and "Commission paid" in Finance.
-  payout: ['commissions', 'finance', 'reports', 'dashboard', 'sales-reps', 'sales-rep-profile'],
+  // and, when paid, the Commission account and "Commission paid" in Finance. A bonus withdrawal decided
+  // moves the bonus too: rejected puts it back in the wallet, paid starts the next cycle (14 Nov 2026).
+  payout: ['commissions', 'finance', 'reports', 'dashboard', 'sales-reps', 'sales-rep-profile', 'bonus', 'bonus-summary', 'bonus-awards'],
   // A sale recorded at the counter (or from a rep's stock): money in, stock out.
   sale: ['sales', 'sale', 'finance', 'reports', ...STOCK],
   // Stock received, adjusted or written off (Inventory, a purchase received).

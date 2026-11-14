@@ -38,7 +38,8 @@ test('approving a settlement refreshes the money, the reps, the stock and the co
 });
 
 test('paying or rejecting a payout refreshes Finance, the reps and the wallet (freshness-2/3)', () => {
-  for (const k of ['commissions', 'finance', 'dashboard', 'sales-reps', 'sales-rep-profile']) {
+  // A bonus withdrawal paid or rejected moves the bonus wallet and the admin's bonus tables too.
+  for (const k of ['commissions', 'finance', 'dashboard', 'sales-reps', 'sales-rep-profile', 'bonus', 'bonus-summary', 'bonus-awards']) {
     assert.ok(AFTER.payout.includes(k), `payout misses ${k}`);
   }
 });

@@ -55,6 +55,7 @@ import {
   Modal,
 } from '@/components/ui';
 import { RED } from '@/lib/brand';
+import { ROLES } from '@/lib/constants';
 
 // How many attention rows are visible before the list scrolls, and the height
 // of one row. A row is h-10 (40px) with a 1px divider above all but the first;
@@ -119,6 +120,11 @@ const HERO_DOT = ['bg-brand-400', 'bg-violet-400', 'bg-cyan-300', 'bg-amber-300'
 // the attention list rather than sending you off to hunt for it.
 function ReviewWithdrawals({ items, onClose }) {
   const qc = useQueryClient();
+  // A BONUS withdrawal (14 Nov 2026) comes out of the bonus, not commission, and only the owner pays one
+  // (the server refuses anyone else); staff may still reject it. Same rule as the Commissions page.
+  const isAdmin = useAuth().user?.role === ROLES.ADMIN;
+  const isBonus = (w) => w.source === 'BONUS';
+  const payable = (w) => !isBonus(w) || isAdmin;
   const [busy, setBusy] = useState(null);
   // Reject asks once more, as it does on Commissions (audit money-flows-5): the rep is told at once.
   const [rejecting, setRejecting] = useState(null);
@@ -143,7 +149,7 @@ function ReviewWithdrawals({ items, onClose }) {
 
   return (
     <Modal open onClose={onClose} size="lg"
-      title={`Commission request${items.length !== 1 ? 's' : ''} · ${formatNumber(items.length)}`}>
+      title={`Withdrawal request${items.length !== 1 ? 's' : ''} · ${formatNumber(items.length)}`}>
       <div className="space-y-3">
         {items.map((w) => (
           <div key={w.id} className="rounded-2xl bg-surface p-4 ring-1 ring-white/[0.07]">
@@ -151,6 +157,7 @@ function ReviewWithdrawals({ items, onClose }) {
               <div className="min-w-0">
                 <p className="truncate text-[15px] font-semibold text-foreground">{w.repName}</p>
                 {w.repCode && <p className="text-[11px] text-faint">{w.repCode}</p>}
+                {isBonus(w) && <p className="text-[10.5px] font-medium text-white/60">Bonus</p>}
               </div>
               <p className="shrink-0 text-2xl font-bold tabular-nums text-emerald-400">{formatCurrency(w.amount)}</p>
             </div>
@@ -164,20 +171,26 @@ function ReviewWithdrawals({ items, onClose }) {
             )}
 
             <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-faint">
-              {w.available != null && (
+              {isBonus(w) && <span>Comes from the bonus</span>}
+              {!isBonus(w) && w.available != null && (
                 <span>
                   Balance after this: <b className="text-foreground">{formatCurrency(Math.max(0, w.available))}</b>
                 </span>
               )}
-              {w.earned != null && <span>Earned all time {formatCurrency(w.earned)}</span>}
+              {!isBonus(w) && w.earned != null && <span>Earned all time {formatCurrency(w.earned)}</span>}
               <span className="ml-auto">{formatDateTime(w.requestedAt)}</span>
             </div>
 
             {rejecting === w.id ? (
               <div className="mt-3 space-y-3 rounded-xl bg-rose-500/[0.06] p-3 ring-1 ring-rose-500/20">
                 <p className="text-[13px] leading-snug text-foreground">
-                  Reject {w.repName || 'this rep'}&rsquo;s request for {formatCurrency(w.amount)}? They will be told it was not
-                  approved, and the amount goes back into their balance.
+                  {isBonus(w) ? (
+                    <>Reject {w.repName || 'this rep'}&rsquo;s bonus withdrawal of {formatCurrency(w.amount)}? They will be told it was not
+                    approved; the bonus goes back into their wallet and their bonus count carries on.</>
+                  ) : (
+                    <>Reject {w.repName || 'this rep'}&rsquo;s request for {formatCurrency(w.amount)}? They will be told it was not
+                    approved, and the amount goes back into their balance.</>
+                  )}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <button type="button" disabled={!!busy} onClick={() => setRejecting(null)}
@@ -190,6 +203,8 @@ function ReviewWithdrawals({ items, onClose }) {
                   </button>
                 </div>
               </div>
+            ) : w.status === 'APPROVED' && !payable(w) ? (
+              <p className="mt-3 text-[11px] text-faint">The owner pays it</p>
             ) : w.status === 'APPROVED' ? (
               // Approved earlier through the API but not yet paid: it still waits for the money (audit money-flows-7).
               <button type="button" disabled={!!busy}
@@ -199,13 +214,15 @@ function ReviewWithdrawals({ items, onClose }) {
                 {busy === `${w.id}:PAY` ? 'Paying…' : 'Approved · mark paid'}
               </button>
             ) : (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button type="button" disabled={!!busy}
-                  onClick={() => run(w.id, 'PAY')}
-                  className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-white ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
-                  <ShieldCheck className="h-4 w-4" />
-                  {busy === `${w.id}:PAY` ? 'Paying…' : 'Approve & pay'}
-                </button>
+              <div className={clsx('mt-3 grid gap-2', payable(w) ? 'grid-cols-2' : 'grid-cols-1')}>
+                {payable(w) && (
+                  <button type="button" disabled={!!busy}
+                    onClick={() => run(w.id, 'PAY')}
+                    className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand-500 text-[13px] font-bold text-white ring-1 ring-brand-500 transition active:scale-[0.97] disabled:opacity-60">
+                    <ShieldCheck className="h-4 w-4" />
+                    {busy === `${w.id}:PAY` ? 'Paying…' : 'Approve & pay'}
+                  </button>
+                )}
                 <button type="button" disabled={!!busy}
                   onClick={() => setRejecting(w.id)}
                   className="flex h-11 items-center justify-center gap-2 rounded-xl bg-elevated text-[13px] font-semibold text-foreground ring-1 ring-white/[0.07] transition active:scale-[0.97] disabled:opacity-60">
@@ -221,6 +238,7 @@ function ReviewWithdrawals({ items, onClose }) {
         <p className="text-[11px] leading-snug text-faint">
           One press marks it paid from your own pocket, records it on the Commission account and tells the rep it
           has been paid. Send the money first.
+          {!isAdmin && items.some(isBonus) && ' Only the owner pays a bonus withdrawal.'}
         </p>
       </div>
     </Modal>
@@ -620,7 +638,7 @@ export default function Dashboard() {
         const items = [
           (attention.commissionRequests?.count || 0) > 0 && {
             key: 'commission-req', tone: 'amber',
-            title: `${attention.commissionRequests.count} commission request${attention.commissionRequests.count !== 1 ? 's' : ''} to decide`,
+            title: `${attention.commissionRequests.count} withdrawal request${attention.commissionRequests.count !== 1 ? 's' : ''} to decide`,
             desc: attention.commissionRequests.items?.[0]
               ? `${attention.commissionRequests.items[0].repName}${attention.commissionRequests.count > 1 ? ' and others' : ''} — waiting on your approval`
               : 'Waiting on your approval',

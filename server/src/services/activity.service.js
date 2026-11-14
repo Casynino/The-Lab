@@ -29,7 +29,7 @@ async function feed(limit = 30) {
     items.push({ kind: 'STOCK_REQUEST', at: r.updatedAt, title: `Stock request ${r.requestNumber} — ${r.status}`, detail: r.salesRep?.user?.name, by: r.salesRep?.user?.name }),
   );
   withdrawals.forEach((w) =>
-    items.push({ kind: 'WITHDRAWAL', at: w.updatedAt, title: `Commission withdrawal — ${w.status}`, detail: `${w.salesRep?.user?.name} · ${toNumber(w.amount)} TZS`, by: w.salesRep?.user?.name, amount: toNumber(w.amount) }),
+    items.push({ kind: 'WITHDRAWAL', at: w.updatedAt, title: `${w.source === 'BONUS' ? 'Bonus' : 'Commission'} withdrawal — ${w.status}`, detail: `${w.salesRep?.user?.name} · ${toNumber(w.amount)} TZS`, by: w.salesRep?.user?.name, amount: toNumber(w.amount) }),
   );
   settlements.forEach((s) =>
     items.push({ kind: 'SETTLEMENT', at: s.createdAt, title: `Settlement ${s.settlementNumber} opened`, detail: `${s.salesRep?.user?.name} · ${toNumber(s.assignedValue)} TZS`, by: s.salesRep?.user?.name }),

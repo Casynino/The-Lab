@@ -192,7 +192,11 @@ export function PayoutHistory({ items = [], empty = 'No withdrawals yet', flat =
           return (
             <li key={w.id} className="flex items-center justify-between gap-3 py-3">
               <div className="min-w-0">
-                <p className="text-[15px] font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</p>
+                <p className="text-[15px] font-semibold tabular-nums text-foreground">
+                  {formatCurrency(w.amount)}
+                  {/* A bonus withdrawal (14 Nov 2026) is named; commission, the usual one, is not. */}
+                  {w.source === 'BONUS' && <span className="ml-1.5 text-[11px] font-medium text-muted">Bonus</span>}
+                </p>
                 <p className="mt-0.5 text-xs text-muted">
                   {w.status === 'PAID' && w.paidAt
                     ? formatDateTime(w.paidAt)
@@ -211,7 +215,10 @@ export function PayoutHistory({ items = [], empty = 'No withdrawals yet', flat =
       {items.map((w) => (
         <li key={w.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-elevated px-3 py-2">
           <div className="min-w-0">
-            <p className="text-sm font-semibold tabular-nums text-foreground">{formatCurrency(w.amount)}</p>
+            <p className="text-sm font-semibold tabular-nums text-foreground">
+              {formatCurrency(w.amount)}
+              {w.source === 'BONUS' && <span className="ml-1.5 text-[11px] font-medium text-muted">Bonus</span>}
+            </p>
             <p className="text-[11px] text-faint">
               {w.status === 'PAID' && w.paidAt
                 ? `Paid ${formatDateTime(w.paidAt)}`

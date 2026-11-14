@@ -482,14 +482,14 @@ async function repActivity(salesRepId) {
     prisma.stockTransfer.findMany({ where: { direction: 'WAREHOUSE_TO_REP', toRepId: salesRepId }, select: { transferNumber: true, status: true, dispatchedAt: true }, orderBy: { dispatchedAt: 'desc' }, take: 12 }),
     prisma.sale.findMany({ where: { salesRepId, settlementId: { not: null }, status: { not: 'CANCELLED' } }, select: { saleNumber: true, total: true, soldAt: true }, orderBy: { soldAt: 'desc' }, take: 12 }),
     prisma.return.findMany({ where: { salesRepId }, select: { returnNumber: true, status: true, processedAt: true }, orderBy: { processedAt: 'desc' }, take: 12 }),
-    prisma.commissionWithdrawal.findMany({ where: { salesRepId }, select: { amount: true, status: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 12 }),
+    prisma.commissionWithdrawal.findMany({ where: { salesRepId }, select: { amount: true, status: true, source: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 12 }),
   ]);
   const ev = [];
   for (const r of requests) ev.push({ at: r.requestedAt, type: 'STOCK_REQUEST', title: `Stock request ${r.requestNumber}`, status: r.status });
   for (const t of issues) ev.push({ at: t.dispatchedAt, type: 'ISSUE', title: `Stock issued · ${t.transferNumber}`, status: t.status });
   for (const s of sales) ev.push({ at: s.soldAt, type: 'SETTLEMENT', title: `Boxes settled · ${s.saleNumber}`, amount: toNumber(s.total) });
   for (const r of returns) ev.push({ at: r.processedAt, type: 'RETURN', title: `Return ${r.returnNumber}`, status: r.status });
-  for (const w of withdrawals) ev.push({ at: w.createdAt, type: 'COMMISSION', title: 'Commission withdrawal', status: w.status, amount: toNumber(w.amount) });
+  for (const w of withdrawals) ev.push({ at: w.createdAt, type: 'COMMISSION', title: w.source === 'BONUS' ? 'Bonus withdrawal' : 'Commission withdrawal', status: w.status, amount: toNumber(w.amount) });
   ev.sort((a, b) => new Date(b.at) - new Date(a.at));
   return ev.slice(0, 40);
 }
@@ -750,7 +750,8 @@ async function deletionCheck(repId) {
     prisma.settlement.count({ where: { salesRepId: repId } }),
     prisma.sale.aggregate({ where: { salesRepId: repId }, _count: { _all: true }, _sum: { total: true } }),
     prisma.return.count({ where: { salesRepId: repId } }),
-    prisma.commissionWithdrawal.aggregate({ where: { salesRepId: repId, status: 'PAID' }, _sum: { amount: true } }),
+    // commissionPaidOut: commission only, not a bonus payout (source BONUS, 14 Nov 2026).
+    prisma.commissionWithdrawal.aggregate({ where: { salesRepId: repId, status: 'PAID', source: 'COMMISSION' }, _sum: { amount: true } }),
     require('../services/commission.service').computeForRep(repId).catch(() => null),
   ]);
 

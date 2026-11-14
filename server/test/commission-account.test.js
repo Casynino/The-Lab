@@ -261,6 +261,44 @@ test('a payout paid while the ledger is being rebuilt is recorded once', async (
   assert.equal(rows.filter((r) => r.refId === 'wd-race' && r.type === 'COMMISSION_PAYMENT').length, 1);
 });
 
+// Bonus in the wallet (owner, 14 Nov 2026): a paid BONUS withdrawal is the same kind of record as a commission
+// payout — same type, same account, so every exclusion holds — named "Bonus paid", under "Bonus Payments",
+// whether it is written when the owner pays or by the self-heal rebuild.
+test('a paid bonus withdrawal is recorded like a commission payout, named as a bonus', async () => {
+  reset();
+  const txn = await finance.recordCommissionPayment({ amount: 500000, who: 'Juma', refId: 'wd-bonus', occurredAt: D('2026-08-02'), source: 'BONUS' }, null);
+  assert.equal(txn.type, 'COMMISSION_PAYMENT');
+  assert.equal(txn.accountId, commission.id);
+  assert.equal(txn.category, 'Bonus Payments');
+  assert.equal(txn.description, 'Bonus paid — Juma');
+  const plain = await finance.recordCommissionPayment({ amount: 30000, who: 'Juma', refId: 'wd-comm', occurredAt: D('2026-08-02') }, null);
+  assert.equal(plain.category, 'Commission Payments');
+  assert.equal(plain.description, 'Commission paid — Juma');
+
+  reset();
+  const paid = [
+    { id: 'wd-b', source: 'BONUS', status: 'PAID', amount: 1000000, paidAt: D('2026-08-05'), decidedAt: D('2026-08-05'), createdAt: D('2026-08-04'), salesRep: { user: { name: 'KP' } } },
+    { id: 'wd-c', source: 'COMMISSION', status: 'PAID', amount: 20000, paidAt: D('2026-08-05'), decidedAt: D('2026-08-05'), createdAt: D('2026-08-04'), salesRep: { user: { name: 'KP' } } },
+  ];
+  Object.assign(prismaStub, {
+    sale: { findMany: async () => [] },
+    saleItem: { findMany: async () => [] },
+    commissionWithdrawal: { findMany: async () => paid },
+  });
+  try {
+    await finance.backfillFromHistory();
+  } finally {
+    delete prismaStub.sale; delete prismaStub.saleItem; delete prismaStub.commissionWithdrawal;
+  }
+  const b = rows.find((r) => r.refId === 'wd-b');
+  const c = rows.find((r) => r.refId === 'wd-c');
+  assert.equal(b.type, 'COMMISSION_PAYMENT');
+  assert.equal(b.category, 'Bonus Payments');
+  assert.equal(b.description, 'Bonus paid — KP');
+  assert.equal(c.category, 'Commission Payments');
+  assert.equal(c.description, 'Commission paid — KP');
+});
+
 test('a payout moves no balance on any money account, and the record is not a balance', async () => {
   reset();
   add({ accountId: mpesa.id, direction: 'IN', type: 'SETTLEMENT', amount: 48000, occurredAt: D('2026-08-01'), refType: 'Sale', brandId: OHIS });

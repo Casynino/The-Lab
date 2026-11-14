@@ -88,14 +88,22 @@ export function reportMonthLabel(r) {
 }
 
 // The bonus row on Home once a tier is reached (audit, 12 Nov 2026): it showed the NEXT tier's 13% and
-// TSh 500,000 in green beside "TSh 50,000 ready", which read as if 500,000 were ready. A bonus he can be
-// paid is shown as that bonus, whole; the way to the next tier stays on the Wallet's Bonus tab.
+// TSh 500,000 in green beside "TSh 50,000 ready", which read as if 500,000 were ready. A bonus he can
+// withdraw is shown as that bonus, whole; the way to the next tier stays on the Wallet's Bonus tab.
+// Since 14 Nov 2026 a reached bonus is IN HIS WALLET: the figure is the server's `wallet.available` (the
+// whole bonus credited in the cycle), not a tier's total. `waiting` is a bonus withdrawal not yet paid;
+// while one waits nothing new is credited, so a tier reached in the new count is not "ready" yet.
+// `more`: a bigger tier is still ahead in this cycle (he can withdraw now or push on).
 export function bonusRow(bonus) {
   const track = bonusTrack(bonus);
   if (!track) return null;
-  const ready = bonus.claimable;
-  if (ready) return { ready: true, pct: 100, barPct: 100, markers: [], reward: Number(ready.bonusAmount) || 0, aim: track.aim };
-  return { ready: false, pct: track.pct, barPct: track.barPct, markers: track.markers, reward: Number(track.aim.bonusAmount) || 0, aim: track.aim };
+  const w = bonus.wallet;
+  // An answer saved before the wallet existed has no `wallet`: the reached tier stands in for it.
+  const inWallet = w ? Number(w.available) || 0 : Number(bonus.claimable?.bonusAmount) || 0;
+  const waiting = w ? Math.max(0, Number(w.pending) || 0) : 0;
+  const more = Boolean(bonus.next);
+  if (inWallet > 0) return { ready: true, pct: 100, barPct: 100, markers: [], reward: inWallet, aim: track.aim, waiting, more };
+  return { ready: false, pct: track.pct, barPct: track.barPct, markers: track.markers, reward: Number(track.aim.bonusAmount) || 0, aim: track.aim, waiting, more };
 }
 
 // The wallet row on Home, read from the same answer as the Wallet page (audit, 12 Nov 2026): a balance

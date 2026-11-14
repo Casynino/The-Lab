@@ -79,7 +79,8 @@ async function buildPeriodBody({ start, end, prev, topProducts = 8 }) {
       by: ['salesRepId'],
       // Paid in the month, by the day it was paid — not approved-but-unpaid, and not counted again when an
       // approved request is paid the month after (audit #81). Rows with no paidAt fall back to the decision.
-      where: { status: 'PAID', OR: [{ paidAt: { gte: start, lte: end } }, { paidAt: null, decidedAt: { gte: start, lte: end } }] },
+      // Commission only: a bonus payout (source BONUS, 14 Nov 2026) is not commission paid.
+      where: { status: 'PAID', source: 'COMMISSION', OR: [{ paidAt: { gte: start, lte: end } }, { paidAt: null, decidedAt: { gte: start, lte: end } }] },
       _sum: { amount: true },
     }).catch(() => []),
     require('./commission.service').summaryAllReps().catch(() => ({ items: [] })),

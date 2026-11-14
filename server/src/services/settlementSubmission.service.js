@@ -253,10 +253,11 @@ async function approve(submissionId, actor) {
   const wa = require('./whatsappNotify.service');
   wa.background(wa.commissionReadyCheck(sub.salesRepId));
   // An approved settlement is the only thing that grows qualifying sales, so
-  // this is where a rep can cross the bonus target. Runs after the response and
-  // is a no-op until the line is actually crossed.
+  // this is where a rep can cross a bonus target: the milestone is credited into
+  // his wallet (once, under his row lock) and he and the owner are told. Runs
+  // after the response; a no-op until a line is actually crossed.
   wa.background(
-    require('./bonus.service').checkAndAward(sub.salesRepId).catch(() => null),
+    require('./bonus.service').creditMilestones(sub.salesRepId).catch(() => null),
   );
 
   return out.dec;

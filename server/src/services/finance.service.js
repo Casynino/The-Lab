@@ -444,8 +444,7 @@ async function backfillFromHistory() {
           direction: 'OUT',
           type: 'COMMISSION_PAYMENT',
           amount: round2(toNumber(w.amount)),
-          category: 'Commission Payments',
-          description: `Commission paid${w.salesRep?.user?.name ? ` — ${w.salesRep.user.name}` : ''}`,
+          ...payoutWords(w.source, w.salesRep?.user?.name),
           refType: 'CommissionWithdrawal',
           refId: w.id,
           occurredAt: w.paidAt || w.decidedAt || w.createdAt,
@@ -669,6 +668,17 @@ async function recordSaleIncome({ saleId, saleNumber, amount, fromSettlement, wh
   }
 }
 
+// How a paid withdrawal reads in the ledger. A BONUS withdrawal (14 Nov 2026) is the same kind of row as a
+// commission payout — type COMMISSION_PAYMENT, on the commission account, off every balance and out of money
+// in/out — named for what it was.
+function payoutWords(source, who) {
+  const bonus = source === 'BONUS';
+  return {
+    category: bonus ? 'Bonus Payments' : 'Commission Payments',
+    description: `${bonus ? 'Bonus' : 'Commission'} paid${who ? ` — ${who}` : ''}`,
+  };
+}
+
 // Automatic money-out when a commission withdrawal is paid.
 // Write a payout's ledger row at most once. The withdrawal row is locked first (FOR UPDATE), then the
 // check for an existing COMMISSION_PAYMENT row and the write run in the same transaction. Approve & pay
@@ -688,7 +698,7 @@ async function writePayoutRowOnce(withdrawalId, makeData) {
   });
 }
 
-async function recordCommissionPayment({ amount, who, reference, refId, occurredAt, fromOwnPocket }, actor) {
+async function recordCommissionPayment({ amount, who, reference, refId, occurredAt, fromOwnPocket, source }, actor) {
   try {
     const amt = round2(toNumber(amount));
     if (!(amt > 0)) return null;
@@ -723,8 +733,7 @@ async function recordCommissionPayment({ amount, who, reference, refId, occurred
         direction: 'OUT',
         type: 'COMMISSION_PAYMENT',
         amount: amt,
-        category: 'Commission Payments',
-        description: `Commission paid${who ? ` — ${who}` : ''}`,
+        ...payoutWords(source, who),
         reference: reference || null,
         refType: 'CommissionWithdrawal',
         refId: refId || null,
@@ -1801,7 +1810,7 @@ function buildCapital(input = {}) {
       total: owesTotal,
       lines: [
         { key: 'suppliers', label: `Owed to ${suppliers.name || 'your supplier'}`, amount: suppliers.total, hint: 'stock they financed' },
-        { key: 'reps', label: 'Owed to your reps', amount: reps, hint: 'commission they can withdraw' },
+        { key: 'reps', label: 'Owed to your reps', amount: reps, hint: 'commission and bonus they can withdraw' },
         { key: 'owner', label: 'Owed back to you', amount: owner.total, hint: 'money out of your own pocket' },
       ],
     },
@@ -1830,12 +1839,15 @@ async function overview(period = 'month', shared = {}) {
   // (historical or missed) into finance before computing. Idempotent by refId.
   // Every read below starts only after it, as before.
   await backfillShared().catch(() => {});
-  const [accounts, prof, inv, commSummary, epoch] = await Promise.all([
+  const [accounts, prof, inv, commSummary, epoch, bonusSummary] = await Promise.all([
     accountBalances(),
     reports.profitOverview(period),
     shared.valuation || inventory.valuation(),
     shared.commSummary || commission.summaryAllReps(),
     reports.financeEpoch(),
+    // The reps' bonus wallets (14 Nov 2026): credited bonus and bonus withdrawals not yet paid are owed too.
+    // Read only (`heal: false`): opening Finance never credits anything.
+    require('./bonus.service').summaryAllReps({ heal: false }),
   ]);
 
   const cashPosition = round2(accounts.reduce((s, a) => s + a.balance, 0));
@@ -2200,8 +2212,12 @@ async function overview(period = 'month', shared = {}) {
   // places on the page can quote a different debt to the same reps. Requests approved but not yet paid
   // are inside `requested` (commission withdrawalTotals counts them as waiting, audit money-flows-7), so
   // they are not added a second time here.
+  // The bonus wallets are added in (14 Nov 2026): a credited bonus ready to withdraw, and a bonus
+  // withdrawal asked for or approved but not yet paid, are money the reps can take just the same.
+  const bonusTotals = (bonusSummary && bonusSummary.totals) || {};
   const repCommissionPayable = round2(
-    commSummary.totals.available + commSummary.totals.requested,
+    commSummary.totals.available + commSummary.totals.requested
+      + (Number(bonusTotals.available) || 0) + (Number(bonusTotals.pending) || 0),
   );
   // ── The supplier split, ALL TIME ────────────────────────────────────────
   // A balance sheet answers "right now", so what the supplier is owed today

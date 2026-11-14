@@ -338,10 +338,11 @@ async function boxesSettledByRep(salesRepId) {
   return agg._sum.baseQuantity || 0;
 }
 
+// Commission only: a BONUS withdrawal (14 Nov 2026) comes out of the bonus pot, never out of commission.
 async function withdrawalTotals(salesRepId) {
   const grouped = await prisma.commissionWithdrawal.groupBy({
     by: ['status'],
-    where: { salesRepId },
+    where: { salesRepId, source: 'COMMISSION' },
     _sum: { amount: true },
   });
   const m = new Map(grouped.map((g) => [g.status, toNumber(g._sum.amount)]));
@@ -365,7 +366,8 @@ async function withdrawalTotals(salesRepId) {
 // otherwise, and no index can sort across two columns like that.
 async function lastPayoutFor(salesRepId) {
   const rows = await prisma.commissionWithdrawal.findMany({
-    where: { salesRepId, status: { in: ['APPROVED', 'PAID'] } },
+    // A bonus payout does not close a commission run.
+    where: { salesRepId, source: 'COMMISSION', status: { in: ['APPROVED', 'PAID'] } },
     select: { id: true, amount: true, status: true, paidAt: true, decidedAt: true, requestedAt: true },
   });
   let best = null;
@@ -617,9 +619,21 @@ function emergencyStateFor(rep) {
   };
 }
 
-async function requestWithdrawal(salesRepId, amount, notes, actor) {
+const SOURCES = ['COMMISSION', 'BONUS'];
+// How a withdrawal is named to the rep and the owner.
+const withdrawalWord = (source) => (source === 'BONUS' ? 'bonus withdrawal' : 'commission withdrawal');
+
+// `source` says which pot it comes from (owner, 14 Nov 2026). COMMISSION is the request as it has always
+// been: any amount up to the commission available, the minimum, the emergency window. BONUS is one request
+// for the WHOLE bonus credited in the rep's current bonus cycle (bonus.requestBonusTx): no minimum, no
+// window, and it ends the bonus cycle. Neither pot ever pays for the other.
+async function requestWithdrawal(salesRepId, amount, notes, actor, { source = 'COMMISSION' } = {}) {
   const amt = round2(amount);
   if (amt <= 0) throw ApiError.badRequest('Amount must be greater than zero');
+  if (!SOURCES.includes(source)) throw ApiError.badRequest('Withdraw from commission or from bonus');
+  const isBonus = source === 'BONUS';
+  const bonus = require('./bonus.service');
+  let credited = [];
 
   // One request at a time per rep (audit #30, 11 Nov 2026): the balance check and the create used to be a
   // read followed by a write with nothing between them, so two taps at the same instant both saw the
@@ -629,15 +643,23 @@ async function requestWithdrawal(salesRepId, amount, notes, actor) {
   // connection, so it sees the first request once that has committed.
   const w = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "sales_representatives" WHERE id = ${salesRepId} FOR UPDATE`;
+    if (isBonus) {
+      const r = await bonus.requestBonusTx(tx, salesRepId, amt, notes, WITHDRAWAL_INCLUDE);
+      credited = r.credited;
+      return r.withdrawal;
+    }
     return createWithdrawalTx(tx, salesRepId, amt, notes);
   }, { maxWait: 10_000, timeout: 20_000 });
+  // A milestone credited on the way in (its own credit had not run yet) is announced once it is committed.
+  if (credited.length) await bonus.announce(salesRepId, credited).catch(() => {});
 
   const repName = w.salesRep?.user?.name || 'A rep';
+  const what = withdrawalWord(source);
   notification.notifyAdmins({
     type: 'GENERAL',
     severity: 'INFO',
-    title: 'Commission withdrawal requested',
-    message: `${repName} requested a commission withdrawal of ${formatCurrency(amt)}.`,
+    title: isBonus ? 'Bonus withdrawal requested' : 'Commission withdrawal requested',
+    message: `${repName} requested a ${what} of ${formatCurrency(w.amount)}.`,
     entityType: 'CommissionWithdrawal',
     entityId: w.id,
   }).catch(() => {});
@@ -645,9 +667,11 @@ async function requestWithdrawal(salesRepId, amount, notes, actor) {
     notification.notifyUser(actor.id, {
       type: 'GENERAL',
       severity: 'INFO',
-      title: 'Withdrawal request submitted',
-      message: `Your withdrawal request of ${formatCurrency(amt)} has been submitted and is pending approval.`,
-      whatsapp: { kind: 'WITHDRAWAL_REQUESTED', amount: amt },
+      title: isBonus ? 'Bonus withdrawal submitted' : 'Withdrawal request submitted',
+      message: isBonus
+        ? `Your bonus withdrawal of ${formatCurrency(w.amount)} has been submitted and is pending approval. Your bonus count starts again from zero.`
+        : `Your withdrawal request of ${formatCurrency(amt)} has been submitted and is pending approval.`,
+      whatsapp: { kind: 'WITHDRAWAL_REQUESTED', amount: toNumber(w.amount), source },
       entityType: 'CommissionWithdrawal',
       entityId: w.id,
     }).catch(() => {});
@@ -702,6 +726,7 @@ async function createWithdrawalTx(tx, salesRepId, amt, notes) {
       amount: amt,
       notes: notes || null,
       status: 'PENDING',
+      source: 'COMMISSION',
       // Stamped on the money, because it is the only record of the exception
       // that can be read without opening the database.
       underEmergency,
@@ -715,6 +740,7 @@ async function listWithdrawals(filters, pagination) {
   const where = {};
   if (filters.salesRepId) where.salesRepId = filters.salesRepId;
   if (filters.status) where.status = filters.status;
+  if (filters.source) where.source = filters.source;
   const [items, total] = await Promise.all([
     prisma.commissionWithdrawal.findMany({ where, include: WITHDRAWAL_INCLUDE, skip: pagination.skip, take: pagination.take, orderBy: pagination.orderBy }),
     prisma.commissionWithdrawal.count({ where }),
@@ -733,6 +759,12 @@ async function decideWithdrawal(id, action, actor) {
   };
   const t = transitions[action];
   if (!t) throw ApiError.badRequest('Unknown action');
+  // Paying a bonus is the owner's (it was admin-only before bonuses lived in the wallet); staff may still
+  // approve or reject one, and pay commission as before.
+  const isBonus = w.source === 'BONUS';
+  if (isBonus && t.to === 'PAID' && actor?.role !== 'ADMIN') {
+    throw ApiError.forbidden('Only the owner can pay a bonus withdrawal.');
+  }
   if (!t.from.includes(w.status)) {
     // Already where this press wanted it (a retry after a lost answer): say the first one went through,
     // not "Cannot pay a PAID request" (audit backend-integrity-5).
@@ -773,11 +805,18 @@ async function decideWithdrawal(id, action, actor) {
     }).catch(() => {});
   }
 
+  // A rejected bonus request reopens the cycle it ended (the bonus is back, the count carries on); a paid
+  // one starts the next cycle. Either way a milestone may now be due, and is credited here.
+  if (isBonus && (t.to === 'REJECTED' || t.to === 'PAID')) {
+    await require('./bonus.service').creditMilestones(w.salesRepId).catch(() => []);
+  }
+
   const repUserId = updated.salesRep?.user?.id;
+  const what = withdrawalWord(w.source);
   const decisionMsgs = {
-    APPROVED: { kind: 'WITHDRAWAL_APPROVED', title: 'Withdrawal approved', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} has been approved.`, severity: 'INFO' },
-    REJECTED: { kind: 'WITHDRAWAL_REJECTED', title: 'Withdrawal rejected', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} was not approved.`, severity: 'WARNING' },
-    PAID: { kind: 'WITHDRAWAL_PAID', title: 'Commission payment received', message: `Your commission withdrawal of ${formatCurrency(updated.amount)} has been paid out.`, severity: 'INFO' },
+    APPROVED: { kind: 'WITHDRAWAL_APPROVED', title: isBonus ? 'Bonus withdrawal approved' : 'Withdrawal approved', message: `Your ${what} of ${formatCurrency(updated.amount)} has been approved.`, severity: 'INFO' },
+    REJECTED: { kind: 'WITHDRAWAL_REJECTED', title: isBonus ? 'Bonus withdrawal rejected' : 'Withdrawal rejected', message: `Your ${what} of ${formatCurrency(updated.amount)} was not approved.${isBonus ? ' The bonus is back in your wallet.' : ''}`, severity: 'WARNING' },
+    PAID: { kind: 'WITHDRAWAL_PAID', title: isBonus ? 'Bonus payment received' : 'Commission payment received', message: `Your ${what} of ${formatCurrency(updated.amount)} has been paid out.`, severity: 'INFO' },
   };
   const dm = decisionMsgs[t.to];
   if (dm && repUserId) {
@@ -786,7 +825,7 @@ async function decideWithdrawal(id, action, actor) {
       severity: dm.severity,
       title: dm.title,
       message: dm.message,
-      whatsapp: { kind: dm.kind, amount: updated.amount },
+      whatsapp: { kind: dm.kind, amount: updated.amount, source: w.source || 'COMMISSION' },
       entityType: 'CommissionWithdrawal',
       entityId: id,
     }).catch(() => {});

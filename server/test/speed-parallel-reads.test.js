@@ -105,7 +105,7 @@ test('bonus progress for every rep is read at once and keeps the reps\' order', 
   stub('../src/config/prisma', db({
     salesRepresentative: { findMany: async () => reps },
     bonusRule: { findMany: async () => [{ id: 't1', salesTarget: 1000000, bonusAmount: 50000, effectiveFrom: new Date('2026-01-01'), isActive: true }] },
-    bonusAward: { findFirst: ({ where }) => g.run(async () => { await wait(byId.get(where.salesRepId).delay); return null; }) },
+    bonusAward: { findMany: ({ where }) => g.run(async () => { await wait(byId.get(where.salesRepId).delay); return []; }) },
   }));
   const bonus = fresh('../src/services/bonus.service');
 

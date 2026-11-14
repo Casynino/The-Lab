@@ -154,13 +154,18 @@ const settlementExtendDeadline = {
 };
 
 // --- Commissions -----------------------------------------------------------
-const withdrawRequest = { body: z.object({ amount: money, notes: z.string().max(500).optional() }) };
+// `source`: which pot (14 Nov 2026). Left out = COMMISSION, so an older screen keeps working as before.
+const WITHDRAWAL_SOURCES = ['COMMISSION', 'BONUS'];
+const withdrawRequest = {
+  body: z.object({ amount: money, notes: z.string().max(500).optional(), source: z.enum(WITHDRAWAL_SOURCES).default('COMMISSION') }),
+};
 const withdrawDecide = { body: z.object({ action: z.enum(['APPROVE', 'REJECT', 'PAY']) }) };
 const withdrawalQuery = {
   query: z.object({
     ...paginationFields,
     status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'PAID']).optional(),
     salesRepId: id.optional(),
+    source: z.enum(WITHDRAWAL_SOURCES).optional(),
   }),
 };
 

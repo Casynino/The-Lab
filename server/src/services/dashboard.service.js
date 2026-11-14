@@ -786,10 +786,13 @@ async function command() {
         count: pendingWithdrawals.length,
         total: round2(pendingWithdrawals.reduce((n, w) => n + toNumber(w.amount), 0)),
         items: pendingWithdrawals.map((w) => {
-          const bal = (commAll.items || []).find((c) => c.salesRepId === w.salesRepId);
+          // A BONUS withdrawal (14 Nov 2026) comes out of the bonus, not commission: no commission figures on it.
+          const source = w.source || 'COMMISSION';
+          const bal = source === 'BONUS' ? null : (commAll.items || []).find((c) => c.salesRepId === w.salesRepId);
           return {
             id: w.id,
             status: w.status,
+            source,
             salesRepId: w.salesRepId,
             repName: w.salesRep?.user?.name || w.salesRep?.code || 'Rep',
             repCode: w.salesRep?.code || null,

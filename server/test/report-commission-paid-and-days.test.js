@@ -37,6 +37,8 @@ function matches(row, where) {
 const at = (iso) => new Date(iso);
 
 function stubReportDeps(withdrawals) {
+  // Every withdrawal before 14 Nov 2026 is COMMISSION (the column's default); a BONUS payout is not commission paid.
+  withdrawals.forEach((w) => { if (!w.source) w.source = 'COMMISSION'; });
   const count = async () => 0;
   stub('../src/config/prisma', {
     setting: { findUnique: async () => null },
@@ -78,7 +80,8 @@ test('weekly "Commission paid": paid money only, in the week it was paid, and on
   const legacyPaid = { salesRepId: 'r2', amount: 20000, status: 'PAID', decidedAt: at('2026-01-06T09:00:00Z'), paidAt: null };
   // Approved in W02, paid in W03: while the W02 report is built it is still only approved…
   const later = { salesRepId: 'r2', amount: 30000, status: 'APPROVED', decidedAt: at('2026-01-08T09:00:00Z'), paidAt: null };
-  const rows = [paidInW02, approvedOnly, legacyPaid, later];
+  const bonusPaid = { salesRepId: 'r1', amount: 500000, status: 'PAID', source: 'BONUS', decidedAt: at('2026-01-07T09:00:00Z'), paidAt: at('2026-01-07T09:00:00Z') };
+  const rows = [paidInW02, approvedOnly, legacyPaid, later, bonusPaid];
   stubReportDeps(rows);
   const weekly = fresh('../src/services/weeklyReport.service');
 
@@ -98,6 +101,8 @@ test('monthly "Commission paid" per rep: paid in the month on the business\'s cl
     { salesRepId: 'r2', amount: 10000, status: 'PAID', decidedAt: at('2026-01-15T07:00:00Z'), paidAt: null },
     // 01:00 EAT on 1 February: February's money.
     { salesRepId: 'r2', amount: 90000, status: 'PAID', decidedAt: at('2026-01-31T22:00:00Z'), paidAt: at('2026-01-31T22:00:00Z') },
+    // A bonus payout is not commission paid (14 Nov 2026).
+    { salesRepId: 'r1', amount: 500000, status: 'PAID', source: 'BONUS', decidedAt: at('2026-01-12T07:00:00Z'), paidAt: at('2026-01-12T07:00:00Z') },
   ]);
   const monthly = fresh('../src/services/monthlyReport.service');
   const d = await monthly.buildMonthlyData('2026-01');
