@@ -50,6 +50,7 @@ const TYPES = {
   SETTLEMENT_SUBMITTED: { label: 'Settlement submitted', priority: 'ACTION' },
   RETURN_SUBMITTED: { label: 'Return request submitted', priority: 'ACTION' },
   COMMISSION_READY: { label: 'Rep commission ready for withdrawal', priority: 'INFO' },
+  WITHDRAWAL_REQUESTED: { label: 'Rep asked to withdraw commission or bonus (with where to send it)', priority: 'ACTION' },
   LOW_STOCK: { label: 'Low stock alert', priority: 'WARNING' },
   OUT_OF_STOCK: { label: 'Out of stock alert', priority: 'CRITICAL' },
   DAILY_SUMMARY: { label: 'Daily business report (21:00, with PDF)', priority: 'INFO' },
@@ -513,6 +514,19 @@ async function returnSubmitted(ret) {
     reason: ret.reason,
   });
   return queue('RETURN_SUBMITTED', { priority: 'ACTION', dedupeKey: `return:${ret.id}`, refType: 'Return', refId: ret.id, text });
+}
+
+// 7. A rep asked to be paid: the amount, the pot and the payout address in full, so the owner can approve and
+// send the money from the message. Once per request.
+async function withdrawalRequested(w) {
+  const text = wt.owner.withdrawalRequested({
+    rep: w.salesRep?.user?.name || w.salesRep?.code || 'A rep',
+    amount: toNumber(w.amount),
+    source: w.source,
+    payTo: w.notes,
+    belowMinimum: Boolean(w.underEmergency),
+  });
+  return queue('WITHDRAWAL_REQUESTED', { priority: 'ACTION', dedupeKey: `withdrawal:${w.id}`, refType: 'CommissionWithdrawal', refId: w.id, text });
 }
 
 // 8. Commission ready — a rep's available balance reached the withdrawal
@@ -1048,6 +1062,7 @@ module.exports = {
   settlementSubmitted,
   settlementSubmittedBatch,
   returnSubmitted,
+  withdrawalRequested,
   commissionReadyCheck,
   stockAlertForProduct,
   scanStockAlerts,

@@ -655,6 +655,9 @@ async function requestWithdrawal(salesRepId, amount, notes, actor, { source = 'C
 
   const repName = w.salesRep?.user?.name || 'A rep';
   const what = withdrawalWord(source);
+  // The owner's WhatsApp, with where to send the money (whatsappNotify.withdrawalRequested).
+  const wa = require('./whatsappNotify.service');
+  wa.background(wa.withdrawalRequested(w));
   notification.notifyAdmins({
     type: 'GENERAL',
     severity: 'INFO',

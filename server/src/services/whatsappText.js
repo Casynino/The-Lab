@@ -225,6 +225,30 @@ const owner = {
     `Daily Fine: ${money(rate)}`,
   ),
 
+  // A rep asked to be paid (Nino, 14 Nov 2026: "the text should come fully so I can see all the details of his
+  // withdrawal"). Who, how much, from which pot, and where to send it — the payout address the rep typed on the
+  // withdraw form, which the app stores in the request's notes as one line:
+  //   "Mobile money · <number> · <name>"   or   "Bank · <bank> · <account> · <name>"
+  // Read back into labelled lines so the number can be copied straight from WhatsApp. A note in any other shape
+  // (older requests, a staff entry) is shown as it was written.
+  withdrawalRequested: ({ rep, amount, source = 'COMMISSION', payTo, belowMinimum = false }) => {
+    const parts = String(payTo || '').split('·').map((s) => s.trim()).filter(Boolean);
+    let where;
+    if (/^mobile money$/i.test(parts[0] || '') && parts.length >= 3) {
+      where = lines('Pay By: Mobile Money', `Number: ${parts[1]}`, `Name: ${parts.slice(2).join(' ')}`);
+    } else if (/^bank$/i.test(parts[0] || '') && parts.length >= 4) {
+      where = lines(`Pay By: Bank (${parts[1]})`, `Account: ${parts[2]}`, `Name: ${parts.slice(3).join(' ')}`);
+    } else {
+      where = payTo ? `Pay To: ${String(payTo).trim()}` : 'Pay To: not given, ask the rep';
+    }
+    return doc(
+      bold(source === 'BONUS' ? 'BONUS WITHDRAWAL REQUEST' : 'COMMISSION WITHDRAWAL REQUEST'),
+      lines(`Rep: ${rep}`, `Amount: ${money(amount)}`, belowMinimum && 'Below Minimum: one-off window'),
+      where,
+      'Status: Waiting for your approval',
+    );
+  },
+
   test: () => doc(bold('ZELAB — TEST NOTIFICATION'), 'WhatsApp notifications are working.'),
 };
 
