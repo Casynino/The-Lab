@@ -231,21 +231,21 @@ const owner = {
   //   "Mobile money · <number> · <name>"   or   "Bank · <bank> · <account> · <name>"
   // Read back into labelled lines so the number can be copied straight from WhatsApp. A note in any other shape
   // (older requests, a staff entry) is shown as it was written.
-  withdrawalRequested: ({ rep, amount, source = 'COMMISSION', payTo, belowMinimum = false }) => {
-    const parts = String(payTo || '').split('·').map((s) => s.trim()).filter(Boolean);
+  withdrawalRequested: ({ rep, amount, source = 'COMMISSION', payTo }) => {
+    // Nino's own format (14 Nov 2026), short: the heading, who and how much, then where to send it.
+    const parts = String(payTo || '').split('·').map((x) => x.trim()).filter(Boolean);
     let where;
     if (/^mobile money$/i.test(parts[0] || '') && parts.length >= 3) {
-      where = lines('Pay By: Mobile Money', `Number: ${parts[1]}`, `Name: ${parts.slice(2).join(' ')}`);
+      where = lines(`Number: ${parts[1]}`, `Name: ${parts.slice(2).join(' ')}`);
     } else if (/^bank$/i.test(parts[0] || '') && parts.length >= 4) {
-      where = lines(`Pay By: Bank (${parts[1]})`, `Account: ${parts[2]}`, `Name: ${parts.slice(3).join(' ')}`);
+      where = lines(`Bank: ${parts[1]}`, `Number: ${parts[2]}`, `Name: ${parts.slice(3).join(' ')}`);
     } else {
-      where = payTo ? `Pay To: ${String(payTo).trim()}` : 'Pay To: not given, ask the rep';
+      where = `Pay To: ${payTo ? String(payTo).trim() : 'not given, ask the rep'}`;
     }
     return doc(
-      bold(source === 'BONUS' ? 'BONUS WITHDRAWAL REQUEST' : 'COMMISSION WITHDRAWAL REQUEST'),
-      lines(`Rep: ${rep}`, `Amount: ${money(amount)}`, belowMinimum && 'Below Minimum: one-off window'),
+      bold(source === 'BONUS' ? 'BONUS WITHDRAWAL' : 'COMMISSION WITHDRAWAL'),
+      lines(`Rep: ${rep}`, `Amount: ${money(amount)}`),
       where,
-      'Status: Waiting for your approval',
     );
   },
 

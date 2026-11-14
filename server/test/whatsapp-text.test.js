@@ -750,44 +750,36 @@ Total Value: TSh 1,289,000`);
   }
 });
 
-// ── a rep asked to be paid (Nino, 14 Nov 2026: the full details, so the money can be sent from the text) ──
-test('COMMISSION WITHDRAWAL REQUEST: rep, amount, and the mobile money number and name in full', () => {
+// ── a rep asked to be paid (Nino, 14 Nov 2026: his own short format) ──
+test('COMMISSION WITHDRAWAL: rep, amount, then the number and name to send it to', () => {
   assert.equal(t.owner.withdrawalRequested({ rep: 'Juma Hassan', amount: 268500, source: 'COMMISSION', payTo: 'Mobile money · 0754123456 · Juma Hassan' }),
-`*COMMISSION WITHDRAWAL REQUEST*
+`*COMMISSION WITHDRAWAL*
 
 Rep: Juma Hassan
 Amount: TSh 268,500
 
-Pay By: Mobile Money
 Number: 0754123456
-Name: Juma Hassan
-
-Status: Waiting for your approval`);
+Name: Juma Hassan`);
 });
 
-test('BONUS WITHDRAWAL REQUEST to a bank: the bank, the account number and the name', () => {
+test('BONUS WITHDRAWAL to a bank: the bank, the account number and the name', () => {
   assert.equal(t.owner.withdrawalRequested({ rep: 'Asha Mwinyi', amount: 150000, source: 'BONUS', payTo: 'Bank · CRDB · 0150123456789 · Asha Mwinyi' }),
-`*BONUS WITHDRAWAL REQUEST*
+`*BONUS WITHDRAWAL*
 
 Rep: Asha Mwinyi
 Amount: TSh 150,000
 
-Pay By: Bank (CRDB)
-Account: 0150123456789
-Name: Asha Mwinyi
-
-Status: Waiting for your approval`);
+Bank: CRDB
+Number: 0150123456789
+Name: Asha Mwinyi`);
 });
 
-test('WITHDRAWAL REQUEST with a note in another shape: shown as written; below the minimum is said', () => {
-  assert.equal(t.owner.withdrawalRequested({ rep: 'Juma Hassan', amount: 30000, payTo: 'Cash at the Lab', belowMinimum: true }),
-`*COMMISSION WITHDRAWAL REQUEST*
+test('WITHDRAWAL with a note in another shape: shown as written', () => {
+  assert.equal(t.owner.withdrawalRequested({ rep: 'Juma Hassan', amount: 30000, payTo: 'Cash at the Lab' }),
+`*COMMISSION WITHDRAWAL*
 
 Rep: Juma Hassan
 Amount: TSh 30,000
-Below Minimum: one-off window
 
-Pay To: Cash at the Lab
-
-Status: Waiting for your approval`);
+Pay To: Cash at the Lab`);
 });

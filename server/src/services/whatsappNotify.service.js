@@ -524,7 +524,6 @@ async function withdrawalRequested(w) {
     amount: toNumber(w.amount),
     source: w.source,
     payTo: w.notes,
-    belowMinimum: Boolean(w.underEmergency),
   });
   return queue('WITHDRAWAL_REQUESTED', { priority: 'ACTION', dedupeKey: `withdrawal:${w.id}`, refType: 'CommissionWithdrawal', refId: w.id, text });
 }
